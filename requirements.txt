@@ -1,0 +1,17 @@
+# Núcleo
+Django==5.1.15
+djangorestframework==3.17.1
+django-environ==0.14.0
+
+# XML / firma / criptografía (facturación electrónica DIAN)
+lxml==6.1.1
+cryptography==49.0.0
+
+# Cliente HTTP / Web Services DIAN
+requests==2.34.2
+
+# Representación gráfica (PDF + QR + imágenes)
+reportlab==5.0.0
+qrcode==8.2
+pillow==12.2.0
+pypdf==6.13.3
