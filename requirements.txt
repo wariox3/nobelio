@@ -3,6 +3,9 @@ Django==5.1.15
 djangorestframework==3.17.1
 django-environ==0.14.0
 
+# Base de datos (PostgreSQL)
+psycopg[binary]==3.2.10
+
 # XML / firma / criptografía (facturación electrónica DIAN)
 lxml==6.1.1
 cryptography==49.0.0

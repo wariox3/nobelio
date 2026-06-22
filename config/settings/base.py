@@ -81,13 +81,10 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
-# --- Base de datos ----------------------------------------------------------
-# Por defecto SQLite en dev; en prod se usa DATABASE_URL (PostgreSQL).
+# --- Base de datos (PostgreSQL) ---------------------------------------------
+# DATABASE_URL es obligatorio: si falta, la app falla al arrancar.
 DATABASES = {
-    "default": env.db_url(
-        "DATABASE_URL",
-        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
-    ),
+    "default": env.db_url("DATABASE_URL"),
 }
 
 # --- Validación de contraseñas ---------------------------------------------

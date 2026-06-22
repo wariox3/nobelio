@@ -80,7 +80,7 @@ Variables principales (`config/settings/base.py` las lee con `django-environ`):
 | `DJANGO_SECRET_KEY` | Clave secreta de Django | inseguro (cámbiala) |
 | `DEBUG` | Modo depuración | `True` (dev) |
 | `ALLOWED_HOSTS` | Hosts permitidos (CSV) | `localhost,127.0.0.1` |
-| `DATABASE_URL` | Conexión BD | SQLite local |
+| `DATABASE_URL` | Conexión PostgreSQL (obligatorio) | — |
 | `DIAN_ENVIRONMENT` | `2` habilitación / `1` producción | `2` |
 | `DIAN_POLICY_ID` | URL de la política de firma | política v2 DIAN |
 | `DIAN_POLICY_HASH` | SHA-256 (base64) del PDF de la política | *(vacío — configúralo)* |
