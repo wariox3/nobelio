@@ -1,0 +1,42 @@
+"""Software de facturación registrado ante la DIAN."""
+from django.db import models
+
+from apps.nucleo.models import ModeloConFechas
+
+from .emisor import Emisor
+
+
+class SoftwareDian(ModeloConFechas):
+    """Software de facturación registrado por el emisor ante la DIAN.
+
+    El ``pin`` no se incluye en el XML; se usa para el CUDE y el
+    ``SoftwareSecurityCode``.
+    """
+
+    emisor = models.ForeignKey(
+        Emisor,
+        on_delete=models.CASCADE,
+        related_name="softwares",
+        verbose_name="emisor",
+    )
+    identificador = models.CharField(
+        "ID del software", max_length=100,
+        help_text="SoftwareID asignado por la DIAN.",
+    )
+    pin = models.CharField("PIN del software", max_length=100)
+    id_proveedor = models.CharField(
+        "ID del proveedor", max_length=20,
+        help_text="ProviderID: NIT del proveedor del software (sin DV).",
+    )
+    test_set_id = models.CharField(
+        "ID del set de pruebas", max_length=100, blank=True,
+        help_text="TestSetId entregado por la DIAN para la habilitación.",
+    )
+    activo = models.BooleanField("activo", default=True)
+
+    class Meta:
+        verbose_name = "software DIAN"
+        verbose_name_plural = "softwares DIAN"
+
+    def __str__(self):
+        return f"Software {self.identificador} ({self.emisor})"

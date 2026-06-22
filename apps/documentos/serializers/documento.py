@@ -1,40 +1,12 @@
-"""Serializers de la API de documentos electrónicos."""
+"""Serializers de lectura y creación del documento electrónico."""
 from decimal import Decimal
 
 from django.db import transaction
 from rest_framework import serializers
 
-from . import models
+from apps.documentos import models
 
-
-class AdquirenteSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = models.Adquirente
-        fields = [
-            "id", "razon_social", "tipo_identificacion", "numero_identificacion",
-            "digito_verificacion", "tipo_organizacion", "responsabilidades",
-            "pais", "departamento", "municipio", "direccion", "telefono", "correo",
-        ]
-
-
-class ImpuestoLineaSerializer(serializers.ModelSerializer):
-    tributo_codigo = serializers.CharField(source="tributo.codigo", read_only=True)
-
-    class Meta:
-        model = models.ImpuestoLinea
-        fields = ["id", "tributo", "tributo_codigo", "base_gravable", "tarifa", "valor"]
-
-
-class LineaDocumentoSerializer(serializers.ModelSerializer):
-    impuestos = ImpuestoLineaSerializer(many=True)
-
-    class Meta:
-        model = models.LineaDocumento
-        fields = [
-            "id", "numero_linea", "descripcion", "codigo_producto",
-            "cantidad", "unidad_medida", "valor_unitario", "valor_total",
-            "descuento", "impuestos",
-        ]
+from .linea import LineaDocumentoSerializer
 
 
 class DocumentoElectronicoSerializer(serializers.ModelSerializer):

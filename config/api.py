@@ -4,8 +4,12 @@ from rest_framework.routers import DefaultRouter
 from apps.catalogos import views as catalogos
 from apps.documentos import views as documentos
 from apps.emisores import views as emisores
+from apps.seguridad import views as seguridad
 
 router = DefaultRouter()
+
+# Seguridad (usuarios; solo staff/admin)
+router.register("usuarios", seguridad.UsuarioViewSet)
 
 # Catálogos (solo lectura)
 router.register("catalogos/tipos-factura", catalogos.TipoFacturaViewSet)

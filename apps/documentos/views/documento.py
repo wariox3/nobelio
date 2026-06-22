@@ -1,4 +1,4 @@
-"""API de documentos electrónicos."""
+"""API de documentos electrónicos y acciones del ciclo de vida DIAN."""
 from django.conf import settings
 from django.http import HttpResponse
 from rest_framework import status, viewsets
@@ -6,15 +6,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.dian import representacion, servicios
-
-from . import serializers
-from .models import Adquirente, DocumentoElectronico
-
-
-class AdquirenteViewSet(viewsets.ModelViewSet):
-    queryset = Adquirente.objects.all()
-    serializer_class = serializers.AdquirenteSerializer
-    search_fields = ["razon_social", "numero_identificacion"]
+from apps.documentos import serializers
+from apps.documentos.models import DocumentoElectronico
 
 
 class DocumentoElectronicoViewSet(viewsets.ModelViewSet):

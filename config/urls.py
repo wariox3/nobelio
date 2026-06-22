@@ -1,5 +1,4 @@
 """Configuración de URLs del proyecto Nobelio."""
-from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import include, path
 
@@ -12,7 +11,6 @@ def estado_servicio(_request):
 
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
     path("estado/", estado_servicio, name="estado-servicio"),
     path("api/", include(router.urls)),
     path("api/auth/", include("rest_framework.urls")),

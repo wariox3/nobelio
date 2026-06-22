@@ -28,7 +28,6 @@ ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[])
 
 # --- Aplicaciones -----------------------------------------------------------
 DJANGO_APPS = [
-    "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -42,6 +41,7 @@ THIRD_PARTY_APPS = [
 
 LOCAL_APPS = [
     "apps.nucleo",
+    "apps.seguridad",
     "apps.catalogos",
     "apps.emisores",
     "apps.documentos",
@@ -86,6 +86,9 @@ ASGI_APPLICATION = "config.asgi.application"
 DATABASES = {
     "default": env.db_url("DATABASE_URL"),
 }
+
+# --- Modelo de usuario personalizado ---------------------------------------
+AUTH_USER_MODEL = "seguridad.Usuario"
 
 # --- Validación de contraseñas ---------------------------------------------
 AUTH_PASSWORD_VALIDATORS = [

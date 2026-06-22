@@ -4,7 +4,7 @@ import tempfile
 from cryptography.hazmat.primitives.serialization import (
     BestAvailableEncryption, pkcs12,
 )
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 from django.test import override_settings
 from rest_framework import status
@@ -35,7 +35,9 @@ class DocumentoAPITests(APITestCase):
         certificado = CertificadoDigital(emisor=cls.emisor, clave="clave123", alias="test")
         certificado.archivo.save("test.p12", ContentFile(p12), save=True)
 
-        cls.usuario = User.objects.create_user("tester", password="x")
+        cls.usuario = get_user_model().objects.create_user(
+            email="tester@example.com", password="x"
+        )
 
     def setUp(self):
         self.client.force_authenticate(self.usuario)

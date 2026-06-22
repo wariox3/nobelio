@@ -1,25 +1,16 @@
-"""Serializers de la API de emisores."""
+"""Serializer del emisor."""
 from rest_framework import serializers
 
-from . import models
+from apps.emisores.models import Emisor
 
-
-class ResolucionFacturacionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = models.ResolucionFacturacion
-        fields = [
-            "id", "emisor", "tipo_factura", "numero_resolucion", "fecha_resolucion",
-            "prefijo", "rango_desde", "rango_hasta", "vigente_desde", "vigente_hasta",
-            "consecutivo_actual", "activa",
-        ]
-        # La clave técnica es sensible: no se expone en la API.
+from .resolucion import ResolucionFacturacionSerializer
 
 
 class EmisorSerializer(serializers.ModelSerializer):
     resoluciones = ResolucionFacturacionSerializer(many=True, read_only=True)
 
     class Meta:
-        model = models.Emisor
+        model = Emisor
         fields = [
             "id", "razon_social", "nombre_comercial",
             "tipo_identificacion", "numero_identificacion", "digito_verificacion",
