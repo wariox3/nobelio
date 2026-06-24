@@ -7,7 +7,7 @@ Usuario = get_user_model()
 
 
 class UsuarioAPITests(APITestCase):
-    URL = "/api/usuarios/"
+    URL = "/api/seguridad/usuarios/"
 
     def setUp(self):
         self.admin = Usuario.objects.create_superuser(
@@ -30,8 +30,9 @@ class UsuarioAPITests(APITestCase):
         self.assertTrue(creado.check_password("OtraClave456"))
 
     def test_no_autenticado_no_puede_crear(self):
+        # Sin credenciales -> 401 (las clases de auth envían WWW-Authenticate).
         resp = self.client.post(self.URL, {"email": "x@x.com", "password": "Clave12345"})
-        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_usuario_no_staff_no_puede_listar(self):
         normal = Usuario.objects.create_user(

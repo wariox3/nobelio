@@ -1,6 +1,8 @@
 # Núcleo
 Django==5.1.15
 djangorestframework==3.17.1
+djangorestframework-simplejwt==5.5.1
+django-cors-headers==4.9.0
 django-environ==0.14.0
 
 # Base de datos (PostgreSQL)

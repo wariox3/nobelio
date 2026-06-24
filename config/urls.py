@@ -1,8 +1,10 @@
-"""Configuración de URLs del proyecto Nobelio."""
+"""Configuración de URLs del proyecto Nobelio.
+
+Cada app gestiona sus propias rutas en su `urls.py`; aquí solo se montan bajo el
+prefijo de su dominio.
+"""
 from django.http import JsonResponse
 from django.urls import include, path
-
-from config.api import router
 
 
 def estado_servicio(_request):
@@ -12,6 +14,8 @@ def estado_servicio(_request):
 
 urlpatterns = [
     path("estado/", estado_servicio, name="estado-servicio"),
-    path("api/", include(router.urls)),
-    path("api/auth/", include("rest_framework.urls")),
+    path("api/seguridad/", include("apps.seguridad.urls")),
+    path("api/catalogos/", include("apps.catalogos.urls")),
+    path("api/", include("apps.emisores.urls")),
+    path("api/", include("apps.documentos.urls")),
 ]

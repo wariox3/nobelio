@@ -9,6 +9,7 @@ Los settings se dividen en:
 Selecciona el módulo con la variable de entorno DJANGO_SETTINGS_MODULE,
 por defecto config.settings.dev (ver manage.py / wsgi.py / asgi.py).
 """
+from datetime import timedelta
 from pathlib import Path
 
 import environ
@@ -30,13 +31,12 @@ ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[])
 DJANGO_APPS = [
     "django.contrib.auth",
     "django.contrib.contenttypes",
-    "django.contrib.sessions",
-    "django.contrib.messages",
     "django.contrib.staticfiles",
 ]
 
 THIRD_PARTY_APPS = [
     "rest_framework",
+    "corsheaders",
 ]
 
 LOCAL_APPS = [
@@ -50,13 +50,13 @@ LOCAL_APPS = [
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
+# API stateless: la autenticación la resuelve DRF por petición (JWT / API Key),
+# así que no hacen falta los middleware de sesión ni de autenticación de Django.
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
-    "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
@@ -72,7 +72,6 @@ TEMPLATES = [
                 "django.template.context_processors.debug",
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
-                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
@@ -114,8 +113,11 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- Django REST Framework --------------------------------------------------
 REST_FRAMEWORK = {
+    # Dos vías coexistiendo: API Key (ERP) y JWT (frontend SPA). Ver
+    # docs/autenticacion.md. Ambas son stateless (sin sesión, sin CSRF).
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.SessionAuthentication",
+        "apps.seguridad.autenticacion.LlaveApiAuthentication",
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
@@ -129,6 +131,21 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 50,
 }
+
+# --- JWT (frontend SPA) -----------------------------------------------------
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(
+        minutes=env.int("JWT_ACCESS_MINUTOS", default=30)
+    ),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=env.int("JWT_REFRESH_DIAS", default=7)),
+    "AUTH_HEADER_TYPES": ("Bearer",),
+}
+
+# --- CORS (la SPA vive en otro dominio) -------------------------------------
+# Orígenes permitidos del frontend, p. ej. https://app.midominio.com
+CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
+# Activar solo si el refresh viaja en cookie httpOnly.
+CORS_ALLOW_CREDENTIALS = env.bool("CORS_ALLOW_CREDENTIALS", default=False)
 
 # ===========================================================================
 # Configuración DIAN
