@@ -28,23 +28,10 @@ class DocumentoElectronico(ModeloUUID, ModeloConFechas):
         ACEPTADO = "aceptado", "Aceptado por la DIAN"
         RECHAZADO = "rechazado", "Rechazado por la DIAN"
 
+    # ===================== Atributos =====================
     tipo = models.CharField("tipo", max_length=20, choices=Tipo.choices)
     estado = models.CharField(
         "estado", max_length=20, choices=Estado.choices, default=Estado.BORRADOR
-    )
-
-    emisor = models.ForeignKey(
-        "emisores.Emisor", on_delete=models.PROTECT,
-        related_name="documentos", verbose_name="emisor",
-    )
-    resolucion = models.ForeignKey(
-        "emisores.ResolucionFacturacion", on_delete=models.PROTECT,
-        related_name="documentos", verbose_name="resolución",
-        null=True, blank=True,
-    )
-    adquirente = models.ForeignKey(
-        Adquirente, on_delete=models.PROTECT,
-        related_name="documentos", verbose_name="adquirente",
     )
 
     # Identificación del documento
@@ -63,21 +50,6 @@ class DocumentoElectronico(ModeloUUID, ModeloConFechas):
 
     fecha_emision = models.DateField("fecha de emisión")
     hora_emision = models.TimeField("hora de emisión")
-
-    moneda = models.ForeignKey(
-        "catalogos.Moneda", on_delete=models.PROTECT,
-        related_name="documentos", verbose_name="moneda",
-    )
-    forma_pago = models.ForeignKey(
-        "catalogos.FormaPago", on_delete=models.PROTECT,
-        related_name="documentos", verbose_name="forma de pago",
-        null=True, blank=True,
-    )
-    medio_pago = models.ForeignKey(
-        "catalogos.MedioPago", on_delete=models.PROTECT,
-        related_name="documentos", verbose_name="medio de pago",
-        null=True, blank=True,
-    )
 
     # Totales (cac:LegalMonetaryTotal)
     valor_bruto = models.DecimalField(
@@ -98,18 +70,59 @@ class DocumentoElectronico(ModeloUUID, ModeloConFechas):
         help_text="PayableAmount.",
     )
 
-    # Para notas crédito/débito
+    observaciones = models.TextField("observaciones", blank=True)
+
+    # Artefactos generados
+    xml_firmado = models.TextField("XML firmado", blank=True)
+    respuesta_dian = models.TextField("respuesta DIAN", blank=True)
+
+    # ===================== Relaciones =====================
+    emisor = models.ForeignKey(
+        "emisores.Emisor", on_delete=models.PROTECT,
+        related_name="documentos", verbose_name="emisor",
+    )
+    resolucion = models.ForeignKey(
+        "emisores.ResolucionFacturacion", on_delete=models.PROTECT,
+        related_name="documentos", verbose_name="resolución",
+        null=True, blank=True,
+    )
+    adquirente = models.ForeignKey(
+        Adquirente, on_delete=models.PROTECT,
+        related_name="documentos", verbose_name="adquirente",
+    )
+    moneda = models.ForeignKey(
+        "catalogos.Moneda", on_delete=models.PROTECT,
+        related_name="documentos", verbose_name="moneda",
+    )
+    forma_pago = models.ForeignKey(
+        "catalogos.FormaPago", on_delete=models.PROTECT,
+        related_name="documentos", verbose_name="forma de pago",
+        null=True, blank=True,
+    )
+    medio_pago = models.ForeignKey(
+        "catalogos.MedioPago", on_delete=models.PROTECT,
+        related_name="documentos", verbose_name="medio de pago",
+        null=True, blank=True,
+    )
+    # Para notas crédito/débito: referencia al documento corregido.
     documento_referencia = models.ForeignKey(
         "self", on_delete=models.PROTECT,
         related_name="notas", null=True, blank=True,
         verbose_name="documento de referencia",
     )
 
-    observaciones = models.TextField("observaciones", blank=True)
-
-    # Artefactos generados
-    xml_firmado = models.TextField("XML firmado", blank=True)
-    respuesta_dian = models.TextField("respuesta DIAN", blank=True)
+    # Origen del documento (trazabilidad): qué integración (ERP) o qué usuario
+    # del frontend lo creó. Se rellenan según cómo entró la petición.
+    origen_llave = models.ForeignKey(
+        "seguridad.LlaveApi", on_delete=models.SET_NULL,
+        related_name="documentos", null=True, blank=True,
+        verbose_name="origen (llave de API)",
+    )
+    origen_usuario = models.ForeignKey(
+        "seguridad.Usuario", on_delete=models.SET_NULL,
+        related_name="documentos_emitidos", null=True, blank=True,
+        verbose_name="origen (usuario)",
+    )
 
     class Meta:
         verbose_name = "documento electrónico"

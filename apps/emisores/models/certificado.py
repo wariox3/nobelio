@@ -13,18 +13,21 @@ class CertificadoDigital(ModeloConFechas):
     versiones (ver .gitignore) y la clave debería cifrarse en producción.
     """
 
-    emisor = models.ForeignKey(
-        Emisor,
-        on_delete=models.CASCADE,
-        related_name="certificados",
-        verbose_name="emisor",
-    )
+    # --- Atributos ---
     alias = models.CharField("alias", max_length=150, blank=True)
     archivo = models.FileField("archivo .p12", upload_to="certificados/")
     clave = models.CharField("clave del certificado", max_length=255)
     vigente_desde = models.DateField("vigente desde", null=True, blank=True)
     vigente_hasta = models.DateField("vigente hasta", null=True, blank=True)
     activo = models.BooleanField("activo", default=True)
+
+    # --- Relaciones ---
+    emisor = models.ForeignKey(
+        Emisor,
+        on_delete=models.CASCADE,
+        related_name="certificados",
+        verbose_name="emisor",
+    )
 
     class Meta:
         verbose_name = "certificado digital"

@@ -11,24 +11,27 @@ class Emisor(ModeloConFechas):
     """
 
     razon_social = models.CharField("razón social", max_length=450)
-    nombre_comercial = models.CharField(
-        "nombre comercial", max_length=450, blank=True
-    )
+    nombre_comercial = models.CharField("nombre comercial", max_length=450, blank=True)
+    numero_identificacion = models.CharField("número de identificación", max_length=20, help_text="NIT sin puntos, sin guiones y sin dígito de verificación.",)
+    digito_verificacion = models.CharField("dígito de verificación", max_length=1, blank=True)
+    direccion = models.CharField("dirección", max_length=255)
+    telefono = models.CharField("teléfono", max_length=50, blank=True)
+    correo = models.EmailField("correo electrónico", blank=True)
+    activo = models.BooleanField("activo", default=True)
 
+    # --- Relaciones ---
+    cuenta = models.ForeignKey(
+        "cuentas.Cuenta",
+        on_delete=models.PROTECT,
+        related_name="emisores",
+        verbose_name="cuenta",
+    )
     tipo_identificacion = models.ForeignKey(
         "catalogos.TipoIdentificacion",
         on_delete=models.PROTECT,
         related_name="emisores",
         verbose_name="tipo de identificación",
     )
-    numero_identificacion = models.CharField(
-        "número de identificación", max_length=20,
-        help_text="NIT sin puntos, sin guiones y sin dígito de verificación.",
-    )
-    digito_verificacion = models.CharField(
-        "dígito de verificación", max_length=1, blank=True
-    )
-
     tipo_organizacion = models.ForeignKey(
         "catalogos.TipoOrganizacion",
         on_delete=models.PROTECT,
@@ -41,8 +44,6 @@ class Emisor(ModeloConFechas):
         verbose_name="responsabilidades fiscales",
         blank=True,
     )
-
-    # Ubicación
     pais = models.ForeignKey(
         "catalogos.Pais",
         on_delete=models.PROTECT,
@@ -61,13 +62,6 @@ class Emisor(ModeloConFechas):
         related_name="emisores",
         verbose_name="municipio",
     )
-    direccion = models.CharField("dirección", max_length=255)
-
-    # Contacto
-    telefono = models.CharField("teléfono", max_length=50, blank=True)
-    correo = models.EmailField("correo electrónico", blank=True)
-
-    activo = models.BooleanField("activo", default=True)
 
     class Meta:
         verbose_name = "emisor"

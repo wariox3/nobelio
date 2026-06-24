@@ -25,6 +25,18 @@ class Usuario(AbstractBaseUser, PermissionsMixin, ModeloConFechas):
         help_text=_("Indica si la cuenta está activa. Desmarcar en lugar de borrar."),
     )
 
+    # --- Relaciones ---
+    # Nullable: el staff interno de la plataforma no pertenece a ninguna cuenta;
+    # los usuarios de un cliente sí están ligados a su cuenta (tenant).
+    cuenta = models.ForeignKey(
+        "cuentas.Cuenta",
+        on_delete=models.PROTECT,
+        related_name="usuarios",
+        verbose_name="cuenta",
+        null=True,
+        blank=True,
+    )
+
     objects = UsuarioManager()
 
     USERNAME_FIELD = "email"

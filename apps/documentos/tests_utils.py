@@ -6,7 +6,14 @@ from apps.catalogos import models as cat
 
 
 def crear_catalogos_minimos():
-    """Crea los registros de catálogo mínimos para las pruebas y los devuelve."""
+    """Crea los registros de catálogo mínimos para las pruebas y los devuelve.
+
+    Incluye una ``cuenta`` (tenant) de conveniencia para crear emisores, aunque
+    no sea un catálogo en sentido estricto.
+    """
+    from apps.cuentas.models import Cuenta
+
+    cuenta = Cuenta.objects.create(nombre="Cuenta Demo")
     nit = cat.TipoIdentificacion.objects.create(codigo="31", nombre="NIT")
     juridica = cat.TipoOrganizacion.objects.create(codigo="1", nombre="Persona Jurídica")
     colombia = cat.Pais.objects.create(codigo="CO", nombre="Colombia")
@@ -18,6 +25,7 @@ def crear_catalogos_minimos():
     unidad = cat.UnidadMedida.objects.create(codigo="94", nombre="Unidad")
     iva = cat.Tributo.objects.create(codigo="01", nombre="IVA")
     return {
+        "cuenta": cuenta,
         "nit": nit,
         "juridica": juridica,
         "colombia": colombia,
@@ -42,6 +50,7 @@ def crear_documento_factura(catalogos=None):
     c = catalogos or crear_catalogos_minimos()
 
     emisor = Emisor.objects.create(
+        cuenta=c["cuenta"],
         razon_social="Empresa Demo SAS", nombre_comercial="Demo",
         tipo_identificacion=c["nit"], numero_identificacion="700085371",
         digito_verificacion="1", tipo_organizacion=c["juridica"],

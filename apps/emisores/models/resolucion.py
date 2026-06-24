@@ -13,18 +13,7 @@ class ResolucionFacturacion(ModeloConFechas):
     el XML. Se obtiene de la consulta del rango de numeración ante la DIAN.
     """
 
-    emisor = models.ForeignKey(
-        Emisor,
-        on_delete=models.CASCADE,
-        related_name="resoluciones",
-        verbose_name="emisor",
-    )
-    tipo_factura = models.ForeignKey(
-        "catalogos.TipoFactura",
-        on_delete=models.PROTECT,
-        related_name="resoluciones",
-        verbose_name="tipo de factura",
-    )
+    # --- Atributos ---
     numero_resolucion = models.CharField("número de resolución", max_length=50)
     fecha_resolucion = models.DateField("fecha de la resolución")
 
@@ -42,6 +31,20 @@ class ResolucionFacturacion(ModeloConFechas):
         help_text="Último consecutivo emitido; 0 si aún no se ha emitido.",
     )
     activa = models.BooleanField("activa", default=True)
+
+    # --- Relaciones ---
+    emisor = models.ForeignKey(
+        Emisor,
+        on_delete=models.CASCADE,
+        related_name="resoluciones",
+        verbose_name="emisor",
+    )
+    tipo_factura = models.ForeignKey(
+        "catalogos.TipoFactura",
+        on_delete=models.PROTECT,
+        related_name="resoluciones",
+        verbose_name="tipo de factura",
+    )
 
     class Meta:
         verbose_name = "resolución de facturación"

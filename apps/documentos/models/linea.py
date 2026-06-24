@@ -9,21 +9,12 @@ from .documento import DocumentoElectronico
 class LineaDocumento(ModeloConFechas):
     """Línea / ítem de un documento (``cac:InvoiceLine``)."""
 
-    documento = models.ForeignKey(
-        DocumentoElectronico, on_delete=models.CASCADE,
-        related_name="lineas", verbose_name="documento",
-    )
+    # --- Atributos ---
     numero_linea = models.PositiveIntegerField("número de línea")
-
     descripcion = models.CharField("descripción", max_length=500)
     codigo_producto = models.CharField("código del producto", max_length=100, blank=True)
-
     cantidad = models.DecimalField(
         "cantidad", max_digits=18, decimal_places=6, default=1
-    )
-    unidad_medida = models.ForeignKey(
-        "catalogos.UnidadMedida", on_delete=models.PROTECT,
-        related_name="lineas", verbose_name="unidad de medida",
     )
     valor_unitario = models.DecimalField(
         "valor unitario", max_digits=18, decimal_places=6, default=0
@@ -34,6 +25,16 @@ class LineaDocumento(ModeloConFechas):
     )
     descuento = models.DecimalField(
         "descuento", max_digits=18, decimal_places=2, default=0
+    )
+
+    # --- Relaciones ---
+    documento = models.ForeignKey(
+        DocumentoElectronico, on_delete=models.CASCADE,
+        related_name="lineas", verbose_name="documento",
+    )
+    unidad_medida = models.ForeignKey(
+        "catalogos.UnidadMedida", on_delete=models.PROTECT,
+        related_name="lineas", verbose_name="unidad de medida",
     )
 
     class Meta:
@@ -54,14 +55,7 @@ class LineaDocumento(ModeloConFechas):
 class ImpuestoLinea(ModeloConFechas):
     """Impuesto aplicado a una línea (``cac:TaxTotal`` dentro de la línea)."""
 
-    linea = models.ForeignKey(
-        LineaDocumento, on_delete=models.CASCADE,
-        related_name="impuestos", verbose_name="línea",
-    )
-    tributo = models.ForeignKey(
-        "catalogos.Tributo", on_delete=models.PROTECT,
-        related_name="impuestos_linea", verbose_name="tributo",
-    )
+    # --- Atributos ---
     base_gravable = models.DecimalField(
         "base gravable", max_digits=18, decimal_places=2, default=0
     )
@@ -70,6 +64,16 @@ class ImpuestoLinea(ModeloConFechas):
     )
     valor = models.DecimalField(
         "valor del impuesto", max_digits=18, decimal_places=2, default=0
+    )
+
+    # --- Relaciones ---
+    linea = models.ForeignKey(
+        LineaDocumento, on_delete=models.CASCADE,
+        related_name="impuestos", verbose_name="línea",
+    )
+    tributo = models.ForeignKey(
+        "catalogos.Tributo", on_delete=models.PROTECT,
+        related_name="impuestos_linea", verbose_name="tributo",
     )
 
     class Meta:

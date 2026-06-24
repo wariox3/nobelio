@@ -20,12 +20,7 @@ LONGITUD_SECRETO = 40
 class LlaveApi(ModeloConFechas):
     """Credencial de larga duración para autenticar a un ERP por API Key."""
 
-    emisor = models.ForeignKey(
-        "emisores.Emisor",
-        on_delete=models.CASCADE,
-        related_name="llaves_api",
-        verbose_name="emisor",
-    )
+    # --- Atributos ---
     nombre = models.CharField(
         "nombre", max_length=150,
         help_text="Identifica la integración, p. ej. 'ERP producción'.",
@@ -39,6 +34,14 @@ class LlaveApi(ModeloConFechas):
     activa = models.BooleanField("activa", default=True)
     expira_en = models.DateTimeField("expira en", null=True, blank=True)
     ultimo_uso_en = models.DateTimeField("último uso en", null=True, blank=True)
+
+    # --- Relaciones ---
+    emisor = models.ForeignKey(
+        "emisores.Emisor",
+        on_delete=models.CASCADE,
+        related_name="llaves_api",
+        verbose_name="emisor",
+    )
 
     class Meta:
         verbose_name = "llave de API"

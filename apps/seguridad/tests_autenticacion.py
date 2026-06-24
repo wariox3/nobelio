@@ -14,6 +14,7 @@ from apps.catalogos.models import (
     TipoIdentificacion,
     TipoOrganizacion,
 )
+from apps.cuentas.models import Cuenta
 from apps.emisores.models import Emisor
 from apps.seguridad.autenticacion import LlaveApiAuthentication, PrincipalLlaveApi
 from apps.seguridad.models import LlaveApi
@@ -22,7 +23,8 @@ Usuario = get_user_model()
 
 
 def crear_emisor():
-    """Crea un emisor mínimo con sus catálogos para las pruebas."""
+    """Crea un emisor mínimo (con su cuenta y catálogos) para las pruebas."""
+    cuenta = Cuenta.objects.create(nombre="Cuenta de Prueba")
     tipo_id = TipoIdentificacion.objects.create(codigo="31", nombre="NIT")
     tipo_org = TipoOrganizacion.objects.create(codigo="1", nombre="Jurídica")
     pais = Pais.objects.create(codigo="CO", nombre="Colombia")
@@ -31,6 +33,7 @@ def crear_emisor():
         codigo="11001", nombre="Bogotá", departamento=depto
     )
     return Emisor.objects.create(
+        cuenta=cuenta,
         razon_social="Empresa de Prueba S.A.S.",
         tipo_identificacion=tipo_id,
         numero_identificacion="900123456",

@@ -15,6 +15,7 @@ def estado_servicio(_request):
 urlpatterns = [
     path("estado/", estado_servicio, name="estado-servicio"),
     path("api/seguridad/", include("apps.seguridad.urls")),
+    path("api/cuentas/", include("apps.cuentas.urls")),
     path("api/catalogos/", include("apps.catalogos.urls")),
     path("api/", include("apps.emisores.urls")),
     path("api/", include("apps.documentos.urls")),

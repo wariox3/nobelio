@@ -13,12 +13,7 @@ class SoftwareDian(ModeloConFechas):
     ``SoftwareSecurityCode``.
     """
 
-    emisor = models.ForeignKey(
-        Emisor,
-        on_delete=models.CASCADE,
-        related_name="softwares",
-        verbose_name="emisor",
-    )
+    # --- Atributos ---
     identificador = models.CharField(
         "ID del software", max_length=100,
         help_text="SoftwareID asignado por la DIAN.",
@@ -33,6 +28,14 @@ class SoftwareDian(ModeloConFechas):
         help_text="TestSetId entregado por la DIAN para la habilitación.",
     )
     activo = models.BooleanField("activo", default=True)
+
+    # --- Relaciones ---
+    emisor = models.ForeignKey(
+        Emisor,
+        on_delete=models.CASCADE,
+        related_name="softwares",
+        verbose_name="emisor",
+    )
 
     class Meta:
         verbose_name = "software DIAN"

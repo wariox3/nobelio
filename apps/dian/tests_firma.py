@@ -48,6 +48,7 @@ class FirmaXAdESTests(TestCase):
         from apps.catalogos.models import TipoFactura
 
         emisor = Emisor.objects.create(
+            cuenta=c["cuenta"],
             razon_social="Empresa Demo SAS",
             tipo_identificacion=c["nit"], numero_identificacion="700085371",
             digito_verificacion="1", tipo_organizacion=c["juridica"],

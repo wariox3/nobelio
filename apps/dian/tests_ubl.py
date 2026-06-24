@@ -20,6 +20,7 @@ class GeneracionUBLTests(TestCase):
         cls.factura = c["nit"].__class__  # no usado; placeholder
 
         cls.emisor = Emisor.objects.create(
+            cuenta=c["cuenta"],
             razon_social="Empresa Demo SAS",
             nombre_comercial="Demo",
             tipo_identificacion=c["nit"],

@@ -41,6 +41,7 @@ THIRD_PARTY_APPS = [
 
 LOCAL_APPS = [
     "apps.nucleo",
+    "apps.cuentas",
     "apps.seguridad",
     "apps.catalogos",
     "apps.emisores",
