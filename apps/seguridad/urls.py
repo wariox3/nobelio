@@ -10,8 +10,8 @@ from rest_framework_simplejwt.views import (
 from apps.seguridad import views
 
 router = SimpleRouter()
-router.register("usuarios", views.UsuarioViewSet)
-router.register("llaves-api", views.LlaveApiViewSet)
+router.register("usuario", views.UsuarioViewSet)
+router.register("llave-api", views.LlaveApiViewSet)
 
 urlpatterns = [
     # Autenticación del frontend (JWT): login con email + contraseña.

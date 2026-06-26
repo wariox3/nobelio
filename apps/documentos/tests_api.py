@@ -43,10 +43,10 @@ class DocumentoAPITests(APITestCase):
         self.client.force_authenticate(self.usuario)
 
     def _url(self, sufijo=""):
-        return f"/api/documentos/{self.documento.id}/{sufijo}"
+        return f"/api/documentos/documento/{self.documento.id}/{sufijo}"
 
     def test_listar_documentos(self):
-        resp = self.client.get("/api/documentos/")
+        resp = self.client.get("/api/documentos/documento/")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(resp.data["count"], 1)
 
@@ -99,7 +99,7 @@ class DocumentoAPITests(APITestCase):
                 }
             ],
         }
-        resp = self.client.post("/api/documentos/", payload, format="json")
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         self.assertEqual(resp.data["valor_bruto"], "2000.00")
         self.assertEqual(resp.data["total_impuestos"], "380.00")
@@ -115,7 +115,7 @@ class CatalogoAPITests(APITestCase):
         Tributo.objects.create(codigo="04", nombre="INC")
 
     def test_catalogo_es_publico_y_busca(self):
-        resp = self.client.get("/api/catalogos/tributos/?search=IVA")
+        resp = self.client.get("/api/catalogos/tributo/?search=IVA")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         codigos = [r["codigo"] for r in resp.data["results"]]
         self.assertIn("01", codigos)

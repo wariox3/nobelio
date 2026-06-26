@@ -113,14 +113,14 @@ class LlaveApiEndToEndTests(APITestCase):
         _, self.clave = LlaveApi.generar(emisor=self.emisor, nombre="ERP")
 
     def test_acceso_a_endpoint_autenticado_con_api_key(self):
-        # /api/emisores/ exige autenticación; la API Key debe bastar.
+        # /api/emisores/emisor/ exige autenticación; la API Key debe bastar.
         resp = self.client.get(
-            "/api/emisores/", HTTP_AUTHORIZATION=f"Api-Key {self.clave}"
+            "/api/emisores/emisor/", HTTP_AUTHORIZATION=f"Api-Key {self.clave}"
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
     def test_sin_credencial_no_autorizado(self):
-        resp = self.client.get("/api/emisores/")
+        resp = self.client.get("/api/emisores/emisor/")
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
@@ -150,7 +150,7 @@ class JWTLoginTests(APITestCase):
             {"email": "frontend@example.com", "password": "ClaveSegura123"},
         ).data["access"]
         resp = self.client.get(
-            "/api/emisores/", HTTP_AUTHORIZATION=f"Bearer {token}"
+            "/api/emisores/emisor/", HTTP_AUTHORIZATION=f"Bearer {token}"
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 

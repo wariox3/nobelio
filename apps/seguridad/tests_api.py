@@ -7,7 +7,7 @@ Usuario = get_user_model()
 
 
 class UsuarioAPITests(APITestCase):
-    URL = "/api/seguridad/usuarios/"
+    URL = "/api/seguridad/usuario/"
 
     def setUp(self):
         self.admin = Usuario.objects.create_superuser(
