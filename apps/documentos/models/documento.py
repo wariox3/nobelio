@@ -125,6 +125,7 @@ class DocumentoElectronico(ModeloUUID, ModeloConFechas):
     )
 
     class Meta:
+        db_table = "doc_documentoelectronico"
         verbose_name = "documento electrónico"
         verbose_name_plural = "documentos electrónicos"
         ordering = ["-fecha_emision", "-consecutivo"]

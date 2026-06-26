@@ -55,6 +55,7 @@ class Adquirente(ModeloConFechas):
     )
 
     class Meta:
+        db_table = "doc_adquirente"
         verbose_name = "adquirente"
         verbose_name_plural = "adquirentes"
         ordering = ["razon_social"]

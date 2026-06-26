@@ -64,6 +64,7 @@ class Emisor(ModeloConFechas):
     )
 
     class Meta:
+        db_table = "emi_emisor"
         verbose_name = "emisor"
         verbose_name_plural = "emisores"
         ordering = ["razon_social"]

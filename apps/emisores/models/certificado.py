@@ -30,6 +30,7 @@ class CertificadoDigital(ModeloConFechas):
     )
 
     class Meta:
+        db_table = "emi_certificadodigital"
         verbose_name = "certificado digital"
         verbose_name_plural = "certificados digitales"
 

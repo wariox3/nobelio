@@ -43,6 +43,7 @@ class Usuario(AbstractBaseUser, PermissionsMixin, ModeloConFechas):
     REQUIRED_FIELDS = []
 
     class Meta:
+        db_table = "seg_usuario"
         verbose_name = "usuario"
         verbose_name_plural = "usuarios"
         ordering = ("email",)

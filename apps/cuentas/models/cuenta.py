@@ -19,6 +19,7 @@ class Cuenta(ModeloConFechas):
     activa = models.BooleanField("activa", default=True)
 
     class Meta:
+        db_table = "cue_cuenta"
         verbose_name = "cuenta"
         verbose_name_plural = "cuentas"
         ordering = ["nombre"]

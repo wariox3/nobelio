@@ -44,6 +44,7 @@ class LlaveApi(ModeloConFechas):
     )
 
     class Meta:
+        db_table = "seg_llaveapi"
         verbose_name = "llave de API"
         verbose_name_plural = "llaves de API"
         ordering = ["-creado_en"]

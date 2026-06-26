@@ -9,5 +9,6 @@ class Tributo(ElementoCatalogo):
     """
 
     class Meta(ElementoCatalogo.Meta):
+        db_table = "cat_tributo"
         verbose_name = "tributo"
         verbose_name_plural = "tributos"

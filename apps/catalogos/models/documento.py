@@ -6,6 +6,7 @@ class TipoFactura(ElementoCatalogo):
     """Tipo de documento / factura (cbc:InvoiceTypeCode). Lista TipoDocumento."""
 
     class Meta(ElementoCatalogo.Meta):
+        db_table = "cat_tipofactura"
         verbose_name = "tipo de factura"
         verbose_name_plural = "tipos de factura"
 
@@ -14,6 +15,7 @@ class ConceptoNotaCredito(ElementoCatalogo):
     """Concepto de corrección de una nota crédito. Lista ConceptoNotaCredito."""
 
     class Meta(ElementoCatalogo.Meta):
+        db_table = "cat_conceptonotacredito"
         verbose_name = "concepto de nota crédito"
         verbose_name_plural = "conceptos de nota crédito"
 
@@ -22,5 +24,6 @@ class ConceptoNotaDebito(ElementoCatalogo):
     """Concepto de corrección de una nota débito. Lista ConceptoNotaDebito."""
 
     class Meta(ElementoCatalogo.Meta):
+        db_table = "cat_conceptonotadebito"
         verbose_name = "concepto de nota débito"
         verbose_name_plural = "conceptos de nota débito"

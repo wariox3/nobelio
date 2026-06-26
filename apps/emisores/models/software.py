@@ -38,6 +38,7 @@ class SoftwareDian(ModeloConFechas):
     )
 
     class Meta:
+        db_table = "emi_softwaredian"
         verbose_name = "software DIAN"
         verbose_name_plural = "softwares DIAN"
 

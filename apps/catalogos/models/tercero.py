@@ -6,6 +6,7 @@ class TipoIdentificacion(ElementoCatalogo):
     """Tipo de identificación fiscal (cédula, NIT, etc.). Lista TipoIdFiscal."""
 
     class Meta(ElementoCatalogo.Meta):
+        db_table = "cat_tipoidentificacion"
         verbose_name = "tipo de identificación"
         verbose_name_plural = "tipos de identificación"
 
@@ -14,6 +15,7 @@ class TipoOrganizacion(ElementoCatalogo):
     """Tipo de organización (persona natural / jurídica). Lista TipoOrganizacion."""
 
     class Meta(ElementoCatalogo.Meta):
+        db_table = "cat_tipoorganizacion"
         verbose_name = "tipo de organización"
         verbose_name_plural = "tipos de organización"
 
@@ -25,5 +27,6 @@ class ResponsabilidadFiscal(ElementoCatalogo):
     """
 
     class Meta(ElementoCatalogo.Meta):
+        db_table = "cat_responsabilidadfiscal"
         verbose_name = "responsabilidad fiscal"
         verbose_name_plural = "responsabilidades fiscales"
