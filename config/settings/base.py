@@ -110,6 +110,16 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+# --- Almacenamiento en Backblaze B2 (S3-compatible) ------------------------
+# Credenciales de una "Application Key" de B2 con acceso al bucket. Si no están
+# configuradas (dev/test), los archivos caen al almacenamiento local.
+B2_BUCKET = env("B2_BUCKET", default="")
+B2_ENDPOINT_URL = env("B2_ENDPOINT_URL", default="")  # p.ej. https://s3.us-west-004.backblazeb2.com
+B2_REGION = env("B2_REGION", default="")              # p.ej. us-west-004
+B2_KEY_ID = env("B2_KEY_ID", default="")              # keyID (access key)
+B2_APP_KEY = env("B2_APP_KEY", default="")            # applicationKey (secret key)
+B2_HABILITADO = bool(B2_BUCKET and B2_ENDPOINT_URL and B2_KEY_ID and B2_APP_KEY)
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- Django REST Framework --------------------------------------------------

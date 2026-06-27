@@ -5,6 +5,8 @@ from apps.emisores import views
 
 router = SimpleRouter()
 router.register("emisor", views.EmisorViewSet)
+router.register("software", views.SoftwareDianViewSet)
+router.register("certificado", views.CertificadoDigitalViewSet)
 router.register("resolucion", views.ResolucionFacturacionViewSet)
 
 urlpatterns = router.urls

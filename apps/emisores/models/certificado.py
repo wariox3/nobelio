@@ -2,6 +2,7 @@
 from django.db import models
 
 from apps.nucleo.models import ModeloConFechas
+from apps.servicios.almacenamiento import almacenamiento_backblaze
 
 from .emisor import Emisor
 
@@ -15,7 +16,11 @@ class CertificadoDigital(ModeloConFechas):
 
     # --- Atributos ---
     alias = models.CharField("alias", max_length=150, blank=True)
-    archivo = models.FileField("archivo .p12", upload_to="certificados/")
+    archivo = models.FileField(
+        "archivo .p12",
+        upload_to="certificados/",
+        storage=almacenamiento_backblaze,
+    )
     clave = models.CharField("clave del certificado", max_length=255)
     vigente_desde = models.DateField("vigente desde", null=True, blank=True)
     vigente_hasta = models.DateField("vigente hasta", null=True, blank=True)
