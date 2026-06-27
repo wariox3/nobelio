@@ -3,7 +3,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import APIException
 
 from apps.emisores.models import Emisor
-from apps.servicios.rues import RuesNoDisponible, consultar_nit
+from apps.utilidades.rues import RuesNoDisponible, consultar_nit
 
 from .resolucion import ResolucionFacturacionSerializer
 

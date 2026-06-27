@@ -146,7 +146,7 @@ REST_FRAMEWORK = {
 # --- JWT (frontend SPA) -----------------------------------------------------
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(
-        minutes=env.int("JWT_ACCESS_MINUTOS", default=30)
+        minutes=env.int("JWT_ACCESS_MINUTOS", default=720)  # 12 horas
     ),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=env.int("JWT_REFRESH_DIAS", default=7)),
     "AUTH_HEADER_TYPES": ("Bearer",),

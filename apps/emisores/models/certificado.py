@@ -2,12 +2,21 @@
 from django.db import models
 
 from apps.nucleo.models import ModeloConFechas
-from apps.servicios.almacenamiento import almacenamiento_backblaze
+from apps.utilidades.almacenamiento import almacenamiento_backblaze
 
 from .emisor import Emisor
 
 
-class CertificadoDigital(ModeloConFechas):
+def ruta_certificado(instance, filename):
+    """Ruta del .p12 dentro del bucket: ``<id_emisor>/certificados/<archivo>``.
+
+    Se usa el id del emisor para aislar los certificados de cada uno en su
+    propia carpeta. ``instance.emisor_id`` evita una consulta extra a la BD.
+    """
+    return f"{instance.emisor_id}/certificados/{filename}"
+
+
+class Certificado(ModeloConFechas):
     """Certificado digital (.p12/.pfx) del emisor para la firma XAdES.
 
     El archivo y la clave son sensibles: el .p12 está fuera del control de
@@ -18,7 +27,7 @@ class CertificadoDigital(ModeloConFechas):
     alias = models.CharField("alias", max_length=150, blank=True)
     archivo = models.FileField(
         "archivo .p12",
-        upload_to="certificados/",
+        upload_to=ruta_certificado,
         storage=almacenamiento_backblaze,
     )
     clave = models.CharField("clave del certificado", max_length=255)
@@ -35,7 +44,7 @@ class CertificadoDigital(ModeloConFechas):
     )
 
     class Meta:
-        db_table = "emi_certificadodigital"
+        db_table = "emi_certificado"
         verbose_name = "certificado digital"
         verbose_name_plural = "certificados digitales"
 

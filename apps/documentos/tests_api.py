@@ -13,7 +13,7 @@ from rest_framework.test import APITestCase
 from apps.dian.tests_firma import _generar_certificado
 from apps.documentos.models import DocumentoElectronico
 from apps.documentos.tests_utils import crear_documento_factura
-from apps.emisores.models import CertificadoDigital
+from apps.emisores.models import Certificado
 
 MEDIA_TEMP = tempfile.mkdtemp()
 
@@ -32,7 +32,7 @@ class DocumentoAPITests(APITestCase):
         p12 = pkcs12.serialize_key_and_certificates(
             b"alias", llave, cert, None, BestAvailableEncryption(b"clave123")
         )
-        certificado = CertificadoDigital(emisor=cls.emisor, clave="clave123", alias="test")
+        certificado = Certificado(emisor=cls.emisor, clave="clave123", alias="test")
         certificado.archivo.save("test.p12", ContentFile(p12), save=True)
 
         cls.usuario = get_user_model().objects.create_user(

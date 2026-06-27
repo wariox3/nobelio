@@ -3,16 +3,16 @@ import os
 
 from rest_framework import serializers
 
-from apps.emisores.models import CertificadoDigital
+from apps.emisores.models import Certificado
 
 
-class CertificadoDigitalSerializer(serializers.ModelSerializer):
+class CertificadoSerializer(serializers.ModelSerializer):
     # Solo el nombre del archivo, para que la UI sepa que hay un .p12 cargado
     # sin exponer un enlace de descarga al certificado (es sensible).
     nombre_archivo = serializers.SerializerMethodField()
 
     class Meta:
-        model = CertificadoDigital
+        model = Certificado
         fields = [
             "id", "emisor", "alias", "archivo", "nombre_archivo", "clave",
             "vigente_desde", "vigente_hasta", "activo",

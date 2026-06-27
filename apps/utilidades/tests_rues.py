@@ -4,7 +4,7 @@ from unittest.mock import patch
 import requests
 from django.test import SimpleTestCase
 
-from apps.servicios import rues
+from apps.utilidades import rues
 
 
 def _respuesta_fake(payload, status_code=200):

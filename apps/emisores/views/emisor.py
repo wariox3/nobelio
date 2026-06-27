@@ -4,7 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.emisores import models, serializers
-from apps.servicios.rues import RuesNoDisponible, consultar_detalle
+from apps.utilidades.rues import RuesNoDisponible, consultar_detalle
 
 
 class EmisorViewSet(viewsets.ModelViewSet):

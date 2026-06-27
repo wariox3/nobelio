@@ -5,7 +5,7 @@ from django.test import TestCase
 from rest_framework.exceptions import APIException
 
 from apps.emisores.serializers.emisor import EmisorSerializer
-from apps.servicios.rues import EmpresaRues, RuesNoDisponible
+from apps.utilidades.rues import EmpresaRues, RuesNoDisponible
 
 _RUTA = "apps.emisores.serializers.emisor.consultar_nit"
 
