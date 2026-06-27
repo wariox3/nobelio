@@ -121,9 +121,12 @@ python manage.py listas TipoResponsabilidad
 
 ## Flujo de uso completo (API)
 
-> Autenticación: la API usa sesión de Django. Inicia sesión en
-> `http://localhost:8000/api/auth/login/` o usa el navegador de DRF.
-> Los catálogos (`/api/catalogos/...`) son de solo lectura y públicos.
+> **Paso a paso (alta → emisión):** ver [docs/checklist-emision.md](docs/checklist-emision.md).
+
+> Autenticación: el frontend usa **JWT** (`POST /api/seguridad/token/` →
+> `Authorization: Bearer <access>`) y el ERP usa **API Key**
+> (`Authorization: Api-Key <prefijo>.<secreto>`). Ver [docs/autenticacion.md](docs/autenticacion.md).
+> Los catálogos (`/api/catalogos/...`) son de solo lectura.
 
 ### 1. Consultar catálogos (para obtener los IDs)
 
