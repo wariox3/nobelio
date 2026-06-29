@@ -65,8 +65,8 @@ class GeneracionUBLTests(TestCase):
             municipio=c["medellin"],
             direccion="Cra 4 # 5-6",
         )
-        cls.documento = doc.DocumentoElectronico.objects.create(
-            tipo=doc.DocumentoElectronico.Tipo.FACTURA_VENTA,
+        cls.documento = doc.Documento.objects.create(
+            tipo=doc.Documento.Tipo.FACTURA_VENTA,
             emisor=cls.emisor,
             resolucion=cls.resolucion,
             adquiriente=cls.adquirente,
@@ -80,7 +80,7 @@ class GeneracionUBLTests(TestCase):
             total_impuestos=Decimal("285000.00"),
             total_a_pagar=Decimal("1785000.00"),
         )
-        linea = doc.LineaDocumento.objects.create(
+        linea = doc.DocumentoDetalle.objects.create(
             documento=cls.documento,
             numero_linea=1,
             descripcion="Producto demo",
@@ -90,8 +90,8 @@ class GeneracionUBLTests(TestCase):
             valor_unitario=Decimal("1500000"),
             valor_total=Decimal("1500000.00"),
         )
-        doc.ImpuestoLinea.objects.create(
-            linea=linea,
+        doc.DocumentoDetalleImpuesto.objects.create(
+            detalle=linea,
             tributo=c["iva"],
             base_gravable=Decimal("1500000.00"),
             tarifa=Decimal("19.00"),

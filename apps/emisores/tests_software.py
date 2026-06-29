@@ -47,7 +47,7 @@ class SoftwareDianAPITests(APITestCase):
         del payload["pin"]
         resp = self.client.post(self.url, payload, format="json")
         self.assertEqual(resp.status_code, 400)
-        self.assertIn("pin", resp.data)
+        self.assertIn("pin", resp.data["errores"])
 
     def test_filtra_por_emisor(self):
         SoftwareDian.objects.create(

@@ -28,7 +28,7 @@ class NotasTestBase(TestCase):
         cls.factura.save(update_fields=["cufe_cude"])
 
     def _crear_nota(self, tipo, numero, consecutivo):
-        nota = doc.DocumentoElectronico.objects.create(
+        nota = doc.Documento.objects.create(
             tipo=tipo, emisor=self.base["emisor"], adquiriente=self.base["adquirente"],
             documento_referencia=self.factura, prefijo="NC", consecutivo=consecutivo,
             numero=numero, fecha_emision=date(2024, 2, 1), hora_emision=time(9, 0, 0),
@@ -36,13 +36,13 @@ class NotasTestBase(TestCase):
             total_impuestos=Decimal("19000.00"), total_a_pagar=Decimal("119000.00"),
             observaciones="Devolución parcial",
         )
-        linea = doc.LineaDocumento.objects.create(
+        linea = doc.DocumentoDetalle.objects.create(
             documento=nota, numero_linea=1, descripcion="Devolución producto",
             cantidad=Decimal("1"), unidad_medida=self.base["catalogos"]["unidad"],
             valor_unitario=Decimal("100000"), valor_total=Decimal("100000.00"),
         )
-        doc.ImpuestoLinea.objects.create(
-            linea=linea, tributo=self.base["catalogos"]["iva"],
+        doc.DocumentoDetalleImpuesto.objects.create(
+            detalle=linea, tributo=self.base["catalogos"]["iva"],
             base_gravable=Decimal("100000.00"), tarifa=Decimal("19.00"),
             valor=Decimal("19000.00"),
         )
@@ -51,7 +51,7 @@ class NotasTestBase(TestCase):
 
 class NotaCreditoTests(NotasTestBase):
     def _xml(self):
-        nota = self._crear_nota(doc.DocumentoElectronico.Tipo.NOTA_CREDITO, "NC1", 1)
+        nota = self._crear_nota(doc.Documento.Tipo.NOTA_CREDITO, "NC1", 1)
         return ubl.constructor_para(
             nota, software=self.base["software"], ambiente=2,
         ).generar_xml()
@@ -82,7 +82,7 @@ class NotaCreditoTests(NotasTestBase):
 
 class NotaDebitoTests(NotasTestBase):
     def _xml(self):
-        nota = self._crear_nota(doc.DocumentoElectronico.Tipo.NOTA_DEBITO, "ND1", 1)
+        nota = self._crear_nota(doc.Documento.Tipo.NOTA_DEBITO, "ND1", 1)
         return ubl.constructor_para(
             nota, software=self.base["software"], ambiente=2,
         ).generar_xml()
@@ -106,15 +106,15 @@ class NotaDebitoTests(NotasTestBase):
 
 class DocumentoSoporteTests(NotasTestBase):
     def _xml(self):
-        ds = doc.DocumentoElectronico.objects.create(
-            tipo=doc.DocumentoElectronico.Tipo.DOCUMENTO_SOPORTE,
+        ds = doc.Documento.objects.create(
+            tipo=doc.Documento.Tipo.DOCUMENTO_SOPORTE,
             emisor=self.base["emisor"], adquiriente=self.base["adquirente"],
             prefijo="DS", consecutivo=1, numero="DS1",
             fecha_emision=date(2024, 2, 1), hora_emision=time(9, 0, 0),
             moneda=self.base["catalogos"]["cop"], valor_bruto=Decimal("50000.00"),
             total_impuestos=Decimal("0.00"), total_a_pagar=Decimal("50000.00"),
         )
-        doc.LineaDocumento.objects.create(
+        doc.DocumentoDetalle.objects.create(
             documento=ds, numero_linea=1, descripcion="Compra a no obligado",
             cantidad=Decimal("1"), unidad_medida=self.base["catalogos"]["unidad"],
             valor_unitario=Decimal("50000"), valor_total=Decimal("50000.00"),

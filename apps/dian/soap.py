@@ -376,6 +376,14 @@ class ClienteDian:
         """GetStatus: consulta el estado de un documento por su trackId."""
         return self._invocar("GetStatus", {"trackId": track_id})
 
+    def consultar_estado_zip(self, track_id: str) -> RespuestaDian:
+        """GetStatusZip: consulta el estado de un envío del Set de Pruebas (ZipKey).
+
+        El Set de Pruebas (SendTestSetAsync) se consulta con GetStatusZip y el
+        ZipKey devuelto; GetStatus daría "TrackId no existe".
+        """
+        return self._invocar("GetStatusZip", {"trackId": track_id})
+
     def consultar_rangos_numeracion(
         self, nit_emisor: str, nit_proveedor: str, software_id: str,
     ) -> RespuestaRangos:

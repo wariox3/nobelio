@@ -1,18 +1,8 @@
-"""ViewSets de catálogos geográficos."""
+"""ViewSet del catálogo municipio (incluye su departamento)."""
 from rest_framework import viewsets
 from rest_framework.permissions import AllowAny
 
 from apps.catalogos import models, serializers
-
-from .base import _CatalogoViewSet
-
-
-class PaisViewSet(_CatalogoViewSet):
-    queryset = models.Pais.objects.all()
-
-
-class DepartamentoViewSet(_CatalogoViewSet):
-    queryset = models.Departamento.objects.all()
 
 
 class MunicipioViewSet(viewsets.ReadOnlyModelViewSet):

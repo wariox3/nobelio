@@ -6,7 +6,7 @@ from apps.nucleo.models import ModeloConFechas, ModeloUUID
 from .adquiriente import Adquiriente
 
 
-class DocumentoElectronico(ModeloUUID, ModeloConFechas):
+class Documento(ModeloUUID, ModeloConFechas):
     """Documento electrónico (factura de venta, notas, documento soporte).
 
     Las notas (crédito/débito) referencian el documento corregido vía
@@ -75,6 +75,11 @@ class DocumentoElectronico(ModeloUUID, ModeloConFechas):
     # Artefactos generados
     xml_firmado = models.TextField("XML firmado", blank=True)
     respuesta_dian = models.TextField("respuesta DIAN", blank=True)
+    track_id = models.CharField(
+        "track id DIAN", max_length=100, blank=True,
+        help_text="Identificador del envío (ZipKey del Set de Pruebas o trackId), "
+        "para consultar el estado en la DIAN.",
+    )
 
     # ===================== Relaciones =====================
     emisor = models.ForeignKey(
@@ -125,7 +130,7 @@ class DocumentoElectronico(ModeloUUID, ModeloConFechas):
     )
 
     class Meta:
-        db_table = "doc_documento_electronico"
+        db_table = "doc_documento"
         verbose_name = "documento electrónico"
         verbose_name_plural = "documentos electrónicos"
         ordering = ["-fecha_emision", "-consecutivo"]

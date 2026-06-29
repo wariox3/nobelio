@@ -1,25 +1,8 @@
-"""Catálogos geográficos (país, departamento, municipio)."""
+"""Catálogo: municipio."""
 from django.db import models
 
 from .base import ElementoCatalogo
-
-
-class Pais(ElementoCatalogo):
-    """País (cac:Country), ISO 3166. Lista Paises."""
-
-    class Meta(ElementoCatalogo.Meta):
-        db_table = "cat_pais"
-        verbose_name = "país"
-        verbose_name_plural = "países"
-
-
-class Departamento(ElementoCatalogo):
-    """Departamento de Colombia (DANE, 2 dígitos). Lista Departamentos."""
-
-    class Meta(ElementoCatalogo.Meta):
-        db_table = "cat_departamento"
-        verbose_name = "departamento"
-        verbose_name_plural = "departamentos"
+from .departamento import Departamento
 
 
 class Municipio(ElementoCatalogo):

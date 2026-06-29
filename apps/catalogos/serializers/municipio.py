@@ -1,4 +1,4 @@
-"""Serializers de catálogos geográficos."""
+"""Serializer del catálogo municipio."""
 from rest_framework import serializers
 
 from apps.catalogos.models import Municipio

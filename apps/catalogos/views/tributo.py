@@ -1,4 +1,4 @@
-"""ViewSets de catálogos tributarios."""
+"""ViewSet del catálogo tributo."""
 from apps.catalogos import models
 
 from .base import _CatalogoViewSet

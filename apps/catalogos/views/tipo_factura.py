@@ -1,4 +1,4 @@
-"""ViewSets de catálogos de tipos de documento."""
+"""ViewSet del catálogo tipo de factura."""
 from apps.catalogos import models
 
 from .base import _CatalogoViewSet

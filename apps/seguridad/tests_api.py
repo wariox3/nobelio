@@ -46,4 +46,4 @@ class UsuarioAPITests(APITestCase):
         self.client.force_authenticate(self.admin)
         resp = self.client.post(self.URL, {"email": "sinclave@example.com"})
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("password", resp.data)
+        self.assertIn("password", resp.data["errores"])

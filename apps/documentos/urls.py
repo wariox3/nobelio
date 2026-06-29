@@ -5,6 +5,6 @@ from apps.documentos import views
 
 router = SimpleRouter()
 router.register("adquiriente", views.AdquirienteViewSet)
-router.register("documento", views.DocumentoElectronicoViewSet)
+router.register("documento", views.DocumentoViewSet)
 
 urlpatterns = router.urls

@@ -11,7 +11,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.dian.tests_firma import _generar_certificado
-from apps.documentos.models import DocumentoElectronico
+from apps.documentos.models import Documento
 from apps.documentos.tests_utils import crear_documento_factura
 from apps.emisores.models import Certificado
 
@@ -53,7 +53,7 @@ class DocumentoAPITests(APITestCase):
     def test_emitir_firma_el_documento(self):
         resp = self.client.post(self._url("emitir/"))
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertEqual(resp.data["estado"], DocumentoElectronico.Estado.FIRMADO)
+        self.assertEqual(resp.data["estado"], Documento.Estado.FIRMADO)
         self.assertEqual(len(resp.data["cufe_cude"]), 96)
 
     def test_descargar_xml_tras_emitir(self):
@@ -77,7 +77,7 @@ class DocumentoAPITests(APITestCase):
     def test_crear_documento_calcula_totales(self):
         c = self.cat
         payload = {
-            "tipo": DocumentoElectronico.Tipo.FACTURA_VENTA,
+            "tipo": Documento.Tipo.FACTURA_VENTA,
             "emisor": self.emisor.id,
             "resolucion": self.documento.resolucion.id,
             "adquiriente": self.documento.adquiriente.id,
@@ -87,7 +87,7 @@ class DocumentoAPITests(APITestCase):
             "fecha_emision": "2024-01-10",
             "hora_emision": "10:00:00",
             "moneda": c["cop"].id,
-            "lineas": [
+            "detalles": [
                 {
                     "numero_linea": 1, "descripcion": "Servicio",
                     "cantidad": "2", "unidad_medida": c["unidad"].id,

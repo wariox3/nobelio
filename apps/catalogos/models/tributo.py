@@ -1,4 +1,4 @@
-"""Catálogos tributarios."""
+"""Catálogo: tributo / impuesto."""
 from .base import ElementoCatalogo
 
 

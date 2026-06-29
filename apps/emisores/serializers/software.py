@@ -9,7 +9,7 @@ class SoftwareDianSerializer(serializers.ModelSerializer):
         model = SoftwareDian
         fields = [
             "id", "emisor", "identificador", "pin", "id_proveedor",
-            "test_set_id", "activo",
+            "test_set_id", "set_pruebas_aceptado", "activo",
         ]
         extra_kwargs = {
             # El PIN es sensible: se acepta al crear/editar pero nunca se devuelve.

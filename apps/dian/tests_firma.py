@@ -72,21 +72,21 @@ class FirmaXAdESTests(TestCase):
             numero_identificacion="800199436", tipo_organizacion=c["juridica"],
             pais=c["colombia"],
         )
-        cls.documento = doc.DocumentoElectronico.objects.create(
-            tipo=doc.DocumentoElectronico.Tipo.FACTURA_VENTA, emisor=emisor,
+        cls.documento = doc.Documento.objects.create(
+            tipo=doc.Documento.Tipo.FACTURA_VENTA, emisor=emisor,
             resolucion=cls.resolucion, adquiriente=adq, prefijo="SETP",
             consecutivo=990000129, numero="323200000129",
             fecha_emision=date(2019, 1, 16), hora_emision=time(10, 53, 10),
             moneda=c["cop"], valor_bruto=Decimal("1500000.00"),
             total_impuestos=Decimal("285000.00"), total_a_pagar=Decimal("1785000.00"),
         )
-        linea = doc.LineaDocumento.objects.create(
+        linea = doc.DocumentoDetalle.objects.create(
             documento=cls.documento, numero_linea=1, descripcion="Producto demo",
             cantidad=Decimal("1"), unidad_medida=c["unidad"],
             valor_unitario=Decimal("1500000"), valor_total=Decimal("1500000.00"),
         )
-        doc.ImpuestoLinea.objects.create(
-            linea=linea, tributo=c["iva"], base_gravable=Decimal("1500000.00"),
+        doc.DocumentoDetalleImpuesto.objects.create(
+            detalle=linea, tributo=c["iva"], base_gravable=Decimal("1500000.00"),
             tarifa=Decimal("19.00"), valor=Decimal("285000.00"),
         )
         cls.llave, cls.cert = _generar_certificado()

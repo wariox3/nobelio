@@ -8,6 +8,7 @@ from rest_framework.response import Response
 
 from apps.emisores import models, serializers
 from apps.emisores.servicios import CertificadoInvalido, validar_pkcs12
+from apps.nucleo.api import ErrorSolicitud
 
 
 class CertificadoViewSet(viewsets.ModelViewSet):
@@ -50,13 +51,9 @@ class CertificadoViewSet(viewsets.ModelViewSet):
         se conservan como histórico.
         """
         if not settings.B2_HABILITADO:
-            return Response(
-                {
-                    "detail": "El almacenamiento Backblaze B2 no está "
-                    "configurado; no se pueden guardar certificados digitales "
-                    "(variables B2_*)."
-                },
-                status=status.HTTP_400_BAD_REQUEST,
+            raise ErrorSolicitud(
+                "El almacenamiento Backblaze B2 no está configurado; no se "
+                "pueden guardar certificados digitales (variables B2_*)."
             )
 
         serializer = self.get_serializer(data=request.data)
@@ -73,9 +70,7 @@ class CertificadoViewSet(viewsets.ModelViewSet):
                 datos, serializer.validated_data["clave"], emisor
             )
         except CertificadoInvalido as exc:
-            return Response(
-                {"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST
-            )
+            raise ErrorSolicitud(str(exc))
 
         with transaction.atomic():
             # Un solo certificado vigente por emisor: jubilamos los previos y

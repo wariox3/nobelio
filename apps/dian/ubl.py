@@ -45,6 +45,9 @@ NS_RAIZ = {
 # NIT de la DIAN (proveedor de autorización).
 NIT_DIAN = "800197268"
 
+# Literal del agente del esquema (schemeAgencyName) que exige la DIAN en CompanyID.
+AGENCIA_DIAN = "CO, DIAN (Dirección de Impuestos y Aduanas Nacionales)"
+
 # Códigos de tributo relevantes para el CUFE/CUDE.
 COD_IVA = "01"
 COD_ICA = "03"
@@ -85,7 +88,7 @@ def _cantidad(valor) -> str:
 def agrupar_impuestos(documento) -> "OrderedDict[str, dict]":
     """Agrupa los impuestos del documento por código de tributo."""
     grupos: "OrderedDict[str, dict]" = OrderedDict()
-    for linea in documento.lineas.all():
+    for linea in documento.detalles.all():
         for imp in linea.impuestos.all():
             codigo = imp.tributo.codigo
             grupo = grupos.setdefault(
@@ -215,18 +218,22 @@ class ConstructorUBL:
 
         proveedor = _sub(dian, "sts", "SoftwareProvider")
         _sub(proveedor, "sts", "ProviderID", self.software.id_proveedor,
-             schemeAgencyID="195", schemeID="4", schemeName="31")
-        _sub(proveedor, "sts", "SoftwareID", self.software.identificador, schemeAgencyID="195")
+             schemeAgencyID="195", schemeAgencyName=AGENCIA_DIAN,
+             schemeID="4", schemeName="31")
+        _sub(proveedor, "sts", "SoftwareID", self.software.identificador,
+             schemeAgencyID="195", schemeAgencyName=AGENCIA_DIAN)
 
         codigo_seguridad = ident.calcular_codigo_seguridad_software(
             id_software=self.software.identificador, pin=self.software.pin,
             numero_documento=self.doc.numero,
         )
-        _sub(dian, "sts", "SoftwareSecurityCode", codigo_seguridad, schemeAgencyID="195")
+        _sub(dian, "sts", "SoftwareSecurityCode", codigo_seguridad,
+             schemeAgencyID="195", schemeAgencyName=AGENCIA_DIAN)
 
         autorizador = _sub(dian, "sts", "AuthorizationProvider")
         _sub(autorizador, "sts", "AuthorizationProviderID", NIT_DIAN,
-             schemeAgencyID="195", schemeID="4", schemeName="31")
+             schemeAgencyID="195", schemeAgencyName=AGENCIA_DIAN,
+             schemeID="4", schemeName="31")
 
         _sub(dian, "sts", "QRCode", self._url_qr(cufe))
         # La 2ª UBLExtension (firma XAdES) la añade el módulo de firma.
@@ -234,7 +241,7 @@ class ConstructorUBL:
     def _cabecera(self, raiz, cufe):
         _sub(raiz, "cbc", "UBLVersionID", "UBL 2.1")
         _sub(raiz, "cbc", "CustomizationID", self.customization_id)
-        _sub(raiz, "cbc", "ProfileID", "DIAN 2.1")
+        _sub(raiz, "cbc", "ProfileID", "DIAN 2.1: Factura Electrónica de Venta")
         _sub(raiz, "cbc", "ProfileExecutionID", self.ambiente)
         _sub(raiz, "cbc", "ID", self.doc.numero)
         _sub(raiz, "cbc", "UUID", cufe, schemeID=str(self.ambiente), schemeName=self.scheme_name)
@@ -247,7 +254,7 @@ class ConstructorUBL:
              listAgencyID="6",
              listAgencyName="United Nations Economic Commission for Europe",
              listID="ISO 4217 Alpha")
-        _sub(raiz, "cbc", "LineCountNumeric", self.doc.lineas.count())
+        _sub(raiz, "cbc", "LineCountNumeric", self.doc.detalles.count())
 
     def _referencias(self, raiz):
         """Referencias a la factura corregida (solo notas)."""
@@ -262,7 +269,10 @@ class ConstructorUBL:
         _sub(nombre, "cbc", "Name", emisor.nombre_comercial or emisor.razon_social)
         self._direccion_fisica(party, emisor)
         self._party_tax_scheme(party, emisor)
-        self._party_legal_entity(party, emisor)
+        codigo_sucursal = (
+            self.resolucion.prefijo if self.resolucion and self.resolucion.prefijo else None
+        )
+        self._party_legal_entity(party, emisor, codigo_sucursal=codigo_sucursal)
         if emisor.correo or emisor.telefono:
             contacto = _sub(party, "cac", "Contact")
             if emisor.telefono:
@@ -275,6 +285,12 @@ class ConstructorUBL:
         cli = _sub(raiz, "cac", "AccountingCustomerParty")
         _sub(cli, "cbc", "AdditionalAccountID", self._codigo_organizacion(adq))
         party = _sub(cli, "cac", "Party")
+        # FAK61/FAK62: identificación del adquiriente (obligatoria para persona natural).
+        ident = _sub(party, "cac", "PartyIdentification")
+        _sub(ident, "cbc", "ID", adq.numero_identificacion,
+             schemeAgencyID="195", schemeAgencyName=AGENCIA_DIAN,
+             schemeID=adq.digito_verificacion or "0",
+             schemeName=adq.tipo_identificacion.codigo)
         nombre = _sub(party, "cac", "PartyName")
         _sub(nombre, "cbc", "Name", adq.razon_social)
         if adq.municipio:
@@ -324,7 +340,7 @@ class ConstructorUBL:
         _sub(total, "cbc", "PayableAmount", _valor(self.doc.total_a_pagar), currencyID=self.moneda)
 
     def _lineas(self, raiz):
-        for linea in self.doc.lineas.all():
+        for linea in self.doc.detalles.all():
             il = _sub(raiz, "cac", self.etiqueta_linea)
             _sub(il, "cbc", "ID", linea.numero_linea)
             _sub(il, "cbc", self.etiqueta_cantidad, _cantidad(linea.cantidad),
@@ -349,6 +365,11 @@ class ConstructorUBL:
             if linea.codigo_producto:
                 ident_item = _sub(item, "cac", "SellersItemIdentification")
                 _sub(ident_item, "cbc", "ID", linea.codigo_producto)
+            # FAZ09/FAZ10: identificación del bien/servicio según un estándar.
+            # 999 = estándar de adopción del contribuyente (código interno).
+            std_item = _sub(item, "cac", "StandardItemIdentification")
+            _sub(std_item, "cbc", "ID", linea.codigo_producto or str(linea.numero_linea),
+                 schemeID="999", schemeAgencyID="195")
 
             precio = _sub(il, "cac", "Price")
             _sub(precio, "cbc", "PriceAmount", _valor(linea.valor_unitario), currencyID=self.moneda)
@@ -383,7 +404,8 @@ class ConstructorUBL:
         pts = _sub(party, "cac", "PartyTaxScheme")
         _sub(pts, "cbc", "RegistrationName", entidad.razon_social)
         _sub(pts, "cbc", "CompanyID", entidad.numero_identificacion,
-             schemeAgencyID="195", schemeID=entidad.digito_verificacion or "0",
+             schemeAgencyID="195", schemeAgencyName=AGENCIA_DIAN,
+             schemeID=entidad.digito_verificacion or "0",
              schemeName=entidad.tipo_identificacion.codigo)
         _sub(pts, "cbc", "TaxLevelCode", self._responsabilidades(entidad), listName="05")
         direccion = _sub(pts, "cac", "RegistrationAddress")
@@ -392,12 +414,18 @@ class ConstructorUBL:
         _sub(esquema, "cbc", "ID", COD_IVA)
         _sub(esquema, "cbc", "Name", "IVA")
 
-    def _party_legal_entity(self, party, entidad):
+    def _party_legal_entity(self, party, entidad, codigo_sucursal=None):
         ple = _sub(party, "cac", "PartyLegalEntity")
         _sub(ple, "cbc", "RegistrationName", entidad.razon_social)
         _sub(ple, "cbc", "CompanyID", entidad.numero_identificacion,
-             schemeAgencyID="195", schemeID=entidad.digito_verificacion or "0",
+             schemeAgencyID="195", schemeAgencyName=AGENCIA_DIAN,
+             schemeID=entidad.digito_verificacion or "0",
              schemeName=entidad.tipo_identificacion.codigo)
+        # FAB10a: el prefijo (código de la sucursal/punto de facturación) debe
+        # coincidir con el Prefix del InvoiceControl.
+        if codigo_sucursal:
+            crs = _sub(ple, "cac", "CorporateRegistrationScheme")
+            _sub(crs, "cbc", "ID", codigo_sucursal)
 
     # -- Auxiliares ---------------------------------------------------------
 
@@ -485,7 +513,7 @@ class ConstructorDocumentoSoporte(ConstructorUBL):
 
 
 # Mapeo tipo de documento -> constructor.
-from apps.documentos.models import DocumentoElectronico as _Doc  # noqa: E402
+from apps.documentos.models import Documento as _Doc  # noqa: E402
 
 CONSTRUCTORES = {
     _Doc.Tipo.FACTURA_VENTA: ConstructorFacturaUBL,

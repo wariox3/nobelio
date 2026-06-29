@@ -7,6 +7,10 @@ puede faltar. Las rutas cuelgan de `/api/`.
 > Autenticación: el **frontend** usa JWT (`Authorization: Bearer <access>`); el
 > **ERP** usa API Key (`Authorization: Api-Key <prefijo>.<secreto>`).
 > Ver [docs/autenticacion.md](autenticacion.md).
+>
+> Errores: todas las respuestas 4xx/5xx tienen el mismo cuerpo
+> `{"detail": "<mensaje>", "errores": {"<campo>": ["<msg>"]}}` (`errores` queda
+> `{}` cuando el error no es por campo). Lo normaliza `apps.nucleo.api.exception_handler`.
 
 ---
 

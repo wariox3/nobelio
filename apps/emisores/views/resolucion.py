@@ -5,12 +5,14 @@ import requests
 from django.shortcuts import get_object_or_404
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from apps.catalogos.models import TipoFactura
 from apps.dian import servicios as dian
 from apps.dian import soap
 from apps.emisores import models, serializers
+from apps.nucleo.api import ErrorPasarela, ErrorSolicitud
 
 
 def _a_fecha(valor: str):
@@ -45,14 +47,9 @@ class ResolucionFacturacionViewSet(viewsets.ModelViewSet):
         """
         emisor_id = request.query_params.get("emisor")
         if not emisor_id:
-            return Response(
-                {"emisor": "El parámetro 'emisor' es obligatorio."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            raise ValidationError({"emisor": "El parámetro 'emisor' es obligatorio."})
         emisor = get_object_or_404(models.Emisor, pk=emisor_id)
         respuesta = self._consultar(emisor)
-        if isinstance(respuesta, Response):
-            return respuesta
         datos = [
             {
                 "prefijo": r.prefijo,
@@ -91,16 +88,13 @@ class ResolucionFacturacionViewSet(viewsets.ModelViewSet):
         )
 
         respuesta = self._consultar(emisor)
-        if isinstance(respuesta, Response):
-            return respuesta
 
         # Si la DIAN no devuelve rangos, no hay nada que importar: devolvemos su
         # mensaje (p. ej. software sin prefijos asociados) en lugar de 0 cambios.
         if not respuesta.rangos:
-            return Response(
-                {"detail": respuesta.descripcion
-                 or "La DIAN no devolvió rangos de numeración para este emisor."},
-                status=status.HTTP_400_BAD_REQUEST,
+            raise ErrorSolicitud(
+                respuesta.descripcion
+                or "La DIAN no devolvió rangos de numeración para este emisor."
             )
 
         guardadas = []
@@ -128,22 +122,16 @@ class ResolucionFacturacionViewSet(viewsets.ModelViewSet):
     # -- Internos -----------------------------------------------------------
 
     def _consultar(self, emisor):
-        """Llama a la DIAN; devuelve un ``RespuestaRangos`` o una Response de error."""
+        """Llama a la DIAN; devuelve un ``RespuestaRangos`` o lanza la excepción."""
         try:
             return dian.consultar_rangos_numeracion(emisor)
         except dian.ErrorEmision as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            raise ErrorSolicitud(str(exc))
         except requests.HTTPError as exc:
             # La DIAN suele responder 500 con un soap:Fault que explica la causa.
             fault = ""
             if exc.response is not None:
                 fault = soap.extraer_fault(exc.response.content)
-            return Response(
-                {"detail": f"La DIAN rechazó la consulta: {fault or exc}"},
-                status=status.HTTP_502_BAD_GATEWAY,
-            )
+            raise ErrorPasarela(f"La DIAN rechazó la consulta: {fault or exc}")
         except requests.RequestException as exc:
-            return Response(
-                {"detail": f"Error al comunicarse con la DIAN: {exc}"},
-                status=status.HTTP_502_BAD_GATEWAY,
-            )
+            raise ErrorPasarela(f"Error al comunicarse con la DIAN: {exc}")

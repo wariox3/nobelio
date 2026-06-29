@@ -13,7 +13,7 @@ from __future__ import annotations
 from django.conf import settings
 
 from apps.dian import firma, soap, ubl
-from apps.documentos.models import DocumentoElectronico
+from apps.documentos.models import Documento
 
 
 class ErrorEmision(Exception):
@@ -65,12 +65,12 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
     ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
     software = _software_activo(documento)
 
-    es_factura = documento.tipo == DocumentoElectronico.Tipo.FACTURA_VENTA
+    es_factura = documento.tipo == Documento.Tipo.FACTURA_VENTA
     if es_factura and documento.resolucion is None:
         raise ErrorEmision("La factura no tiene resolución de facturación asociada.")
     if (
-        documento.tipo in (DocumentoElectronico.Tipo.NOTA_CREDITO,
-                            DocumentoElectronico.Tipo.NOTA_DEBITO)
+        documento.tipo in (Documento.Tipo.NOTA_CREDITO,
+                            Documento.Tipo.NOTA_DEBITO)
         and documento.documento_referencia is None
     ):
         raise ErrorEmision("La nota debe referenciar el documento que corrige.")
@@ -84,14 +84,14 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
     )
     xml = constructor.generar_xml()
     documento.cufe_cude = constructor.cufe
-    documento.estado = DocumentoElectronico.Estado.GENERADO
+    documento.estado = Documento.Estado.GENERADO
 
     if firmador is None:
         firmador = construir_firmador(documento, **cred)
     xml_firmado = firmador.firmar(xml)
 
     documento.xml_firmado = xml_firmado.decode("utf-8")
-    documento.estado = DocumentoElectronico.Estado.FIRMADO
+    documento.estado = Documento.Estado.FIRMADO
     documento.save(update_fields=["cufe_cude", "xml_firmado", "estado", "actualizado_en"])
     return xml_firmado
 
@@ -136,8 +136,10 @@ def consultar_rangos_numeracion(emisor, *, cliente=None, ambiente=None,
 def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):
     """Empaqueta y envía el XML firmado a la DIAN; actualiza el estado.
 
-    En habilitación (ambiente=2) usa SendTestSetAsync con el TestSetId del
-    software; en producción usa SendBillSync.
+    Usa SendTestSetAsync (con el TestSetId del software) solo mientras se está
+    en habilitación y el Set de Pruebas aún NO ha sido aceptado. Una vez
+    aceptado (``software.set_pruebas_aceptado``) o en producción, usa
+    SendBillSync (síncrono).
     """
     ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
     if not documento.xml_firmado:
@@ -150,33 +152,48 @@ def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):
     xml = documento.xml_firmado.encode("utf-8")
     nombre = f"{documento.numero}.xml"
 
-    if ambiente == 2:
+    usar_set_pruebas = ambiente == 2 and not software.set_pruebas_aceptado
+    if usar_set_pruebas:
         respuesta = cliente.enviar_set_pruebas(xml, nombre, software.test_set_id)
     else:
         respuesta = cliente.enviar_factura_sincrono(xml, nombre)
 
     documento.respuesta_dian = respuesta.xml_crudo
+    if respuesta.track_id:
+        documento.track_id = respuesta.track_id
     if respuesta.es_valido:
-        documento.estado = DocumentoElectronico.Estado.ACEPTADO
+        documento.estado = Documento.Estado.ACEPTADO
     elif respuesta.errores:
-        documento.estado = DocumentoElectronico.Estado.RECHAZADO
+        documento.estado = Documento.Estado.RECHAZADO
     else:
-        documento.estado = DocumentoElectronico.Estado.ENVIADO
-    documento.save(update_fields=["respuesta_dian", "estado", "actualizado_en"])
+        documento.estado = Documento.Estado.ENVIADO
+    documento.save(update_fields=["respuesta_dian", "track_id", "estado", "actualizado_en"])
     return respuesta
 
 
 def consultar_estado(documento, *, cliente=None, ambiente=None, track_id=None, **cred):
-    """Consulta el estado de un documento en la DIAN (GetStatus)."""
+    """Consulta el estado de un documento en la DIAN.
+
+    En habilitación (ambiente=2) usa GetStatusZip con el ZipKey del Set de
+    Pruebas; en producción usa GetStatus. Por defecto usa el ``track_id``
+    guardado en el documento al enviarlo.
+    """
     ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
     if cliente is None:
         cliente = construir_cliente(documento, ambiente, **cred)
 
-    respuesta = cliente.consultar_estado(track_id or "")
+    track_id = track_id or documento.track_id
+    if not track_id:
+        raise ErrorEmision("El documento no tiene track_id; envíelo a la DIAN primero.")
+
+    if ambiente == 2:
+        respuesta = cliente.consultar_estado_zip(track_id)
+    else:
+        respuesta = cliente.consultar_estado(track_id)
     documento.respuesta_dian = respuesta.xml_crudo
     if respuesta.es_valido:
-        documento.estado = DocumentoElectronico.Estado.ACEPTADO
+        documento.estado = Documento.Estado.ACEPTADO
     elif respuesta.errores:
-        documento.estado = DocumentoElectronico.Estado.RECHAZADO
+        documento.estado = Documento.Estado.RECHAZADO
     documento.save(update_fields=["respuesta_dian", "estado", "actualizado_en"])
     return respuesta

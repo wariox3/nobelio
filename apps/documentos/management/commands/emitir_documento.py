@@ -8,7 +8,7 @@ la DIAN. Útil para el proceso de habilitación contra el Set de Pruebas.
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.dian import servicios
-from apps.documentos.models import DocumentoElectronico
+from apps.documentos.models import Documento
 
 
 class Command(BaseCommand):
@@ -23,8 +23,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **opciones):
         try:
-            documento = DocumentoElectronico.objects.get(pk=opciones["id"])
-        except (DocumentoElectronico.DoesNotExist, ValueError) as exc:
+            documento = Documento.objects.get(pk=opciones["id"])
+        except (Documento.DoesNotExist, ValueError) as exc:
             raise CommandError(f"No existe el documento {opciones['id']}") from exc
 
         try:

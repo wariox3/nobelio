@@ -59,6 +59,12 @@ class Adquiriente(ModeloConFechas):
         verbose_name = "adquiriente"
         verbose_name_plural = "adquirientes"
         ordering = ["razon_social"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tipo_identificacion", "numero_identificacion"],
+                name="adquiriente_identificacion_unica",
+            )
+        ]
 
     def __str__(self):
         return f"{self.numero_identificacion} - {self.razon_social}"

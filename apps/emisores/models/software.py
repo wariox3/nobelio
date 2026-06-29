@@ -27,6 +27,11 @@ class SoftwareDian(ModeloConFechas):
         "ID del set de pruebas", max_length=100, blank=True,
         help_text="TestSetId entregado por la DIAN para la habilitación.",
     )
+    set_pruebas_aceptado = models.BooleanField(
+        "set de pruebas aceptado", default=False,
+        help_text="Cuando la DIAN acepta el Set de Pruebas, los envíos pasan a "
+        "SendBillSync (síncrono) en vez de SendTestSetAsync.",
+    )
     activo = models.BooleanField("activo", default=True)
 
     # --- Relaciones ---

@@ -1,5 +1,5 @@
 """API de documentos electrónicos."""
 from .adquiriente import AdquirienteViewSet
-from .documento import DocumentoElectronicoViewSet
+from .documento import DocumentoViewSet
 
-__all__ = ["AdquirienteViewSet", "DocumentoElectronicoViewSet"]
+__all__ = ["AdquirienteViewSet", "DocumentoViewSet"]

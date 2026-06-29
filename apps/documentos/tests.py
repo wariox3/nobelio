@@ -41,8 +41,8 @@ class GrafoDocumentoTests(TestCase):
         )
 
     def test_crear_documento_con_linea_e_impuesto(self):
-        documento = doc.DocumentoElectronico.objects.create(
-            tipo=doc.DocumentoElectronico.Tipo.FACTURA_VENTA,
+        documento = doc.Documento.objects.create(
+            tipo=doc.Documento.Tipo.FACTURA_VENTA,
             emisor=self.emisor,
             adquiriente=self.adquirente,
             prefijo="SETP",
@@ -55,7 +55,7 @@ class GrafoDocumentoTests(TestCase):
             total_impuestos=Decimal("285000.00"),
             total_a_pagar=Decimal("1785000.00"),
         )
-        linea = doc.LineaDocumento.objects.create(
+        linea = doc.DocumentoDetalle.objects.create(
             documento=documento,
             numero_linea=1,
             descripcion="Producto demo",
@@ -64,15 +64,15 @@ class GrafoDocumentoTests(TestCase):
             valor_unitario=Decimal("1500000"),
             valor_total=Decimal("1500000.00"),
         )
-        doc.ImpuestoLinea.objects.create(
-            linea=linea,
+        doc.DocumentoDetalleImpuesto.objects.create(
+            detalle=linea,
             tributo=self.cat["iva"],
             base_gravable=Decimal("1500000.00"),
             tarifa=Decimal("19.00"),
             valor=Decimal("285000.00"),
         )
 
-        self.assertEqual(documento.lineas.count(), 1)
+        self.assertEqual(documento.detalles.count(), 1)
         self.assertEqual(linea.impuestos.count(), 1)
         self.assertEqual(str(documento), "Factura de venta SETP990000129")
 

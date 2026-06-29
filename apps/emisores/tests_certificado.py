@@ -168,8 +168,8 @@ class CertificadoAPITests(APITestCase):
             self.url_cargar, {"emisor": self.emisor.id}, format="multipart"
         )
         self.assertEqual(resp.status_code, 400)
-        self.assertIn("clave", resp.data)
-        self.assertIn("archivo", resp.data)
+        self.assertIn("clave", resp.data["errores"])
+        self.assertIn("archivo", resp.data["errores"])
 
     def test_post_generico_deshabilitado(self):
         # La creación genérica está bloqueada: solo se sube por 'cargar'.

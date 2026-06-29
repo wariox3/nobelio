@@ -145,7 +145,7 @@ class GeneradorPDF:
     def _tabla_lineas(self):
         encabezados = ["#", "Descripción", "Cant.", "Und.", "Vr. Unitario", "Dscto.", "Total"]
         filas = [encabezados]
-        for linea in self.doc.lineas.all():
+        for linea in self.doc.detalles.all():
             filas.append([
                 str(linea.numero_linea),
                 Paragraph(linea.descripcion, self.estilos["Mini"]),

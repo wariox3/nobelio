@@ -124,6 +124,8 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- Django REST Framework --------------------------------------------------
 REST_FRAMEWORK = {
+    # Errores con cuerpo homogéneo: {"detail": ..., "errores": {...}}.
+    "EXCEPTION_HANDLER": "apps.nucleo.api.exception_handler",
     # Dos vías coexistiendo: API Key (ERP) y JWT (frontend SPA). Ver
     # docs/autenticacion.md. Ambas son stateless (sin sesión, sin CSRF).
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -192,7 +194,10 @@ DIAN_POLICY_NAME = env(
 # Hash (SHA-256 en base64) del PDF de la política de firma DIAN. Es el valor que
 # va en xades:SigPolicyHash/ds:DigestValue. Debe corresponder al PDF de
 # DIAN_POLICY_ID; calcularlo con apps.dian.firma.calcular_hash_politica().
-DIAN_POLICY_HASH = env("DIAN_POLICY_HASH", default="")
+DIAN_POLICY_HASH = env(
+    "DIAN_POLICY_HASH",
+    default="dMoMvtcG5aIzgYo0tIsSQeVJBDnUnfSOfBpxXrmor0Y=",
+)
 
 # Carpeta donde se almacenan los XML/PDF generados (relativa a MEDIA_ROOT).
 DIAN_STORAGE_SUBDIR = "dian"
