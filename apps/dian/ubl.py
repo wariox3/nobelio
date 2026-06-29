@@ -153,7 +153,7 @@ class ConstructorUBL:
             valor_ica=_valor_por_tributo(self.impuestos, COD_ICA),
             valor_total=self.doc.total_a_pagar,
             nit_emisor=self.doc.emisor.numero_identificacion,
-            id_adquirente=self.doc.adquirente.numero_identificacion,
+            id_adquirente=self.doc.adquiriente.numero_identificacion,
             tipo_ambiente=self.ambiente,
         )
         if self.usa_cude:
@@ -271,7 +271,7 @@ class ConstructorUBL:
                 _sub(contacto, "cbc", "ElectronicMail", emisor.correo)
 
     def _parte_adquirente(self, raiz):
-        adq = self.doc.adquirente
+        adq = self.doc.adquiriente
         cli = _sub(raiz, "cac", "AccountingCustomerParty")
         _sub(cli, "cbc", "AdditionalAccountID", self._codigo_organizacion(adq))
         party = _sub(cli, "cac", "Party")

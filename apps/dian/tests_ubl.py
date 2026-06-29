@@ -54,7 +54,7 @@ class GeneracionUBLTests(TestCase):
             vigente_desde=date(2019, 1, 19),
             vigente_hasta=date(2030, 1, 19),
         )
-        cls.adquirente = doc.Adquirente.objects.create(
+        cls.adquirente = doc.Adquiriente.objects.create(
             razon_social="Cliente Demo",
             tipo_identificacion=c["nit"],
             numero_identificacion="800199436",
@@ -69,7 +69,7 @@ class GeneracionUBLTests(TestCase):
             tipo=doc.DocumentoElectronico.Tipo.FACTURA_VENTA,
             emisor=cls.emisor,
             resolucion=cls.resolucion,
-            adquirente=cls.adquirente,
+            adquiriente=cls.adquirente,
             prefijo="SETP",
             consecutivo=990000129,
             numero="323200000129",

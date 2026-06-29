@@ -1,13 +1,13 @@
 """
-Modelos de documentos electrónicos: adquirentes, documento electrónico
+Modelos de documentos electrónicos: adquirientes, documento electrónico
 (factura, notas, documento soporte), sus líneas e impuestos.
 """
-from .adquirente import Adquirente
+from .adquiriente import Adquiriente
 from .documento import DocumentoElectronico
 from .linea import ImpuestoLinea, LineaDocumento
 
 __all__ = [
-    "Adquirente",
+    "Adquiriente",
     "DocumentoElectronico",
     "LineaDocumento",
     "ImpuestoLinea",

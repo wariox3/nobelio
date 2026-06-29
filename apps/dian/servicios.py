@@ -20,18 +20,26 @@ class ErrorEmision(Exception):
     """Error en el proceso de emisión de un documento."""
 
 
-def _software_activo(documento):
-    software = documento.emisor.softwares.filter(activo=True).first()
+def _software_activo_emisor(emisor):
+    software = emisor.softwares.filter(activo=True).first()
     if software is None:
         raise ErrorEmision("El emisor no tiene un software DIAN activo.")
     return software
 
 
-def _certificado_activo(documento):
-    certificado = documento.emisor.certificados.filter(activo=True).first()
+def _certificado_activo_emisor(emisor):
+    certificado = emisor.certificados.filter(activo=True).first()
     if certificado is None:
         raise ErrorEmision("El emisor no tiene un certificado digital activo.")
     return certificado
+
+
+def _software_activo(documento):
+    return _software_activo_emisor(documento.emisor)
+
+
+def _certificado_activo(documento):
+    return _certificado_activo_emisor(documento.emisor)
 
 
 def construir_firmador(documento, *, llave=None, certificado=None, cadena=None):
@@ -88,14 +96,41 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
     return xml_firmado
 
 
-def construir_cliente(documento, ambiente, *, llave=None, certificado=None):
-    """Crea el ClienteDian con la URL del ambiente y las credenciales del emisor."""
+def construir_cliente_emisor(emisor, ambiente, *, llave=None, certificado=None):
+    """Crea el ClienteDian con la URL del ambiente y el certificado del emisor."""
     if llave is None or certificado is None:
-        cert_modelo = _certificado_activo(documento)
+        cert_modelo = _certificado_activo_emisor(emisor)
         with cert_modelo.archivo.open("rb") as fh:
             llave, certificado, _ = firma.cargar_pkcs12(fh.read(), cert_modelo.clave)
     url = settings.DIAN_WSDL[ambiente].replace("?wsdl", "")
     return soap.ClienteDian(url, llave, certificado)
+
+
+def construir_cliente(documento, ambiente, *, llave=None, certificado=None):
+    """Crea el ClienteDian para el emisor del documento."""
+    return construir_cliente_emisor(
+        documento.emisor, ambiente, llave=llave, certificado=certificado,
+    )
+
+
+def consultar_rangos_numeracion(emisor, *, cliente=None, ambiente=None,
+                                software=None, **cred):
+    """Consulta los rangos de numeración (resoluciones) del emisor en la DIAN.
+
+    Usa el software DIAN activo del emisor (``id_proveedor`` = NIT del proveedor
+    tecnológico, que en software propio es el propio emisor). Devuelve un
+    ``soap.RespuestaRangos`` con el código/descripción de la DIAN y los rangos
+    (cada uno con su clave técnica).
+    """
+    ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
+    software = software or _software_activo_emisor(emisor)
+    if cliente is None:
+        cliente = construir_cliente_emisor(emisor, ambiente, **cred)
+    return cliente.consultar_rangos_numeracion(
+        emisor.numero_identificacion,
+        software.id_proveedor,
+        software.identificador,
+    )
 
 
 def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):

@@ -20,7 +20,7 @@ class DocumentoElectronicoSerializer(serializers.ModelSerializer):
         model = models.DocumentoElectronico
         fields = [
             "id", "tipo", "tipo_display", "estado", "estado_display",
-            "emisor", "resolucion", "adquirente",
+            "emisor", "resolucion", "adquiriente",
             "prefijo", "consecutivo", "numero", "cufe_cude",
             "fecha_emision", "hora_emision", "moneda", "forma_pago", "medio_pago",
             "valor_bruto", "total_impuestos", "total_descuentos", "total_cargos",
@@ -44,7 +44,7 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.DocumentoElectronico
         fields = [
-            "id", "tipo", "emisor", "resolucion", "adquirente",
+            "id", "tipo", "emisor", "resolucion", "adquiriente",
             "prefijo", "consecutivo", "numero",
             "fecha_emision", "hora_emision", "moneda", "forma_pago", "medio_pago",
             "total_descuentos", "total_cargos", "documento_referencia",

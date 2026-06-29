@@ -11,6 +11,7 @@ Operaciones soportadas:
   - SendTestSetAsync : envío al Set de Pruebas (habilitación) -> devuelve ZipKey/trackId.
   - SendBillSync     : envío síncrono (producción) -> DianResponse.
   - GetStatus        : consulta de estado por trackId -> DianResponse.
+  - GetNumberingRange: consulta de rangos de numeración (resoluciones) -> RangoNumeracion[].
 
 La firma del sobre (WS-Security) y el empaquetado son independientes del envío
 HTTP, de modo que pueden probarse sin conexión.
@@ -50,6 +51,10 @@ VALUE_TYPE_X509 = (
     "http://docs.oasis-open.org/wss/2004/01/"
     "oasis-200401-wss-x509-token-profile-1.0#X509v3"
 )
+# La política del WS exige referenciar el certificado por huella (RequireThumbprintReference).
+VALUE_TYPE_THUMBPRINT = (
+    "http://docs.oasis-open.org/wss/oasis-wss-soap-message-security-1.1#ThumbprintSHA1"
+)
 ENCODING_BASE64 = (
     "http://docs.oasis-open.org/wss/2004/01/"
     "oasis-200401-wss-soap-message-security-1.0#Base64Binary"
@@ -79,6 +84,25 @@ def _exc_c14n(elemento) -> bytes:
 
 def _digest_b64(datos: bytes) -> str:
     return base64.b64encode(hashlib.sha256(datos).digest()).decode()
+
+
+def extraer_fault(xml: bytes | str) -> str:
+    """Extrae el motivo de un SOAP Fault. Devuelve '' si no es un fault.
+
+    Un HTTP 500 de la DIAN normalmente trae un ``soap:Fault`` con la causa real
+    (firma WS-Security, parámetros, etc.) en ``Body/Fault/Reason/Text``.
+    """
+    try:
+        if isinstance(xml, str):
+            xml = xml.encode()
+        raiz = etree.fromstring(xml)
+    except etree.XMLSyntaxError:
+        return ""
+    for etiqueta in ("Text", "faultstring", "Reason"):
+        nodos = raiz.xpath(f"//*[local-name()='{etiqueta}']")
+        if nodos and nodos[0].text:
+            return nodos[0].text.strip()
+    return ""
 
 
 # ===========================================================================
@@ -144,10 +168,97 @@ class RespuestaDian:
 
 
 # ===========================================================================
+# Rango de numeración (resolución de facturación)
+# ===========================================================================
+@dataclass
+class RangoNumeracion:
+    """Un rango de numeración autorizado por la DIAN (resolución).
+
+    Mapea uno a uno con ``ResolucionFacturacion``. La ``clave_tecnica`` es el
+    dato clave que entrega esta operación: se necesita para calcular el CUFE y
+    no se puede obtener de otra forma por servicio web.
+    """
+
+    prefijo: str = ""
+    numero_resolucion: str = ""
+    fecha_resolucion: str = ""
+    rango_desde: int = 0
+    rango_hasta: int = 0
+    vigente_desde: str = ""
+    vigente_hasta: str = ""
+    clave_tecnica: str = ""
+
+    @classmethod
+    def lista_desde_xml(cls, xml: bytes | str) -> list["RangoNumeracion"]:
+        """Parsea la respuesta de GetNumberingRange (lista NumberRangeResponse)."""
+        if isinstance(xml, str):
+            xml = xml.encode()
+        raiz = etree.fromstring(xml)
+
+        rangos = []
+        for nodo in raiz.xpath("//*[local-name()='ResponseList']"
+                               "/*[local-name()='NumberRangeResponse']"):
+            def texto(local_name):
+                hijos = nodo.xpath(f"./*[local-name()='{local_name}']")
+                return hijos[0].text.strip() if hijos and hijos[0].text else ""
+
+            rangos.append(cls(
+                prefijo=texto("Prefix"),
+                numero_resolucion=texto("ResolutionNumber"),
+                fecha_resolucion=texto("ResolutionDate"),
+                rango_desde=int(texto("FromNumber") or 0),
+                rango_hasta=int(texto("ToNumber") or 0),
+                vigente_desde=texto("ValidDateFrom"),
+                vigente_hasta=texto("ValidDateTo"),
+                clave_tecnica=texto("TechnicalKey"),
+            ))
+        return rangos
+
+
+@dataclass
+class RespuestaRangos:
+    """Respuesta de GetNumberingRange: código/descripción de la DIAN + rangos.
+
+    Cuando ``rangos`` viene vacío, ``descripcion`` explica el motivo (p. ej.
+    "No registra prefijos asociados al código de software: ...").
+    """
+
+    codigo: str = ""
+    descripcion: str = ""
+    rangos: list[RangoNumeracion] = field(default_factory=list)
+
+    @classmethod
+    def desde_xml(cls, xml: bytes | str) -> "RespuestaRangos":
+        if isinstance(xml, str):
+            xml = xml.encode()
+        raiz = etree.fromstring(xml)
+
+        def texto(local_name):
+            nodos = raiz.xpath(f"//*[local-name()='{local_name}']")
+            return nodos[0].text.strip() if nodos and nodos[0].text else ""
+
+        return cls(
+            codigo=texto("OperationCode"),
+            descripcion=texto("OperationDescription"),
+            rangos=RangoNumeracion.lista_desde_xml(xml),
+        )
+
+
+# ===========================================================================
 # Firma WS-Security del sobre SOAP
 # ===========================================================================
 class FirmanteWSSecurity:
-    """Firma un sobre SOAP con WS-Security (Timestamp + Body)."""
+    """Firma un sobre SOAP con WS-Security según la política del WCF de la DIAN.
+
+    La política del WSDL es un ``TransportBinding`` (HTTPS) con
+    ``EndorsingSupportingTokens`` (X509):
+      - AlgorithmSuite Basic256Sha256Rsa15 → digest SHA256, firma RSA-SHA256, exc-c14n.
+      - Layout ``Strict`` → orden Timestamp, BinarySecurityToken, Signature.
+      - ``IncludeTimestamp`` + ``SignedParts`` Header ``wsa:To`` → se firman el
+        Timestamp y el ``wsa:To`` (el Body lo protege TLS, no se firma).
+      - ``RequireThumbprintReference`` → el certificado se referencia por su
+        huella SHA-1 (KeyIdentifier ThumbprintSHA1), no por Reference al BST.
+    """
 
     def __init__(self, llave_privada, certificado, *, vigencia_segundos: int = 60):
         self.llave = llave_privada
@@ -156,26 +267,23 @@ class FirmanteWSSecurity:
         sid = uuid.uuid4().hex
         self.id_timestamp = f"TS-{sid}"
         self.id_body = f"id-{sid}"
+        self.id_to = f"id-to-{sid}"
         self.id_bst = f"X509-{sid}"
         self.id_sig = f"SIG-{sid}"
 
     def firmar(self, envelope) -> None:
         """Añade Header WS-Security firmado al envelope (modifica in situ)."""
         header = envelope.find(_q("soap", "Header"))
-        body = envelope.find(_q("soap", "Body"))
-        body.set(_q("wsu", "Id"), self.id_body)
 
         seguridad = _sub(header, "wsse", "Security")
-        seguridad.set(_q("soap", "mustUnderstand"), "1")
 
-        # Timestamp
+        # Layout estricto: Timestamp, BinarySecurityToken y luego Signature.
         timestamp = _sub(seguridad, "wsu", "Timestamp")
         timestamp.set(_q("wsu", "Id"), self.id_timestamp)
         ahora = datetime.now(TZ_UTC)
         _sub(timestamp, "wsu", "Created", _instante(ahora))
         _sub(timestamp, "wsu", "Expires", _instante(ahora + timedelta(seconds=self.vigencia)))
 
-        # BinarySecurityToken (certificado)
         bst = _sub(
             seguridad, "wsse", "BinarySecurityToken",
             base64.b64encode(self.cert.public_bytes(Encoding.DER)).decode(),
@@ -183,15 +291,22 @@ class FirmanteWSSecurity:
         )
         bst.set(_q("wsu", "Id"), self.id_bst)
 
-        firma = self._construir_firma(seguridad, timestamp, body)
+        # Se firman el Timestamp y el wsa:To (SignedParts de la política).
+        referencias = [(timestamp, self.id_timestamp)]
+        to = header.find(_q("wsa", "To"))
+        if to is not None:
+            to.set(_q("wsu", "Id"), self.id_to)
+            referencias.append((to, self.id_to))
 
-    def _construir_firma(self, seguridad, timestamp, body):
+        self._construir_firma(seguridad, referencias)
+
+    def _construir_firma(self, seguridad, referencias):
         firma = _sub(seguridad, "ds", "Signature", Id=self.id_sig)
         signed_info = _sub(firma, "ds", "SignedInfo")
         _sub(signed_info, "ds", "CanonicalizationMethod", Algorithm=ALG_EXC_C14N)
         _sub(signed_info, "ds", "SignatureMethod", Algorithm=ALG_FIRMA_RSA_SHA256)
 
-        for elemento, ref_id in [(timestamp, self.id_timestamp), (body, self.id_body)]:
+        for elemento, ref_id in referencias:
             self._referencia(signed_info, elemento, ref_id)
 
         sig_value = _sub(firma, "ds", "SignatureValue")
@@ -210,9 +325,14 @@ class FirmanteWSSecurity:
         _sub(ref, "ds", "DigestValue", _digest_b64(_exc_c14n(elemento)))
 
     def _key_info(self, firma):
+        # RequireThumbprintReference: el certificado se referencia por su huella
+        # SHA-1 (no por Reference directo al BinarySecurityToken).
         key_info = _sub(firma, "ds", "KeyInfo")
         str_ref = _sub(key_info, "wsse", "SecurityTokenReference")
-        _sub(str_ref, "wsse", "Reference", URI=f"#{self.id_bst}", ValueType=VALUE_TYPE_X509)
+        huella = base64.b64encode(
+            hashlib.sha1(self.cert.public_bytes(Encoding.DER)).digest()
+        ).decode()
+        _sub(str_ref, "wsse", "KeyIdentifier", huella, ValueType=VALUE_TYPE_THUMBPRINT)
 
 
 def _instante(momento: datetime) -> str:
@@ -255,6 +375,24 @@ class ClienteDian:
     def consultar_estado(self, track_id: str) -> RespuestaDian:
         """GetStatus: consulta el estado de un documento por su trackId."""
         return self._invocar("GetStatus", {"trackId": track_id})
+
+    def consultar_rangos_numeracion(
+        self, nit_emisor: str, nit_proveedor: str, software_id: str,
+    ) -> RespuestaRangos:
+        """GetNumberingRange: consulta los rangos de numeración (resoluciones).
+
+        Devuelve los rangos autorizados al NIT del emisor (con la
+        ``clave_tecnica`` de cada uno, necesaria para el CUFE) junto con el
+        código y la descripción de la operación que da la DIAN.
+        """
+        parametros = {
+            "accountCode": nit_emisor,
+            "accountCodeT": nit_proveedor,
+            "softwareCode": software_id,
+        }
+        sobre = self.construir_sobre("GetNumberingRange", parametros)
+        respuesta = self._post(sobre, f"{ACCION_BASE}/GetNumberingRange")
+        return RespuestaRangos.desde_xml(respuesta)
 
     # -- Internos -----------------------------------------------------------
 

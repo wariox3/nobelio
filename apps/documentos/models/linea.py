@@ -38,7 +38,7 @@ class LineaDocumento(ModeloConFechas):
     )
 
     class Meta:
-        db_table = "doc_lineadocumento"
+        db_table = "doc_linea_documento"
         verbose_name = "línea de documento"
         verbose_name_plural = "líneas de documento"
         ordering = ["numero_linea"]
@@ -78,7 +78,7 @@ class ImpuestoLinea(ModeloConFechas):
     )
 
     class Meta:
-        db_table = "doc_impuestolinea"
+        db_table = "doc_impuesto_linea"
         verbose_name = "impuesto de línea"
         verbose_name_plural = "impuestos de línea"
 

@@ -32,7 +32,7 @@ class GrafoDocumentoTests(TestCase):
             municipio=c["medellin"],
             direccion="Calle 1 # 2-3",
         )
-        cls.adquirente = doc.Adquirente.objects.create(
+        cls.adquirente = doc.Adquiriente.objects.create(
             razon_social="Cliente Demo",
             tipo_identificacion=c["nit"],
             numero_identificacion="800199436",
@@ -44,7 +44,7 @@ class GrafoDocumentoTests(TestCase):
         documento = doc.DocumentoElectronico.objects.create(
             tipo=doc.DocumentoElectronico.Tipo.FACTURA_VENTA,
             emisor=self.emisor,
-            adquirente=self.adquirente,
+            adquiriente=self.adquirente,
             prefijo="SETP",
             consecutivo=129,
             numero="SETP990000129",

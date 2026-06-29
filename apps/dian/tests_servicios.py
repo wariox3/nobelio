@@ -22,6 +22,10 @@ class FakeCliente:
         self.llamadas.append(("sincrono", nombre))
         return self.respuesta
 
+    def consultar_rangos_numeracion(self, nit_emisor, nit_proveedor, software_id):
+        self.llamadas.append(("rangos", nit_emisor, nit_proveedor, software_id))
+        return self.respuesta
+
 
 class GenerarYFirmarTests(TestCase):
     @classmethod
@@ -80,3 +84,34 @@ class EnviarADianTests(TestCase):
         self.documento.save()
         with self.assertRaises(servicios.ErrorEmision):
             servicios.enviar_a_dian(self.documento, cliente=FakeCliente(None), ambiente=2)
+
+
+class ConsultarRangosTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.emisor = crear_documento_factura()["documento"].emisor
+
+    def test_consulta_usa_nit_y_software_del_emisor(self):
+        respuesta = soap.RespuestaRangos(
+            codigo="100", descripcion="OK",
+            rangos=[soap.RangoNumeracion(prefijo="SETP", clave_tecnica="abc")],
+        )
+        cliente = FakeCliente(respuesta)
+        resultado = servicios.consultar_rangos_numeracion(
+            self.emisor, cliente=cliente, ambiente=2,
+        )
+
+        self.assertEqual(resultado, respuesta)
+        clase, nit, proveedor, software_id = cliente.llamadas[0]
+        self.assertEqual(clase, "rangos")
+        self.assertEqual(nit, self.emisor.numero_identificacion)
+        # Software propio: el proveedor es el propio NIT del emisor.
+        self.assertEqual(proveedor, "700085371")
+        self.assertEqual(software_id, "56f2ae4e-9812-4fad-9255-08fcfcd5ccb0")
+
+    def test_sin_software_activo_falla(self):
+        self.emisor.softwares.update(activo=False)
+        with self.assertRaises(servicios.ErrorEmision):
+            servicios.consultar_rangos_numeracion(
+                self.emisor, cliente=FakeCliente([]), ambiente=2,
+            )

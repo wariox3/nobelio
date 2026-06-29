@@ -1,12 +1,12 @@
-"""Serializer del adquirente."""
+"""Serializer del adquiriente."""
 from rest_framework import serializers
 
-from apps.documentos.models import Adquirente
+from apps.documentos.models import Adquiriente
 
 
-class AdquirenteSerializer(serializers.ModelSerializer):
+class AdquirienteSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Adquirente
+        model = Adquiriente
         fields = [
             "id", "razon_social", "tipo_identificacion", "numero_identificacion",
             "digito_verificacion", "tipo_organizacion", "responsabilidades",

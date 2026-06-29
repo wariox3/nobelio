@@ -67,14 +67,14 @@ class FirmaXAdESTests(TestCase):
             clave_tecnica="693ff6f2a553c3646a063436fd4dd9ded0311471",
             vigente_desde=date(2019, 1, 19), vigente_hasta=date(2030, 1, 19),
         )
-        adq = doc.Adquirente.objects.create(
+        adq = doc.Adquiriente.objects.create(
             razon_social="Cliente Demo", tipo_identificacion=c["nit"],
             numero_identificacion="800199436", tipo_organizacion=c["juridica"],
             pais=c["colombia"],
         )
         cls.documento = doc.DocumentoElectronico.objects.create(
             tipo=doc.DocumentoElectronico.Tipo.FACTURA_VENTA, emisor=emisor,
-            resolucion=cls.resolucion, adquirente=adq, prefijo="SETP",
+            resolucion=cls.resolucion, adquiriente=adq, prefijo="SETP",
             consecutivo=990000129, numero="323200000129",
             fecha_emision=date(2019, 1, 16), hora_emision=time(10, 53, 10),
             moneda=c["cop"], valor_bruto=Decimal("1500000.00"),

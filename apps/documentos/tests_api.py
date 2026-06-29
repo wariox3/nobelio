@@ -80,7 +80,7 @@ class DocumentoAPITests(APITestCase):
             "tipo": DocumentoElectronico.Tipo.FACTURA_VENTA,
             "emisor": self.emisor.id,
             "resolucion": self.documento.resolucion.id,
-            "adquirente": self.documento.adquirente.id,
+            "adquiriente": self.documento.adquiriente.id,
             "prefijo": "SETP",
             "consecutivo": 990000130,
             "numero": "SETP990000130",

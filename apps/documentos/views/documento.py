@@ -15,7 +15,7 @@ class DocumentoElectronicoViewSet(viewsets.ModelViewSet):
 
     queryset = (
         DocumentoElectronico.objects.select_related(
-            "emisor", "adquirente", "resolucion", "moneda"
+            "emisor", "adquiriente", "resolucion", "moneda"
         ).prefetch_related("lineas__impuestos")
     )
 

@@ -53,8 +53,20 @@ puede faltar. Las rutas cuelgan de `/api/`.
 
 ## 6. Resolución de facturación
 
-- [ ] `POST /api/emisores/resolucion/` → número y fecha de resolución, `prefijo`,
-      `rango_desde`/`rango_hasta`, `clave_tecnica`, vigencias y `tipo_factura`.
+Hay dos vías. La recomendada es traer los datos directamente de la DIAN
+(incluida la **clave técnica**, que no se puede cargar manualmente por la API):
+
+- [ ] `GET /api/emisores/resolucion/consulta-dian/?emisor=<id>` → consulta
+      `GetNumberingRange` y **previsualiza** los rangos autorizados (sin guardar;
+      la clave técnica no se expone, solo se indica si está presente).
+      El parámetro `emisor` es obligatorio.
+- [ ] `POST /api/emisores/resolucion/importar-dian/` con
+      `{"emisor": <id>, "tipo_factura": <id>}` → consulta `GetNumberingRange` y
+      crea/actualiza las resoluciones, guardando la `clave_tecnica` en el servidor.
+      Requiere certificado y software DIAN activos del emisor.
+
+- [ ] *(alternativa manual)* `POST /api/emisores/resolucion/` → número y fecha de
+      resolución, `prefijo`, `rango_desde`/`rango_hasta`, vigencias y `tipo_factura`.
       El `consecutivo_actual` avanza con cada emisión.
 
 ## 7. Adquirente (cliente receptor)

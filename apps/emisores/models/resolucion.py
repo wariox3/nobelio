@@ -47,7 +47,7 @@ class ResolucionFacturacion(ModeloConFechas):
     )
 
     class Meta:
-        db_table = "emi_resolucionfacturacion"
+        db_table = "emi_resolucion_facturacion"
         verbose_name = "resolución de facturación"
         verbose_name_plural = "resoluciones de facturación"
         ordering = ["-fecha_resolucion"]

@@ -3,7 +3,7 @@ from django.db import models
 
 from apps.nucleo.models import ModeloConFechas, ModeloUUID
 
-from .adquirente import Adquirente
+from .adquiriente import Adquiriente
 
 
 class DocumentoElectronico(ModeloUUID, ModeloConFechas):
@@ -86,9 +86,9 @@ class DocumentoElectronico(ModeloUUID, ModeloConFechas):
         related_name="documentos", verbose_name="resolución",
         null=True, blank=True,
     )
-    adquirente = models.ForeignKey(
-        Adquirente, on_delete=models.PROTECT,
-        related_name="documentos", verbose_name="adquirente",
+    adquiriente = models.ForeignKey(
+        Adquiriente, on_delete=models.PROTECT,
+        related_name="documentos", verbose_name="adquiriente",
     )
     moneda = models.ForeignKey(
         "catalogos.Moneda", on_delete=models.PROTECT,
@@ -125,7 +125,7 @@ class DocumentoElectronico(ModeloUUID, ModeloConFechas):
     )
 
     class Meta:
-        db_table = "doc_documentoelectronico"
+        db_table = "doc_documento_electronico"
         verbose_name = "documento electrónico"
         verbose_name_plural = "documentos electrónicos"
         ordering = ["-fecha_emision", "-consecutivo"]

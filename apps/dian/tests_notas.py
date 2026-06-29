@@ -29,7 +29,7 @@ class NotasTestBase(TestCase):
 
     def _crear_nota(self, tipo, numero, consecutivo):
         nota = doc.DocumentoElectronico.objects.create(
-            tipo=tipo, emisor=self.base["emisor"], adquirente=self.base["adquirente"],
+            tipo=tipo, emisor=self.base["emisor"], adquiriente=self.base["adquirente"],
             documento_referencia=self.factura, prefijo="NC", consecutivo=consecutivo,
             numero=numero, fecha_emision=date(2024, 2, 1), hora_emision=time(9, 0, 0),
             moneda=self.base["catalogos"]["cop"], valor_bruto=Decimal("100000.00"),
@@ -108,7 +108,7 @@ class DocumentoSoporteTests(NotasTestBase):
     def _xml(self):
         ds = doc.DocumentoElectronico.objects.create(
             tipo=doc.DocumentoElectronico.Tipo.DOCUMENTO_SOPORTE,
-            emisor=self.base["emisor"], adquirente=self.base["adquirente"],
+            emisor=self.base["emisor"], adquiriente=self.base["adquirente"],
             prefijo="DS", consecutivo=1, numero="DS1",
             fecha_emision=date(2024, 2, 1), hora_emision=time(9, 0, 0),
             moneda=self.base["catalogos"]["cop"], valor_bruto=Decimal("50000.00"),

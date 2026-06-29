@@ -117,10 +117,10 @@ class GeneradorPDF:
         return [tabla]
 
     def _partes(self):
-        adq = self.doc.adquirente
+        adq = self.doc.adquiriente
         resolucion = self.doc.resolucion
         adquirente = Paragraph(
-            f"<b>Adquirente:</b> {adq.razon_social}<br/>"
+            f"<b>Adquiriente:</b> {adq.razon_social}<br/>"
             f"Identificación: {adq.numero_identificacion}"
             f"{'-' + adq.digito_verificacion if adq.digito_verificacion else ''}<br/>"
             f"{adq.direccion}",

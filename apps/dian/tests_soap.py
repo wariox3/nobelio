@@ -52,13 +52,19 @@ class SobreSOAPTests(SimpleTestCase):
             arbol.findtext(f"{{{ns['soap']}}}Header/{{{ns['wsa']}}}Action"),
             "http://wcf.dian.colombia/IWcfDianCustomerServices/SendTestSetAsync",
         )
-        # WS-Security con Timestamp, BinarySecurityToken y Signature.
-        self.assertIsNotNone(arbol.find(f".//{{{ns['wsu']}}}Timestamp"))
-        self.assertIsNotNone(arbol.find(f".//{{{ns['wsse']}}}BinarySecurityToken"))
-        self.assertIsNotNone(arbol.find(f".//{{{ns['ds']}}}Signature"))
-        # El Body lleva wsu:Id y los parámetros de la operación.
+        # WS-Security en layout estricto: Timestamp, BinarySecurityToken, Signature.
+        seguridad = arbol.find(f".//{{{ns['wsse']}}}Security")
+        self.assertNotIn(f"{{{ns['soap']}}}mustUnderstand", seguridad.attrib)
+        self.assertEqual(
+            [etree.QName(h).localname for h in seguridad],
+            ["Timestamp", "BinarySecurityToken", "Signature"],
+        )
+        # El certificado se referencia por huella SHA-1 (RequireThumbprintReference).
+        key_id = arbol.find(f".//{{{ns['wsse']}}}KeyIdentifier")
+        self.assertIsNotNone(key_id)
+        self.assertEqual(key_id.get("ValueType"), soap.VALUE_TYPE_THUMBPRINT)
+        # El Body lleva los parámetros de la operación (no se firma; lo protege TLS).
         body = arbol.find(f"{{{ns['soap']}}}Body")
-        self.assertIn(f"{{{ns['wsu']}}}Id", body.attrib)
         self.assertEqual(
             body.findtext(f"{{{ns['wcf']}}}SendTestSetAsync/{{{ns['wcf']}}}testSetId"),
             "abc",
@@ -84,14 +90,17 @@ class SobreSOAPTests(SimpleTestCase):
             canon = etree.tostring(elem, method="c14n", exclusive=True)
             return base64.b64encode(hashlib.sha256(canon).digest()).decode()
 
-        refs = arbol.findall(f".//{{{ns['ds']}}}Reference")
+        # Solo cuentan las Reference de la firma (las del SignedInfo), no la de KeyInfo.
+        signed_info = arbol.find(f".//{{{ns['ds']}}}SignedInfo")
+        refs = signed_info.findall(f"{{{ns['ds']}}}Reference")
         valores = {r.get("URI"): r.find(f"{{{ns['ds']}}}DigestValue").text for r in refs}
 
         wsu_id = f"{{{ns['wsu']}}}Id"
         timestamp = arbol.find(f".//{{{ns['wsu']}}}Timestamp")
-        body = arbol.find(f"{{{ns['soap']}}}Body")
+        to = arbol.find(f".//{{{ns['wsa']}}}To")
+        # Se firman el Timestamp y el wsa:To (SignedParts de la política DIAN).
         self.assertEqual(valores["#" + timestamp.get(wsu_id)], digest(timestamp))
-        self.assertEqual(valores["#" + body.get(wsu_id)], digest(body))
+        self.assertEqual(valores["#" + to.get(wsu_id)], digest(to))
 
 
 class RespuestaDianTests(SimpleTestCase):
@@ -117,3 +126,72 @@ class RespuestaDianTests(SimpleTestCase):
         self.assertEqual(r.codigo_estado, "00")
         self.assertEqual(r.descripcion_estado, "Procesado Correctamente")
         self.assertEqual(r.errores, ["Advertencia 1"])
+
+
+class RangoNumeracionTests(SimpleTestCase):
+    XML = """<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
+      <s:Body><GetNumberingRangeResponse xmlns="http://wcf.dian.colombia">
+        <GetNumberingRangeResult xmlns:a="http://schemas.datacontract.org/2004/07/x">
+          <a:OperationCode>100</a:OperationCode>
+          <a:ResponseList>
+            <a:NumberRangeResponse>
+              <a:ResolutionNumber>18760000001</a:ResolutionNumber>
+              <a:ResolutionDate>2019-01-10</a:ResolutionDate>
+              <a:Prefix>SETP</a:Prefix>
+              <a:FromNumber>990000000</a:FromNumber>
+              <a:ToNumber>995000000</a:ToNumber>
+              <a:ValidDateFrom>2019-01-10</a:ValidDateFrom>
+              <a:ValidDateTo>2020-01-10</a:ValidDateTo>
+              <a:TechnicalKey>fc8eac422eba16e22ffd8c6f94b3f40a6e38162c</a:TechnicalKey>
+            </a:NumberRangeResponse>
+            <a:NumberRangeResponse>
+              <a:ResolutionNumber>18760000002</a:ResolutionNumber>
+              <a:Prefix></a:Prefix>
+              <a:FromNumber>1</a:FromNumber>
+              <a:ToNumber>5000</a:ToNumber>
+              <a:TechnicalKey>aa11bb22</a:TechnicalKey>
+            </a:NumberRangeResponse>
+          </a:ResponseList>
+        </GetNumberingRangeResult></GetNumberingRangeResponse></s:Body></s:Envelope>"""
+
+    def test_parsea_lista_de_rangos(self):
+        rangos = soap.RangoNumeracion.lista_desde_xml(self.XML)
+        self.assertEqual(len(rangos), 2)
+
+        primero = rangos[0]
+        self.assertEqual(primero.prefijo, "SETP")
+        self.assertEqual(primero.numero_resolucion, "18760000001")
+        self.assertEqual(primero.fecha_resolucion, "2019-01-10")
+        self.assertEqual(primero.rango_desde, 990000000)
+        self.assertEqual(primero.rango_hasta, 995000000)
+        self.assertEqual(primero.clave_tecnica, "fc8eac422eba16e22ffd8c6f94b3f40a6e38162c")
+
+        # Rango sin prefijo ni fechas: no debe romper el parseo.
+        self.assertEqual(rangos[1].prefijo, "")
+        self.assertEqual(rangos[1].rango_desde, 1)
+
+    def test_respuesta_vacia(self):
+        xml = """<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
+          <s:Body><GetNumberingRangeResponse xmlns="http://wcf.dian.colombia">
+            <GetNumberingRangeResult/></GetNumberingRangeResponse></s:Body></s:Envelope>"""
+        self.assertEqual(soap.RangoNumeracion.lista_desde_xml(xml), [])
+
+    def test_respuesta_rangos_incluye_codigo_y_descripcion(self):
+        resp = soap.RespuestaRangos.desde_xml(self.XML)
+        self.assertEqual(resp.codigo, "100")
+        self.assertEqual(len(resp.rangos), 2)
+
+    def test_respuesta_rangos_sin_prefijos(self):
+        # Caso real: software sin prefijos asociados (OperationCode 302, lista nil).
+        xml = """<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
+          <s:Body><GetNumberingRangeResponse xmlns="http://wcf.dian.colombia">
+            <GetNumberingRangeResult xmlns:b="http://schemas.datacontract.org/2004/07/NumberRangeResponseList"
+                                     xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+              <b:OperationCode>302</b:OperationCode>
+              <b:OperationDescription>No registra prefijos asociados al codigo de software: abc.</b:OperationDescription>
+              <b:ResponseList i:nil="true"/>
+            </GetNumberingRangeResult></GetNumberingRangeResponse></s:Body></s:Envelope>"""
+        resp = soap.RespuestaRangos.desde_xml(xml)
+        self.assertEqual(resp.codigo, "302")
+        self.assertIn("No registra prefijos", resp.descripcion)
+        self.assertEqual(resp.rangos, [])
