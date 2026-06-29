@@ -60,6 +60,13 @@ class GenerarYFirmarTests(TestCase):
         )
         self.assertIn("<ds:Signature", self.documento.xml_firmado)
 
+    def test_no_reemite_si_ya_firmado(self):
+        self.documento.estado = Documento.Estado.FIRMADO
+        self.documento.save(update_fields=["estado"])
+        with self.assertRaises(servicios.ErrorEmision) as ctx:
+            servicios.generar_y_firmar(self.documento)
+        self.assertEqual(str(ctx.exception), "El documento ya está firmado.")
+
 
 class EnviarADianTests(TestCase):
     @classmethod
@@ -98,11 +105,30 @@ class EnviarADianTests(TestCase):
         self.documento.refresh_from_db()
         self.assertEqual(self.documento.estado, Documento.Estado.RECHAZADO)
 
+    def test_procesado_anteriormente_se_marca_aceptado(self):
+        # Regla 90: la DIAN ya tenía el CUFE -> ya aceptado, no rechazado.
+        respuesta = soap.RespuestaDian(
+            es_valido=False, codigo_estado="99",
+            errores=["Regla: 90, Rechazo: Documento procesado anteriormente."],
+        )
+        cliente = FakeCliente(respuesta)
+        servicios.enviar_a_dian(self.documento, cliente=cliente, ambiente=2)
+
+        self.documento.refresh_from_db()
+        self.assertEqual(self.documento.estado, Documento.Estado.ACEPTADO)
+
     def test_sin_firmar_falla(self):
         self.documento.xml_firmado = ""
         self.documento.save()
         with self.assertRaises(servicios.ErrorEmision):
             servicios.enviar_a_dian(self.documento, cliente=FakeCliente(None), ambiente=2)
+
+    def test_no_reenvia_si_ya_aceptado(self):
+        self.documento.estado = Documento.Estado.ACEPTADO
+        self.documento.save(update_fields=["estado"])
+        with self.assertRaises(servicios.ErrorEmision) as ctx:
+            servicios.enviar_a_dian(self.documento, cliente=FakeCliente(None), ambiente=2)
+        self.assertEqual(str(ctx.exception), "El documento ya fue aceptado por la DIAN.")
 
 
 class ConsultarEstadoTests(TestCase):

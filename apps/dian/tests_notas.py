@@ -27,9 +27,10 @@ class NotasTestBase(TestCase):
         cls.factura.cufe_cude = "f" * 96  # CUFE de la factura referenciada
         cls.factura.save(update_fields=["cufe_cude"])
 
-    def _crear_nota(self, tipo, numero, consecutivo):
+    def _crear_nota(self, codigo, numero, consecutivo):
         nota = doc.Documento.objects.create(
-            tipo=tipo, emisor=self.base["emisor"], adquiriente=self.base["adquirente"],
+            documento_tipo=doc.DocumentoTipo.objects.get(codigo=codigo),
+            emisor=self.base["emisor"], adquiriente=self.base["adquirente"],
             documento_referencia=self.factura, prefijo="NC", consecutivo=consecutivo,
             numero=numero, fecha_emision=date(2024, 2, 1), hora_emision=time(9, 0, 0),
             moneda=self.base["catalogos"]["cop"], valor_bruto=Decimal("100000.00"),
@@ -51,7 +52,7 @@ class NotasTestBase(TestCase):
 
 class NotaCreditoTests(NotasTestBase):
     def _xml(self):
-        nota = self._crear_nota(doc.Documento.Tipo.NOTA_CREDITO, "NC1", 1)
+        nota = self._crear_nota(doc.DocumentoTipo.Codigo.NOTA_CREDITO, "NC1", 1)
         return ubl.constructor_para(
             nota, software=self.base["software"], ambiente=2,
         ).generar_xml()
@@ -82,7 +83,7 @@ class NotaCreditoTests(NotasTestBase):
 
 class NotaDebitoTests(NotasTestBase):
     def _xml(self):
-        nota = self._crear_nota(doc.Documento.Tipo.NOTA_DEBITO, "ND1", 1)
+        nota = self._crear_nota(doc.DocumentoTipo.Codigo.NOTA_DEBITO, "ND1", 1)
         return ubl.constructor_para(
             nota, software=self.base["software"], ambiente=2,
         ).generar_xml()
@@ -107,7 +108,7 @@ class NotaDebitoTests(NotasTestBase):
 class DocumentoSoporteTests(NotasTestBase):
     def _xml(self):
         ds = doc.Documento.objects.create(
-            tipo=doc.Documento.Tipo.DOCUMENTO_SOPORTE,
+            documento_tipo=doc.DocumentoTipo.objects.get(codigo=doc.DocumentoTipo.Codigo.DOCUMENTO_SOPORTE),
             emisor=self.base["emisor"], adquiriente=self.base["adquirente"],
             prefijo="DS", consecutivo=1, numero="DS1",
             fecha_emision=date(2024, 2, 1), hora_emision=time(9, 0, 0),

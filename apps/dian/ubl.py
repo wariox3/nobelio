@@ -111,7 +111,6 @@ class ConstructorUBL:
     # Parámetros que diferencian cada tipo de documento (sobreescritos abajo).
     nombre_raiz = "Invoice"
     etiqueta_tipo = "InvoiceTypeCode"
-    codigo_tipo = "01"
     etiqueta_linea = "InvoiceLine"
     etiqueta_cantidad = "InvoicedQuantity"
     etiqueta_total = "LegalMonetaryTotal"
@@ -249,7 +248,7 @@ class ConstructorUBL:
         _sub(raiz, "cbc", "IssueTime", ident.formatear_hora(self.doc.hora_emision))
         # El UBL DebitNote no tiene elemento de tipo (etiqueta_tipo = None).
         if self.etiqueta_tipo:
-            _sub(raiz, "cbc", self.etiqueta_tipo, self.codigo_tipo)
+            _sub(raiz, "cbc", self.etiqueta_tipo, self.doc.documento_tipo.codigo_dian)
         _sub(raiz, "cbc", "DocumentCurrencyCode", self.moneda,
              listAgencyID="6",
              listAgencyName="United Nations Economic Commission for Europe",
@@ -476,7 +475,6 @@ class ConstructorNotaCredito(_ConstructorNotaUBL):
 
     nombre_raiz = "CreditNote"
     etiqueta_tipo = "CreditNoteTypeCode"
-    codigo_tipo = "91"
     etiqueta_linea = "CreditNoteLine"
     etiqueta_cantidad = "CreditedQuantity"
     etiqueta_total = "LegalMonetaryTotal"
@@ -488,7 +486,6 @@ class ConstructorNotaDebito(_ConstructorNotaUBL):
 
     nombre_raiz = "DebitNote"
     etiqueta_tipo = None  # el UBL DebitNote no define un elemento de tipo
-    codigo_tipo = "92"
     etiqueta_linea = "DebitNoteLine"
     etiqueta_cantidad = "DebitedQuantity"
     etiqueta_total = "RequestedMonetaryTotal"
@@ -503,7 +500,6 @@ class ConstructorDocumentoSoporte(ConstructorUBL):
     adquirente; es una aproximación pendiente de validar contra la DIAN.
     """
 
-    codigo_tipo = "05"
     scheme_name = ident.SCHEME_NAME_CUDE
     usa_cude = True
     customization_id_default = "10"
@@ -512,23 +508,24 @@ class ConstructorDocumentoSoporte(ConstructorUBL):
         _sub(il, "cbc", "FreeOfChargeIndicator", "false")
 
 
-# Mapeo tipo de documento -> constructor.
-from apps.documentos.models import Documento as _Doc  # noqa: E402
+# Mapeo código de tipo de documento -> constructor.
+from apps.documentos.models import DocumentoTipo as _Tipo  # noqa: E402
 
 CONSTRUCTORES = {
-    _Doc.Tipo.FACTURA_VENTA: ConstructorFacturaUBL,
-    _Doc.Tipo.NOTA_CREDITO: ConstructorNotaCredito,
-    _Doc.Tipo.NOTA_DEBITO: ConstructorNotaDebito,
-    _Doc.Tipo.DOCUMENTO_SOPORTE: ConstructorDocumentoSoporte,
+    _Tipo.Codigo.FACTURA_VENTA: ConstructorFacturaUBL,
+    _Tipo.Codigo.NOTA_CREDITO: ConstructorNotaCredito,
+    _Tipo.Codigo.NOTA_DEBITO: ConstructorNotaDebito,
+    _Tipo.Codigo.DOCUMENTO_SOPORTE: ConstructorDocumentoSoporte,
 }
 
 
 def constructor_para(documento, **kwargs) -> ConstructorUBL:
-    """Devuelve el constructor adecuado según el tipo del documento."""
+    """Devuelve el constructor adecuado según el código del tipo de documento."""
+    codigo = documento.documento_tipo.codigo
     try:
-        clase = CONSTRUCTORES[documento.tipo]
+        clase = CONSTRUCTORES[codigo]
     except KeyError:
-        raise ValueError(f"Tipo de documento no soportado para UBL: {documento.tipo}")
+        raise ValueError(f"Tipo de documento no soportado para UBL: {codigo}")
     return clase(documento, **kwargs)
 
 

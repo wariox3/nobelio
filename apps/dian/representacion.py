@@ -100,7 +100,7 @@ class GeneradorPDF:
             self.estilos["Mini"],
         )
         info_doc = Paragraph(
-            f"<b>{self.doc.get_tipo_display().upper()}</b><br/>"
+            f"<b>{self.doc.documento_tipo.nombre.upper()}</b><br/>"
             f"<b>No. {self.doc.numero}</b><br/>"
             f"Fecha: {self.doc.fecha_emision.isoformat()}<br/>"
             f"Hora: {formatear_hora(self.doc.hora_emision)}",

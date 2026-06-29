@@ -13,11 +13,20 @@ from __future__ import annotations
 from django.conf import settings
 
 from apps.dian import firma, soap, ubl
-from apps.documentos.models import Documento
+from apps.documentos.models import Documento, DocumentoTipo
 
 
 class ErrorEmision(Exception):
     """Error en el proceso de emisión de un documento."""
+
+
+def _ya_procesado(respuesta) -> bool:
+    """Detecta la regla 90 de la DIAN ("Documento procesado anteriormente").
+
+    Significa que el CUFE ya fue recibido y aceptado en un envío previo, así que
+    no es un rechazo de contenido sino un documento ya aceptado.
+    """
+    return any("procesado anteriormente" in e.lower() for e in respuesta.errores)
 
 
 def _software_activo_emisor(emisor):
@@ -63,14 +72,24 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
     Devuelve los bytes del XML firmado.
     """
     ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
+
+    bloqueados = {
+        Documento.Estado.FIRMADO: "El documento ya está firmado.",
+        Documento.Estado.ENVIADO: "El documento ya fue enviado a la DIAN.",
+        Documento.Estado.ACEPTADO: "El documento ya fue aceptado por la DIAN.",
+    }
+    if documento.estado in bloqueados:
+        raise ErrorEmision(bloqueados[documento.estado])
+
     software = _software_activo(documento)
 
-    es_factura = documento.tipo == Documento.Tipo.FACTURA_VENTA
+    codigo_tipo = documento.documento_tipo.codigo
+    es_factura = codigo_tipo == DocumentoTipo.Codigo.FACTURA_VENTA
     if es_factura and documento.resolucion is None:
         raise ErrorEmision("La factura no tiene resolución de facturación asociada.")
     if (
-        documento.tipo in (Documento.Tipo.NOTA_CREDITO,
-                            Documento.Tipo.NOTA_DEBITO)
+        codigo_tipo in (DocumentoTipo.Codigo.NOTA_CREDITO,
+                        DocumentoTipo.Codigo.NOTA_DEBITO)
         and documento.documento_referencia is None
     ):
         raise ErrorEmision("La nota debe referenciar el documento que corrige.")
@@ -142,6 +161,8 @@ def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):
     SendBillSync (síncrono).
     """
     ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
+    if documento.estado == Documento.Estado.ACEPTADO:
+        raise ErrorEmision("El documento ya fue aceptado por la DIAN.")
     if not documento.xml_firmado:
         raise ErrorEmision("El documento no está firmado; ejecute generar_y_firmar primero.")
 
@@ -161,7 +182,9 @@ def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):
     documento.respuesta_dian = respuesta.xml_crudo
     if respuesta.track_id:
         documento.track_id = respuesta.track_id
-    if respuesta.es_valido:
+    # "Documento procesado anteriormente" (regla 90): la DIAN ya tiene ese CUFE
+    # de un envío previo; en la práctica ya está aceptado, no es un rechazo.
+    if respuesta.es_valido or _ya_procesado(respuesta):
         documento.estado = Documento.Estado.ACEPTADO
     elif respuesta.errores:
         documento.estado = Documento.Estado.RECHAZADO
@@ -191,7 +214,7 @@ def consultar_estado(documento, *, cliente=None, ambiente=None, track_id=None, *
     else:
         respuesta = cliente.consultar_estado(track_id)
     documento.respuesta_dian = respuesta.xml_crudo
-    if respuesta.es_valido:
+    if respuesta.es_valido or _ya_procesado(respuesta):
         documento.estado = Documento.Estado.ACEPTADO
     elif respuesta.errores:
         documento.estado = Documento.Estado.RECHAZADO

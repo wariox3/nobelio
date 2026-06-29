@@ -73,7 +73,7 @@ class FirmaXAdESTests(TestCase):
             pais=c["colombia"],
         )
         cls.documento = doc.Documento.objects.create(
-            tipo=doc.Documento.Tipo.FACTURA_VENTA, emisor=emisor,
+            documento_tipo=doc.DocumentoTipo.objects.get(codigo=doc.DocumentoTipo.Codigo.FACTURA_VENTA), emisor=emisor,
             resolucion=cls.resolucion, adquiriente=adq, prefijo="SETP",
             consecutivo=990000129, numero="323200000129",
             fecha_emision=date(2019, 1, 16), hora_emision=time(10, 53, 10),

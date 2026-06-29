@@ -66,7 +66,7 @@ class GeneracionUBLTests(TestCase):
             direccion="Cra 4 # 5-6",
         )
         cls.documento = doc.Documento.objects.create(
-            tipo=doc.Documento.Tipo.FACTURA_VENTA,
+            documento_tipo=doc.DocumentoTipo.objects.get(codigo=doc.DocumentoTipo.Codigo.FACTURA_VENTA),
             emisor=cls.emisor,
             resolucion=cls.resolucion,
             adquiriente=cls.adquirente,

@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from django.db import transaction
 from rest_framework import serializers
+from rest_framework.validators import UniqueTogetherValidator
 
 from apps.documentos import models
 
@@ -13,13 +14,15 @@ class DocumentoSerializer(serializers.ModelSerializer):
     """Serializer de lectura del documento, con detalles anidados."""
 
     detalles = DocumentoDetalleSerializer(many=True, read_only=True)
-    tipo_display = serializers.CharField(source="get_tipo_display", read_only=True)
+    documento_tipo_nombre = serializers.CharField(
+        source="documento_tipo.nombre", read_only=True
+    )
     estado_display = serializers.CharField(source="get_estado_display", read_only=True)
 
     class Meta:
         model = models.Documento
         fields = [
-            "id", "tipo", "tipo_display", "estado", "estado_display",
+            "id", "documento_tipo", "documento_tipo_nombre", "estado", "estado_display",
             "emisor", "resolucion", "adquiriente",
             "prefijo", "consecutivo", "numero", "cufe_cude", "track_id",
             "fecha_emision", "hora_emision", "moneda", "forma_pago", "medio_pago",
@@ -44,11 +47,20 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Documento
         fields = [
-            "id", "tipo", "emisor", "resolucion", "adquiriente",
+            "id", "documento_tipo", "emisor", "resolucion", "adquiriente",
             "prefijo", "consecutivo", "numero",
             "fecha_emision", "hora_emision", "moneda", "forma_pago", "medio_pago",
             "total_descuentos", "total_cargos", "documento_referencia",
             "observaciones", "detalles",
+        ]
+        # Mensaje propio para la unicidad (emisor+prefijo+consecutivo+tipo) en vez
+        # del genérico "deben formar un conjunto único".
+        validators = [
+            UniqueTogetherValidator(
+                queryset=models.Documento.objects.all(),
+                fields=["emisor", "prefijo", "consecutivo", "documento_tipo"],
+                message="El documento ya fue creado.",
+            )
         ]
 
     def validate_detalles(self, detalles):

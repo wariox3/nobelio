@@ -13,13 +13,6 @@ class Documento(ModeloUUID, ModeloConFechas):
     ``documento_referencia``.
     """
 
-    class Tipo(models.TextChoices):
-        FACTURA_VENTA = "factura_venta", "Factura de venta"
-        NOTA_CREDITO = "nota_credito", "Nota crédito"
-        NOTA_DEBITO = "nota_debito", "Nota débito"
-        DOCUMENTO_SOPORTE = "documento_soporte", "Documento soporte"
-        NOMINA = "nomina", "Nómina electrónica"
-
     class Estado(models.TextChoices):
         BORRADOR = "borrador", "Borrador"
         GENERADO = "generado", "XML generado"
@@ -29,7 +22,6 @@ class Documento(ModeloUUID, ModeloConFechas):
         RECHAZADO = "rechazado", "Rechazado por la DIAN"
 
     # ===================== Atributos =====================
-    tipo = models.CharField("tipo", max_length=20, choices=Tipo.choices)
     estado = models.CharField(
         "estado", max_length=20, choices=Estado.choices, default=Estado.BORRADOR
     )
@@ -38,8 +30,9 @@ class Documento(ModeloUUID, ModeloConFechas):
     prefijo = models.CharField("prefijo", max_length=10, blank=True)
     consecutivo = models.PositiveBigIntegerField("consecutivo")
     numero = models.CharField(
-        "número", max_length=30,
-        help_text="Prefijo concatenado con el consecutivo (cbc:ID).",
+        "número", max_length=30, blank=True,
+        help_text="Número del documento (cbc:ID). Si se omite, se arma como "
+        "prefijo + consecutivo.",
     )
 
     # Identificadores DIAN
@@ -82,6 +75,10 @@ class Documento(ModeloUUID, ModeloConFechas):
     )
 
     # ===================== Relaciones =====================
+    documento_tipo = models.ForeignKey(
+        "documentos.DocumentoTipo", on_delete=models.PROTECT,
+        related_name="documentos", verbose_name="tipo de documento",
+    )
     emisor = models.ForeignKey(
         "emisores.Emisor", on_delete=models.PROTECT,
         related_name="documentos", verbose_name="emisor",
@@ -136,10 +133,17 @@ class Documento(ModeloUUID, ModeloConFechas):
         ordering = ["-fecha_emision", "-consecutivo"]
         constraints = [
             models.UniqueConstraint(
-                fields=["emisor", "prefijo", "consecutivo", "tipo"],
+                fields=["emisor", "prefijo", "consecutivo", "documento_tipo"],
                 name="documento_numero_unico_por_emisor",
             )
         ]
 
+    def save(self, *args, **kwargs):
+        # El número es la composición prefijo + consecutivo salvo que se fije
+        # explícitamente (p. ej. para reproducir un número específico).
+        if not self.numero:
+            self.numero = f"{self.prefijo}{self.consecutivo}"
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"{self.get_tipo_display()} {self.numero}"
+        return f"{self.documento_tipo.nombre} {self.numero}"

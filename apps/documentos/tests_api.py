@@ -11,7 +11,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.dian.tests_firma import _generar_certificado
-from apps.documentos.models import Documento
+from apps.documentos.models import Documento, DocumentoTipo
 from apps.documentos.tests_utils import crear_documento_factura
 from apps.emisores.models import Certificado
 
@@ -77,7 +77,9 @@ class DocumentoAPITests(APITestCase):
     def test_crear_documento_calcula_totales(self):
         c = self.cat
         payload = {
-            "tipo": Documento.Tipo.FACTURA_VENTA,
+            "documento_tipo": DocumentoTipo.objects.get(
+                codigo=DocumentoTipo.Codigo.FACTURA_VENTA
+            ).id,
             "emisor": self.emisor.id,
             "resolucion": self.documento.resolucion.id,
             "adquiriente": self.documento.adquiriente.id,
