@@ -70,6 +70,10 @@ class Documento(ModeloUUID, ModeloConFechas):
         help_text="Identificador del envío (ZipKey del Set de Pruebas o trackId), "
         "para consultar el estado en la DIAN.",
     )
+    fecha_validacion = models.DateTimeField(
+        "fecha y hora de validación DIAN", null=True, blank=True,
+        help_text="Momento en que la DIAN aceptó el documento.",
+    )
 
     # Artefactos en object storage (B2): el contenido NO se guarda en la BD.
     xml_archivo = models.FileField(

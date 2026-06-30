@@ -28,17 +28,27 @@ class DocumentoSerializer(serializers.ModelSerializer):
             "id", "documento_tipo", "documento_tipo_nombre",
             "estado", "estado_codigo", "estado_descripcion",
             "emisor", "resolucion", "adquiriente",
-            "prefijo", "consecutivo", "numero", "cufe_cude", "track_id", "errores",
+            "prefijo", "consecutivo", "numero", "cufe_cude", "track_id",
+            "fecha_validacion", "errores",
             "fecha_emision", "hora_emision", "moneda", "forma_pago", "medio_pago",
             "valor_bruto", "total_impuestos", "total_descuentos", "total_cargos",
             "total_a_pagar", "documento_referencia", "observaciones", "detalles",
             "creado_en", "actualizado_en",
         ]
         read_only_fields = [
-            "estado", "cufe_cude", "track_id",
+            "estado", "cufe_cude", "track_id", "fecha_validacion",
             "valor_bruto", "total_impuestos",
             "total_a_pagar", "creado_en", "actualizado_en",
         ]
+
+
+class DocumentoListaSerializer(DocumentoSerializer):
+    """Versión para el listado: sin las líneas (``detalles``) anidadas."""
+
+    detalles = None  # se quita el campo heredado
+
+    class Meta(DocumentoSerializer.Meta):
+        fields = [f for f in DocumentoSerializer.Meta.fields if f != "detalles"]
 
 
 class DocumentoCrearSerializer(serializers.ModelSerializer):

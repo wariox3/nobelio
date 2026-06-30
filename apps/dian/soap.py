@@ -133,6 +133,7 @@ class RespuestaDian:
     codigo_estado: str = ""
     descripcion_estado: str = ""
     errores: list[str] = field(default_factory=list)
+    fecha_validacion: "datetime | None" = None
     xml_crudo: str = ""
 
     @classmethod
@@ -163,8 +164,36 @@ class RespuestaDian:
             codigo_estado=texto("StatusCode"),
             descripcion_estado=texto("StatusDescription") or texto("Message"),
             errores=errores,
+            fecha_validacion=_fecha_validacion(raiz),
             xml_crudo=xml.decode(errors="replace"),
         )
+
+
+def _fecha_validacion(raiz) -> "datetime | None":
+    """Fecha/hora de validación desde el ApplicationResponse incrustado.
+
+    Cuando el documento es válido, la DIAN devuelve el ApplicationResponse (UBL)
+    en ``XmlBase64Bytes``; su ``IssueDate``+``IssueTime`` es la marca de validación.
+    """
+    nodos = raiz.xpath("//*[local-name()='XmlBase64Bytes']")
+    if not nodos or not nodos[0].text:
+        return None
+    try:
+        ar = etree.fromstring(base64.b64decode(nodos[0].text))
+    except Exception:
+        return None
+
+    def texto(local_name):
+        n = ar.xpath(f"//*[local-name()='{local_name}']")
+        return n[0].text.strip() if n and n[0].text else ""
+
+    fecha, hora = texto("IssueDate"), texto("IssueTime")
+    if not fecha:
+        return None
+    try:
+        return datetime.fromisoformat(f"{fecha}T{hora}" if hora else fecha)
+    except ValueError:
+        return None
 
 
 # ===========================================================================

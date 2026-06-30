@@ -112,6 +112,29 @@ class RespuestaDianTests(SimpleTestCase):
         r = soap.RespuestaDian.desde_xml(xml)
         self.assertEqual(r.track_id, "track-123")
 
+    def test_extrae_fecha_validacion_del_application_response(self):
+        import base64
+        app_response = (
+            '<ApplicationResponse xmlns="urn:oasis:names:specification:ubl:schema:xsd:ApplicationResponse-2"'
+            ' xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">'
+            "<cbc:IssueDate>2026-06-29</cbc:IssueDate>"
+            "<cbc:IssueTime>14:30:05-05:00</cbc:IssueTime>"
+            "</ApplicationResponse>"
+        )
+        b64 = base64.b64encode(app_response.encode()).decode()
+        xml = f"""<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
+          <s:Body><GetStatusResponse xmlns="http://wcf.dian.colombia">
+            <GetStatusResult xmlns:a="x">
+              <a:IsValid>true</a:IsValid>
+              <a:StatusCode>00</a:StatusCode>
+              <a:XmlBase64Bytes>{b64}</a:XmlBase64Bytes>
+            </GetStatusResult></GetStatusResponse></s:Body></s:Envelope>"""
+        r = soap.RespuestaDian.desde_xml(xml)
+        self.assertTrue(r.es_valido)
+        self.assertIsNotNone(r.fecha_validacion)
+        self.assertEqual(r.fecha_validacion.year, 2026)
+        self.assertEqual(r.fecha_validacion.hour, 14)
+
     def test_parsea_respuesta_con_estado_y_errores(self):
         xml = """<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
           <s:Body><GetStatusResponse xmlns="http://wcf.dian.colombia">

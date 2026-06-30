@@ -14,6 +14,7 @@ import re
 
 from django.conf import settings
 from django.core.files.base import ContentFile
+from django.utils import timezone
 
 from apps.dian import firma, soap, ubl
 from apps.documentos.models import DocumentoError, DocumentoEstado, DocumentoTipo
@@ -244,11 +245,15 @@ def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):
     # de un envío previo; en la práctica ya está aceptado, no es un rechazo.
     if respuesta.es_valido or _ya_procesado(respuesta):
         documento.estado = _estado(DocumentoEstado.Codigo.ACEPTADO)
+        if not documento.fecha_validacion:
+            documento.fecha_validacion = respuesta.fecha_validacion or timezone.now()
     elif respuesta.errores:
         documento.estado = _estado(DocumentoEstado.Codigo.RECHAZADO)
     else:
         documento.estado = _estado(DocumentoEstado.Codigo.ENVIADO)
-    documento.save(update_fields=[*_CAMPOS_RESPUESTA, "track_id", "estado", "actualizado_en"])
+    documento.save(update_fields=[
+        *_CAMPOS_RESPUESTA, "track_id", "estado", "fecha_validacion", "actualizado_en",
+    ])
     return respuesta
 
 
@@ -274,7 +279,11 @@ def consultar_estado(documento, *, cliente=None, ambiente=None, track_id=None, *
     _guardar_respuesta(documento, respuesta)
     if respuesta.es_valido or _ya_procesado(respuesta):
         documento.estado = _estado(DocumentoEstado.Codigo.ACEPTADO)
+        if not documento.fecha_validacion:
+            documento.fecha_validacion = respuesta.fecha_validacion or timezone.now()
     elif respuesta.errores:
         documento.estado = _estado(DocumentoEstado.Codigo.RECHAZADO)
-    documento.save(update_fields=[*_CAMPOS_RESPUESTA, "estado", "actualizado_en"])
+    documento.save(update_fields=[
+        *_CAMPOS_RESPUESTA, "estado", "fecha_validacion", "actualizado_en",
+    ])
     return respuesta

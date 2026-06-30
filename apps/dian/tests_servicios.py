@@ -90,6 +90,8 @@ class EnviarADianTests(TestCase):
         self.assertEqual(cliente.llamadas[0][0], "set_pruebas")
         # El track_id (ZipKey) se persiste para consultar el estado luego.
         self.assertEqual(self.documento.track_id, "track-1")
+        # Al aceptar se registra la fecha/hora de validación.
+        self.assertIsNotNone(self.documento.fecha_validacion)
 
     def test_set_aceptado_usa_sendbillsync(self):
         # Con el Set de Pruebas ya aceptado, aun en habilitación se usa SendBillSync.

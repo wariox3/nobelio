@@ -49,6 +49,23 @@ class DocumentoAPITests(APITestCase):
         resp = self.client.get("/api/documentos/documento/")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(resp.data["count"], 1)
+        # El listado NO incluye las líneas; el detalle (retrieve) sí.
+        self.assertNotIn("detalles", resp.data["results"][0])
+        detalle = self.client.get(f"/api/documentos/documento/{self.documento.id}/")
+        self.assertIn("detalles", detalle.data)
+
+    def test_filtrar_por_emisor_y_estado(self):
+        url = "/api/documentos/documento/"
+        # Emisor existente -> al menos 1; estado inexistente -> 0.
+        self.assertGreaterEqual(
+            self.client.get(url, {"emisor": self.emisor.id}).data["count"], 1
+        )
+        self.assertEqual(
+            self.client.get(url, {"estado": "aceptado"}).data["count"], 0
+        )
+        self.assertEqual(
+            self.client.get(url, {"emisor": 999999}).data["count"], 0
+        )
 
     def test_emitir_firma_el_documento(self):
         resp = self.client.post(self._url("emitir/"))

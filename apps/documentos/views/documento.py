@@ -17,13 +17,33 @@ class DocumentoViewSet(viewsets.ModelViewSet):
     queryset = (
         Documento.objects.select_related(
             "documento_tipo", "estado", "emisor", "adquiriente", "resolucion", "moneda"
-        ).prefetch_related("detalles__impuestos", "errores")
+        ).prefetch_related("errores")
     )
 
     def get_serializer_class(self):
         if self.action in ("create", "update", "partial_update"):
             return serializers.DocumentoCrearSerializer
+        if self.action == "list":
+            return serializers.DocumentoListaSerializer
         return serializers.DocumentoSerializer
+
+    def get_queryset(self):
+        """Permite filtrar el listado por ``emisor`` (id), ``estado`` y
+        ``documento_tipo`` (ambos por código): p. ej.
+        ``?emisor=2&estado=aceptado&documento_tipo=factura_venta``.
+        """
+        qs = super().get_queryset()
+        # El listado no incluye las líneas; solo el detalle/retrieve las precarga.
+        if self.action != "list":
+            qs = qs.prefetch_related("detalles__impuestos")
+        params = self.request.query_params
+        if emisor := params.get("emisor"):
+            qs = qs.filter(emisor=emisor)
+        if estado := params.get("estado"):
+            qs = qs.filter(estado__codigo=estado)
+        if tipo := params.get("documento_tipo"):
+            qs = qs.filter(documento_tipo__codigo=tipo)
+        return qs
 
     @action(detail=True, methods=["post"])
     def emitir(self, request, pk=None):

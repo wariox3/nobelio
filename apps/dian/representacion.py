@@ -99,11 +99,18 @@ class GeneradorPDF:
             f"{', ' + emisor.telefono if emisor.telefono else ''}",
             self.estilos["Mini"],
         )
+        validacion = ""
+        if self.doc.fecha_validacion:
+            validacion = (
+                "<br/>Validación DIAN: "
+                f"{self.doc.fecha_validacion.strftime('%Y-%m-%d %H:%M:%S')}"
+            )
         info_doc = Paragraph(
             f"<b>{self.doc.documento_tipo.nombre.upper()}</b><br/>"
             f"<b>No. {self.doc.numero}</b><br/>"
             f"Fecha: {self.doc.fecha_emision.isoformat()}<br/>"
-            f"Hora: {formatear_hora(self.doc.hora_emision)}",
+            f"Hora: {formatear_hora(self.doc.hora_emision)}"
+            f"{validacion}",
             self.estilos["Mini"],
         )
         tabla = Table([[info_emisor, info_doc]], colWidths=[11 * cm, 7 * cm])
