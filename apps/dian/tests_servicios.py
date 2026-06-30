@@ -52,7 +52,7 @@ class GenerarYFirmarTests(TestCase):
         servicios.generar_y_firmar(self.documento, firmador=firmador, ambiente=1)
 
         self.documento.refresh_from_db()
-        self.assertEqual(self.documento.estado.codigo, DocumentoEstado.Codigo.FIRMADO)
+        self.assertEqual(self.documento.estado.nombre, DocumentoEstado.Nombre.FIRMADO)
         # CUFE oficial (ambiente=1).
         self.assertEqual(
             self.documento.cufe_cude,
@@ -62,7 +62,7 @@ class GenerarYFirmarTests(TestCase):
         self.assertIn(b"<ds:Signature", self.documento.leer_xml())
 
     def test_no_reemite_si_ya_firmado(self):
-        self.documento.estado = DocumentoEstado.objects.get(codigo=DocumentoEstado.Codigo.FIRMADO)
+        self.documento.estado = DocumentoEstado.objects.get(nombre=DocumentoEstado.Nombre.FIRMADO)
         self.documento.save(update_fields=["estado"])
         with self.assertRaises(servicios.ErrorEmision) as ctx:
             servicios.generar_y_firmar(self.documento)
@@ -85,7 +85,7 @@ class EnviarADianTests(TestCase):
         r = servicios.enviar_a_dian(self.documento, cliente=cliente, ambiente=2)
 
         self.documento.refresh_from_db()
-        self.assertEqual(self.documento.estado.codigo, DocumentoEstado.Codigo.ACEPTADO)
+        self.assertEqual(self.documento.estado.nombre, DocumentoEstado.Nombre.ACEPTADO)
         self.assertEqual(r.track_id, "track-1")
         self.assertEqual(cliente.llamadas[0][0], "set_pruebas")
         # El track_id (ZipKey) se persiste para consultar el estado luego.
@@ -111,7 +111,7 @@ class EnviarADianTests(TestCase):
         servicios.enviar_a_dian(self.documento, cliente=cliente, ambiente=2)
 
         self.documento.refresh_from_db()
-        self.assertEqual(self.documento.estado.codigo, DocumentoEstado.Codigo.RECHAZADO)
+        self.assertEqual(self.documento.estado.nombre, DocumentoEstado.Nombre.RECHAZADO)
         # Solo se guarda el rechazo; la notificación se descarta.
         errores = list(self.documento.errores.all())
         self.assertEqual(len(errores), 1)
@@ -130,7 +130,7 @@ class EnviarADianTests(TestCase):
         servicios.enviar_a_dian(self.documento, cliente=cliente, ambiente=2)
 
         self.documento.refresh_from_db()
-        self.assertEqual(self.documento.estado.codigo, DocumentoEstado.Codigo.ACEPTADO)
+        self.assertEqual(self.documento.estado.nombre, DocumentoEstado.Nombre.ACEPTADO)
 
     def test_sin_firmar_falla(self):
         self.documento.xml_archivo = ""
@@ -139,7 +139,7 @@ class EnviarADianTests(TestCase):
             servicios.enviar_a_dian(self.documento, cliente=FakeCliente(None), ambiente=2)
 
     def test_no_reenvia_si_ya_aceptado(self):
-        self.documento.estado = DocumentoEstado.objects.get(codigo=DocumentoEstado.Codigo.ACEPTADO)
+        self.documento.estado = DocumentoEstado.objects.get(nombre=DocumentoEstado.Nombre.ACEPTADO)
         self.documento.save(update_fields=["estado"])
         with self.assertRaises(servicios.ErrorEmision) as ctx:
             servicios.enviar_a_dian(self.documento, cliente=FakeCliente(None), ambiente=2)
@@ -147,6 +147,8 @@ class EnviarADianTests(TestCase):
 
 
 class ConsultarEstadoTests(TestCase):
+    """consultar_estado es solo lectura: enruta la operación y NO muta el documento."""
+
     @classmethod
     def setUpTestData(cls):
         cls.documento = crear_documento_factura()["documento"]
@@ -154,12 +156,8 @@ class ConsultarEstadoTests(TestCase):
         cls.documento.save()
 
     def test_habilitacion_usa_getstatuszip(self):
-        respuesta = soap.RespuestaDian(es_valido=True, codigo_estado="00")
-        cliente = FakeCliente(respuesta)
+        cliente = FakeCliente(soap.RespuestaDian(es_valido=True, codigo_estado="00"))
         servicios.consultar_estado(self.documento, cliente=cliente, ambiente=2)
-
-        self.documento.refresh_from_db()
-        self.assertEqual(self.documento.estado.codigo, DocumentoEstado.Codigo.ACEPTADO)
         self.assertEqual(cliente.llamadas[0], ("estado_zip", "zip-123"))
 
     def test_produccion_usa_getstatus(self):
@@ -167,11 +165,57 @@ class ConsultarEstadoTests(TestCase):
         servicios.consultar_estado(self.documento, cliente=cliente, ambiente=1)
         self.assertEqual(cliente.llamadas[0], ("estado", "zip-123"))
 
+    def test_sendbillsync_usa_getstatus_por_cufe(self):
+        # Si el track_id es el CUFE (envío SendBillSync), aun en habilitación
+        # se consulta con GetStatus, no GetStatusZip.
+        self.documento.cufe_cude = "CUFE123"
+        self.documento.track_id = "CUFE123"
+        self.documento.save(update_fields=["cufe_cude", "track_id"])
+        cliente = FakeCliente(soap.RespuestaDian(es_valido=True, codigo_estado="00"))
+        servicios.consultar_estado(self.documento, cliente=cliente, ambiente=2)
+        self.assertEqual(cliente.llamadas[0], ("estado", "CUFE123"))
+
+    def test_no_modifica_el_documento(self):
+        estado_previo = self.documento.estado_id
+        cliente = FakeCliente(soap.RespuestaDian(es_valido=True, codigo_estado="00"))
+        servicios.consultar_estado(self.documento, cliente=cliente, ambiente=2)
+        self.documento.refresh_from_db()
+        self.assertEqual(self.documento.estado_id, estado_previo)
+
     def test_sin_track_id_falla(self):
         self.documento.track_id = ""
         self.documento.save()
         with self.assertRaises(servicios.ErrorEmision):
             servicios.consultar_estado(self.documento, cliente=FakeCliente(None), ambiente=2)
+
+
+class ActualizarEstadoTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.documento = crear_documento_factura()["documento"]
+        cls.documento.track_id = "zip-123"
+        cls.documento.save()
+
+    def _poner(self, codigo):
+        self.documento.estado = DocumentoEstado.objects.get(nombre=codigo)
+        self.documento.save(update_fields=["estado"])
+
+    def test_rechazado_pasa_a_aceptado(self):
+        self._poner(DocumentoEstado.Nombre.RECHAZADO)
+        cliente = FakeCliente(soap.RespuestaDian(es_valido=True, codigo_estado="00"))
+        servicios.actualizar_estado(self.documento, cliente=cliente, ambiente=2)
+        self.documento.refresh_from_db()
+        self.assertEqual(self.documento.estado.nombre, DocumentoEstado.Nombre.ACEPTADO)
+
+    def test_aceptado_no_se_actualiza(self):
+        self._poner(DocumentoEstado.Nombre.ACEPTADO)
+        with self.assertRaises(servicios.ErrorEmision):
+            servicios.actualizar_estado(self.documento, cliente=FakeCliente(None), ambiente=2)
+
+    def test_borrador_no_se_actualiza(self):
+        self._poner(DocumentoEstado.Nombre.BORRADOR)
+        with self.assertRaises(servicios.ErrorEmision):
+            servicios.actualizar_estado(self.documento, cliente=FakeCliente(None), ambiente=2)
 
 
 class ConsultarRangosTests(TestCase):

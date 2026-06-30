@@ -20,9 +20,9 @@ from apps.dian import firma, soap, ubl
 from apps.documentos.models import DocumentoError, DocumentoEstado, DocumentoTipo
 
 
-def _estado(codigo: str) -> DocumentoEstado:
-    """Devuelve la instancia de estado por su código (FK de Documento.estado)."""
-    return DocumentoEstado.objects.get(codigo=codigo)
+def _estado(nombre: str) -> DocumentoEstado:
+    """Devuelve la instancia de estado por su nombre (FK de Documento.estado)."""
+    return DocumentoEstado.objects.get(nombre=nombre)
 
 
 class ErrorEmision(Exception):
@@ -132,12 +132,12 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
     ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
 
     bloqueados = {
-        DocumentoEstado.Codigo.FIRMADO: "El documento ya está firmado.",
-        DocumentoEstado.Codigo.ENVIADO: "El documento ya fue enviado a la DIAN.",
-        DocumentoEstado.Codigo.ACEPTADO: "El documento ya fue aceptado por la DIAN.",
+        DocumentoEstado.Nombre.FIRMADO: "El documento ya está firmado.",
+        DocumentoEstado.Nombre.ENVIADO: "El documento ya fue enviado a la DIAN.",
+        DocumentoEstado.Nombre.ACEPTADO: "El documento ya fue aceptado por la DIAN.",
     }
-    if documento.estado_id and documento.estado.codigo in bloqueados:
-        raise ErrorEmision(bloqueados[documento.estado.codigo])
+    if documento.estado_id and documento.estado.nombre in bloqueados:
+        raise ErrorEmision(bloqueados[documento.estado.nombre])
 
     software = _software_activo(documento)
 
@@ -169,7 +169,7 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
     documento.xml_archivo.save(
         f"{documento.numero}.xml", ContentFile(xml_firmado), save=False
     )
-    documento.estado = _estado(DocumentoEstado.Codigo.FIRMADO)
+    documento.estado = _estado(DocumentoEstado.Nombre.FIRMADO)
     documento.save(update_fields=["cufe_cude", "xml_archivo", "estado", "actualizado_en"])
     return xml_firmado
 
@@ -220,7 +220,7 @@ def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):
     SendBillSync (síncrono).
     """
     ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
-    if documento.estado_id and documento.estado.codigo == DocumentoEstado.Codigo.ACEPTADO:
+    if documento.estado_id and documento.estado.nombre == DocumentoEstado.Nombre.ACEPTADO:
         raise ErrorEmision("El documento ya fue aceptado por la DIAN.")
     if not documento.xml_archivo:
         raise ErrorEmision("El documento no está firmado; ejecute generar_y_firmar primero.")
@@ -244,13 +244,13 @@ def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):
     # "Documento procesado anteriormente" (regla 90): la DIAN ya tiene ese CUFE
     # de un envío previo; en la práctica ya está aceptado, no es un rechazo.
     if respuesta.es_valido or _ya_procesado(respuesta):
-        documento.estado = _estado(DocumentoEstado.Codigo.ACEPTADO)
+        documento.estado = _estado(DocumentoEstado.Nombre.ACEPTADO)
         if not documento.fecha_validacion:
             documento.fecha_validacion = respuesta.fecha_validacion or timezone.now()
     elif respuesta.errores:
-        documento.estado = _estado(DocumentoEstado.Codigo.RECHAZADO)
+        documento.estado = _estado(DocumentoEstado.Nombre.RECHAZADO)
     else:
-        documento.estado = _estado(DocumentoEstado.Codigo.ENVIADO)
+        documento.estado = _estado(DocumentoEstado.Nombre.ENVIADO)
     documento.save(update_fields=[
         *_CAMPOS_RESPUESTA, "track_id", "estado", "fecha_validacion", "actualizado_en",
     ])
@@ -258,11 +258,14 @@ def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):
 
 
 def consultar_estado(documento, *, cliente=None, ambiente=None, track_id=None, **cred):
-    """Consulta el estado de un documento en la DIAN.
+    """Consulta (solo lectura) el estado del documento en la DIAN.
 
-    En habilitación (ambiente=2) usa GetStatusZip con el ZipKey del Set de
-    Pruebas; en producción usa GetStatus. Por defecto usa el ``track_id``
-    guardado en el documento al enviarlo.
+    NO modifica el documento; devuelve lo que responde la DIAN. Para aplicar el
+    resultado al documento usa ``actualizar_estado``.
+
+    Elige la operación según cómo se envió: si el identificador es un ZipKey del
+    Set de Pruebas (distinto del CUFE, en habilitación) usa GetStatusZip; si es
+    la clave del documento (CUFE, envíos SendBillSync) usa GetStatus.
     """
     ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
     if cliente is None:
@@ -272,17 +275,42 @@ def consultar_estado(documento, *, cliente=None, ambiente=None, track_id=None, *
     if not track_id:
         raise ErrorEmision("El documento no tiene track_id; envíelo a la DIAN primero.")
 
-    if ambiente == 2:
-        respuesta = cliente.consultar_estado_zip(track_id)
-    else:
-        respuesta = cliente.consultar_estado(track_id)
+    # ZipKey del Set de Pruebas (≠ CUFE) → GetStatusZip; CUFE/trackId → GetStatus.
+    es_zipkey = ambiente == 2 and track_id != documento.cufe_cude
+    if es_zipkey:
+        return cliente.consultar_estado_zip(track_id)
+    return cliente.consultar_estado(track_id)
+
+
+# Estados desde los que tiene sentido refrescar contra la DIAN (enviados, no
+# terminales). Un ``aceptado`` es terminal y un borrador/firmado no se ha enviado.
+_ESTADOS_ACTUALIZABLES = {
+    DocumentoEstado.Nombre.ENVIADO,
+    DocumentoEstado.Nombre.RECHAZADO,
+}
+
+
+def actualizar_estado(documento, *, cliente=None, ambiente=None, **cred):
+    """Consulta la DIAN y aplica el resultado al documento.
+
+    Solo para documentos enviados y no aceptados (``enviado``/``rechazado``):
+    un ``aceptado`` es terminal y no se toca; un documento sin enviar no aplica.
+    """
+    codigo_actual = documento.estado.nombre if documento.estado_id else ""
+    if codigo_actual not in _ESTADOS_ACTUALIZABLES:
+        raise ErrorEmision(
+            "Solo se puede actualizar el estado de documentos enviados o "
+            "rechazados (no aceptados ni en borrador)."
+        )
+
+    respuesta = consultar_estado(documento, cliente=cliente, ambiente=ambiente, **cred)
     _guardar_respuesta(documento, respuesta)
     if respuesta.es_valido or _ya_procesado(respuesta):
-        documento.estado = _estado(DocumentoEstado.Codigo.ACEPTADO)
+        documento.estado = _estado(DocumentoEstado.Nombre.ACEPTADO)
         if not documento.fecha_validacion:
             documento.fecha_validacion = respuesta.fecha_validacion or timezone.now()
     elif respuesta.errores:
-        documento.estado = _estado(DocumentoEstado.Codigo.RECHAZADO)
+        documento.estado = _estado(DocumentoEstado.Nombre.RECHAZADO)
     documento.save(update_fields=[
         *_CAMPOS_RESPUESTA, "estado", "fecha_validacion", "actualizado_en",
     ])

@@ -149,7 +149,7 @@ class Documento(ModeloUUID, ModeloConFechas):
         if not self.estado_id:
             from .documento_estado import DocumentoEstado
             self.estado = DocumentoEstado.objects.get(
-                codigo=DocumentoEstado.Codigo.BORRADOR
+                nombre=DocumentoEstado.Nombre.BORRADOR
             )
         super().save(*args, **kwargs)
 

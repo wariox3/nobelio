@@ -70,7 +70,7 @@ class DocumentoAPITests(APITestCase):
     def test_emitir_firma_el_documento(self):
         resp = self.client.post(self._url("emitir/"))
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertEqual(resp.data["estado"], DocumentoEstado.Codigo.FIRMADO)
+        self.assertEqual(resp.data["estado"], DocumentoEstado.Nombre.FIRMADO)
         self.assertEqual(len(resp.data["cufe_cude"]), 96)
 
     def test_descargar_xml_tras_emitir(self):

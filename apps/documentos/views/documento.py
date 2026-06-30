@@ -1,14 +1,23 @@
 """API de documentos electrónicos y acciones del ciclo de vida DIAN."""
+import requests
 from django.conf import settings
 from django.http import FileResponse, HttpResponse
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from apps.dian import representacion, servicios
+from apps.dian import representacion, servicios, soap
 from apps.documentos import serializers
 from apps.documentos.models import Documento
-from apps.nucleo.api import ErrorSolicitud
+from apps.nucleo.api import ErrorPasarela, ErrorSolicitud
+
+
+def _error_pasarela(exc):
+    """Convierte un error de comunicación con la DIAN en un 502 con mensaje claro."""
+    fault = ""
+    if isinstance(exc, requests.HTTPError) and exc.response is not None:
+        fault = soap.extraer_fault(exc.response.content)
+    return ErrorPasarela(f"Error al comunicarse con la DIAN: {fault or exc}")
 
 
 class DocumentoViewSet(viewsets.ModelViewSet):
@@ -40,7 +49,7 @@ class DocumentoViewSet(viewsets.ModelViewSet):
         if emisor := params.get("emisor"):
             qs = qs.filter(emisor=emisor)
         if estado := params.get("estado"):
-            qs = qs.filter(estado__codigo=estado)
+            qs = qs.filter(estado__nombre=estado)
         if tipo := params.get("documento_tipo"):
             qs = qs.filter(documento_tipo__codigo=tipo)
         return qs
@@ -54,7 +63,7 @@ class DocumentoViewSet(viewsets.ModelViewSet):
         except servicios.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
         return Response({
-            "estado": documento.estado.codigo,
+            "estado": documento.estado.nombre,
             "cufe_cude": documento.cufe_cude,
         })
 
@@ -66,8 +75,10 @@ class DocumentoViewSet(viewsets.ModelViewSet):
             respuesta = servicios.enviar_a_dian(documento)
         except servicios.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
+        except requests.RequestException as exc:
+            raise _error_pasarela(exc)
         return Response({
-            "estado": documento.estado.codigo,
+            "estado": documento.estado.nombre,
             "track_id": respuesta.track_id,
             "es_valido": respuesta.es_valido,
             "codigo_estado": respuesta.codigo_estado,
@@ -75,20 +86,43 @@ class DocumentoViewSet(viewsets.ModelViewSet):
             "errores": respuesta.errores,
         })
 
-    @action(detail=True, methods=["post"])
+    @action(detail=True, methods=["get"])
     def consultar(self, request, pk=None):
-        """Consulta en la DIAN el estado del documento por su track_id.
+        """Consulta (solo lectura) el estado del documento en la DIAN.
 
-        En habilitación usa GetStatusZip (Set de Pruebas); en producción GetStatus.
+        No modifica el documento; devuelve lo que responde la DIAN. Para aplicar
+        el resultado usa la acción ``actualizar-estado``.
         """
         documento = self.get_object()
         try:
             respuesta = servicios.consultar_estado(documento)
         except servicios.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
+        except requests.RequestException as exc:
+            raise _error_pasarela(exc)
         return Response({
-            "estado": documento.estado.codigo,
-            "track_id": documento.track_id,
+            "estado": documento.estado.nombre,  # estado local (sin cambios)
+            "es_valido": respuesta.es_valido,
+            "codigo_estado": respuesta.codigo_estado,
+            "descripcion": respuesta.descripcion_estado,
+            "errores": respuesta.errores,
+        })
+
+    @action(detail=True, methods=["post"], url_path="actualizar-estado")
+    def actualizar_estado(self, request, pk=None):
+        """Consulta la DIAN y actualiza el estado del documento.
+
+        Solo aplica a documentos enviados/rechazados (no aceptados ni en borrador).
+        """
+        documento = self.get_object()
+        try:
+            respuesta = servicios.actualizar_estado(documento)
+        except servicios.ErrorEmision as exc:
+            raise ErrorSolicitud(str(exc))
+        except requests.RequestException as exc:
+            raise _error_pasarela(exc)
+        return Response({
+            "estado": documento.estado.nombre,
             "es_valido": respuesta.es_valido,
             "codigo_estado": respuesta.codigo_estado,
             "descripcion": respuesta.descripcion_estado,

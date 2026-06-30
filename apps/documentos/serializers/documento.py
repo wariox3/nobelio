@@ -19,14 +19,14 @@ class DocumentoSerializer(serializers.ModelSerializer):
     documento_tipo_nombre = serializers.CharField(
         source="documento_tipo.nombre", read_only=True
     )
-    estado_codigo = serializers.CharField(source="estado.codigo", read_only=True)
+    estado_nombre = serializers.CharField(source="estado.nombre", read_only=True)
     estado_descripcion = serializers.CharField(source="estado.descripcion", read_only=True)
 
     class Meta:
         model = models.Documento
         fields = [
             "id", "documento_tipo", "documento_tipo_nombre",
-            "estado", "estado_codigo", "estado_descripcion",
+            "estado", "estado_nombre", "estado_descripcion",
             "emisor", "resolucion", "adquiriente",
             "prefijo", "consecutivo", "numero", "cufe_cude", "track_id",
             "fecha_validacion", "errores",
@@ -43,12 +43,20 @@ class DocumentoSerializer(serializers.ModelSerializer):
 
 
 class DocumentoListaSerializer(DocumentoSerializer):
-    """Versión para el listado: sin las líneas (``detalles``) anidadas."""
+    """Versión para el listado: sin las líneas anidadas y, del estado, solo el nombre."""
 
     detalles = None  # se quita el campo heredado
+    estado_descripcion = None  # en la lista solo va estado_nombre
 
     class Meta(DocumentoSerializer.Meta):
-        fields = [f for f in DocumentoSerializer.Meta.fields if f != "detalles"]
+        fields = [
+            f for f in DocumentoSerializer.Meta.fields
+            if f not in {"detalles", "estado_descripcion"}
+        ]
+        read_only_fields = [
+            f for f in DocumentoSerializer.Meta.read_only_fields
+            if f not in {"detalles", "estado_descripcion"}
+        ]
 
 
 class DocumentoCrearSerializer(serializers.ModelSerializer):
