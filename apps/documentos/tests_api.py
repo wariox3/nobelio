@@ -11,7 +11,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.dian.tests_firma import _generar_certificado
-from apps.documentos.models import Documento, DocumentoTipo
+from apps.documentos.models import Documento, DocumentoEstado, DocumentoTipo
 from apps.documentos.tests_utils import crear_documento_factura
 from apps.emisores.models import Certificado
 
@@ -53,7 +53,7 @@ class DocumentoAPITests(APITestCase):
     def test_emitir_firma_el_documento(self):
         resp = self.client.post(self._url("emitir/"))
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertEqual(resp.data["estado"], Documento.Estado.FIRMADO)
+        self.assertEqual(resp.data["estado"], DocumentoEstado.Codigo.FIRMADO)
         self.assertEqual(len(resp.data["cufe_cude"]), 96)
 
     def test_descargar_xml_tras_emitir(self):
@@ -61,7 +61,8 @@ class DocumentoAPITests(APITestCase):
         resp = self.client.get(self._url("xml/"))
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(resp["Content-Type"], "application/xml")
-        self.assertIn(b"<ds:Signature", resp.content)
+        # FileResponse (stream) desde object storage.
+        self.assertIn(b"<ds:Signature", b"".join(resp.streaming_content))
 
     def test_descargar_pdf_tras_emitir(self):
         self.client.post(self._url("emitir/"))

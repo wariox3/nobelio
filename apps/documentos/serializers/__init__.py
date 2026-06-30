@@ -2,11 +2,13 @@
 from .adquiriente import AdquirienteSerializer
 from .documento import DocumentoCrearSerializer, DocumentoSerializer
 from .documento_detalle import DocumentoDetalleImpuestoSerializer, DocumentoDetalleSerializer
+from .documento_error import DocumentoErrorSerializer
 
 __all__ = [
     "AdquirienteSerializer",
     "DocumentoDetalleImpuestoSerializer",
     "DocumentoDetalleSerializer",
+    "DocumentoErrorSerializer",
     "DocumentoSerializer",
     "DocumentoCrearSerializer",
 ]

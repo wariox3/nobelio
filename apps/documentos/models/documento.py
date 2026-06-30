@@ -2,8 +2,19 @@
 from django.db import models
 
 from apps.nucleo.models import ModeloConFechas, ModeloUUID
+from apps.utilidades.almacenamiento import almacenamiento_backblaze
 
 from .adquiriente import Adquiriente
+
+
+def _ruta_artefacto(instance, filename):
+    """Ruta en el bucket: ``<emisor_id>/documentos/<aaaa>/<mm>/<archivo>``.
+
+    Aísla por emisor (cada emisor pertenece a una cuenta) y agrupa por
+    año/mes para mantener manejable el número de objetos por carpeta.
+    """
+    fecha = instance.fecha_emision
+    return f"{instance.emisor_id}/documentos/{fecha:%Y/%m}/{filename}"
 
 
 class Documento(ModeloUUID, ModeloConFechas):
@@ -13,19 +24,7 @@ class Documento(ModeloUUID, ModeloConFechas):
     ``documento_referencia``.
     """
 
-    class Estado(models.TextChoices):
-        BORRADOR = "borrador", "Borrador"
-        GENERADO = "generado", "XML generado"
-        FIRMADO = "firmado", "Firmado"
-        ENVIADO = "enviado", "Enviado a la DIAN"
-        ACEPTADO = "aceptado", "Aceptado por la DIAN"
-        RECHAZADO = "rechazado", "Rechazado por la DIAN"
-
     # ===================== Atributos =====================
-    estado = models.CharField(
-        "estado", max_length=20, choices=Estado.choices, default=Estado.BORRADOR
-    )
-
     # Identificación del documento
     prefijo = models.CharField("prefijo", max_length=10, blank=True)
     consecutivo = models.PositiveBigIntegerField("consecutivo")
@@ -65,19 +64,31 @@ class Documento(ModeloUUID, ModeloConFechas):
 
     observaciones = models.TextField("observaciones", blank=True)
 
-    # Artefactos generados
-    xml_firmado = models.TextField("XML firmado", blank=True)
-    respuesta_dian = models.TextField("respuesta DIAN", blank=True)
+    # Resultado de la DIAN
     track_id = models.CharField(
         "track id DIAN", max_length=100, blank=True,
         help_text="Identificador del envío (ZipKey del Set de Pruebas o trackId), "
         "para consultar el estado en la DIAN.",
     )
 
+    # Artefactos en object storage (B2): el contenido NO se guarda en la BD.
+    xml_archivo = models.FileField(
+        "XML firmado", upload_to=_ruta_artefacto,
+        storage=almacenamiento_backblaze, blank=True,
+    )
+    respuesta_archivo = models.FileField(
+        "respuesta DIAN (cruda)", upload_to=_ruta_artefacto,
+        storage=almacenamiento_backblaze, blank=True,
+    )
+
     # ===================== Relaciones =====================
     documento_tipo = models.ForeignKey(
         "documentos.DocumentoTipo", on_delete=models.PROTECT,
         related_name="documentos", verbose_name="tipo de documento",
+    )
+    estado = models.ForeignKey(
+        "documentos.DocumentoEstado", on_delete=models.PROTECT,
+        related_name="documentos", verbose_name="estado",
     )
     emisor = models.ForeignKey(
         "emisores.Emisor", on_delete=models.PROTECT,
@@ -113,19 +124,6 @@ class Documento(ModeloUUID, ModeloConFechas):
         verbose_name="documento de referencia",
     )
 
-    # Origen del documento (trazabilidad): qué integración (ERP) o qué usuario
-    # del frontend lo creó. Se rellenan según cómo entró la petición.
-    origen_llave = models.ForeignKey(
-        "seguridad.LlaveApi", on_delete=models.SET_NULL,
-        related_name="documentos", null=True, blank=True,
-        verbose_name="origen (llave de API)",
-    )
-    origen_usuario = models.ForeignKey(
-        "seguridad.Usuario", on_delete=models.SET_NULL,
-        related_name="documentos_emitidos", null=True, blank=True,
-        verbose_name="origen (usuario)",
-    )
-
     class Meta:
         db_table = "doc_documento"
         verbose_name = "documento electrónico"
@@ -143,7 +141,20 @@ class Documento(ModeloUUID, ModeloConFechas):
         # explícitamente (p. ej. para reproducir un número específico).
         if not self.numero:
             self.numero = f"{self.prefijo}{self.consecutivo}"
+        # Estado inicial por defecto: borrador.
+        if not self.estado_id:
+            from .documento_estado import DocumentoEstado
+            self.estado = DocumentoEstado.objects.get(
+                codigo=DocumentoEstado.Codigo.BORRADOR
+            )
         super().save(*args, **kwargs)
+
+    def leer_xml(self) -> bytes:
+        """Devuelve los bytes del XML firmado desde el storage (B2/local)."""
+        if not self.xml_archivo:
+            return b""
+        with self.xml_archivo.open("rb") as fh:
+            return fh.read()
 
     def __str__(self):
         return f"{self.documento_tipo.nombre} {self.numero}"

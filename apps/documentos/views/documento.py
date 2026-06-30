@@ -1,6 +1,6 @@
 """API de documentos electrónicos y acciones del ciclo de vida DIAN."""
 from django.conf import settings
-from django.http import HttpResponse
+from django.http import FileResponse, HttpResponse
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -16,8 +16,8 @@ class DocumentoViewSet(viewsets.ModelViewSet):
 
     queryset = (
         Documento.objects.select_related(
-            "documento_tipo", "emisor", "adquiriente", "resolucion", "moneda"
-        ).prefetch_related("detalles__impuestos")
+            "documento_tipo", "estado", "emisor", "adquiriente", "resolucion", "moneda"
+        ).prefetch_related("detalles__impuestos", "errores")
     )
 
     def get_serializer_class(self):
@@ -34,7 +34,7 @@ class DocumentoViewSet(viewsets.ModelViewSet):
         except servicios.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
         return Response({
-            "estado": documento.estado,
+            "estado": documento.estado.codigo,
             "cufe_cude": documento.cufe_cude,
         })
 
@@ -47,7 +47,7 @@ class DocumentoViewSet(viewsets.ModelViewSet):
         except servicios.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
         return Response({
-            "estado": documento.estado,
+            "estado": documento.estado.codigo,
             "track_id": respuesta.track_id,
             "es_valido": respuesta.es_valido,
             "codigo_estado": respuesta.codigo_estado,
@@ -67,7 +67,7 @@ class DocumentoViewSet(viewsets.ModelViewSet):
         except servicios.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
         return Response({
-            "estado": documento.estado,
+            "estado": documento.estado.codigo,
             "track_id": documento.track_id,
             "es_valido": respuesta.es_valido,
             "codigo_estado": respuesta.codigo_estado,
@@ -77,12 +77,16 @@ class DocumentoViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"])
     def xml(self, request, pk=None):
-        """Descarga el XML firmado del documento."""
+        """Descarga el XML firmado del documento (stream desde object storage)."""
         documento = self.get_object()
-        if not documento.xml_firmado:
+        if not documento.xml_archivo:
             raise ErrorSolicitud("El documento aún no está firmado.")
-        respuesta = HttpResponse(documento.xml_firmado, content_type="application/xml")
-        respuesta["Content-Disposition"] = f'attachment; filename="{documento.numero}.xml"'
+        respuesta = FileResponse(
+            documento.xml_archivo.open("rb"),
+            content_type="application/xml",
+            as_attachment=True,
+            filename=f"{documento.numero}.xml",
+        )
         return respuesta
 
     @action(detail=True, methods=["get"])

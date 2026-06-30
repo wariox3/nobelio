@@ -10,10 +10,18 @@ pueden inyectar para facilitar las pruebas sin red ni .p12 reales.
 """
 from __future__ import annotations
 
+import re
+
 from django.conf import settings
+from django.core.files.base import ContentFile
 
 from apps.dian import firma, soap, ubl
-from apps.documentos.models import Documento, DocumentoTipo
+from apps.documentos.models import DocumentoError, DocumentoEstado, DocumentoTipo
+
+
+def _estado(codigo: str) -> DocumentoEstado:
+    """Devuelve la instancia de estado por su código (FK de Documento.estado)."""
+    return DocumentoEstado.objects.get(codigo=codigo)
 
 
 class ErrorEmision(Exception):
@@ -27,6 +35,55 @@ def _ya_procesado(respuesta) -> bool:
     no es un rechazo de contenido sino un documento ya aceptado.
     """
     return any("procesado anteriormente" in e.lower() for e in respuesta.errores)
+
+
+# "Regla: <regla>, <Tipo>: <mensaje>" (Rechazo / Notificación).
+_RE_ERROR = re.compile(
+    r"Regla:\s*(?P<regla>[^,]+),\s*(?P<tipo>[^:]+):\s*(?P<mensaje>.*)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _parsear_error(texto: str) -> dict:
+    """Parsea un error de la DIAN a ``{regla, tipo, mensaje}``."""
+    m = _RE_ERROR.match(texto.strip())
+    if not m:
+        return {"regla": "", "tipo": DocumentoError.Tipo.OTRO, "mensaje": texto.strip()}
+    etiqueta = m.group("tipo").strip().lower()
+    if etiqueta.startswith("rechaz"):
+        tipo = DocumentoError.Tipo.RECHAZO
+    elif etiqueta.startswith("notif"):
+        tipo = DocumentoError.Tipo.NOTIFICACION
+    else:
+        tipo = DocumentoError.Tipo.OTRO
+    return {"regla": m.group("regla").strip(), "tipo": tipo, "mensaje": m.group("mensaje").strip()}
+
+
+def _guardar_respuesta(documento, respuesta):
+    """Registra el resultado DIAN: SOAP crudo en B2 y los rechazos como filas.
+
+    El ``respuesta_archivo`` se asigna sin guardar (el caller hace ``save``);
+    las filas ``DocumentoError`` se reemplazan de inmediato.
+    """
+    if respuesta.xml_crudo:
+        documento.respuesta_archivo.save(
+            f"{documento.numero}.dian.xml",
+            ContentFile(respuesta.xml_crudo.encode("utf-8")),
+            save=False,
+        )
+    # Solo se guardan los rechazos (las notificaciones son informativas).
+    documento.errores.all().delete()
+    filas = []
+    for e in respuesta.errores:
+        datos = _parsear_error(e)
+        if datos["tipo"] == DocumentoError.Tipo.NOTIFICACION:
+            continue
+        filas.append(DocumentoError(documento=documento, **datos))
+    DocumentoError.objects.bulk_create(filas)
+
+
+# Campos del documento que se actualizan al registrar una respuesta de la DIAN.
+_CAMPOS_RESPUESTA = ["respuesta_archivo"]
 
 
 def _software_activo_emisor(emisor):
@@ -74,12 +131,12 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
     ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
 
     bloqueados = {
-        Documento.Estado.FIRMADO: "El documento ya está firmado.",
-        Documento.Estado.ENVIADO: "El documento ya fue enviado a la DIAN.",
-        Documento.Estado.ACEPTADO: "El documento ya fue aceptado por la DIAN.",
+        DocumentoEstado.Codigo.FIRMADO: "El documento ya está firmado.",
+        DocumentoEstado.Codigo.ENVIADO: "El documento ya fue enviado a la DIAN.",
+        DocumentoEstado.Codigo.ACEPTADO: "El documento ya fue aceptado por la DIAN.",
     }
-    if documento.estado in bloqueados:
-        raise ErrorEmision(bloqueados[documento.estado])
+    if documento.estado_id and documento.estado.codigo in bloqueados:
+        raise ErrorEmision(bloqueados[documento.estado.codigo])
 
     software = _software_activo(documento)
 
@@ -103,15 +160,16 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
     )
     xml = constructor.generar_xml()
     documento.cufe_cude = constructor.cufe
-    documento.estado = Documento.Estado.GENERADO
 
     if firmador is None:
         firmador = construir_firmador(documento, **cred)
     xml_firmado = firmador.firmar(xml)
 
-    documento.xml_firmado = xml_firmado.decode("utf-8")
-    documento.estado = Documento.Estado.FIRMADO
-    documento.save(update_fields=["cufe_cude", "xml_firmado", "estado", "actualizado_en"])
+    documento.xml_archivo.save(
+        f"{documento.numero}.xml", ContentFile(xml_firmado), save=False
+    )
+    documento.estado = _estado(DocumentoEstado.Codigo.FIRMADO)
+    documento.save(update_fields=["cufe_cude", "xml_archivo", "estado", "actualizado_en"])
     return xml_firmado
 
 
@@ -161,16 +219,16 @@ def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):
     SendBillSync (síncrono).
     """
     ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
-    if documento.estado == Documento.Estado.ACEPTADO:
+    if documento.estado_id and documento.estado.codigo == DocumentoEstado.Codigo.ACEPTADO:
         raise ErrorEmision("El documento ya fue aceptado por la DIAN.")
-    if not documento.xml_firmado:
+    if not documento.xml_archivo:
         raise ErrorEmision("El documento no está firmado; ejecute generar_y_firmar primero.")
 
     software = _software_activo(documento)
     if cliente is None:
         cliente = construir_cliente(documento, ambiente, **cred)
 
-    xml = documento.xml_firmado.encode("utf-8")
+    xml = documento.leer_xml()
     nombre = f"{documento.numero}.xml"
 
     usar_set_pruebas = ambiente == 2 and not software.set_pruebas_aceptado
@@ -179,18 +237,18 @@ def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):
     else:
         respuesta = cliente.enviar_factura_sincrono(xml, nombre)
 
-    documento.respuesta_dian = respuesta.xml_crudo
+    _guardar_respuesta(documento, respuesta)
     if respuesta.track_id:
         documento.track_id = respuesta.track_id
     # "Documento procesado anteriormente" (regla 90): la DIAN ya tiene ese CUFE
     # de un envío previo; en la práctica ya está aceptado, no es un rechazo.
     if respuesta.es_valido or _ya_procesado(respuesta):
-        documento.estado = Documento.Estado.ACEPTADO
+        documento.estado = _estado(DocumentoEstado.Codigo.ACEPTADO)
     elif respuesta.errores:
-        documento.estado = Documento.Estado.RECHAZADO
+        documento.estado = _estado(DocumentoEstado.Codigo.RECHAZADO)
     else:
-        documento.estado = Documento.Estado.ENVIADO
-    documento.save(update_fields=["respuesta_dian", "track_id", "estado", "actualizado_en"])
+        documento.estado = _estado(DocumentoEstado.Codigo.ENVIADO)
+    documento.save(update_fields=[*_CAMPOS_RESPUESTA, "track_id", "estado", "actualizado_en"])
     return respuesta
 
 
@@ -213,10 +271,10 @@ def consultar_estado(documento, *, cliente=None, ambiente=None, track_id=None, *
         respuesta = cliente.consultar_estado_zip(track_id)
     else:
         respuesta = cliente.consultar_estado(track_id)
-    documento.respuesta_dian = respuesta.xml_crudo
+    _guardar_respuesta(documento, respuesta)
     if respuesta.es_valido or _ya_procesado(respuesta):
-        documento.estado = Documento.Estado.ACEPTADO
+        documento.estado = _estado(DocumentoEstado.Codigo.ACEPTADO)
     elif respuesta.errores:
-        documento.estado = Documento.Estado.RECHAZADO
-    documento.save(update_fields=["respuesta_dian", "estado", "actualizado_en"])
+        documento.estado = _estado(DocumentoEstado.Codigo.RECHAZADO)
+    documento.save(update_fields=[*_CAMPOS_RESPUESTA, "estado", "actualizado_en"])
     return respuesta

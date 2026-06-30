@@ -6,7 +6,9 @@ import sys
 
 def main():
     """Run administrative tasks."""
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.dev')
+    # La suite de pruebas usa settings propios (storage local, sin B2/red).
+    predeterminado = 'config.settings.test' if 'test' in sys.argv else 'config.settings.dev'
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', predeterminado)
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:

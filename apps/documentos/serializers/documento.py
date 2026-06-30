@@ -8,30 +8,35 @@ from rest_framework.validators import UniqueTogetherValidator
 from apps.documentos import models
 
 from .documento_detalle import DocumentoDetalleSerializer
+from .documento_error import DocumentoErrorSerializer
 
 
 class DocumentoSerializer(serializers.ModelSerializer):
     """Serializer de lectura del documento, con detalles anidados."""
 
     detalles = DocumentoDetalleSerializer(many=True, read_only=True)
+    errores = DocumentoErrorSerializer(many=True, read_only=True)
     documento_tipo_nombre = serializers.CharField(
         source="documento_tipo.nombre", read_only=True
     )
-    estado_display = serializers.CharField(source="get_estado_display", read_only=True)
+    estado_codigo = serializers.CharField(source="estado.codigo", read_only=True)
+    estado_descripcion = serializers.CharField(source="estado.descripcion", read_only=True)
 
     class Meta:
         model = models.Documento
         fields = [
-            "id", "documento_tipo", "documento_tipo_nombre", "estado", "estado_display",
+            "id", "documento_tipo", "documento_tipo_nombre",
+            "estado", "estado_codigo", "estado_descripcion",
             "emisor", "resolucion", "adquiriente",
-            "prefijo", "consecutivo", "numero", "cufe_cude", "track_id",
+            "prefijo", "consecutivo", "numero", "cufe_cude", "track_id", "errores",
             "fecha_emision", "hora_emision", "moneda", "forma_pago", "medio_pago",
             "valor_bruto", "total_impuestos", "total_descuentos", "total_cargos",
             "total_a_pagar", "documento_referencia", "observaciones", "detalles",
             "creado_en", "actualizado_en",
         ]
         read_only_fields = [
-            "estado", "cufe_cude", "track_id", "valor_bruto", "total_impuestos",
+            "estado", "cufe_cude", "track_id",
+            "valor_bruto", "total_impuestos",
             "total_a_pagar", "creado_en", "actualizado_en",
         ]
 

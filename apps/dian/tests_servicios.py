@@ -1,9 +1,10 @@
 """Pruebas del servicio de orquestación (pipeline completo)."""
+from django.core.files.base import ContentFile
 from django.test import TestCase
 
 from apps.dian import servicios, soap
 from apps.dian.tests_firma import _generar_certificado
-from apps.documentos.models import Documento
+from apps.documentos.models import Documento, DocumentoError, DocumentoEstado
 from apps.documentos.tests_utils import crear_documento_factura
 
 
@@ -51,17 +52,17 @@ class GenerarYFirmarTests(TestCase):
         servicios.generar_y_firmar(self.documento, firmador=firmador, ambiente=1)
 
         self.documento.refresh_from_db()
-        self.assertEqual(self.documento.estado, Documento.Estado.FIRMADO)
+        self.assertEqual(self.documento.estado.codigo, DocumentoEstado.Codigo.FIRMADO)
         # CUFE oficial (ambiente=1).
         self.assertEqual(
             self.documento.cufe_cude,
             "8bb918b19ba22a694f1da11c643b5e9de39adf60311cf179179e9b33"
             "381030bcd4c3c3f156c506ed5908f9276f5bd9b4",
         )
-        self.assertIn("<ds:Signature", self.documento.xml_firmado)
+        self.assertIn(b"<ds:Signature", self.documento.leer_xml())
 
     def test_no_reemite_si_ya_firmado(self):
-        self.documento.estado = Documento.Estado.FIRMADO
+        self.documento.estado = DocumentoEstado.objects.get(codigo=DocumentoEstado.Codigo.FIRMADO)
         self.documento.save(update_fields=["estado"])
         with self.assertRaises(servicios.ErrorEmision) as ctx:
             servicios.generar_y_firmar(self.documento)
@@ -72,8 +73,10 @@ class EnviarADianTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.documento = crear_documento_factura()["documento"]
-        cls.documento.xml_firmado = "<Invoice/>"
         cls.documento.cufe_cude = "ABC"
+        cls.documento.xml_archivo.save(
+            "f.xml", ContentFile(b"<Invoice/>"), save=False
+        )
         cls.documento.save()
 
     def test_set_pruebas_acepta(self):
@@ -82,7 +85,7 @@ class EnviarADianTests(TestCase):
         r = servicios.enviar_a_dian(self.documento, cliente=cliente, ambiente=2)
 
         self.documento.refresh_from_db()
-        self.assertEqual(self.documento.estado, Documento.Estado.ACEPTADO)
+        self.assertEqual(self.documento.estado.codigo, DocumentoEstado.Codigo.ACEPTADO)
         self.assertEqual(r.track_id, "track-1")
         self.assertEqual(cliente.llamadas[0][0], "set_pruebas")
         # El track_id (ZipKey) se persiste para consultar el estado luego.
@@ -97,13 +100,23 @@ class EnviarADianTests(TestCase):
         servicios.enviar_a_dian(self.documento, cliente=cliente, ambiente=2)
         self.assertEqual(cliente.llamadas[0][0], "sincrono")
 
-    def test_rechazo_marca_estado(self):
-        respuesta = soap.RespuestaDian(es_valido=False, errores=["Error X"])
+    def test_rechazo_marca_estado_y_guarda_errores(self):
+        respuesta = soap.RespuestaDian(es_valido=False, errores=[
+            "Regla: FAJ24, Rechazo: DV del NIT no es correcto",
+            "Regla: FAJ43b, Notificación: Nombre no corresponde al RUT",
+        ])
         cliente = FakeCliente(respuesta)
         servicios.enviar_a_dian(self.documento, cliente=cliente, ambiente=2)
 
         self.documento.refresh_from_db()
-        self.assertEqual(self.documento.estado, Documento.Estado.RECHAZADO)
+        self.assertEqual(self.documento.estado.codigo, DocumentoEstado.Codigo.RECHAZADO)
+        # Solo se guarda el rechazo; la notificación se descarta.
+        errores = list(self.documento.errores.all())
+        self.assertEqual(len(errores), 1)
+        self.assertEqual(errores[0].regla, "FAJ24")
+        self.assertEqual(errores[0].tipo, DocumentoError.Tipo.RECHAZO)
+        self.assertEqual(errores[0].mensaje, "DV del NIT no es correcto")
+        self.assertFalse(self.documento.errores.filter(regla="FAJ43b").exists())
 
     def test_procesado_anteriormente_se_marca_aceptado(self):
         # Regla 90: la DIAN ya tenía el CUFE -> ya aceptado, no rechazado.
@@ -115,16 +128,16 @@ class EnviarADianTests(TestCase):
         servicios.enviar_a_dian(self.documento, cliente=cliente, ambiente=2)
 
         self.documento.refresh_from_db()
-        self.assertEqual(self.documento.estado, Documento.Estado.ACEPTADO)
+        self.assertEqual(self.documento.estado.codigo, DocumentoEstado.Codigo.ACEPTADO)
 
     def test_sin_firmar_falla(self):
-        self.documento.xml_firmado = ""
+        self.documento.xml_archivo = ""
         self.documento.save()
         with self.assertRaises(servicios.ErrorEmision):
             servicios.enviar_a_dian(self.documento, cliente=FakeCliente(None), ambiente=2)
 
     def test_no_reenvia_si_ya_aceptado(self):
-        self.documento.estado = Documento.Estado.ACEPTADO
+        self.documento.estado = DocumentoEstado.objects.get(codigo=DocumentoEstado.Codigo.ACEPTADO)
         self.documento.save(update_fields=["estado"])
         with self.assertRaises(servicios.ErrorEmision) as ctx:
             servicios.enviar_a_dian(self.documento, cliente=FakeCliente(None), ambiente=2)
@@ -144,7 +157,7 @@ class ConsultarEstadoTests(TestCase):
         servicios.consultar_estado(self.documento, cliente=cliente, ambiente=2)
 
         self.documento.refresh_from_db()
-        self.assertEqual(self.documento.estado, Documento.Estado.ACEPTADO)
+        self.assertEqual(self.documento.estado.codigo, DocumentoEstado.Codigo.ACEPTADO)
         self.assertEqual(cliente.llamadas[0], ("estado_zip", "zip-123"))
 
     def test_produccion_usa_getstatus(self):
