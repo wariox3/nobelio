@@ -16,7 +16,7 @@ from apps.catalogos import models
 # Mapeo: nombre del archivo .gc (stem o prefijo) -> modelo destino.
 MAPEO = {
     "TipoDocumento": models.TipoFactura,
-    "TipoIdFiscal": models.TipoIdentificacion,
+    "TipoIdentificacion": models.TipoIdentificacion,
     "TipoOrganizacion": models.TipoOrganizacion,
     "TipoResponsabilidad": models.ResponsabilidadFiscal,
     "TipoImpuesto": models.Tributo,

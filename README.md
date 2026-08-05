@@ -51,6 +51,10 @@ de la DIAN; el CUFE/CUDE se verifica contra los ejemplos oficiales del Anexo.
 
 ## Instalación
 
+> ¿Primera vez montando el proyecto? Ver
+> [docs/entorno-desarrollo.md](docs/entorno-desarrollo.md) para los pasos
+> completos desde cero (PostgreSQL, venv, `.env`).
+
 ```bash
 # 1. Clonar y entrar al proyecto
 cd nobelio
