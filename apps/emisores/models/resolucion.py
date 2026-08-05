@@ -66,3 +66,38 @@ class ResolucionFacturacion(ModeloConFechas):
         """Calcula el siguiente número a emitir respetando el rango autorizado."""
         base = max(self.consecutivo_actual, self.rango_desde - 1)
         return base + 1
+
+
+def resolucion_activa_en_otra_cuenta(emisor, prefijo, numero_resolucion, excluir_pk=None):
+    """Devuelve la resolución activa que ya tiene este NIT en otra cuenta, o ``None``.
+
+    Un NIT puede estar dado de alta en varias cuentas (una por integración),
+    pero la numeración que autoriza la DIAN es una sola: si dos filas emitieran
+    con el mismo prefijo y resolución, cada una llevaría su propio
+    ``consecutivo_actual`` y la DIAN rechazaría los números repetidos —
+    consecutivos que además ya no se recuperan.
+
+    Se mira solo entre las **activas** a propósito: cuando un cliente migra de
+    integración se desactiva la resolución en la cuenta que deja, y con eso
+    queda libre para registrarla en la nueva.
+    """
+    consulta = ResolucionFacturacion.objects.filter(
+        activa=True,
+        prefijo=prefijo,
+        numero_resolucion=numero_resolucion,
+        emisor__tipo_identificacion_id=emisor.tipo_identificacion_id,
+        emisor__numero_identificacion=emisor.numero_identificacion,
+    ).exclude(emisor_id=emisor.pk).select_related("emisor__cuenta")
+    if excluir_pk is not None:
+        consulta = consulta.exclude(pk=excluir_pk)
+    return consulta.first()
+
+
+def mensaje_resolucion_ocupada(resolucion):
+    """Explica el choque de numeración y cómo resolverlo."""
+    return (
+        f"La resolución {resolucion.numero_resolucion} con prefijo "
+        f"'{resolucion.prefijo}' ya está activa para este NIT en la cuenta "
+        f"'{resolucion.emisor.cuenta}'. Dos cuentas no pueden numerar con la "
+        f"misma resolución a la vez: desactívala allí antes de registrarla aquí."
+    )

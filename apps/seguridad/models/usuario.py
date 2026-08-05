@@ -26,15 +26,16 @@ class Usuario(AbstractBaseUser, PermissionsMixin, ModeloConFechas):
     )
 
     # --- Relaciones ---
-    # Nullable: el staff interno de la plataforma no pertenece a ninguna cuenta;
-    # los usuarios de un cliente sí están ligados a su cuenta (tenant).
-    cuenta = models.ForeignKey(
-        "cuentas.Cuenta",
-        on_delete=models.PROTECT,
+    # El usuario no pertenece a una cuenta: lo que puede ver son exactamente los
+    # emisores que tenga asignados, sin ningún techo intermedio. La cuenta es
+    # cosa de la LlaveApi, que sí necesita alcanzar a todos los emisores de una
+    # integración. Sin emisores un usuario no staff no ve nada (falla cerrado).
+    emisores = models.ManyToManyField(
+        "emisores.Emisor",
         related_name="usuarios",
-        verbose_name="cuenta",
-        null=True,
+        verbose_name="emisores",
         blank=True,
+        help_text="Emisores cuyos datos puede consultar y operar el usuario.",
     )
 
     objects = UsuarioManager()

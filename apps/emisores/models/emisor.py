@@ -69,9 +69,15 @@ class Emisor(ModeloConFechas):
         verbose_name_plural = "emisores"
         ordering = ["razon_social"]
         constraints = [
+            # La unicidad es por cuenta, no global: el mismo NIT puede estar dado
+            # de alta en varias integraciones a la vez —una para facturación y
+            # otra para nómina, o las dos a la vez mientras el cliente migra de
+            # proveedor— y cada fila lleva sus propios datos (correo, resolución,
+            # certificado). Lo que no puede repetirse entre esas filas es una
+            # resolución de numeración activa; ver ResolucionFacturacion.
             models.UniqueConstraint(
-                fields=["tipo_identificacion", "numero_identificacion"],
-                name="emisor_identificacion_unica",
+                fields=["cuenta", "tipo_identificacion", "numero_identificacion"],
+                name="emisor_identificacion_unica_por_cuenta",
             )
         ]
 

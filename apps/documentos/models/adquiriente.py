@@ -1,4 +1,9 @@
-"""Adquiriente: cliente / receptor del documento electrónico."""
+"""Adquiriente: cliente / receptor del documento electrónico.
+
+El adquiriente pertenece a un emisor: es *su* cartera de clientes. Dos emisores
+que facturen al mismo NIT tienen cada uno su propia fila, porque los datos de
+contacto y la razón social que cada uno registró son suyos y no deben mezclarse.
+"""
 from django.db import models
 
 from apps.nucleo.models import ModeloConFechas
@@ -21,6 +26,12 @@ class Adquiriente(ModeloConFechas):
     correo = models.EmailField("correo electrónico", blank=True)
 
     # --- Relaciones ---
+    emisor = models.ForeignKey(
+        "emisores.Emisor",
+        on_delete=models.CASCADE,
+        related_name="adquirientes",
+        verbose_name="emisor",
+    )
     tipo_identificacion = models.ForeignKey(
         "catalogos.TipoIdentificacion",
         on_delete=models.PROTECT,
@@ -60,9 +71,11 @@ class Adquiriente(ModeloConFechas):
         verbose_name_plural = "adquirientes"
         ordering = ["razon_social"]
         constraints = [
+            # La unicidad es por emisor, no global: el mismo NIT puede ser
+            # cliente de varios emisores a la vez.
             models.UniqueConstraint(
-                fields=["tipo_identificacion", "numero_identificacion"],
-                name="adquiriente_identificacion_unica",
+                fields=["emisor", "tipo_identificacion", "numero_identificacion"],
+                name="adquiriente_identificacion_unica_por_emisor",
             )
         ]
 

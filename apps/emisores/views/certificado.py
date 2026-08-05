@@ -9,9 +9,10 @@ from rest_framework.response import Response
 from apps.emisores import models, serializers
 from apps.emisores.servicios import CertificadoInvalido, validar_pkcs12
 from apps.nucleo.api import ErrorSolicitud
+from apps.seguridad.alcance import AlcanceEmisorMixin, exigir_alcance
 
 
-class CertificadoViewSet(viewsets.ModelViewSet):
+class CertificadoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
     serializer_class = serializers.CertificadoSerializer
     queryset = models.Certificado.objects.select_related("emisor")
 
@@ -59,6 +60,9 @@ class CertificadoViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         emisor = serializer.validated_data["emisor"]
+        # 'cargar' guarda por su cuenta, así que el alcance se comprueba aquí y
+        # no en el perform_create del mixin.
+        exigir_alcance(request, emisor)
         archivo = serializer.validated_data["archivo"]
 
         # Validamos el .p12 con los bytes subidos y devolvemos el puntero al

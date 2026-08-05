@@ -7,7 +7,11 @@ técnica).
 """
 from .certificado import Certificado
 from .emisor import Emisor
-from .resolucion import ResolucionFacturacion
+from .resolucion import (
+    ResolucionFacturacion,
+    mensaje_resolucion_ocupada,
+    resolucion_activa_en_otra_cuenta,
+)
 from .software import SoftwareDian
 
 __all__ = [
@@ -15,4 +19,6 @@ __all__ = [
     "SoftwareDian",
     "Certificado",
     "ResolucionFacturacion",
+    "resolucion_activa_en_otra_cuenta",
+    "mensaje_resolucion_ocupada",
 ]

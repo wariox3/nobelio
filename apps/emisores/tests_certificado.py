@@ -76,6 +76,7 @@ class CertificadoAPITests(APITestCase):
         self.usuario = get_user_model().objects.create_user(
             email="staff@nobelio.co", password="x"
         )
+        self.usuario.emisores.add(self.emisor)
         self.client.force_authenticate(self.usuario)
         self.url = "/api/emisores/certificado/"
         self.url_cargar = "/api/emisores/certificado/cargar/"

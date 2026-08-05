@@ -139,6 +139,11 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
     if documento.estado_id and documento.estado.nombre in bloqueados:
         raise ErrorEmision(bloqueados[documento.estado.nombre])
 
+    # Dar de baja un emisor (activo=False) tiene que cortar la emisión: es la
+    # forma de suspender a un cliente sin tocar las credenciales de su cuenta.
+    if not documento.emisor.activo:
+        raise ErrorEmision("El emisor está inactivo; no puede emitir documentos.")
+
     software = _software_activo(documento)
 
     codigo_tipo = documento.documento_tipo.codigo

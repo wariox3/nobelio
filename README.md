@@ -130,7 +130,9 @@ python manage.py listas TipoResponsabilidad
 > Autenticación: el frontend usa **JWT** (`POST /api/seguridad/token/` →
 > `Authorization: Bearer <access>`) y el ERP usa **API Key**
 > (`Authorization: Api-Key <prefijo>.<secreto>`). Ver [docs/autenticacion.md](docs/autenticacion.md).
-> Los catálogos (`/api/catalogos/...`) son de solo lectura.
+> Cada credencial solo alcanza los emisores de su cuenta: lo ajeno no aparece en
+> los listados y responde 404. Los catálogos (`/api/catalogos/...`) son de solo
+> lectura.
 
 ### 1. Consultar catálogos (para obtener los IDs)
 
@@ -172,6 +174,7 @@ Luego, en el **admin** (o por shell), registra para ese emisor:
 curl -X POST http://localhost:8000/api/adquirentes/ \
   -H "Content-Type: application/json" -b cookies.txt \
   -d '{
+    "emisor": "<id-emisor>",
     "razon_social": "Cliente Demo",
     "tipo_identificacion": 1,
     "numero_identificacion": "800199436",

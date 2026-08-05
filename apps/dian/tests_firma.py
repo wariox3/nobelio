@@ -68,6 +68,7 @@ class FirmaXAdESTests(TestCase):
             vigente_desde=date(2019, 1, 19), vigente_hasta=date(2030, 1, 19),
         )
         adq = doc.Adquiriente.objects.create(
+            emisor=emisor,
             razon_social="Cliente Demo", tipo_identificacion=c["nit"],
             numero_identificacion="800199436", tipo_organizacion=c["juridica"],
             pais=c["colombia"],

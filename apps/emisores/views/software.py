@@ -2,9 +2,10 @@
 from rest_framework import viewsets
 
 from apps.emisores import models, serializers
+from apps.seguridad.alcance import AlcanceEmisorMixin
 
 
-class SoftwareDianViewSet(viewsets.ModelViewSet):
+class SoftwareDianViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
     serializer_class = serializers.SoftwareDianSerializer
     queryset = models.SoftwareDian.objects.select_related("emisor")
 

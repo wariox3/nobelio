@@ -33,6 +33,7 @@ class GrafoDocumentoTests(TestCase):
             direccion="Calle 1 # 2-3",
         )
         cls.adquirente = doc.Adquiriente.objects.create(
+            emisor=cls.emisor,
             razon_social="Cliente Demo",
             tipo_identificacion=c["nit"],
             numero_identificacion="800199436",

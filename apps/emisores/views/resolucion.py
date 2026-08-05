@@ -13,6 +13,7 @@ from apps.dian import servicios as dian
 from apps.dian import soap
 from apps.emisores import models, serializers
 from apps.nucleo.api import ErrorPasarela, ErrorSolicitud
+from apps.seguridad.alcance import AlcanceEmisorMixin, exigir_alcance
 
 
 def _a_fecha(valor: str):
@@ -25,7 +26,7 @@ def _a_fecha(valor: str):
         return None
 
 
-class ResolucionFacturacionViewSet(viewsets.ModelViewSet):
+class ResolucionFacturacionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
     queryset = models.ResolucionFacturacion.objects.select_related("emisor", "tipo_factura")
     serializer_class = serializers.ResolucionFacturacionSerializer
 
@@ -49,6 +50,7 @@ class ResolucionFacturacionViewSet(viewsets.ModelViewSet):
         if not emisor_id:
             raise ValidationError({"emisor": "El parámetro 'emisor' es obligatorio."})
         emisor = get_object_or_404(models.Emisor, pk=emisor_id)
+        exigir_alcance(request, emisor)
         respuesta = self._consultar(emisor)
         datos = [
             {
@@ -83,6 +85,7 @@ class ResolucionFacturacionViewSet(viewsets.ModelViewSet):
         ``clave_tecnica`` en el servidor. No devuelve la clave técnica.
         """
         emisor = get_object_or_404(models.Emisor, pk=request.data.get("emisor"))
+        exigir_alcance(request, emisor)
         tipo_factura = get_object_or_404(
             TipoFactura, pk=request.data.get("tipo_factura"),
         )
@@ -96,6 +99,16 @@ class ResolucionFacturacionViewSet(viewsets.ModelViewSet):
                 respuesta.descripcion
                 or "La DIAN no devolvió rangos de numeración para este emisor."
             )
+
+        # Esta acción persiste sin pasar por el serializer, así que la regla de
+        # numeración se comprueba aquí: si el NIT ya numera con ese prefijo y
+        # resolución en otra cuenta, no se importa nada.
+        for r in respuesta.rangos:
+            ocupada = models.resolucion_activa_en_otra_cuenta(
+                emisor, prefijo=r.prefijo or "", numero_resolucion=r.numero_resolucion
+            )
+            if ocupada is not None:
+                raise ErrorSolicitud(models.mensaje_resolucion_ocupada(ocupada))
 
         guardadas = []
         for r in respuesta.rangos:

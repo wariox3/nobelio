@@ -38,6 +38,7 @@ class DocumentoAPITests(APITestCase):
         cls.usuario = get_user_model().objects.create_user(
             email="tester@example.com", password="x"
         )
+        cls.usuario.emisores.add(cls.emisor)
 
     def setUp(self):
         self.client.force_authenticate(self.usuario)

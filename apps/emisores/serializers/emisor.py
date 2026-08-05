@@ -2,10 +2,33 @@
 from rest_framework import serializers
 from rest_framework.exceptions import APIException
 
+from apps.cuentas.models import Cuenta
 from apps.emisores.models import Emisor
+from apps.seguridad.alcance import cuenta_de_la_credencial
 from apps.utilidades.rues import RuesNoDisponible, consultar_nit
 
 from .resolucion import ResolucionFacturacionSerializer
+
+
+class CuentaDeLaCredencial:
+    """Default de ``cuenta``: la de la API Key que hace la petición.
+
+    Hace falta como *default* y no solo en la vista porque la unicidad del
+    emisor es ``(cuenta, tipo_identificacion, numero_identificacion)``: DRF
+    valida ese conjunto antes de que la vista toque nada, así que necesita la
+    cuenta ya resuelta. Para el staff devuelve ``None`` y la indica en el cuerpo.
+    """
+
+    requires_context = True
+
+    def __call__(self, campo):
+        return _cuenta_de(campo.context)
+
+
+def _cuenta_de(contexto):
+    """Cuenta de la credencial, o ``None`` fuera de una petición HTTP."""
+    request = contexto.get("request")
+    return cuenta_de_la_credencial(request) if request is not None else None
 
 
 class RuesNoDisponibleError(APIException):
@@ -21,6 +44,20 @@ class RuesNoDisponibleError(APIException):
 
 class EmisorSerializer(serializers.ModelSerializer):
     resoluciones = ResolucionFacturacionSerializer(many=True, read_only=True)
+    # No se exige en el cuerpo: para una integración sale de la credencial; solo
+    # el staff de la plataforma la indica explícitamente.
+    cuenta = serializers.PrimaryKeyRelatedField(
+        queryset=Cuenta.objects.all(), default=CuentaDeLaCredencial()
+    )
+
+    def validate_cuenta(self, value):
+        """Una integración no puede crear emisores fuera de su propia cuenta."""
+        propia = _cuenta_de(self.context)
+        if propia is not None and value != propia:
+            raise serializers.ValidationError(
+                "La credencial solo puede operar sobre su propia cuenta."
+            )
+        return value
 
     def validate_numero_identificacion(self, value):
         """Exige que el NIT exista en el RUES al crear/cambiar el emisor.

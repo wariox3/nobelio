@@ -10,6 +10,7 @@ from apps.dian import representacion, servicios, soap
 from apps.documentos import serializers
 from apps.documentos.models import Documento
 from apps.nucleo.api import ErrorPasarela, ErrorSolicitud
+from apps.seguridad.alcance import AlcanceEmisorMixin
 
 
 def _error_pasarela(exc):
@@ -20,8 +21,13 @@ def _error_pasarela(exc):
     return ErrorPasarela(f"Error al comunicarse con la DIAN: {fault or exc}")
 
 
-class DocumentoViewSet(viewsets.ModelViewSet):
-    """CRUD de documentos electrónicos y acciones del ciclo de vida DIAN."""
+class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
+    """CRUD de documentos electrónicos y acciones del ciclo de vida DIAN.
+
+    Todo el conjunto está acotado a los emisores que alcanza el solicitante
+    (ver :mod:`apps.seguridad.alcance`): un documento de otra cuenta no aparece
+    en el listado y responde 404 en el detalle.
+    """
 
     queryset = (
         Documento.objects.select_related(
@@ -40,6 +46,9 @@ class DocumentoViewSet(viewsets.ModelViewSet):
         """Permite filtrar el listado por ``emisor`` (id), ``estado`` y
         ``documento_tipo`` (ambos por código): p. ej.
         ``?emisor=2&estado=aceptado&documento_tipo=factura_venta``.
+
+        El filtro por ``emisor`` acota dentro del alcance, nunca lo amplía: el
+        mixin ya restringió el queryset antes de llegar aquí.
         """
         qs = super().get_queryset()
         # El listado no incluye las líneas; solo el detalle/retrieve las precarga.

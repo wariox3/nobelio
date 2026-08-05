@@ -91,6 +91,30 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("El documento debe tener al menos un detalle.")
         return detalles
 
+    def validate(self, attrs):
+        """Comprueba que todo lo referenciado pertenezca al mismo emisor.
+
+        Sin esto se podría facturar con la resolución de un emisor a nombre de
+        otro, o referenciar el adquiriente de una cuenta ajena.
+        """
+        emisor = attrs.get("emisor") or getattr(self.instance, "emisor", None)
+        if emisor is None:
+            # Falta el emisor: ya lo reporta la validación de campo obligatorio.
+            return attrs
+        relacionados = {
+            "resolucion": attrs.get("resolucion"),
+            "adquiriente": attrs.get("adquiriente"),
+            "documento_referencia": attrs.get("documento_referencia"),
+        }
+        errores = {
+            campo: "No pertenece al emisor del documento."
+            for campo, objeto in relacionados.items()
+            if objeto is not None and objeto.emisor_id != emisor.pk
+        }
+        if errores:
+            raise serializers.ValidationError(errores)
+        return attrs
+
     @transaction.atomic
     def create(self, validated_data):
         detalles_data = validated_data.pop("detalles")

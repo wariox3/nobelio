@@ -6,8 +6,8 @@ El ERP envía la credencial en la cabecera::
 
 A diferencia del frontend (que usa JWT y se autentica como un ``Usuario``), el
 ERP no es una persona: se autentica como un :class:`PrincipalLlaveApi`, que
-expone el emisor al que pertenece la llave para que los permisos y las vistas
-puedan delimitar sobre qué emisor opera.
+expone la llave (y con ella su cuenta y su emisor opcional) para que
+``apps.seguridad.alcance`` delimite sobre qué emisores puede operar.
 """
 from rest_framework import authentication, exceptions
 
@@ -31,10 +31,13 @@ class PrincipalLlaveApi:
 
     def __init__(self, llave):
         self.llave = llave
+        self.cuenta = llave.cuenta
+        # Solo lo traen las llaves estrechadas a un emisor; normalmente es None
+        # y el alcance se resuelve por cuenta.
         self.emisor = llave.emisor
 
     def __str__(self):
-        return f"ERP[{self.emisor}]"
+        return f"ERP[{self.emisor or self.cuenta}]"
 
 
 class LlaveApiAuthentication(authentication.BaseAuthentication):
@@ -68,7 +71,9 @@ class LlaveApiAuthentication(authentication.BaseAuthentication):
         if not separador or not prefijo or not secreto:
             raise exceptions.AuthenticationFailed("API Key inválida.")
         try:
-            llave = LlaveApi.objects.select_related("emisor").get(prefijo=prefijo)
+            llave = LlaveApi.objects.select_related("cuenta", "emisor").get(
+                prefijo=prefijo
+            )
         except LlaveApi.DoesNotExist:
             raise exceptions.AuthenticationFailed("API Key inválida.")
         if not llave.verificar_secreto(secreto):

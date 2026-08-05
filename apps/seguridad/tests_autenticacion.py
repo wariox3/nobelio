@@ -53,7 +53,7 @@ class LlaveApiAuthenticationTests(APITestCase):
         self.auth = LlaveApiAuthentication()
         self.emisor = crear_emisor()
         self.llave, self.clave = LlaveApi.generar(
-            emisor=self.emisor, nombre="ERP pruebas"
+            cuenta=self.emisor.cuenta, nombre="ERP pruebas"
         )
 
     def _autenticar(self, credencial):
@@ -62,11 +62,13 @@ class LlaveApiAuthenticationTests(APITestCase):
         )
         return self.auth.authenticate(request)
 
-    def test_credencial_valida_devuelve_principal_con_emisor(self):
+    def test_credencial_valida_devuelve_principal_con_cuenta(self):
         usuario, llave = self._autenticar(self.clave)
         self.assertIsInstance(usuario, PrincipalLlaveApi)
         self.assertTrue(usuario.is_authenticated)
-        self.assertEqual(usuario.emisor, self.emisor)
+        self.assertEqual(usuario.cuenta, self.emisor.cuenta)
+        # Llave de cuenta: sin emisor, alcanza a todos los de la cuenta.
+        self.assertIsNone(usuario.emisor)
         self.assertEqual(llave, self.llave)
 
     def test_uso_registra_ultimo_uso(self):
@@ -110,7 +112,7 @@ class LlaveApiEndToEndTests(APITestCase):
 
     def setUp(self):
         self.emisor = crear_emisor()
-        _, self.clave = LlaveApi.generar(emisor=self.emisor, nombre="ERP")
+        _, self.clave = LlaveApi.generar(cuenta=self.emisor.cuenta, nombre="ERP")
 
     def test_acceso_a_endpoint_autenticado_con_api_key(self):
         # /api/emisores/emisor/ exige autenticación; la API Key debe bastar.

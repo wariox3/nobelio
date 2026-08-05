@@ -72,6 +72,7 @@ def crear_documento_factura(catalogos=None):
         vigente_desde=date(2019, 1, 19), vigente_hasta=date(2030, 1, 19),
     )
     adquirente = doc.Adquiriente.objects.create(
+        emisor=emisor,
         razon_social="Cliente Demo", tipo_identificacion=c["nit"],
         numero_identificacion="800199436", digito_verificacion="6",
         tipo_organizacion=c["juridica"], pais=c["colombia"],
