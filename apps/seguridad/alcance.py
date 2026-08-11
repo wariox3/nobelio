@@ -5,8 +5,7 @@ concentra la única pregunta que hay que responder en cada petición: *¿qué
 emisores alcanza este solicitante?* Las tres respuestas posibles son:
 
 - **Staff de la plataforma**: todos (``None`` = sin restricción).
-- **Integración (API Key)**: los emisores de la cuenta de la llave, o solo uno
-  si la llave está estrechada a un emisor concreto.
+- **Integración (API Key)**: los emisores de la cuenta de la llave.
 - **Usuario humano (JWT)**: los emisores que tenga asignados explícitamente.
 
 La cuenta solo aparece en el caso de la llave. Un usuario no pertenece a
@@ -43,8 +42,6 @@ def emisores_permitidos(request):
         return None
     llave = _llave(request)
     if llave is not None:
-        if llave.emisor_id:
-            return Emisor.objects.filter(pk=llave.emisor_id)
         return Emisor.objects.filter(cuenta_id=llave.cuenta_id)
     return request.user.emisores.all()
 

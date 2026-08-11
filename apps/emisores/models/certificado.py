@@ -47,6 +47,9 @@ class Certificado(ModeloConFechas):
         db_table = "emi_certificado"
         verbose_name = "certificado digital"
         verbose_name_plural = "certificados digitales"
+        # El más reciente primero: al cargar uno nuevo el anterior queda como
+        # histórico (activo=False).
+        ordering = ["-creado_en"]
 
     def __str__(self):
         return f"Certificado {self.alias or self.pk} ({self.emisor})"

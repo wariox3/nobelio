@@ -7,7 +7,6 @@ para muchos emisores sin mezclarlos.
 from unittest import mock
 
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError as ValidationErrorDjango
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient, APITestCase
@@ -158,7 +157,7 @@ class FlujoDeAltaTests(AlcanceBase):
 
 
 class AlcanceLlaveDeCuentaTests(AlcanceBase):
-    """Una llave sin emisor alcanza todos los emisores de su cuenta, y solo esos."""
+    """Una llave alcanza todos los emisores de su cuenta, y solo esos."""
 
     def setUp(self):
         super().setUp()
@@ -204,30 +203,6 @@ class AlcanceLlaveDeCuentaTests(AlcanceBase):
         self.assertEqual(
             Adquiriente.objects.filter(numero_identificacion="800100003").count(), 2
         )
-
-
-class AlcanceLlaveEstrechaTests(AlcanceBase):
-    """Una llave ligada a un emisor no alcanza a los hermanos de su cuenta."""
-
-    def setUp(self):
-        super().setUp()
-        self.cabecera = self._api_key(cuenta=self.cuenta, emisor=self.emisor)
-
-    def test_solo_ve_su_emisor(self):
-        resp = self.client.get(URL_EMISORES, **self.cabecera)
-        ids = {fila["id"] for fila in resp.data["results"]}
-        self.assertEqual(ids, {self.emisor.id})
-
-    def test_no_alcanza_al_hermano_de_su_propia_cuenta(self):
-        resp = self.client.get(f"{URL_EMISORES}{self.hermano.id}/", **self.cabecera)
-        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
-
-    def test_no_se_puede_estrechar_a_un_emisor_de_otra_cuenta(self):
-        llave = LlaveApi(
-            cuenta=self.cuenta, emisor=self.emisor_ajeno, nombre="Incoherente"
-        )
-        with self.assertRaises(ValidationErrorDjango):
-            llave.clean()
 
 
 class AltaDeEmisoresTests(AlcanceBase):

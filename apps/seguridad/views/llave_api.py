@@ -15,7 +15,7 @@ class LlaveApiViewSet(viewsets.ModelViewSet):
     que la rotación no deje al ERP sin credencial).
     """
 
-    queryset = LlaveApi.objects.select_related("cuenta", "emisor").all()
+    queryset = LlaveApi.objects.select_related("cuenta").all()
     serializer_class = LlaveApiSerializer
     permission_classes = [IsAdminUser]
-    search_fields = ["nombre", "prefijo", "cuenta__nombre", "emisor__razon_social"]
+    search_fields = ["nombre", "prefijo", "cuenta__nombre"]

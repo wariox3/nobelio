@@ -46,6 +46,7 @@ class SoftwareDian(ModeloConFechas):
         db_table = "emi_software"
         verbose_name = "software DIAN"
         verbose_name_plural = "softwares DIAN"
+        ordering = ["-creado_en"]
 
     def __str__(self):
         return f"Software {self.identificador} ({self.emisor})"

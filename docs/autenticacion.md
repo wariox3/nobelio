@@ -45,7 +45,6 @@ y revocar N secretos) se multiplicaría.
 ```
 LlaveApi
   cuenta       FK -> cuentas.Cuenta      # alcance: sus emisores
-  emisor       FK -> emisores.Emisor (null)  # opcional: estrecha a uno solo
   nombre       str        # "RedDoc producción", etc.
   prefijo      str(8)     # identificador público, para buscar la fila
   clave_hash   str        # hash del secreto; el secreto NUNCA se guarda en claro
@@ -57,11 +56,12 @@ LlaveApi
 - Cabecera: `Authorization: Api-Key <prefijo>.<secreto>`
 - El secreto se muestra **una sola vez** al crearla; luego solo queda el hash.
 - La `Authentication` class busca por `prefijo`, verifica el hash y deja un
-  `PrincipalLlaveApi` con la cuenta (y el emisor, si la llave es estrecha) para
-  que `apps.seguridad.alcance` filtre.
-- **Una cuenta puede tener varias llaves vivas**: producción y habilitación, la
-  nueva y la vieja durante una rotación, o una estrecha para un cliente que se
-  conecta por su cuenta. No hay unicidad por cuenta.
+  `PrincipalLlaveApi` con la cuenta para que `apps.seguridad.alcance` filtre.
+- **Una cuenta puede tener varias llaves vivas**: producción y habilitación, o
+  la nueva y la vieja durante una rotación. No hay unicidad por cuenta.
+- **La cuenta es el único alcance posible.** Un emisor nunca se conecta por su
+  lado: quien vaya a emitir directamente se da de alta como su propia cuenta,
+  con su emisor y su llave. Por eso la llave no tiene FK a emisor.
 - Revocación = `activa = False` (o borrar la fila). Para suspender a un cliente
   concreto sin tocar credenciales: `Emisor.activo = False`, que corta la emisión.
 
@@ -131,7 +131,6 @@ CORS_ALLOWED_ORIGINS = ["https://app.midominio.com"]
 |---|---|
 | Staff de la plataforma | Todos (sin restricción) |
 | API Key de cuenta | Todos los emisores de su cuenta |
-| API Key estrecha | Solo su emisor |
 | Usuario humano (JWT) | Los emisores que tenga **asignados** |
 
 `AlcanceEmisorMixin` aplica eso en los ViewSets: filtra el queryset en lectura
@@ -177,7 +176,7 @@ cuenta, para que una persona no quede repartida entre integraciones.
 | Alcance multi-inquilino (`emisores_permitidos`, `AlcanceEmisorMixin`) | `apps/seguridad/alcance.py` |
 | API de gestión de llaves (solo staff) | `apps/seguridad/views/llave_api.py`, ruta `/api/seguridad/llaves-api/` |
 | API de usuarios (solo staff) | `apps/seguridad/views/usuario.py`, ruta `/api/seguridad/usuarios/` |
-| Alta de llave por CLI | `python manage.py crear_llave_api --cuenta <id> --nombre "..." [--emisor <id>]` |
+| Alta de llave por CLI | `python manage.py crear_llave_api --cuenta <id> --nombre "..."` |
 | Rutas de seguridad (router + JWT) | `apps/seguridad/urls.py` (montado en `/api/seguridad/`) → `usuarios`, `llaves-api`, `token/`, `token/refresh/`, `token/verify/` |
 | Auth classes, `SIMPLE_JWT`, CORS | `config/settings/base.py` |
 | Variables de entorno | `.env.example` (`CORS_ALLOWED_ORIGINS`, `JWT_ACCESS_MINUTOS`, …) |

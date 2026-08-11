@@ -67,8 +67,6 @@ class LlaveApiAuthenticationTests(APITestCase):
         self.assertIsInstance(usuario, PrincipalLlaveApi)
         self.assertTrue(usuario.is_authenticated)
         self.assertEqual(usuario.cuenta, self.emisor.cuenta)
-        # Llave de cuenta: sin emisor, alcanza a todos los de la cuenta.
-        self.assertIsNone(usuario.emisor)
         self.assertEqual(llave, self.llave)
 
     def test_uso_registra_ultimo_uso(self):

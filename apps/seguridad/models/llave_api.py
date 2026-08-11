@@ -11,9 +11,9 @@ una sola credencial sobre todos los emisores de su cuenta. Una cuenta puede
 tener varias llaves vivas a la vez: producción y habilitación, o la nueva y la
 vieja mientras dura una rotación.
 
-Opcionalmente la llave se puede *estrechar* a un único emisor (``emisor`` no
-nulo) para casos en los que un cliente concreto se conecta por su cuenta sin
-pasar por la integración principal.
+La cuenta es el único alcance posible: un emisor nunca se conecta por su lado.
+Quien vaya a emitir directamente se da de alta como su propia cuenta, con su
+emisor y su llave.
 """
 from django.contrib.auth.hashers import check_password, make_password
 from django.db import models
@@ -52,15 +52,6 @@ class LlaveApi(ModeloConFechas):
         verbose_name="cuenta",
         help_text="Alcance de la llave: todos los emisores de esta cuenta.",
     )
-    emisor = models.ForeignKey(
-        "emisores.Emisor",
-        on_delete=models.CASCADE,
-        related_name="llaves_api",
-        verbose_name="emisor",
-        null=True,
-        blank=True,
-        help_text="Opcional: restringe la llave a un único emisor de la cuenta.",
-    )
 
     class Meta:
         db_table = "seg_llave_api"
@@ -71,25 +62,15 @@ class LlaveApi(ModeloConFechas):
     def __str__(self):
         return f"{self.nombre} ({self.prefijo})"
 
-    def clean(self):
-        """Un emisor estrecho tiene que pertenecer a la cuenta de la llave."""
-        from django.core.exceptions import ValidationError
-
-        if self.emisor_id and self.emisor.cuenta_id != self.cuenta_id:
-            raise ValidationError(
-                {"emisor": "El emisor no pertenece a la cuenta de la llave."}
-            )
-
     @classmethod
-    def generar(cls, *, cuenta, nombre, emisor=None, activa=True, expira_en=None):
+    def generar(cls, *, cuenta, nombre, activa=True, expira_en=None):
         """Crea una llave y devuelve ``(llave, clave_completa)``.
 
         ``clave_completa`` (``<prefijo>.<secreto>``) es lo único que sirve para
         autenticar y solo se conoce en este momento; guárdala donde el ERP la
         pueda leer, porque después no se puede recuperar.
 
-        Con ``emisor`` la llave queda restringida a ese emisor; sin él alcanza a
-        todos los emisores de ``cuenta``.
+        La llave alcanza a todos los emisores de ``cuenta``.
         """
         prefijo = get_random_string(LONGITUD_PREFIJO)
         while cls.objects.filter(prefijo=prefijo).exists():
@@ -97,7 +78,6 @@ class LlaveApi(ModeloConFechas):
         secreto = get_random_string(LONGITUD_SECRETO)
         llave = cls.objects.create(
             cuenta=cuenta,
-            emisor=emisor,
             nombre=nombre,
             prefijo=prefijo,
             clave_hash=make_password(secreto),
