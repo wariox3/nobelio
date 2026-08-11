@@ -6,9 +6,11 @@ from rest_framework.response import Response
 
 from apps.emisores import models, serializers
 from apps.seguridad.alcance import (
+    MENSAJE_SIN_CUENTA,
     AlcanceEmisorMixin,
-    cuenta_de_la_credencial,
     es_staff,
+    exigir_cuenta,
+    puede_dar_de_alta,
 )
 from apps.utilidades.rues import RuesNoDisponible, consultar_detalle
 
@@ -32,27 +34,32 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         # Se comprueba antes de validar el cuerpo: quien no tiene cuenta de la
         # que colgar el emisor merece un 403 claro, no un 400 sobre los campos.
-        if cuenta_de_la_credencial(request) is None and not es_staff(request):
-            raise PermissionDenied(
-                "Solo el staff o una integración pueden dar de alta emisores."
-            )
+        if not puede_dar_de_alta(request):
+            raise PermissionDenied(MENSAJE_SIN_CUENTA)
         return super().create(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         # Para una integración la cuenta ya la puso el default del serializer y
         # `validate_cuenta` impidió que apuntara a otra. Al staff, que no tiene
         # credencial de cuenta, hay que exigírsela.
-        if not serializer.validated_data.get("cuenta"):
+        cuenta = serializer.validated_data.get("cuenta")
+        if not cuenta:
             raise ValidationError({"cuenta": "Es obligatoria para el staff."})
+        # Última puerta antes de escribir: el serializer ya lo comprobó, pero la
+        # regla se verifica aquí contra `alcance` para que ningún cambio futuro
+        # en el serializer pueda abrir un alta en cuenta ajena en silencio.
+        exigir_cuenta(self.request, cuenta)
         serializer.save()
 
     def perform_update(self, serializer):
         # El alcance ya limitó el queryset; esto impide además que un emisor se
-        # mueva a otra cuenta desde el cuerpo de la petición.
+        # mueva a otra cuenta desde el cuerpo de la petición. Solo el staff
+        # puede cambiarla; si no la indica (PUT sin 'cuenta', donde el default
+        # de la credencial es None) se conserva la que ya tenía.
+        cuenta = serializer.instance.cuenta
         if es_staff(self.request):
-            serializer.save()
-        else:
-            serializer.save(cuenta=serializer.instance.cuenta)
+            cuenta = serializer.validated_data.get("cuenta") or cuenta
+        serializer.save(cuenta=cuenta)
 
     @action(detail=False, methods=["get"], url_path="validar-nit")
     def validar_nit(self, request):

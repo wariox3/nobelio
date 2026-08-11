@@ -243,6 +243,52 @@ class AltaDeEmisoresTests(AlcanceBase):
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("cuenta", resp.data["errores"])
 
+    def test_el_staff_debe_indicar_la_cuenta(self):
+        # No tiene credencial de cuenta, así que no hay default que aplicar.
+        self.client.force_authenticate(
+            Usuario.objects.create_user(
+                email="staff@nobelio.co", password="ClaveSegura123", is_staff=True
+            )
+        )
+        resp = self.crear(self.payload(), {})
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("cuenta", resp.data["errores"])
+
+    def test_no_se_puede_dar_de_alta_en_una_cuenta_inactiva(self):
+        self.cuenta_ajena.activa = False
+        self.cuenta_ajena.save(update_fields=["activa"])
+        self.client.force_authenticate(
+            Usuario.objects.create_user(
+                email="staff@nobelio.co", password="ClaveSegura123", is_staff=True
+            )
+        )
+        resp = self.crear(self.payload(cuenta=self.cuenta_ajena.id), {})
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("cuenta", resp.data["errores"])
+
+    def test_el_staff_puede_editar_sin_reenviar_la_cuenta(self):
+        # PUT sin 'cuenta': el default de la credencial es None para el staff y
+        # antes se intentaba guardar el emisor sin cuenta (IntegrityError).
+        self.client.force_authenticate(
+            Usuario.objects.create_user(
+                email="staff@nobelio.co", password="ClaveSegura123", is_staff=True
+            )
+        )
+        payload = self.payload(
+            numero_identificacion=self.emisor.numero_identificacion,
+            razon_social="Cliente A renombrado",
+        )
+        with mock.patch(
+            "apps.emisores.serializers.emisor.consultar_nit", return_value={"nit": "x"}
+        ):
+            resp = self.client.put(
+                f"{URL_EMISORES}{self.emisor.id}/", payload, format="json"
+            )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.emisor.refresh_from_db()
+        self.assertEqual(self.emisor.cuenta, self.cuenta)
+        self.assertEqual(self.emisor.razon_social, "Cliente A renombrado")
+
 
 class AlcanceDeDocumentosTests(AlcanceBase):
     """Los documentos de otra cuenta no aparecen ni se pueden referenciar."""

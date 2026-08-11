@@ -64,6 +64,8 @@ LlaveApi
   con su emisor y su llave. Por eso la llave no tiene FK a emisor.
 - Revocación = `activa = False` (o borrar la fila). Para suspender a un cliente
   concreto sin tocar credenciales: `Emisor.activo = False`, que corta la emisión.
+- **`Cuenta.activa = False` corta el acceso de todas sus llaves de golpe** (401),
+  sin tener que revocarlas una a una, y sus cuentas dejan de admitir emisores nuevos.
 
 ### El mismo NIT puede estar en varias cuentas
 
@@ -132,6 +134,12 @@ CORS_ALLOWED_ORIGINS = ["https://app.midominio.com"]
 | Staff de la plataforma | Todos (sin restricción) |
 | API Key de cuenta | Todos los emisores de su cuenta |
 | Usuario humano (JWT) | Los emisores que tenga **asignados** |
+
+Al **crear** un emisor la pregunta es la otra mitad — *¿de qué cuenta puede
+colgarlo?* — y la responde `alcance.cuenta_permitida`: el staff elige la cuenta
+(y debe indicarla, no hay default), la integración solo puede usar la suya, y un
+usuario humano no da de alta emisores porque no pertenece a ninguna. La cuenta
+tiene que estar **activa**.
 
 `AlcanceEmisorMixin` aplica eso en los ViewSets: filtra el queryset en lectura
 (lo ajeno responde 404, no 403, para no revelar que existe) y valida el emisor

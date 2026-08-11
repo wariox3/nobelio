@@ -93,6 +93,14 @@ class LlaveApiAuthenticationTests(APITestCase):
         with self.assertRaises(AuthenticationFailed):
             self._autenticar(self.clave)
 
+    def test_cuenta_inactiva_falla(self):
+        # Desactivar la cuenta corta el acceso sin tocar sus llaves.
+        cuenta = self.emisor.cuenta
+        cuenta.activa = False
+        cuenta.save(update_fields=["activa"])
+        with self.assertRaises(AuthenticationFailed):
+            self._autenticar(self.clave)
+
     def test_llave_expirada_falla(self):
         self.llave.expira_en = timezone.now() - timedelta(seconds=1)
         self.llave.save(update_fields=["expira_en"])

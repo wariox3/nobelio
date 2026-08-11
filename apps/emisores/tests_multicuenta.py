@@ -14,6 +14,7 @@ DIAN autoriza un solo rango por prefijo, así que dos filas numerando a la vez
 producirían consecutivos repetidos (y quemados).
 """
 from datetime import date
+from unittest import mock
 
 from django.db.utils import IntegrityError
 from rest_framework import status
@@ -27,6 +28,7 @@ from apps.seguridad.models import Usuario
 
 NIT = "901192048"
 URL_RESOLUCIONES = "/api/emisores/resolucion/"
+URL_EMISORES = "/api/emisores/emisor/"
 
 
 class MismoNitEnVariasCuentasTests(APITestCase):
@@ -83,6 +85,44 @@ class MismoNitEnVariasCuentasTests(APITestCase):
     def test_el_mismo_nit_no_se_repite_dentro_de_una_cuenta(self):
         with self.assertRaises(IntegrityError):
             self.crear_emisor(self.erp1, correo="otro@empresa.co")
+
+    def test_el_alta_duplicada_dice_cual_es_el_emisor_que_estorba(self):
+        """El 400 tiene que servir para actuar, no solo para saber que falló."""
+        payload = {
+            "cuenta": self.erp1.id,
+            "razon_social": "Semantica Digital S.A.S",
+            "tipo_identificacion": self.cat["nit"].id,
+            "numero_identificacion": NIT,
+            "tipo_organizacion": self.cat["juridica"].id,
+            "pais": self.cat["colombia"].id,
+            "departamento": self.cat["antioquia"].id,
+            "municipio": self.cat["medellin"].id,
+            "direccion": "Calle 1 # 2-3",
+        }
+        with mock.patch(
+            "apps.emisores.serializers.emisor.consultar_nit", return_value={"nit": NIT}
+        ):
+            resp = self.client.post(URL_EMISORES, payload, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        # Cuelga del campo que hay que corregir, no de non_field_errors.
+        self.assertIn("numero_identificacion", resp.data["errores"])
+        mensaje = resp.data["errores"]["numero_identificacion"][0]
+        self.assertNotIn("conjunto único", mensaje)
+        self.assertIn(self.erp1.nombre, mensaje)
+        self.assertIn(self.emisor1.razon_social, mensaje)
+        self.assertIn(str(self.emisor1.pk), mensaje)
+
+    def test_editar_un_emisor_sin_cambiar_su_nit_no_choca_consigo_mismo(self):
+        with mock.patch(
+            "apps.emisores.serializers.emisor.consultar_nit", return_value={"nit": NIT}
+        ):
+            resp = self.client.patch(
+                f"{URL_EMISORES}{self.emisor1.id}/",
+                {"nombre_comercial": "Semántica"},
+                format="json",
+            )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
 
     # --- La numeración sigue siendo una sola ------------------------------
 

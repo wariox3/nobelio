@@ -75,6 +75,10 @@ class LlaveApiAuthentication(authentication.BaseAuthentication):
             raise exceptions.AuthenticationFailed("API Key inválida.")
         if not llave.esta_vigente():
             raise exceptions.AuthenticationFailed("API Key inactiva o expirada.")
+        # Desactivar la cuenta corta el acceso de todas sus llaves de golpe, sin
+        # tener que revocarlas una a una.
+        if not llave.cuenta.activa:
+            raise exceptions.AuthenticationFailed("La cuenta está inactiva.")
         llave.registrar_uso()
         return (PrincipalLlaveApi(llave), llave)
 

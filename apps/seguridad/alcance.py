@@ -11,12 +11,22 @@ emisores alcanza este solicitante?* Las tres respuestas posibles son:
 La cuenta solo aparece en el caso de la llave. Un usuario no pertenece a
 ninguna: su alcance es la lista de emisores que se le asignó, sin más, y sin
 emisores no ve nada (falla cerrado).
+
+Al **crear** un emisor la pregunta es la otra mitad: *¿de qué cuenta puede
+colgarlo?* La responde ``cuenta_permitida``, que es la única definición de esa
+regla en el proyecto (``exigir_cuenta`` es su versión que lanza 403).
 """
 from rest_framework.exceptions import PermissionDenied
 
 from apps.emisores.models import Emisor
 
 MENSAJE_FUERA_DE_ALCANCE = "No tiene acceso a este emisor."
+MENSAJE_FUERA_DE_CUENTA = (
+    "La credencial solo puede operar sobre su propia cuenta."
+)
+MENSAJE_SIN_CUENTA = (
+    "Solo el staff o una integración pueden dar de alta emisores."
+)
 
 
 def es_staff(request):
@@ -54,6 +64,37 @@ def cuenta_de_la_credencial(request):
     """
     llave = _llave(request)
     return llave.cuenta if llave is not None else None
+
+
+def puede_dar_de_alta(request):
+    """¿El solicitante tiene una cuenta de la que colgar un emisor nuevo?
+
+    Solo la integración (que lo cuelga de la suya) y el staff (que indica cuál).
+    Un usuario humano no pertenece a ninguna cuenta, así que no crea emisores:
+    el alta es del staff o del ERP, y después se le asignan los emisores.
+    """
+    return cuenta_de_la_credencial(request) is not None or es_staff(request)
+
+
+def cuenta_permitida(request, cuenta):
+    """¿El solicitante puede colgar datos de ``cuenta``?
+
+    Regla única del alta multi-inquilino: el staff elige la cuenta libremente;
+    una integración solo puede usar la suya; quien no tiene cuenta no crea nada.
+    """
+    propia = cuenta_de_la_credencial(request)
+    if propia is None:
+        return es_staff(request)
+    return cuenta is not None and cuenta.pk == propia.pk
+
+
+def exigir_cuenta(request, cuenta):
+    """Lanza 403 si el solicitante no puede colgar datos de ``cuenta``."""
+    if not cuenta_permitida(request, cuenta):
+        raise PermissionDenied(
+            MENSAJE_FUERA_DE_CUENTA if cuenta_de_la_credencial(request)
+            else MENSAJE_SIN_CUENTA
+        )
 
 
 def puede_operar(request, emisor):
