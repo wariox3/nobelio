@@ -103,7 +103,7 @@ python manage.py migrate
 # Cargar los catálogos DIAN (tipos, tributos, municipios, monedas, …)
 python manage.py cargar_catalogos
 
-# Crear un usuario administrador (la API requiere autenticación)
+# Crear el usuario staff inicial (da de alta cuentas, usuarios y llaves)
 python manage.py createsuperuser
 
 # Levantar el servidor de desarrollo
@@ -111,8 +111,11 @@ python manage.py runserver
 ```
 
 - API: `http://localhost:8000/api/`
-- Admin: `http://localhost:8000/admin/`
 - Estado: `http://localhost:8000/estado/`
+
+> No hay sitio de administración: `django.contrib.admin` no está instalado y la
+> API es *stateless* (sin sesiones ni cookies). Todo se hace por la API o por
+> comandos de gestión.
 
 Inspeccionar catálogos sin BD:
 
@@ -134,19 +137,34 @@ python manage.py listas TipoResponsabilidad
 > los listados y responde 404. Los catálogos (`/api/catalogos/...`) son de solo
 > lectura.
 
+### 0. Obtener una credencial
+
+El staff crea la **cuenta** (el tenant) y su **llave de API**; el emisor cuelga
+siempre de una cuenta. Desde la línea de comandos:
+
+```bash
+python manage.py crear_llave_api --cuenta 1 --nombre "ERP producción"
+# → Authorization: Api-Key <prefijo>.<secreto>   (se muestra una sola vez)
+
+export API_KEY='<prefijo>.<secreto>'
+```
+
 ### 1. Consultar catálogos (para obtener los IDs)
 
 ```bash
-curl "http://localhost:8000/api/catalogos/tipos-identificacion/"
-curl "http://localhost:8000/api/catalogos/tributos/?search=IVA"
-curl "http://localhost:8000/api/catalogos/municipios/?search=Medell"
+curl -H "Authorization: Api-Key $API_KEY" \
+  "http://localhost:8000/api/catalogos/tipo-identificacion/"
+curl -H "Authorization: Api-Key $API_KEY" \
+  "http://localhost:8000/api/catalogos/tributo/?search=IVA"
+curl -H "Authorization: Api-Key $API_KEY" \
+  "http://localhost:8000/api/catalogos/municipio/?search=Medell"
 ```
 
 ### 2. Crear el emisor (OFE)
 
 ```bash
-curl -X POST http://localhost:8000/api/emisores/ \
-  -H "Content-Type: application/json" -b cookies.txt \
+curl -X POST http://localhost:8000/api/emisores/emisor/ \
+  -H "Content-Type: application/json" -H "Authorization: Api-Key $API_KEY" \
   -d '{
     "razon_social": "Empresa Demo SAS",
     "tipo_identificacion": 1,
@@ -160,19 +178,24 @@ curl -X POST http://localhost:8000/api/emisores/ \
   }'
 ```
 
-Luego, en el **admin** (o por shell), registra para ese emisor:
+La `cuenta` no se envía: sale de la credencial. El NIT se valida contra el RUES.
 
-- **Software DIAN** (`SoftwareDian`): `identificador`, `pin`, `id_proveedor`,
-  y `test_set_id` (entregado por la DIAN para habilitación).
-- **Certificado digital** (`CertificadoDigital`): sube el `.p12` y su `clave`.
-- **Resolución de facturación** (`ResolucionFacturacion`): prefijo, rango,
-  `clave_tecnica` y vigencia.
+Luego registra para ese emisor (ver
+[docs/checklist-emision.md](docs/checklist-emision.md) para el detalle):
 
-### 3. Crear el adquirente (cliente)
+- **Software DIAN** — `POST /api/emisores/software/`: `identificador`, `pin`,
+  `id_proveedor` y `test_set_id` (entregado por la DIAN para habilitación).
+- **Certificado digital** — `POST /api/emisores/certificado/cargar/` (multipart
+  con el `.p12` y su `clave`; se valida y se guarda en Backblaze B2).
+- **Resolución de facturación** — `POST /api/emisores/resolucion/importar-dian/`
+  la trae de la DIAN con su `clave_tecnica` (o `POST /api/emisores/resolucion/`
+  para cargarla a mano, sin clave técnica).
+
+### 3. Crear el adquiriente (cliente)
 
 ```bash
-curl -X POST http://localhost:8000/api/adquirentes/ \
-  -H "Content-Type: application/json" -b cookies.txt \
+curl -X POST http://localhost:8000/api/documentos/adquiriente/ \
+  -H "Content-Type: application/json" -H "Authorization: Api-Key $API_KEY" \
   -d '{
     "emisor": "<id-emisor>",
     "razon_social": "Cliente Demo",
@@ -184,20 +207,20 @@ curl -X POST http://localhost:8000/api/adquirentes/ \
 
 ### 4. Crear el documento (con líneas e impuestos)
 
-Los totales se calculan automáticamente a partir de las líneas.
+Los totales se calculan automáticamente a partir de los detalles.
 
 ```bash
-curl -X POST http://localhost:8000/api/documentos/ \
-  -H "Content-Type: application/json" -b cookies.txt \
+curl -X POST http://localhost:8000/api/documentos/documento/ \
+  -H "Content-Type: application/json" -H "Authorization: Api-Key $API_KEY" \
   -d '{
-    "tipo": "factura_venta",
+    "documento_tipo": "<id-tipo>",
     "emisor": "<id-emisor>",
     "resolucion": "<id-resolucion>",
-    "adquirente": "<id-adquirente>",
+    "adquiriente": "<id-adquiriente>",
     "prefijo": "SETP", "consecutivo": 990000001, "numero": "SETP990000001",
     "fecha_emision": "2026-06-21", "hora_emision": "10:00:00",
     "moneda": 1,
-    "lineas": [
+    "detalles": [
       {
         "numero_linea": 1, "descripcion": "Producto demo",
         "cantidad": "1", "unidad_medida": 1,
@@ -210,33 +233,55 @@ curl -X POST http://localhost:8000/api/documentos/ \
   }'
 ```
 
+`documento_tipo` es el **id** de la fila de `DocumentoTipo` cuyo `codigo` es
+`factura_venta`, `nota_credito`, `nota_debito`, `documento_soporte` o `nomina`.
+
 ### 5. Emitir (genera XML UBL + CUFE + firma)
 
 ```bash
-curl -X POST http://localhost:8000/api/documentos/<id>/emitir/ -b cookies.txt
+curl -X POST http://localhost:8000/api/documentos/documento/<id>/emitir/ \
+  -H "Authorization: Api-Key $API_KEY"
 # → { "estado": "firmado", "cufe_cude": "8bb918b1...f5bd9b4" }
 ```
 
 ### 6. Enviar a la DIAN
 
-En habilitación (`DIAN_ENVIRONMENT=2`) usa `SendTestSetAsync` con el `test_set_id`;
-en producción usa `SendBillSync`.
+Se usa `SendTestSetAsync` (con el `test_set_id` del software) solo mientras se
+está en habilitación (`DIAN_ENVIRONMENT=2`) **y** el Set de Pruebas todavía no
+ha sido aceptado. En cuanto la DIAN lo acepta —`SoftwareDian.set_pruebas_aceptado`—
+o en producción, se usa `SendBillSync` (síncrono).
 
 ```bash
-curl -X POST http://localhost:8000/api/documentos/<id>/enviar/ -b cookies.txt
+curl -X POST http://localhost:8000/api/documentos/documento/<id>/enviar/ \
+  -H "Authorization: Api-Key $API_KEY"
 # → { "estado": "...", "track_id": "...", "es_valido": true/false, "errores": [...] }
+```
+
+El documento queda en `aceptado`, `rechazado` o —si la DIAN aún no ha
+resuelto— `enviado`. En ese último caso:
+
+```bash
+# Consulta sin efectos: devuelve lo que dice la DIAN, no toca el documento.
+curl -H "Authorization: Api-Key $API_KEY" \
+  http://localhost:8000/api/documentos/documento/<id>/consultar/
+
+# Aplica el resultado al documento (solo si está enviado/rechazado).
+curl -X POST -H "Authorization: Api-Key $API_KEY" \
+  http://localhost:8000/api/documentos/documento/<id>/actualizar-estado/
 ```
 
 ### 7. Descargar artefactos
 
 ```bash
-curl -b cookies.txt http://localhost:8000/api/documentos/<id>/xml/ -o factura.xml
-curl -b cookies.txt http://localhost:8000/api/documentos/<id>/pdf/ -o factura.pdf
+curl -H "Authorization: Api-Key $API_KEY" \
+  http://localhost:8000/api/documentos/documento/<id>/xml/ -o factura.xml
+curl -H "Authorization: Api-Key $API_KEY" \
+  http://localhost:8000/api/documentos/documento/<id>/pdf/ -o factura.pdf
 ```
 
 ### Notas crédito/débito y documento soporte
 
-Mismo flujo cambiando `"tipo"`:
+Mismo flujo cambiando `documento_tipo`:
 
 - `nota_credito` / `nota_debito`: requieren `documento_referencia` (el id de la
   factura que corrigen). Usan CUDE.
@@ -250,6 +295,7 @@ Mismo flujo cambiando `"tipo"`:
 |---------|-------------|
 | `python manage.py cargar_catalogos` | Carga las listas DIAN `.gc` en la BD (idempotente). |
 | `python manage.py listas [Nombre]` | Inspecciona las listas de valores `.gc`. |
+| `python manage.py crear_llave_api --cuenta <id> --nombre "..."` | Crea la API Key de una integración (muestra el secreto una sola vez). |
 | `python manage.py emitir_documento <uuid> [--enviar]` | Firma y (opcional) envía un documento a la DIAN. |
 
 ---
@@ -258,16 +304,19 @@ Mismo flujo cambiando `"tipo"`:
 
 ```
 nobelio/
-├── config/                  Proyecto Django (settings, urls, api router)
+├── config/                  Proyecto Django (settings, urls)
 │   ├── settings/            base.py · dev.py · prod.py
-│   └── api.py               Router DRF (/api/)
+│   └── urls.py              Monta cada app bajo /api/<dominio>/
 ├── apps/
-│   ├── nucleo/              Modelos base abstractos
+│   ├── nucleo/              Modelos base abstractos + errores de la API
+│   ├── cuentas/             Cuenta (tenant): agrupa emisores y llaves
+│   ├── seguridad/           Usuario (JWT), LlaveApi (ERP) y alcance multi-inquilino
+│   ├── utilidades/          Almacenamiento en B2 y cliente RUES
 │   ├── catalogos/           Catálogos DIAN + parser Genericode (.gc)
 │   │   ├── genericode.py    Parser de listas .gc
 │   │   └── datos/listas/    Listas oficiales DIAN (.gc)
 │   ├── emisores/            Emisor (OFE), software, certificado, resolución
-│   ├── documentos/          Documento electrónico, líneas, impuestos, adquirente, API
+│   ├── documentos/          Documento electrónico, detalles, impuestos, adquiriente, API
 │   └── dian/                Núcleo DIAN:
 │       ├── identificadores.py   CUFE / CUDE / código de seguridad
 │       ├── ubl.py              Generación XML UBL 2.1 (factura, notas, soporte)
@@ -277,7 +326,11 @@ nobelio/
 │       ├── servicios.py        Orquestación del pipeline
 │       └── datos/xsd/          Esquemas XSD oficiales DIAN
 ├── docs/
-│   └── anexo-tecnico.md     Resumen del Anexo Técnico v1.9
+│   ├── checklist-emision.md    Del alta del tenant a la emisión, paso a paso
+│   ├── autenticacion.md        JWT, API Key y alcance multi-inquilino
+│   ├── anexo-tecnico.md        Resumen del Anexo Técnico v1.9
+│   ├── almacenamiento-xml.md   XML firmado y respuestas DIAN en B2
+│   └── entorno-desarrollo.md   Montar el proyecto desde cero
 ├── requirements.txt
 └── manage.py
 ```

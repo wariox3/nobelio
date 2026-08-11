@@ -182,10 +182,10 @@ cuenta, para que una persona no quede repartida entre integraciones.
 | Modelo `LlaveApi` (+ `generar`, `esta_vigente`, `verificar_secreto`) | `apps/seguridad/models/llave_api.py` |
 | Autenticación API Key + `PrincipalLlaveApi` | `apps/seguridad/autenticacion.py` |
 | Alcance multi-inquilino (`emisores_permitidos`, `AlcanceEmisorMixin`) | `apps/seguridad/alcance.py` |
-| API de gestión de llaves (solo staff) | `apps/seguridad/views/llave_api.py`, ruta `/api/seguridad/llaves-api/` |
-| API de usuarios (solo staff) | `apps/seguridad/views/usuario.py`, ruta `/api/seguridad/usuarios/` |
+| API de gestión de llaves (solo staff) | `apps/seguridad/views/llave_api.py`, ruta `/api/seguridad/llave-api/` |
+| API de usuarios (solo staff) | `apps/seguridad/views/usuario.py`, ruta `/api/seguridad/usuario/` |
 | Alta de llave por CLI | `python manage.py crear_llave_api --cuenta <id> --nombre "..."` |
-| Rutas de seguridad (router + JWT) | `apps/seguridad/urls.py` (montado en `/api/seguridad/`) → `usuarios`, `llaves-api`, `token/`, `token/refresh/`, `token/verify/` |
+| Rutas de seguridad (router + JWT) | `apps/seguridad/urls.py` (montado en `/api/seguridad/`) → `usuario`, `llave-api`, `token/`, `token/refresh/`, `token/verify/` |
 | Auth classes, `SIMPLE_JWT`, CORS | `config/settings/base.py` |
 | Variables de entorno | `.env.example` (`CORS_ALLOWED_ORIGINS`, `JWT_ACCESS_MINUTOS`, …) |
 | Pruebas de autenticación | `apps/seguridad/tests_autenticacion.py` |

@@ -1,5 +1,6 @@
 """Pruebas de la API REST de documentos (flujo end-to-end)."""
 import tempfile
+from datetime import date, timedelta
 
 from cryptography.hazmat.primitives.serialization import (
     BestAvailableEncryption, pkcs12,
@@ -14,6 +15,10 @@ from apps.dian.tests_firma import _generar_certificado
 from apps.documentos.models import Documento, DocumentoEstado, DocumentoTipo
 from apps.documentos.tests_utils import crear_documento_factura
 from apps.emisores.models import Certificado
+from apps.emisores.servicios import (
+    MENSAJE_EMISOR_INACTIVO,
+    MENSAJE_SIN_CERTIFICADO,
+)
 
 MEDIA_TEMP = tempfile.mkdtemp()
 
@@ -93,9 +98,9 @@ class DocumentoAPITests(APITestCase):
         resp = self.client.get(self._url("pdf/"))
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_crear_documento_calcula_totales(self):
+    def _payload_documento(self):
         c = self.cat
-        payload = {
+        return {
             "documento_tipo": DocumentoTipo.objects.get(
                 codigo=DocumentoTipo.Codigo.FACTURA_VENTA
             ).id,
@@ -120,11 +125,61 @@ class DocumentoAPITests(APITestCase):
                 }
             ],
         }
-        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+
+    def _crear(self):
+        return self.client.post(
+            "/api/documentos/documento/", self._payload_documento(), format="json"
+        )
+
+    def test_crear_documento_calcula_totales(self):
+        resp = self._crear()
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         self.assertEqual(resp.data["valor_bruto"], "2000.00")
         self.assertEqual(resp.data["total_impuestos"], "380.00")
         self.assertEqual(resp.data["total_a_pagar"], "2380.00")
+
+    # --- El emisor tiene que estar en condiciones de firmar ----------------
+
+    def test_no_se_crea_si_el_emisor_no_tiene_certificado(self):
+        Certificado.objects.filter(emisor=self.emisor).delete()
+        resp = self._crear()
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(resp.data["errores"]["emisor"], [MENSAJE_SIN_CERTIFICADO])
+        self.assertFalse(Documento.objects.filter(consecutivo=990000130).exists())
+
+    def test_no_se_crea_con_el_certificado_vencido(self):
+        certificado = Certificado.objects.get(emisor=self.emisor)
+        certificado.vigente_hasta = date.today() - timedelta(days=1)
+        certificado.save(update_fields=["vigente_hasta"])
+
+        resp = self._crear()
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("venció", resp.data["errores"]["emisor"][0])
+
+    def test_no_se_crea_si_el_certificado_aun_no_rige(self):
+        certificado = Certificado.objects.get(emisor=self.emisor)
+        certificado.vigente_desde = date.today() + timedelta(days=1)
+        certificado.save(update_fields=["vigente_desde"])
+
+        resp = self._crear()
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("no rige hasta", resp.data["errores"]["emisor"][0])
+
+    def test_se_crea_con_el_certificado_en_vigencia(self):
+        certificado = Certificado.objects.get(emisor=self.emisor)
+        certificado.vigente_desde = date.today() - timedelta(days=1)
+        certificado.vigente_hasta = date.today() + timedelta(days=1)
+        certificado.save(update_fields=["vigente_desde", "vigente_hasta"])
+
+        self.assertEqual(self._crear().status_code, status.HTTP_201_CREATED)
+
+    def test_no_se_crea_si_el_emisor_esta_inactivo(self):
+        self.emisor.activo = False
+        self.emisor.save(update_fields=["activo"])
+
+        resp = self._crear()
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(resp.data["errores"]["emisor"], [MENSAJE_EMISOR_INACTIVO])
 
 
 class CatalogoAPITests(APITestCase):

@@ -16,6 +16,7 @@ Al **crear** un emisor la pregunta es la otra mitad: *¿de qué cuenta puede
 colgarlo?* La responde ``cuenta_permitida``, que es la única definición de esa
 regla en el proyecto (``exigir_cuenta`` es su versión que lanza 403).
 """
+from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
 from apps.emisores.models import Emisor
@@ -111,6 +112,36 @@ def exigir_alcance(request, emisor):
     """Lanza 403 si el solicitante no alcanza a ``emisor``."""
     if not puede_operar(request, emisor):
         raise PermissionDenied(MENSAJE_FUERA_DE_ALCANCE)
+
+
+class RelacionDelAlcance(serializers.PrimaryKeyRelatedField):
+    """Campo de relación acotado a los emisores que alcanza el solicitante.
+
+    Sin esto, un id ajeno y un id inexistente se distinguen por el mensaje de
+    error ("no pertenece al emisor" frente a "no existe"), y eso convierte al
+    endpoint en un oráculo: un cliente autenticado puede averiguar qué ids hay
+    en otras cuentas. Filtrando el queryset las dos respuestas son idénticas.
+
+    ``campo_emisor`` es la ruta ORM del modelo hasta el emisor (``"emisor"`` en
+    casi todos; ``"id"`` cuando el propio modelo es el emisor).
+    """
+
+    def __init__(self, *args, campo_emisor="emisor", **kwargs):
+        self.campo_emisor = campo_emisor
+        super().__init__(*args, **kwargs)
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        request = self.context.get("request")
+        if request is None:
+            # Fuera de una petición (shell, pruebas del serializer suelto) no
+            # hay a quién acotar; la pertenencia la sigue validando el propio
+            # serializer.
+            return qs
+        permitidos = emisores_permitidos(request)
+        if permitidos is None:
+            return qs
+        return qs.filter(**{f"{self.campo_emisor}__in": permitidos})
 
 
 class AlcanceEmisorMixin:

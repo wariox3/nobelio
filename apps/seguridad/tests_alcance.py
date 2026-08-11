@@ -4,6 +4,7 @@ Lo que se comprueba aquí es que los datos de una cuenta no se ven ni se tocan
 desde otra: es la frontera que hace que una misma integración pueda facturar
 para muchos emisores sin mezclarlos.
 """
+import re
 from unittest import mock
 
 from django.contrib.auth import get_user_model
@@ -12,7 +13,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient, APITestCase
 
 from apps.cuentas.models import Cuenta
-from apps.documentos.models import Adquiriente
+from apps.documentos.models import Adquiriente, DocumentoTipo
 from apps.documentos.serializers import DocumentoCrearSerializer
 from apps.documentos.tests_utils import (
     crear_catalogos_minimos,
@@ -302,6 +303,50 @@ class AlcanceDeDocumentosTests(AlcanceBase):
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(resp.data["count"], 0)
+
+    def _payload_documento(self, adquiriente_id):
+        c = self.cat
+        return {
+            "documento_tipo": DocumentoTipo.objects.get(
+                codigo=DocumentoTipo.Codigo.FACTURA_VENTA
+            ).id,
+            "emisor": self.emisor.id,
+            "adquiriente": adquiriente_id,
+            "prefijo": "SETP", "consecutivo": 1, "numero": "SETP1",
+            "fecha_emision": "2024-01-10", "hora_emision": "10:00:00",
+            "moneda": c["cop"].id,
+            "detalles": [
+                {
+                    "numero_linea": 1, "descripcion": "Servicio",
+                    "cantidad": "1", "unidad_medida": c["unidad"].id,
+                    "valor_unitario": "1000", "valor_total": "1000.00",
+                    "impuestos": [],
+                }
+            ],
+        }
+
+    def test_un_id_ajeno_no_se_distingue_de_uno_inexistente(self):
+        """El error no puede servir de oráculo de existencia entre cuentas."""
+        ajeno = self.crear_adquiriente(self.emisor_ajeno, nit="800100009")
+        cabecera = self._api_key(cuenta=self.cuenta)
+        url = "/api/documentos/documento/"
+
+        con_ajeno = self.client.post(
+            url, self._payload_documento(ajeno.id), format="json", **cabecera
+        )
+        con_inexistente = self.client.post(
+            url, self._payload_documento(999999), format="json", **cabecera
+        )
+
+        self.assertEqual(con_ajeno.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(con_ajeno.status_code, con_inexistente.status_code)
+        # Las respuestas solo pueden diferir en el id que se envió.
+        def sin_ids(errores):
+            return re.sub(r"\d+", "N", str(errores))
+
+        self.assertEqual(
+            sin_ids(con_ajeno.data["errores"]), sin_ids(con_inexistente.data["errores"])
+        )
 
     def test_no_se_puede_facturar_con_el_adquiriente_de_otro_emisor(self):
         ajeno = self.crear_adquiriente(self.emisor_ajeno, nit="800100004")

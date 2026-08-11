@@ -75,13 +75,18 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
 
 ## 7. Adquirente (cliente receptor)
 
-- [ ] `POST /api/documentos/adquirente/` → datos del receptor del documento.
+- [ ] `POST /api/documentos/adquiriente/` → datos del receptor del documento.
 
 ## 8. Documento electrónico
 
 - [ ] `POST /api/documentos/documento/` (`DocumentoCrearSerializer`):
-      `tipo`, `emisor`, `resolucion`, `adquirente`, `moneda`, formas/medios de pago,
-      y `lineas` (cada una con sus `impuestos`/tributos). Los totales se calculan al crear.
+      `documento_tipo`, `emisor`, `resolucion`, `adquiriente`, `moneda`,
+      formas/medios de pago, y `detalles` (cada uno con sus `impuestos`/tributos).
+      Los totales se calculan al crear.
+- Se rechaza (400 en `emisor`) si el emisor **no está en condiciones de firmar**:
+  inactivo, sin certificado activo, o con el certificado vencido o aún sin regir.
+  Es la misma regla que aplica `emitir/` (`emisores.servicios.motivo_no_puede_emitir`),
+  comprobada ya al crear para no dejar borradores que nunca se van a poder emitir.
 
 ## 9. Ciclo de vida DIAN
 
@@ -89,6 +94,17 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
       **CUFE/CUDE** y **firma XAdES-EPES** (requiere certificado activo del emisor).
 - [ ] `POST /api/documentos/documento/{id}/enviar/` → envía a la DIAN por WS;
       devuelve `track_id`, `es_valido`, `codigo_estado` y errores.
+      Se usa `SendTestSetAsync` (con el `test_set_id`) solo mientras se está en
+      habilitación **y** el Set de Pruebas aún no ha sido aceptado; una vez
+      aceptado (`SoftwareDian.set_pruebas_aceptado`) o en producción, `SendBillSync`.
+      El documento queda en `aceptado`, `rechazado` o —si la DIAN no ha resuelto
+      todavía— `enviado`.
+- [ ] *(si quedó en `enviado`)* `GET /api/documentos/documento/{id}/consultar/` →
+      pregunta a la DIAN **sin tocar** el documento; devuelve `es_valido`,
+      `codigo_estado` y errores.
+- [ ] *(si quedó en `enviado`)* `POST /api/documentos/documento/{id}/actualizar-estado/` →
+      consulta y **aplica** el resultado. Solo para documentos enviados o
+      rechazados: sobre un borrador o uno ya aceptado responde 400.
 - [ ] `GET /api/documentos/documento/{id}/xml/` → descarga el XML firmado.
 - [ ] `GET /api/documentos/documento/{id}/pdf/` → descarga la representación gráfica (PDF con QR).
 
@@ -97,11 +113,17 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
 ### Resumen de dependencias
 
 ```
-Cuenta → Usuario
+Cuenta → Llave API / Usuario
       └→ Emisor → Software DIAN
                 → Certificado (B2)
                 → Resolución
-                                 ┐
-Adquirente ──────────────────────┼→ Documento → emitir → enviar → xml/pdf
-                                 ┘
+                                  ┐
+Adquiriente ──────────────────────┼→ Documento → emitir → enviar → xml/pdf
+                                  ┘                          │
+                                                             └→ (enviado)
+                                                                consultar /
+                                                                actualizar-estado
 ```
+
+Estados del documento (`DocumentoEstado.Nombre`):
+`borrador → firmado → enviado | aceptado | rechazado`.

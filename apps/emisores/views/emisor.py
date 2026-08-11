@@ -65,7 +65,7 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
     def validar_nit(self, request):
         """Valida un NIT contra el RUES y devuelve sus datos para autocompletar.
 
-        ``GET /api/emisores/validar-nit/?nit=900123456``
+        ``GET /api/emisores/emisor/validar-nit/?nit=900123456``
 
         Respuestas:
           - 200 ``{"existe": true, ...datos...}``  si el NIT está en el RUES.

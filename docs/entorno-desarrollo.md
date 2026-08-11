@@ -82,12 +82,12 @@ localmente.
 
 ---
 
-## 5. Migraciones, catálogos y usuario admin
+## 5. Migraciones, catálogos y usuario staff
 
 ```bash
 python manage.py migrate
 python manage.py cargar_catalogos     # tipos, tributos, municipios, monedas...
-python manage.py createsuperuser
+python manage.py createsuperuser      # staff: da de alta cuentas, usuarios y llaves
 ```
 
 ---
@@ -99,8 +99,10 @@ python manage.py runserver
 ```
 
 - API: http://localhost:8000/api/
-- Admin: http://localhost:8000/admin/
 - Estado: http://localhost:8000/estado/
+
+> No hay `/admin/`: `django.contrib.admin` no está instalado y la API es
+> *stateless* (sin sesiones). Todo se hace por la API o por comandos.
 
 Sigue con el flujo completo de uso de la API en el
 [README](../README.md#flujo-de-uso-completo-api) o el

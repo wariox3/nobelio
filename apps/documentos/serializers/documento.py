@@ -6,6 +6,9 @@ from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
 
 from apps.documentos import models
+from apps.emisores.models import Emisor, ResolucionFacturacion
+from apps.emisores.servicios import motivo_no_puede_emitir
+from apps.seguridad.alcance import RelacionDelAlcance
 
 from .documento_detalle import DocumentoDetalleSerializer
 from .documento_error import DocumentoErrorSerializer
@@ -66,6 +69,16 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
     """
 
     detalles = DocumentoDetalleSerializer(many=True)
+    # Todo lo que se referencia se busca solo dentro del alcance del
+    # solicitante: un id de otra cuenta responde igual que uno inexistente.
+    emisor = RelacionDelAlcance(queryset=Emisor.objects.all(), campo_emisor="id")
+    resolucion = RelacionDelAlcance(
+        queryset=ResolucionFacturacion.objects.all(), required=False, allow_null=True
+    )
+    adquiriente = RelacionDelAlcance(queryset=models.Adquiriente.objects.all())
+    documento_referencia = RelacionDelAlcance(
+        queryset=models.Documento.objects.all(), required=False, allow_null=True
+    )
 
     class Meta:
         model = models.Documento
@@ -92,10 +105,10 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
         return detalles
 
     def validate(self, attrs):
-        """Comprueba que todo lo referenciado pertenezca al mismo emisor.
+        """Comprueba que el emisor pueda emitir y que lo referenciado sea suyo.
 
-        Sin esto se podría facturar con la resolución de un emisor a nombre de
-        otro, o referenciar el adquiriente de una cuenta ajena.
+        Sin lo segundo se podría facturar con la resolución de un emisor a
+        nombre de otro, o referenciar el adquiriente de una cuenta ajena.
         """
         emisor = attrs.get("emisor") or getattr(self.instance, "emisor", None)
         if emisor is None:
@@ -113,6 +126,14 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
         }
         if errores:
             raise serializers.ValidationError(errores)
+
+        # Lo último, para no tapar un error de datos de la propia petición con
+        # uno de configuración del emisor: sin certificado activo y vigente el
+        # documento nacería muerto —se crearía bien y reventaría al firmarlo—,
+        # así que se dice ya y no en `emitir/`.
+        motivo = motivo_no_puede_emitir(emisor)
+        if motivo:
+            raise serializers.ValidationError({"emisor": motivo})
         return attrs
 
     @transaction.atomic

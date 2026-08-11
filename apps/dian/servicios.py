@@ -18,6 +18,11 @@ from django.utils import timezone
 
 from apps.dian import firma, soap, ubl
 from apps.documentos.models import DocumentoError, DocumentoEstado, DocumentoTipo
+from apps.emisores.servicios import (
+    MENSAJE_EMISOR_INACTIVO,
+    certificado_activo,
+    motivo_no_puede_emitir,
+)
 
 
 def _estado(nombre: str) -> DocumentoEstado:
@@ -95,10 +100,15 @@ def _software_activo_emisor(emisor):
 
 
 def _certificado_activo_emisor(emisor):
-    certificado = emisor.certificados.filter(activo=True).first()
-    if certificado is None:
-        raise ErrorEmision("El emisor no tiene un certificado digital activo.")
-    return certificado
+    """El certificado con el que firmar, comprobando que se pueda usar.
+
+    Misma regla que al crear el documento (``motivo_no_puede_emitir``): sin ella
+    se podría firmar con un certificado vencido y la DIAN rechazaría el envío.
+    """
+    motivo = motivo_no_puede_emitir(emisor)
+    if motivo:
+        raise ErrorEmision(motivo)
+    return certificado_activo(emisor)
 
 
 def _software_activo(documento):
@@ -141,8 +151,10 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
 
     # Dar de baja un emisor (activo=False) tiene que cortar la emisión: es la
     # forma de suspender a un cliente sin tocar las credenciales de su cuenta.
+    # El certificado no se exige aquí sino en `construir_firmador`, que es quien
+    # lo necesita (las pruebas inyectan el firmador y no cargan .p12).
     if not documento.emisor.activo:
-        raise ErrorEmision("El emisor está inactivo; no puede emitir documentos.")
+        raise ErrorEmision(MENSAJE_EMISOR_INACTIVO)
 
     software = _software_activo(documento)
 
