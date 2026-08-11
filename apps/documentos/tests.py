@@ -32,20 +32,23 @@ class GrafoDocumentoTests(TestCase):
             municipio=c["medellin"],
             direccion="Calle 1 # 2-3",
         )
-        cls.adquirente = doc.Adquiriente.objects.create(
-            emisor=cls.emisor,
+        cls.nit_adquirente = "800199436"
+
+    def _crear_adquiriente(self, documento):
+        """El receptor cuelga del documento: se crea después de él."""
+        return doc.Adquiriente.objects.create(
+            documento=documento,
             razon_social="Cliente Demo",
-            tipo_identificacion=c["nit"],
-            numero_identificacion="800199436",
-            tipo_organizacion=c["juridica"],
-            pais=c["colombia"],
+            tipo_identificacion=self.cat["nit"],
+            numero_identificacion=self.nit_adquirente,
+            tipo_organizacion=self.cat["juridica"],
+            pais=self.cat["colombia"],
         )
 
     def test_crear_documento_con_linea_e_impuesto(self):
         documento = doc.Documento.objects.create(
             documento_tipo=doc.DocumentoTipo.objects.get(codigo=doc.DocumentoTipo.Codigo.FACTURA_VENTA),
             emisor=self.emisor,
-            adquiriente=self.adquirente,
             prefijo="SETP",
             consecutivo=129,
             numero="SETP990000129",
@@ -56,6 +59,7 @@ class GrafoDocumentoTests(TestCase):
             total_impuestos=Decimal("285000.00"),
             total_a_pagar=Decimal("1785000.00"),
         )
+        adquiriente = self._crear_adquiriente(documento)
         linea = doc.DocumentoDetalle.objects.create(
             documento=documento,
             numero_linea=1,
@@ -75,6 +79,7 @@ class GrafoDocumentoTests(TestCase):
 
         self.assertEqual(documento.detalles.count(), 1)
         self.assertEqual(linea.impuestos.count(), 1)
+        self.assertEqual(documento.adquiriente, adquiriente)
         self.assertEqual(str(documento), "Factura de venta SETP990000129")
 
     def test_cufe_a_partir_del_documento(self):
@@ -87,7 +92,7 @@ class GrafoDocumentoTests(TestCase):
             valor_iva=Decimal("285000.00"),
             valor_total=Decimal("1785000.00"),
             nit_emisor=self.emisor.numero_identificacion,
-            id_adquirente=self.adquirente.numero_identificacion,
+            id_adquirente=self.nit_adquirente,
             clave_tecnica="693ff6f2a553c3646a063436fd4dd9ded0311471",
             tipo_ambiente="1",
         )

@@ -4,8 +4,6 @@ from django.db import models
 from apps.nucleo.models import ModeloConFechas, ModeloUUID
 from apps.utilidades.almacenamiento import almacenamiento_backblaze
 
-from .adquiriente import Adquiriente
-
 
 def _ruta_artefacto(instance, filename):
     """Ruta en el bucket: ``<emisor_id>/documentos/<aaaa>/<mm>/<archivo>``.
@@ -103,10 +101,6 @@ class Documento(ModeloUUID, ModeloConFechas):
         related_name="documentos", verbose_name="resolución",
         null=True, blank=True,
     )
-    adquiriente = models.ForeignKey(
-        Adquiriente, on_delete=models.PROTECT,
-        related_name="documentos", verbose_name="adquiriente",
-    )
     moneda = models.ForeignKey(
         "catalogos.Moneda", on_delete=models.PROTECT,
         related_name="documentos", verbose_name="moneda",
@@ -152,6 +146,17 @@ class Documento(ModeloUUID, ModeloConFechas):
                 nombre=DocumentoEstado.Nombre.BORRADOR
             )
         super().save(*args, **kwargs)
+
+    @property
+    def es_borrador(self) -> bool:
+        """Aún no se ha firmado, así que sus datos todavía se pueden cambiar."""
+        from .documento_estado import DocumentoEstado
+
+        if not self.estado_id:
+            return True
+        return self.estado.nombre in (
+            DocumentoEstado.Nombre.BORRADOR, DocumentoEstado.Nombre.GENERADO,
+        )
 
     def leer_xml(self) -> bytes:
         """Devuelve los bytes del XML firmado desde el storage (B2/local)."""

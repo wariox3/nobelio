@@ -32,7 +32,7 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
     queryset = (
         Documento.objects.select_related(
             "documento_tipo", "estado", "emisor", "adquiriente", "resolucion", "moneda"
-        ).prefetch_related("errores")
+        ).prefetch_related("errores", "adquiriente__responsabilidades")
     )
 
     def get_serializer_class(self):

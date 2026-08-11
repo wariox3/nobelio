@@ -8,7 +8,7 @@ from lxml import etree
 
 from apps.dian import ubl
 from apps.documentos import models as doc
-from apps.documentos.tests_utils import crear_documento_factura
+from apps.documentos.tests_utils import crear_adquiriente, crear_documento_factura
 
 
 def _validar_xsd(xml: bytes, nombre_xsd: str):
@@ -30,13 +30,14 @@ class NotasTestBase(TestCase):
     def _crear_nota(self, codigo, numero, consecutivo):
         nota = doc.Documento.objects.create(
             documento_tipo=doc.DocumentoTipo.objects.get(codigo=codigo),
-            emisor=self.base["emisor"], adquiriente=self.base["adquirente"],
+            emisor=self.base["emisor"],
             documento_referencia=self.factura, prefijo="NC", consecutivo=consecutivo,
             numero=numero, fecha_emision=date(2024, 2, 1), hora_emision=time(9, 0, 0),
             moneda=self.base["catalogos"]["cop"], valor_bruto=Decimal("100000.00"),
             total_impuestos=Decimal("19000.00"), total_a_pagar=Decimal("119000.00"),
             observaciones="Devolución parcial",
         )
+        crear_adquiriente(nota, self.base["catalogos"])
         linea = doc.DocumentoDetalle.objects.create(
             documento=nota, numero_linea=1, descripcion="Devolución producto",
             cantidad=Decimal("1"), unidad_medida=self.base["catalogos"]["unidad"],
@@ -109,12 +110,13 @@ class DocumentoSoporteTests(NotasTestBase):
     def _xml(self):
         ds = doc.Documento.objects.create(
             documento_tipo=doc.DocumentoTipo.objects.get(codigo=doc.DocumentoTipo.Codigo.DOCUMENTO_SOPORTE),
-            emisor=self.base["emisor"], adquiriente=self.base["adquirente"],
+            emisor=self.base["emisor"],
             prefijo="DS", consecutivo=1, numero="DS1",
             fecha_emision=date(2024, 2, 1), hora_emision=time(9, 0, 0),
             moneda=self.base["catalogos"]["cop"], valor_bruto=Decimal("50000.00"),
             total_impuestos=Decimal("0.00"), total_a_pagar=Decimal("50000.00"),
         )
+        crear_adquiriente(ds, self.base["catalogos"])
         doc.DocumentoDetalle.objects.create(
             documento=ds, numero_linea=1, descripcion="Compra a no obligado",
             cantidad=Decimal("1"), unidad_medida=self.base["catalogos"]["unidad"],

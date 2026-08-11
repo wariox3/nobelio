@@ -42,8 +42,11 @@ puede faltar. Las rutas cuelgan de `/api/`.
 ## 4. Software DIAN (modalidad software propio)
 
 - [ ] `POST /api/emisores/software/` →
-  - `id_proveedor` = **NIT del propio emisor** (el proveedor tecnológico es el emisor).
   - `identificador` (SoftwareID) y `pin` reales registrados ante la DIAN.
+  - El `ProviderID` del XML **no se registra**: en software propio el proveedor
+    tecnológico es el propio emisor, así que sale de su NIT (y el `schemeID`,
+    de su dígito de verificación). La DIAN valida que el `SoftwareID` esté
+    registrado bajo ese NIT.
   - `test_set_id` solo aplica en **habilitación** (Set de Pruebas).
 
 ## 5. Certificado digital
@@ -73,22 +76,39 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
       resolución, `prefijo`, `rango_desde`/`rango_hasta`, vigencias y `tipo_factura`.
       El `consecutivo_actual` avanza con cada emisión.
 
-## 7. Adquirente (cliente receptor)
-
-- [ ] `POST /api/documentos/adquiriente/` → datos del receptor del documento.
-
-## 8. Documento electrónico
+## 7. Documento electrónico
 
 - [ ] `POST /api/documentos/documento/` (`DocumentoCrearSerializer`):
-      `documento_tipo`, `emisor`, `resolucion`, `adquiriente`, `moneda`,
+      `documento_tipo`, `emisor`, `numero_resolucion`, `adquiriente`, `moneda`,
       formas/medios de pago, y `detalles` (cada uno con sus `impuestos`/tributos).
       Los totales se calculan al crear.
+- La resolución se pide **siempre** por `numero_resolucion` (el número DIAN, que
+  es lo que el emisor conoce); el id no se acepta al crear. Se busca entre las
+  **activas** del emisor del documento; si el número está repetido (importado
+  para varios tipos de factura o prefijos) desempata el `prefijo` del documento,
+  y si aun así no se puede decidir responde 400. En la lectura vuelven
+  `resolucion` (id) y `resolucion_numero`. En un `PATCH` no hay que repetirlo:
+  se usa la resolución que el documento ya tiene.
+- El `adquiriente` va **anidado en el documento**, no por id: no hay cartera de
+  clientes ni endpoint propio. Cada documento guarda su copia del receptor (1:1,
+  `documento.adquiriente`), que es la que quedó firmada en el XML y entró en el
+  CUFE; así, corregir un dato del cliente en una factura nueva no reescribe las
+  ya emitidas. Se puede corregir el de un borrador con `PATCH` sobre el
+  documento, y al borrar el documento se borra con él.
+- Un documento **firmado o posterior no se puede modificar** (400): sus datos ya
+  viajaron en el XML y en el CUFE, y cambiarlos solo lograría que el PDF dejara
+  de coincidir con lo firmado.
+- Se rechaza (400 en `prefijo` o `consecutivo`) si el número del documento no cabe
+  en lo que autorizó la resolución: el `prefijo` tiene que ser el de la resolución
+  y el `consecutivo` estar entre `rango_desde` y `rango_hasta` (extremos incluidos).
+  Sin esto el documento se crea, se firma —consumiendo consecutivo— y la DIAN lo
+  rechaza al enviarlo. También se comprueba al modificarlo con `PATCH`.
 - Se rechaza (400 en `emisor`) si el emisor **no está en condiciones de firmar**:
   inactivo, sin certificado activo, o con el certificado vencido o aún sin regir.
   Es la misma regla que aplica `emitir/` (`emisores.servicios.motivo_no_puede_emitir`),
   comprobada ya al crear para no dejar borradores que nunca se van a poder emitir.
 
-## 9. Ciclo de vida DIAN
+## 8. Ciclo de vida DIAN
 
 - [ ] `POST /api/documentos/documento/{id}/emitir/` → genera XML UBL 2.1, calcula
       **CUFE/CUDE** y **firma XAdES-EPES** (requiere certificado activo del emisor).
@@ -117,12 +137,11 @@ Cuenta → Llave API / Usuario
       └→ Emisor → Software DIAN
                 → Certificado (B2)
                 → Resolución
-                                  ┐
-Adquiriente ──────────────────────┼→ Documento → emitir → enviar → xml/pdf
-                                  ┘                          │
-                                                             └→ (enviado)
-                                                                consultar /
-                                                                actualizar-estado
+                → Documento (lleva dentro al adquiriente)
+                       └→ emitir → enviar → xml/pdf
+                                      │
+                                      └→ (enviado) consultar /
+                                                   actualizar-estado
 ```
 
 Estados del documento (`DocumentoEstado.Nombre`):

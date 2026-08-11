@@ -215,10 +215,13 @@ class ConstructorUBL:
              listAgencyName="United Nations Economic Commission for Europe",
              listSchemeURI="urn:oasis:names:specification:ubl:codelist:gc:CountryIdentificationCode-2.1")
 
+        # Software propio: el proveedor tecnológico es el propio emisor, así que
+        # el ProviderID es su NIT y el schemeID, su dígito de verificación.
+        emisor = self.doc.emisor
         proveedor = _sub(dian, "sts", "SoftwareProvider")
-        _sub(proveedor, "sts", "ProviderID", self.software.id_proveedor,
+        _sub(proveedor, "sts", "ProviderID", emisor.numero_identificacion,
              schemeAgencyID="195", schemeAgencyName=AGENCIA_DIAN,
-             schemeID="4", schemeName="31")
+             schemeID=emisor.digito_verificacion or "0", schemeName="31")
         _sub(proveedor, "sts", "SoftwareID", self.software.identificador,
              schemeAgencyID="195", schemeAgencyName=AGENCIA_DIAN)
 

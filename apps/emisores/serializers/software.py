@@ -8,7 +8,7 @@ class SoftwareDianSerializer(serializers.ModelSerializer):
     class Meta:
         model = SoftwareDian
         fields = [
-            "id", "emisor", "identificador", "pin", "id_proveedor",
+            "id", "emisor", "identificador", "pin",
             "test_set_id", "set_pruebas_aceptado", "activo",
         ]
         extra_kwargs = {

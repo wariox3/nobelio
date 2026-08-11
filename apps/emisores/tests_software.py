@@ -32,7 +32,6 @@ class SoftwareDianAPITests(APITestCase):
             "emisor": self.emisor.id,
             "identificador": "abc123-software-id",
             "pin": "12345",
-            "id_proveedor": "901192048",
             "test_set_id": "set-pruebas-xyz",
         }
 
@@ -52,11 +51,11 @@ class SoftwareDianAPITests(APITestCase):
 
     def test_filtra_por_emisor(self):
         SoftwareDian.objects.create(
-            emisor=self.emisor, identificador="s1", pin="1", id_proveedor="901192048"
+            emisor=self.emisor, identificador="s1", pin="1"
         )
         otro = _crear_emisor(self.cat, nit="800197268")
         SoftwareDian.objects.create(
-            emisor=otro, identificador="s2", pin="2", id_proveedor="800197268"
+            emisor=otro, identificador="s2", pin="2"
         )
         resp = self.client.get(self.url, {"emisor": self.emisor.id})
         self.assertEqual(resp.status_code, 200)

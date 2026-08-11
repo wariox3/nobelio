@@ -1,8 +1,9 @@
-"""Adquiriente: cliente / receptor del documento electrónico.
+"""Adquiriente: receptor del documento electrónico.
 
-El adquiriente pertenece a un emisor: es *su* cartera de clientes. Dos emisores
-que facturen al mismo NIT tienen cada uno su propia fila, porque los datos de
-contacto y la razón social que cada uno registró son suyos y no deben mezclarse.
+No es una cartera de clientes: los datos del receptor se piden en cada documento
+y se guardan pegados a él. Así el documento conserva al receptor tal como se
+facturó —que es lo que quedó firmado en el XML y entró en el CUFE—, y editar un
+cliente no reescribe la historia de las facturas ya emitidas.
 """
 from django.db import models
 
@@ -10,7 +11,13 @@ from apps.nucleo.models import ModeloConFechas
 
 
 class Adquiriente(ModeloConFechas):
-    """Cliente / receptor del documento (``cac:AccountingCustomerParty``)."""
+    """Receptor del documento (``cac:AccountingCustomerParty``).
+
+    Va en tabla aparte y no en columnas del documento por las responsabilidades
+    fiscales, que son una relación múltiple, y para no cargar `Documento` con
+    quince campos del receptor. La relación es 1:1: se llega con
+    ``documento.adquiriente``.
+    """
 
     # --- Atributos ---
     razon_social = models.CharField("razón social", max_length=450)
@@ -26,11 +33,11 @@ class Adquiriente(ModeloConFechas):
     correo = models.EmailField("correo electrónico", blank=True)
 
     # --- Relaciones ---
-    emisor = models.ForeignKey(
-        "emisores.Emisor",
+    documento = models.OneToOneField(
+        "documentos.Documento",
         on_delete=models.CASCADE,
-        related_name="adquirientes",
-        verbose_name="emisor",
+        related_name="adquiriente",
+        verbose_name="documento",
     )
     tipo_identificacion = models.ForeignKey(
         "catalogos.TipoIdentificacion",
@@ -70,14 +77,6 @@ class Adquiriente(ModeloConFechas):
         verbose_name = "adquiriente"
         verbose_name_plural = "adquirientes"
         ordering = ["razon_social"]
-        constraints = [
-            # La unicidad es por emisor, no global: el mismo NIT puede ser
-            # cliente de varios emisores a la vez.
-            models.UniqueConstraint(
-                fields=["emisor", "tipo_identificacion", "numero_identificacion"],
-                name="adquiriente_identificacion_unica_por_emisor",
-            )
-        ]
 
     def __str__(self):
         return f"{self.numero_identificacion} - {self.razon_social}"

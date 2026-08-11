@@ -37,7 +37,6 @@ class GeneracionUBLTests(TestCase):
             emisor=cls.emisor,
             identificador="56f2ae4e-9812-4fad-9255-08fcfcd5ccb0",
             pin="12345",
-            id_proveedor="700085371",
         )
         from apps.catalogos.models import TipoFactura
 
@@ -54,23 +53,10 @@ class GeneracionUBLTests(TestCase):
             vigente_desde=date(2019, 1, 19),
             vigente_hasta=date(2030, 1, 19),
         )
-        cls.adquirente = doc.Adquiriente.objects.create(
-            emisor=cls.emisor,
-            razon_social="Cliente Demo",
-            tipo_identificacion=c["nit"],
-            numero_identificacion="800199436",
-            digito_verificacion="6",
-            tipo_organizacion=c["juridica"],
-            pais=c["colombia"],
-            departamento=c["antioquia"],
-            municipio=c["medellin"],
-            direccion="Cra 4 # 5-6",
-        )
         cls.documento = doc.Documento.objects.create(
             documento_tipo=doc.DocumentoTipo.objects.get(codigo=doc.DocumentoTipo.Codigo.FACTURA_VENTA),
             emisor=cls.emisor,
             resolucion=cls.resolucion,
-            adquiriente=cls.adquirente,
             prefijo="SETP",
             consecutivo=990000129,
             numero="323200000129",
@@ -80,6 +66,18 @@ class GeneracionUBLTests(TestCase):
             valor_bruto=Decimal("1500000.00"),
             total_impuestos=Decimal("285000.00"),
             total_a_pagar=Decimal("1785000.00"),
+        )
+        cls.adquirente = doc.Adquiriente.objects.create(
+            documento=cls.documento,
+            razon_social="Cliente Demo",
+            tipo_identificacion=c["nit"],
+            numero_identificacion="800199436",
+            digito_verificacion="6",
+            tipo_organizacion=c["juridica"],
+            pais=c["colombia"],
+            departamento=c["antioquia"],
+            municipio=c["medellin"],
+            direccion="Cra 4 # 5-6",
         )
         linea = doc.DocumentoDetalle.objects.create(
             documento=cls.documento,
@@ -133,6 +131,23 @@ class GeneracionUBLTests(TestCase):
         # QR con la URL de habilitación.
         qr = arbol.find(f".//{{{ns['sts']}}}QRCode")
         self.assertIn("catalogo-vpfe-hab.dian.gov.co", qr.text)
+
+    def test_el_proveedor_del_software_es_el_emisor(self):
+        """Software propio: ProviderID = NIT del emisor, y schemeID = su DV.
+
+        El DV estuvo fijado a "4" (el de la DIAN, copiado del bloque de
+        AuthorizationProvider), así que iba mal para cualquier emisor.
+        """
+        arbol = etree.fromstring(self._generar())
+        proveedor = arbol.find(f".//{{{ubl.NS['sts']}}}ProviderID")
+
+        self.assertEqual(proveedor.text, self.emisor.numero_identificacion)
+        self.assertEqual(proveedor.get("schemeID"), self.emisor.digito_verificacion)
+        self.assertEqual(proveedor.get("schemeName"), "31")
+        # El NIT de la DIAN sí lleva su propio DV, y no es el del emisor.
+        autorizador = arbol.find(f".//{{{ubl.NS['sts']}}}AuthorizationProviderID")
+        self.assertEqual(autorizador.text, "800197268")
+        self.assertEqual(autorizador.get("schemeID"), "4")
 
     def test_valida_contra_xsd_oficial(self):
         xml = self._generar()

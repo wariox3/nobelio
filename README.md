@@ -183,31 +183,26 @@ La `cuenta` no se envía: sale de la credencial. El NIT se valida contra el RUES
 Luego registra para ese emisor (ver
 [docs/checklist-emision.md](docs/checklist-emision.md) para el detalle):
 
-- **Software DIAN** — `POST /api/emisores/software/`: `identificador`, `pin`,
-  `id_proveedor` y `test_set_id` (entregado por la DIAN para habilitación).
+- **Software DIAN** — `POST /api/emisores/software/`: `identificador`, `pin` y
+  `test_set_id` (entregado por la DIAN para habilitación). El `ProviderID` del
+  XML no se guarda: en software propio es el NIT del propio emisor.
 - **Certificado digital** — `POST /api/emisores/certificado/cargar/` (multipart
   con el `.p12` y su `clave`; se valida y se guarda en Backblaze B2).
 - **Resolución de facturación** — `POST /api/emisores/resolucion/importar-dian/`
   la trae de la DIAN con su `clave_tecnica` (o `POST /api/emisores/resolucion/`
   para cargarla a mano, sin clave técnica).
 
-### 3. Crear el adquiriente (cliente)
+### 3. Crear el documento (con receptor, líneas e impuestos)
 
-```bash
-curl -X POST http://localhost:8000/api/documentos/adquiriente/ \
-  -H "Content-Type: application/json" -H "Authorization: Api-Key $API_KEY" \
-  -d '{
-    "emisor": "<id-emisor>",
-    "razon_social": "Cliente Demo",
-    "tipo_identificacion": 1,
-    "numero_identificacion": "800199436",
-    "tipo_organizacion": 1, "pais": 1
-  }'
-```
+Los totales se calculan automáticamente a partir de los detalles. La resolución
+se indica con `numero_resolucion` —el número que la DIAN le dio al emisor, que
+es el que este conoce—; se busca entre las resoluciones **activas** de ese
+emisor y se guarda su id. El `prefijo` y el `consecutivo` tienen que caber en lo
+que esa resolución autorizó, o la petición responde 400.
 
-### 4. Crear el documento (con líneas e impuestos)
-
-Los totales se calculan automáticamente a partir de los detalles.
+Los datos del `adquiriente` van **dentro de cada documento**: no hay cartera de
+clientes ni endpoint propio. Cada documento guarda su copia del receptor, que es
+la que quedó firmada en el XML y entró en el CUFE.
 
 ```bash
 curl -X POST http://localhost:8000/api/documentos/documento/ \
@@ -215,8 +210,14 @@ curl -X POST http://localhost:8000/api/documentos/documento/ \
   -d '{
     "documento_tipo": "<id-tipo>",
     "emisor": "<id-emisor>",
-    "resolucion": "<id-resolucion>",
-    "adquiriente": "<id-adquiriente>",
+    "numero_resolucion": "18760000001",
+    "adquiriente": {
+      "razon_social": "Cliente Demo",
+      "tipo_identificacion": 1,
+      "numero_identificacion": "800199436",
+      "digito_verificacion": "6",
+      "tipo_organizacion": 1, "pais": 1
+    },
     "prefijo": "SETP", "consecutivo": 990000001, "numero": "SETP990000001",
     "fecha_emision": "2026-06-21", "hora_emision": "10:00:00",
     "moneda": 1,
@@ -236,7 +237,7 @@ curl -X POST http://localhost:8000/api/documentos/documento/ \
 `documento_tipo` es el **id** de la fila de `DocumentoTipo` cuyo `codigo` es
 `factura_venta`, `nota_credito`, `nota_debito`, `documento_soporte` o `nomina`.
 
-### 5. Emitir (genera XML UBL + CUFE + firma)
+### 4. Emitir (genera XML UBL + CUFE + firma)
 
 ```bash
 curl -X POST http://localhost:8000/api/documentos/documento/<id>/emitir/ \
@@ -244,7 +245,7 @@ curl -X POST http://localhost:8000/api/documentos/documento/<id>/emitir/ \
 # → { "estado": "firmado", "cufe_cude": "8bb918b1...f5bd9b4" }
 ```
 
-### 6. Enviar a la DIAN
+### 5. Enviar a la DIAN
 
 Se usa `SendTestSetAsync` (con el `test_set_id` del software) solo mientras se
 está en habilitación (`DIAN_ENVIRONMENT=2`) **y** el Set de Pruebas todavía no
@@ -270,7 +271,7 @@ curl -X POST -H "Authorization: Api-Key $API_KEY" \
   http://localhost:8000/api/documentos/documento/<id>/actualizar-estado/
 ```
 
-### 7. Descargar artefactos
+### 6. Descargar artefactos
 
 ```bash
 curl -H "Authorization: Api-Key $API_KEY" \
@@ -316,7 +317,7 @@ nobelio/
 │   │   ├── genericode.py    Parser de listas .gc
 │   │   └── datos/listas/    Listas oficiales DIAN (.gc)
 │   ├── emisores/            Emisor (OFE), software, certificado, resolución
-│   ├── documentos/          Documento electrónico, detalles, impuestos, adquiriente, API
+│   ├── documentos/          Documento electrónico, detalles, impuestos, receptor, API
 │   └── dian/                Núcleo DIAN:
 │       ├── identificadores.py   CUFE / CUDE / código de seguridad
 │       ├── ubl.py              Generación XML UBL 2.1 (factura, notas, soporte)

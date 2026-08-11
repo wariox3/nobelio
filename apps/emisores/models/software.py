@@ -9,6 +9,11 @@ from .emisor import Emisor
 class SoftwareDian(ModeloConFechas):
     """Software de facturación registrado por el emisor ante la DIAN.
 
+    Solo guarda lo que la DIAN entrega y no se puede deducir. El ``ProviderID``
+    del XML no está aquí a propósito: en modalidad **software propio** el
+    proveedor tecnológico es el propio emisor, así que se toma de su NIT
+    (guardarlo aparte solo abría la puerta a que se desincronizara).
+
     El ``pin`` no se incluye en el XML; se usa para el CUDE y el
     ``SoftwareSecurityCode``.
     """
@@ -19,10 +24,6 @@ class SoftwareDian(ModeloConFechas):
         help_text="SoftwareID asignado por la DIAN.",
     )
     pin = models.CharField("PIN del software", max_length=100)
-    id_proveedor = models.CharField(
-        "ID del proveedor", max_length=20,
-        help_text="ProviderID: NIT del proveedor del software (sin DV).",
-    )
     test_set_id = models.CharField(
         "ID del set de pruebas", max_length=100, blank=True,
         help_text="TestSetId entregado por la DIAN para la habilitación.",

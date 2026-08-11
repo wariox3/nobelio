@@ -13,7 +13,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient, APITestCase
 
 from apps.cuentas.models import Cuenta
-from apps.documentos.models import Adquiriente, DocumentoTipo
+from apps.documentos.models import DocumentoTipo
 from apps.documentos.serializers import DocumentoCrearSerializer
 from apps.documentos.tests_utils import (
     crear_catalogos_minimos,
@@ -25,7 +25,6 @@ from apps.seguridad.models import LlaveApi
 Usuario = get_user_model()
 
 URL_EMISORES = "/api/emisores/emisor/"
-URL_ADQUIRIENTES = "/api/documentos/adquiriente/"
 URL_SOFTWARE = "/api/emisores/software/"
 
 
@@ -57,30 +56,18 @@ class AlcanceBase(APITestCase):
             direccion="Calle 1 # 2-3",
         )
 
-    def crear_adquiriente(self, emisor, nit):
-        """Un cliente del emisor: la cartera que no debe cruzarse entre cuentas."""
-        c = self.cat
-        return Adquiriente.objects.create(
-            emisor=emisor,
-            razon_social="Cliente Demo",
-            tipo_identificacion=c["nit"],
-            numero_identificacion=nit,
-            tipo_organizacion=c["juridica"],
-            pais=c["colombia"],
-        )
-
     def _api_key(self, **kwargs):
         _, clave = LlaveApi.generar(nombre="ERP", **kwargs)
         return {"HTTP_AUTHORIZATION": f"Api-Key {clave}"}
 
 
 class FlujoDeAltaTests(AlcanceBase):
-    """El alta completa: staff → cuenta → llave → emisor → adquiriente.
+    """El alta completa: staff → cuenta → llave → emisor.
 
     Es el recorrido real de puesta en marcha. El staff de la plataforma da de
     alta la integración y su credencial; de ahí en adelante la integración se
-    autoabastece: crea sus emisores y cada emisor su cartera de clientes, sin
-    que el staff tenga que intervenir por cada cliente nuevo.
+    autoabastece: crea sus emisores y factura con ellos sin que el staff tenga
+    que intervenir por cada cliente nuevo.
     """
 
     def test_alta_completa_de_una_integracion(self):
@@ -133,25 +120,8 @@ class FlujoDeAltaTests(AlcanceBase):
             )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         self.assertEqual(resp.data["cuenta"], cuenta_id)
-        emisor_id = resp.data["id"]
 
-        # 4. Y la cartera de clientes de ese emisor.
-        resp = erp.post(
-            URL_ADQUIRIENTES,
-            {
-                "emisor": emisor_id,
-                "razon_social": "Cliente Final S.A.S.",
-                "tipo_identificacion": c["nit"].id,
-                "numero_identificacion": "800100010",
-                "tipo_organizacion": c["juridica"].id,
-                "pais": c["colombia"].id,
-            },
-            format="json",
-            **cabecera,
-        )
-        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
-
-        # 5. Y no ve nada de las demás integraciones.
+        # 4. Y no ve nada de las demás integraciones.
         self.assertEqual(
             erp.get(URL_EMISORES, **cabecera).data["count"], 1
         )
@@ -179,31 +149,10 @@ class AlcanceLlaveDeCuentaTests(AlcanceBase):
             "emisor": self.emisor_ajeno.id,
             "identificador": "abc123-software-id",
             "pin": "12345",
-            "id_proveedor": "901192048",
             "test_set_id": "set-xyz",
         }
         resp = self.client.post(URL_SOFTWARE, payload, format="json", **self.cabecera)
         self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
-
-    def test_no_ve_la_cartera_de_clientes_de_otra_cuenta(self):
-        propio = self.crear_adquiriente(self.emisor, nit="800100001")
-        ajeno = self.crear_adquiriente(self.emisor_ajeno, nit="800100002")
-
-        resp = self.client.get(URL_ADQUIRIENTES, **self.cabecera)
-        ids = {fila["id"] for fila in resp.data["results"]}
-        self.assertIn(propio.id, ids)
-        self.assertNotIn(ajeno.id, ids)
-
-        detalle = self.client.get(f"{URL_ADQUIRIENTES}{ajeno.id}/", **self.cabecera)
-        self.assertEqual(detalle.status_code, status.HTTP_404_NOT_FOUND)
-
-    def test_el_mismo_nit_puede_ser_cliente_de_dos_emisores(self):
-        # Antes la unicidad era global y el segundo emisor no podía registrarlo.
-        self.crear_adquiriente(self.emisor, nit="800100003")
-        self.crear_adquiriente(self.hermano, nit="800100003")
-        self.assertEqual(
-            Adquiriente.objects.filter(numero_identificacion="800100003").count(), 2
-        )
 
 
 class AltaDeEmisoresTests(AlcanceBase):
@@ -304,14 +253,21 @@ class AlcanceDeDocumentosTests(AlcanceBase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(resp.data["count"], 0)
 
-    def _payload_documento(self, adquiriente_id):
+    def _payload_documento(self, emisor_id):
         c = self.cat
         return {
             "documento_tipo": DocumentoTipo.objects.get(
                 codigo=DocumentoTipo.Codigo.FACTURA_VENTA
             ).id,
-            "emisor": self.emisor.id,
-            "adquiriente": adquiriente_id,
+            "emisor": emisor_id,
+            "numero_resolucion": "18760000001",
+            "adquiriente": {
+                "razon_social": "Cliente Demo",
+                "tipo_identificacion": c["nit"].id,
+                "numero_identificacion": "800100009",
+                "tipo_organizacion": c["juridica"].id,
+                "pais": c["colombia"].id,
+            },
             "prefijo": "SETP", "consecutivo": 1, "numero": "SETP1",
             "fecha_emision": "2024-01-10", "hora_emision": "10:00:00",
             "moneda": c["cop"].id,
@@ -327,12 +283,11 @@ class AlcanceDeDocumentosTests(AlcanceBase):
 
     def test_un_id_ajeno_no_se_distingue_de_uno_inexistente(self):
         """El error no puede servir de oráculo de existencia entre cuentas."""
-        ajeno = self.crear_adquiriente(self.emisor_ajeno, nit="800100009")
         cabecera = self._api_key(cuenta=self.cuenta)
         url = "/api/documentos/documento/"
 
         con_ajeno = self.client.post(
-            url, self._payload_documento(ajeno.id), format="json", **cabecera
+            url, self._payload_documento(self.emisor_ajeno.id), format="json", **cabecera
         )
         con_inexistente = self.client.post(
             url, self._payload_documento(999999), format="json", **cabecera
@@ -348,13 +303,14 @@ class AlcanceDeDocumentosTests(AlcanceBase):
             sin_ids(con_ajeno.data["errores"]), sin_ids(con_inexistente.data["errores"])
         )
 
-    def test_no_se_puede_facturar_con_el_adquiriente_de_otro_emisor(self):
-        ajeno = self.crear_adquiriente(self.emisor_ajeno, nit="800100004")
+    def test_no_se_puede_referenciar_un_documento_de_otro_emisor(self):
+        """Una nota crédito no puede colgar de la factura de otra cuenta."""
+        ajeno = crear_documento_factura(catalogos=self.cat)["documento"]
         with self.assertRaises(ValidationError) as caso:
             DocumentoCrearSerializer().validate(
-                {"emisor": self.emisor, "adquiriente": ajeno}
+                {"emisor": self.emisor, "documento_referencia": ajeno}
             )
-        self.assertIn("adquiriente", caso.exception.detail)
+        self.assertIn("documento_referencia", caso.exception.detail)
 
 
 class AlcanceDeUsuariosTests(AlcanceBase):

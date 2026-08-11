@@ -212,10 +212,10 @@ def consultar_rangos_numeracion(emisor, *, cliente=None, ambiente=None,
                                 software=None, **cred):
     """Consulta los rangos de numeración (resoluciones) del emisor en la DIAN.
 
-    Usa el software DIAN activo del emisor (``id_proveedor`` = NIT del proveedor
-    tecnológico, que en software propio es el propio emisor). Devuelve un
-    ``soap.RespuestaRangos`` con el código/descripción de la DIAN y los rangos
-    (cada uno con su clave técnica).
+    Usa el software DIAN activo del emisor. El WS pide por separado el NIT del
+    OFE y el del proveedor tecnológico; en software propio son el mismo, así que
+    va el del emisor en los dos. Devuelve un ``soap.RespuestaRangos`` con el
+    código/descripción de la DIAN y los rangos (cada uno con su clave técnica).
     """
     ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
     software = software or _software_activo_emisor(emisor)
@@ -223,7 +223,7 @@ def consultar_rangos_numeracion(emisor, *, cliente=None, ambiente=None,
         cliente = construir_cliente_emisor(emisor, ambiente, **cred)
     return cliente.consultar_rangos_numeracion(
         emisor.numero_identificacion,
-        software.id_proveedor,
+        emisor.numero_identificacion,
         software.identificador,
     )
 

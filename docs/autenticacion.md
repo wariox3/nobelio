@@ -143,8 +143,8 @@ tiene que estar **activa**.
 
 `AlcanceEmisorMixin` aplica eso en los ViewSets: filtra el queryset en lectura
 (lo ajeno responde 404, no 403, para no revelar que existe) y valida el emisor
-recibido en escritura (403). Lo usan documentos, adquirientes, emisores,
-resoluciones, software y certificados.
+recibido en escritura (403). Lo usan documentos, emisores, resoluciones,
+software y certificados.
 
 ### La cuenta es de la llave, no del usuario
 
@@ -165,10 +165,13 @@ cuenta, para que una persona no quede repartida entre integraciones.
   y se ignora la del cuerpo (`EmisorViewSet.perform_create`).
 - Dar de alta un emisor es cosa de la integración o del staff. Un usuario humano
   no tiene cuenta de la que colgarlo, así que recibe **403**.
-- Un documento no puede referenciar resolución, adquiriente ni documento de
-  referencia de otro emisor (`DocumentoCrearSerializer.validate`).
-- El adquiriente pertenece a un emisor y su unicidad es por emisor: el mismo NIT
-  puede ser cliente de varios emisores, cada uno con sus propios datos.
+- Un documento no puede referenciar resolución ni documento de referencia de
+  otro emisor (`DocumentoCrearSerializer.validate`). La resolución se busca por
+  su número dentro del emisor del documento, así que un número ajeno responde
+  igual que uno inexistente.
+- El adquiriente no se referencia: sus datos llegan en cada documento y se
+  guardan pegados a él, de modo que no hay cartera de clientes que pueda
+  cruzarse entre cuentas.
 
 ## Dependencias
 

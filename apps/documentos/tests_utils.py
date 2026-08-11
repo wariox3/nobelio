@@ -37,6 +37,20 @@ def crear_catalogos_minimos():
     }
 
 
+def crear_adquiriente(documento, catalogos):
+    """Crea el receptor de un documento: cada documento lleva el suyo."""
+    from apps.documentos import models as doc
+
+    c = catalogos
+    return doc.Adquiriente.objects.create(
+        documento=documento,
+        razon_social="Cliente Demo", tipo_identificacion=c["nit"],
+        numero_identificacion="800199436", digito_verificacion="6",
+        tipo_organizacion=c["juridica"], pais=c["colombia"],
+        departamento=c["antioquia"], municipio=c["medellin"], direccion="Cra 4 # 5-6",
+    )
+
+
 def crear_documento_factura(catalogos=None):
     """Crea un documento de factura completo (emisor, software, resolución,
     adquirente, documento, línea e impuesto) y devuelve un dict con todo.
@@ -59,7 +73,7 @@ def crear_documento_factura(catalogos=None):
     )
     software = SoftwareDian.objects.create(
         emisor=emisor, identificador="56f2ae4e-9812-4fad-9255-08fcfcd5ccb0",
-        pin="12345", id_proveedor="700085371",
+        pin="12345",
     )
     tipo_factura, _ = TipoFactura.objects.get_or_create(
         codigo="01", defaults={"nombre": "Factura de Venta"}
@@ -71,21 +85,15 @@ def crear_documento_factura(catalogos=None):
         clave_tecnica="693ff6f2a553c3646a063436fd4dd9ded0311471",
         vigente_desde=date(2019, 1, 19), vigente_hasta=date(2030, 1, 19),
     )
-    adquirente = doc.Adquiriente.objects.create(
-        emisor=emisor,
-        razon_social="Cliente Demo", tipo_identificacion=c["nit"],
-        numero_identificacion="800199436", digito_verificacion="6",
-        tipo_organizacion=c["juridica"], pais=c["colombia"],
-        departamento=c["antioquia"], municipio=c["medellin"], direccion="Cra 4 # 5-6",
-    )
     documento = doc.Documento.objects.create(
         documento_tipo=doc.DocumentoTipo.objects.get(codigo=doc.DocumentoTipo.Codigo.FACTURA_VENTA), emisor=emisor,
-        resolucion=resolucion, adquiriente=adquirente, prefijo="SETP",
+        resolucion=resolucion, prefijo="SETP",
         consecutivo=990000129, numero="323200000129",
         fecha_emision=date(2019, 1, 16), hora_emision=time(10, 53, 10),
         moneda=c["cop"], valor_bruto=Decimal("1500000.00"),
         total_impuestos=Decimal("285000.00"), total_a_pagar=Decimal("1785000.00"),
     )
+    adquirente = crear_adquiriente(documento, c)
     linea = doc.DocumentoDetalle.objects.create(
         documento=documento, numero_linea=1, descripcion="Producto demo",
         codigo_producto="DEMO-1", cantidad=Decimal("1"), unidad_medida=c["unidad"],
