@@ -24,6 +24,8 @@ from apps.catalogos.models import TipoFactura
 from apps.cuentas.models import Cuenta
 from apps.documentos.tests_utils import crear_catalogos_minimos
 from apps.emisores.models import Emisor, ResolucionFacturacion
+from apps.emisores.serializers.emisor import MENSAJE_DUPLICADO
+from apps.nucleo.api import MENSAJE_GENERICO
 from apps.seguridad.models import Usuario
 
 NIT = "901192048"
@@ -86,8 +88,8 @@ class MismoNitEnVariasCuentasTests(APITestCase):
         with self.assertRaises(IntegrityError):
             self.crear_emisor(self.erp1, correo="otro@empresa.co")
 
-    def test_el_alta_duplicada_dice_cual_es_el_emisor_que_estorba(self):
-        """El 400 tiene que servir para actuar, no solo para saber que falló."""
+    def test_el_alta_duplicada_se_explica_en_el_campo_del_documento(self):
+        """El error señala el campo a corregir, no `non_field_errors`."""
         payload = {
             "cuenta": self.erp1.id,
             "razon_social": "Semantica Digital S.A.S",
@@ -106,12 +108,11 @@ class MismoNitEnVariasCuentasTests(APITestCase):
 
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         # Cuelga del campo que hay que corregir, no de non_field_errors.
-        self.assertIn("numero_identificacion", resp.data["errores"])
-        mensaje = resp.data["errores"]["numero_identificacion"][0]
-        self.assertNotIn("conjunto único", mensaje)
-        self.assertIn(self.erp1.nombre, mensaje)
-        self.assertIn(self.emisor1.razon_social, mensaje)
-        self.assertIn(str(self.emisor1.pk), mensaje)
+        self.assertNotIn("non_field_errors", resp.data["errores"])
+        self.assertEqual(
+            resp.data["errores"]["numero_identificacion"], [MENSAJE_DUPLICADO]
+        )
+        self.assertEqual(resp.data["detail"], MENSAJE_GENERICO)
 
     def test_editar_un_emisor_sin_cambiar_su_nit_no_choca_consigo_mismo(self):
         with mock.patch(

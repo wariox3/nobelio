@@ -31,6 +31,9 @@ def _cuenta_de(contexto):
     return cuenta_de_la_credencial(request) if request is not None else None
 
 
+MENSAJE_DUPLICADO = "El emisor ya existe con ese tipo y número de identificación."
+
+
 class RuesNoDisponibleError(APIException):
     """503: no se pudo verificar el NIT contra el RUES (no es 'no existe')."""
 
@@ -89,8 +92,7 @@ class EmisorSerializer(serializers.ModelSerializer):
         ``Meta.validators``), cuyo mensaje nombra ``cuenta`` —un campo que el ERP
         nunca envía— y aterriza en ``non_field_errors``, donde el formulario no
         lo puede señalar. Aquí el error cuelga de ``numero_identificacion``, que
-        es el campo que hay que corregir, y dice de quién es el registro que
-        estorba para que se vea que no hay que crearlo, sino usarlo.
+        es el campo que hay que corregir.
         """
         def valor(campo):
             return attrs.get(campo, getattr(self.instance, campo, None))
@@ -108,17 +110,8 @@ class EmisorSerializer(serializers.ModelSerializer):
         )
         if self.instance is not None:
             repetidos = repetidos.exclude(pk=self.instance.pk)
-        existente = repetidos.first()
-        if existente is not None:
-            raise serializers.ValidationError(
-                {
-                    "numero_identificacion": (
-                        f"La cuenta '{cuenta}' ya tiene un emisor con "
-                        f"{tipo.nombre} {numero}: '{existente.razon_social}'. "
-                        f"Use ese emisor (id {existente.pk}) en vez de crear otro."
-                    )
-                }
-            )
+        if repetidos.exists():
+            raise serializers.ValidationError({"numero_identificacion": MENSAJE_DUPLICADO})
         return attrs
 
     class Meta:
