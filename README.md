@@ -178,7 +178,10 @@ curl -X POST http://localhost:8000/api/emisores/emisor/ \
   }'
 ```
 
-La `cuenta` no se envía: sale de la credencial. El NIT se valida contra el RUES.
+La `cuenta` no se envía: sale de la credencial. El alta no consulta el RUES; lo
+que se rechaza es repetir un emisor ya dado de alta en la misma cuenta. Para
+comprobar un NIT (y autocompletar el formulario) está
+`GET /api/emisores/emisor/validar-nit/?nit=<NIT>`.
 
 Luego registra para ese emisor (ver
 [docs/checklist-emision.md](docs/checklist-emision.md) para el detalle):

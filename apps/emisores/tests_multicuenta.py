@@ -14,7 +14,6 @@ DIAN autoriza un solo rango por prefijo, así que dos filas numerando a la vez
 producirían consecutivos repetidos (y quemados).
 """
 from datetime import date
-from unittest import mock
 
 from django.db.utils import IntegrityError
 from rest_framework import status
@@ -101,28 +100,23 @@ class MismoNitEnVariasCuentasTests(APITestCase):
             "municipio": self.cat["medellin"].id,
             "direccion": "Calle 1 # 2-3",
         }
-        with mock.patch(
-            "apps.emisores.serializers.emisor.consultar_nit", return_value={"nit": NIT}
-        ):
-            resp = self.client.post(URL_EMISORES, payload, format="json")
+        resp = self.client.post(URL_EMISORES, payload, format="json")
 
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         # Cuelga del campo que hay que corregir, no de non_field_errors.
         self.assertNotIn("non_field_errors", resp.data["errores"])
         self.assertEqual(
-            resp.data["errores"]["numero_identificacion"], [MENSAJE_DUPLICADO]
+            resp.data["errores"]["numero_identificacion"],
+            [MENSAJE_DUPLICADO.format(numero=NIT, cuenta=self.erp1.nombre)],
         )
         self.assertEqual(resp.data["detail"], MENSAJE_GENERICO)
 
     def test_editar_un_emisor_sin_cambiar_su_nit_no_choca_consigo_mismo(self):
-        with mock.patch(
-            "apps.emisores.serializers.emisor.consultar_nit", return_value={"nit": NIT}
-        ):
-            resp = self.client.patch(
-                f"{URL_EMISORES}{self.emisor1.id}/",
-                {"nombre_comercial": "Semántica"},
-                format="json",
-            )
+        resp = self.client.patch(
+            f"{URL_EMISORES}{self.emisor1.id}/",
+            {"nombre_comercial": "Semántica"},
+            format="json",
+        )
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
 
     # --- La numeración sigue siendo una sola ------------------------------

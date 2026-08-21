@@ -35,7 +35,8 @@ puede faltar. Las rutas cuelgan de `/api/`.
 
 ## 3. Emisor (OFE)
 
-- [ ] `GET /api/emisores/emisor/validar-nit/?nit=<NIT>` → valida contra RUES y autocompleta datos.
+- [ ] *(opcional)* `GET /api/emisores/emisor/validar-nit/?nit=<NIT>` → consulta el RUES
+      y autocompleta datos. El alta **no** lo exige: es ayuda para el formulario.
 - [ ] `POST /api/emisores/emisor/` → crea el emisor ligado a la **cuenta**
       (razón social, NIT + DV, tipo de organización, ubicación, responsabilidades).
 

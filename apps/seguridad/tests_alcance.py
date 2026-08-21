@@ -5,7 +5,6 @@ desde otra: es la frontera que hace que una misma integración pueda facturar
 para muchos emisores sin mezclarlos.
 """
 import re
-from unittest import mock
 
 from django.contrib.auth import get_user_model
 from rest_framework import status
@@ -100,24 +99,21 @@ class FlujoDeAltaTests(AlcanceBase):
 
         # 3. La integración crea un emisor, que cae en su cuenta sola.
         c = self.cat
-        with mock.patch(
-            "apps.emisores.serializers.emisor.consultar_nit", return_value={"nit": "x"}
-        ):
-            resp = erp.post(
-                URL_EMISORES,
-                {
-                    "razon_social": "Cliente de integracion1 S.A.S.",
-                    "tipo_identificacion": c["nit"].id,
-                    "numero_identificacion": "900000010",
-                    "tipo_organizacion": c["juridica"].id,
-                    "pais": c["colombia"].id,
-                    "departamento": c["antioquia"].id,
-                    "municipio": c["medellin"].id,
-                    "direccion": "Calle 9 # 9-9",
-                },
-                format="json",
-                **cabecera,
-            )
+        resp = erp.post(
+            URL_EMISORES,
+            {
+                "razon_social": "Cliente de integracion1 S.A.S.",
+                "tipo_identificacion": c["nit"].id,
+                "numero_identificacion": "900000010",
+                "tipo_organizacion": c["juridica"].id,
+                "pais": c["colombia"].id,
+                "departamento": c["antioquia"].id,
+                "municipio": c["medellin"].id,
+                "direccion": "Calle 9 # 9-9",
+            },
+            format="json",
+            **cabecera,
+        )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         self.assertEqual(resp.data["cuenta"], cuenta_id)
 
@@ -173,11 +169,7 @@ class AltaDeEmisoresTests(AlcanceBase):
         return datos
 
     def crear(self, payload, cabecera):
-        # El serializer consulta el RUES al validar el NIT; se evita aquí.
-        with mock.patch(
-            "apps.emisores.serializers.emisor.consultar_nit", return_value={"nit": "x"}
-        ):
-            return self.client.post(URL_EMISORES, payload, format="json", **cabecera)
+        return self.client.post(URL_EMISORES, payload, format="json", **cabecera)
 
     def test_sin_indicar_cuenta_cae_en_la_de_la_credencial(self):
         resp = self.crear(self.payload(), self._api_key(cuenta=self.cuenta))
@@ -228,12 +220,9 @@ class AltaDeEmisoresTests(AlcanceBase):
             numero_identificacion=self.emisor.numero_identificacion,
             razon_social="Cliente A renombrado",
         )
-        with mock.patch(
-            "apps.emisores.serializers.emisor.consultar_nit", return_value={"nit": "x"}
-        ):
-            resp = self.client.put(
-                f"{URL_EMISORES}{self.emisor.id}/", payload, format="json"
-            )
+        resp = self.client.put(
+            f"{URL_EMISORES}{self.emisor.id}/", payload, format="json"
+        )
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
         self.emisor.refresh_from_db()
         self.assertEqual(self.emisor.cuenta, self.cuenta)

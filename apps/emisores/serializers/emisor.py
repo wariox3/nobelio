@@ -1,11 +1,9 @@
 """Serializer del emisor."""
 from rest_framework import serializers
-from rest_framework.exceptions import APIException
 
 from apps.cuentas.models import Cuenta
 from apps.emisores.models import Emisor
 from apps.seguridad.alcance import MENSAJE_FUERA_DE_CUENTA, cuenta_de_la_credencial
-from apps.utilidades.rues import RuesNoDisponible, consultar_nit
 
 from .resolucion import ResolucionFacturacionSerializer
 
@@ -31,18 +29,12 @@ def _cuenta_de(contexto):
     return cuenta_de_la_credencial(request) if request is not None else None
 
 
-MENSAJE_DUPLICADO = "El emisor ya existe con ese tipo y número de identificación."
-
-
-class RuesNoDisponibleError(APIException):
-    """503: no se pudo verificar el NIT contra el RUES (no es 'no existe')."""
-
-    status_code = 503
-    default_detail = (
-        "No se pudo validar el NIT contra el RUES en este momento. "
-        "Intente más tarde."
-    )
-    default_code = "rues_no_disponible"
+# Nombra la cuenta a propósito: el mismo NIT puede estar dado de alta en otra
+# (ver Emisor.Meta.constraints), así que "ya existe" sin decir dónde parece un
+# error de la plataforma. Formatear con `.format(numero=..., cuenta=...)`.
+MENSAJE_DUPLICADO = (
+    "El emisor con identificación {numero} ya existe en la cuenta '{cuenta}'."
+)
 
 
 class EmisorSerializer(serializers.ModelSerializer):
@@ -66,33 +58,13 @@ class EmisorSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(MENSAJE_FUERA_DE_CUENTA)
         return value
 
-    def validate_numero_identificacion(self, value):
-        """Exige que el NIT exista en el RUES al crear/cambiar el emisor.
-
-        - No existe en el RUES -> 400 (error de validación del campo).
-        - RUES no disponible    -> 503 (no se pudo verificar).
-        """
-        # En edición, si el NIT no cambió, no se vuelve a consultar el RUES.
-        if self.instance and self.instance.numero_identificacion == value:
-            return value
-        try:
-            empresa = consultar_nit(value)
-        except RuesNoDisponible as exc:
-            raise RuesNoDisponibleError() from exc
-        if empresa is None:
-            raise serializers.ValidationError(
-                "El NIT no existe en el RUES (Registro Único Empresarial y Social)."
-            )
-        return value
-
     def validate(self, attrs):
-        """Comprueba la unicidad del emisor dentro de su cuenta.
+        """Comprueba que el emisor no esté ya dado de alta en su cuenta.
 
-        Sustituye al ``UniqueTogetherValidator`` que DRF genera solo (ver
-        ``Meta.validators``), cuyo mensaje nombra ``cuenta`` —un campo que el ERP
-        nunca envía— y aterriza en ``non_field_errors``, donde el formulario no
-        lo puede señalar. Aquí el error cuelga de ``numero_identificacion``, que
-        es el campo que hay que corregir.
+        El NIT no se contrasta con el RUES al dar de alta: es un registro ajeno
+        y a veces caído, y no puede decidir si un alta entra o no. Quien quiera
+        comprobarlo tiene ``GET /api/emisores/emisor/validar-nit/``, que además
+        devuelve los datos para autocompletar el formulario.
         """
         def valor(campo):
             return attrs.get(campo, getattr(self.instance, campo, None))
@@ -105,14 +77,31 @@ class EmisorSerializer(serializers.ModelSerializer):
             # de campo (o la vista, si es la cuenta del staff).
             return attrs
 
+        self.exigir_no_duplicado(cuenta, tipo, numero)
+        return attrs
+
+    def exigir_no_duplicado(self, cuenta, tipo, numero):
+        """La unicidad del emisor dentro de su cuenta.
+
+        Sustituye al ``UniqueTogetherValidator`` que DRF genera solo (ver
+        ``Meta.validators``), cuyo mensaje nombra ``cuenta`` —un campo que el ERP
+        nunca envía— y aterriza en ``non_field_errors``, donde el formulario no
+        lo puede señalar. Aquí el error cuelga de ``numero_identificacion``, que
+        es el campo que hay que corregir.
+        """
         repetidos = Emisor.objects.filter(
             cuenta=cuenta, tipo_identificacion=tipo, numero_identificacion=numero
         )
         if self.instance is not None:
             repetidos = repetidos.exclude(pk=self.instance.pk)
         if repetidos.exists():
-            raise serializers.ValidationError({"numero_identificacion": MENSAJE_DUPLICADO})
-        return attrs
+            raise serializers.ValidationError(
+                {
+                    "numero_identificacion": MENSAJE_DUPLICADO.format(
+                        numero=numero, cuenta=cuenta.nombre
+                    )
+                }
+            )
 
     class Meta:
         model = Emisor
