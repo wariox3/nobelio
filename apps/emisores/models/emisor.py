@@ -2,6 +2,7 @@
 from django.db import models
 
 from apps.nucleo.models import ModeloConFechas
+from apps.utilidades.nit import dv_de_entidad
 
 
 class Emisor(ModeloConFechas):
@@ -68,6 +69,12 @@ class Emisor(ModeloConFechas):
         related_name="emisores",
         verbose_name="municipio",
     )
+
+    def save(self, *args, **kwargs):
+        # El DV se calcula, no se recibe: la DIAN lo comprueba contra el NIT y
+        # un valor tecleado a mano (o traído del RUES) rechaza el documento.
+        self.digito_verificacion = dv_de_entidad(self)
+        super().save(*args, **kwargs)
 
     class Meta:
         db_table = "emi_emisor"

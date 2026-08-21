@@ -50,6 +50,11 @@ AGENCIA_DIAN = "CO, DIAN (Dirección de Impuestos y Aduanas Nacionales)"
 
 # Códigos de tributo relevantes para el CUFE/CUDE.
 COD_IVA = "01"
+
+# TaxLevelCode cuando la entidad no declara ninguna responsabilidad. Es el
+# "No aplica" de la lista TipoResponsabilidad-2.1; el antiguo "R-99-PN" ya no
+# está en esa lista y la DIAN lo rechaza.
+SIN_RESPONSABILIDAD = "ZZ"
 COD_ICA = "03"
 COD_INC = "04"
 
@@ -109,6 +114,9 @@ class ConstructorUBL:
     """Base para construir el XML UBL 2.1 de un documento electrónico DIAN."""
 
     # Parámetros que diferencian cada tipo de documento (sobreescritos abajo).
+    # cbc:ProfileID: el literal exacto que la DIAN espera para cada tipo
+    # (CAD03). Cada subclase pone el suyo.
+    profile_id = "DIAN 2.1: Factura Electrónica de Venta"
     nombre_raiz = "Invoice"
     etiqueta_tipo = "InvoiceTypeCode"
     etiqueta_linea = "InvoiceLine"
@@ -243,7 +251,7 @@ class ConstructorUBL:
     def _cabecera(self, raiz, cufe):
         _sub(raiz, "cbc", "UBLVersionID", "UBL 2.1")
         _sub(raiz, "cbc", "CustomizationID", self.customization_id)
-        _sub(raiz, "cbc", "ProfileID", "DIAN 2.1: Factura Electrónica de Venta")
+        _sub(raiz, "cbc", "ProfileID", self.profile_id)
         _sub(raiz, "cbc", "ProfileExecutionID", self.ambiente)
         _sub(raiz, "cbc", "ID", self.doc.numero)
         _sub(raiz, "cbc", "UUID", cufe, schemeID=str(self.ambiente), schemeName=self.scheme_name)
@@ -432,8 +440,13 @@ class ConstructorUBL:
     # -- Auxiliares ---------------------------------------------------------
 
     def _responsabilidades(self, entidad) -> str:
+        """TaxLevelCode: los códigos de la lista TipoResponsabilidad, o ``ZZ``.
+
+        ``ZZ`` ("No aplica") es el código de la 2.1; ``R-99-PN`` era el de la
+        versión anterior y la DIAN lo rechaza con CAJ26/CAK26.
+        """
         codigos = [r.codigo for r in entidad.responsabilidades.all()]
-        return ";".join(codigos) if codigos else "R-99-PN"
+        return ";".join(codigos) if codigos else SIN_RESPONSABILIDAD
 
     def _codigo_organizacion(self, entidad) -> str:
         return entidad.tipo_organizacion.codigo if entidad.tipo_organizacion else "1"
@@ -445,6 +458,8 @@ class ConstructorUBL:
 
 class ConstructorFacturaUBL(ConstructorUBL):
     """Factura electrónica de venta (Invoice, InvoiceTypeCode=01, CUFE)."""
+
+    profile_id = "DIAN 2.1: Factura Electrónica de Venta"
 
     def _linea_extra(self, il, linea):
         _sub(il, "cbc", "FreeOfChargeIndicator", "false")
@@ -476,6 +491,7 @@ class _ConstructorNotaUBL(ConstructorUBL):
 class ConstructorNotaCredito(_ConstructorNotaUBL):
     """Nota crédito (CreditNote, CreditNoteTypeCode=91, CUDE)."""
 
+    profile_id = "DIAN 2.1: Nota Crédito de Factura Electrónica de Venta"
     nombre_raiz = "CreditNote"
     etiqueta_tipo = "CreditNoteTypeCode"
     etiqueta_linea = "CreditNoteLine"
@@ -487,6 +503,7 @@ class ConstructorNotaCredito(_ConstructorNotaUBL):
 class ConstructorNotaDebito(_ConstructorNotaUBL):
     """Nota débito (DebitNote, DebitNoteTypeCode=92, CUDE)."""
 
+    profile_id = "DIAN 2.1: Nota Débito de Factura Electrónica de Venta"
     nombre_raiz = "DebitNote"
     etiqueta_tipo = None  # el UBL DebitNote no define un elemento de tipo
     etiqueta_linea = "DebitNoteLine"

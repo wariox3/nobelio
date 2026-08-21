@@ -168,6 +168,13 @@ CORS_ALLOW_CREDENTIALS = env.bool("CORS_ALLOW_CREDENTIALS", default=False)
 #   1 = Producción
 DIAN_ENVIRONMENT = env.int("DIAN_ENVIRONMENT", default=2)
 
+# Sondeo del Set de Pruebas. SendTestSetAsync es asíncrono: tras enviar hay que
+# preguntar por el resultado hasta que la DIAN termine de procesar. La
+# habilitación espera dentro de la propia petición HTTP, así que el techo
+# (intentos × espera) tiene que caber en el timeout del proxy que haya delante.
+DIAN_SET_PRUEBAS_INTENTOS = env.int("DIAN_SET_PRUEBAS_INTENTOS", default=10)
+DIAN_SET_PRUEBAS_ESPERA = env.float("DIAN_SET_PRUEBAS_ESPERA", default=6.0)
+
 # Endpoints de los Web Services de la DIAN por ambiente.
 DIAN_WSDL = {
     # Habilitación

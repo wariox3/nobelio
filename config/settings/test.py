@@ -17,3 +17,7 @@ B2_HABILITADO = False
 
 # Archivos de prueba en un temporal aislado (no en el repo).
 MEDIA_ROOT = tempfile.mkdtemp(prefix="nobelio-test-media-")
+
+# Sin esperas reales en el sondeo del Set de Pruebas.
+DIAN_SET_PRUEBAS_INTENTOS = 3
+DIAN_SET_PRUEBAS_ESPERA = 0

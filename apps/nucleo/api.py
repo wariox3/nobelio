@@ -85,3 +85,19 @@ def exception_handler(exc, context):
     detail, errores = _normalizar(respuesta.data)
     respuesta.data = {"detail": detail, "errores": errores}
     return respuesta
+
+
+def error_pasarela_dian(exc):
+    """Convierte un fallo de red con la DIAN en un 502 con el fault dentro.
+
+    La DIAN devuelve el motivo real en el ``soap:Fault`` del cuerpo, no en el
+    código HTTP: sin extraerlo, todos los errores se leen igual ("502").
+    """
+    import requests
+
+    from apps.dian import soap
+
+    fault = ""
+    if isinstance(exc, requests.HTTPError) and exc.response is not None:
+        fault = soap.extraer_fault(exc.response.content)
+    return ErrorPasarela(f"Error al comunicarse con la DIAN: {fault or exc}")

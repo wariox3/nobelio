@@ -6,19 +6,11 @@ from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from apps.dian import representacion, servicios, soap
+from apps.dian import representacion, servicios
 from apps.documentos import serializers
 from apps.documentos.models import Documento
-from apps.nucleo.api import ErrorPasarela, ErrorSolicitud
+from apps.nucleo.api import ErrorSolicitud, error_pasarela_dian
 from apps.seguridad.alcance import AlcanceEmisorMixin
-
-
-def _error_pasarela(exc):
-    """Convierte un error de comunicación con la DIAN en un 502 con mensaje claro."""
-    fault = ""
-    if isinstance(exc, requests.HTTPError) and exc.response is not None:
-        fault = soap.extraer_fault(exc.response.content)
-    return ErrorPasarela(f"Error al comunicarse con la DIAN: {fault or exc}")
 
 
 class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
@@ -85,7 +77,7 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         except servicios.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
         except requests.RequestException as exc:
-            raise _error_pasarela(exc)
+            raise error_pasarela_dian(exc)
         return Response({
             "estado": documento.estado.nombre,
             "track_id": respuesta.track_id,
@@ -108,7 +100,7 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         except servicios.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
         except requests.RequestException as exc:
-            raise _error_pasarela(exc)
+            raise error_pasarela_dian(exc)
         return Response({
             "estado": documento.estado.nombre,  # estado local (sin cambios)
             "es_valido": respuesta.es_valido,
@@ -129,7 +121,7 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         except servicios.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
         except requests.RequestException as exc:
-            raise _error_pasarela(exc)
+            raise error_pasarela_dian(exc)
         return Response({
             "estado": documento.estado.nombre,
             "es_valido": respuesta.es_valido,

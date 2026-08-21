@@ -1,4 +1,5 @@
 """API del emisor."""
+import requests
 from django.db import transaction
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -7,6 +8,7 @@ from rest_framework.response import Response
 
 from apps.dian import servicios as dian
 from apps.emisores import models, serializers
+from apps.nucleo.api import ErrorSolicitud, error_pasarela_dian
 from apps.seguridad.alcance import (
     MENSAJE_SIN_CUENTA,
     AlcanceEmisorMixin,
@@ -64,61 +66,80 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
             cuenta = serializer.validated_data.get("cuenta") or cuenta
         serializer.save(cuenta=cuenta)
 
-    @action(detail=False, methods=["post"], url_path="habilitar")
-    def habilitar(self, request):
-        """Habilita al emisor: registra su software y corre el Set de Pruebas.
+    @action(detail=False, methods=["post"], url_path="crear-habilitacion")
+    def crear_habilitacion(self, request):
+        """Arranca la habilitación: software, resolución y documentos de prueba.
 
-        ``POST /api/emisores/emisor/habilitar/``
+        ``POST /api/emisores/emisor/crear-habilitacion/``
 
         ```json
         {"emisor": 2, "identificador": "94966156-8084-428b-b1b1-a903a053aed1",
          "pin": "12345", "test_set_id": "0d26ba8c-8584-4199-b210-2ddc063c3ddd"}
         ```
 
-        Dos pasos en una llamada:
+Todo en una llamada:
 
         1. Registra el software (``identificador``, ``pin`` y ``test_set_id``
-           son los que entrega la DIAN) y jubila el anterior del emisor.
-        2. Emite contra la DIAN la factura y la nota crédito del Set de Pruebas
-           (``SendTestSetAsync``) y deja al emisor con ``habilitado_facturacion``
-           en ``true``. Ni los documentos ni la resolución con la que se numeran
-           quedan registrados: son de la habilitación, no del emisor.
+           son los que entrega la DIAN; los tres obligatorios) y jubila el
+           anterior del emisor. Si el ``identificador`` ya está registrado
+           responde 400: el SoftwareID se da de alta una sola vez.
+        2. Da de alta la resolución del Set de Pruebas y emite con ella la
+           factura: la envía, y **espera consultando a la DIAN** hasta que la
+           acepte (``SendTestSetAsync`` es asíncrono).
+        3. Solo entonces crea y envía la nota crédito —que referencia a esa
+           factura y la DIAN la rechazaría si aún no la tuviera registrada— y
+           espera igualmente su aceptación.
+        4. Con las dos aceptadas marca ``habilitado_facturacion`` en el emisor y
+           ``set_pruebas_aceptado`` en el software.
+
+        La respuesta son los ids de los dos documentos, ya en ``aceptado``:
+
+        ```json
+        {"factura": "3f2b…", "nota_credito": "9c41…"}
+        ```
+
+        Con ellos se consulta todo lo demás en
+        ``GET /api/documentos/documento/{id}/``.
+
+        Es una llamada **lenta**: espera a la DIAN dos veces. El techo son
+        ``DIAN_SET_PRUEBAS_INTENTOS × DIAN_SET_PRUEBAS_ESPERA`` por documento.
 
         El emisor tiene que traer ya su certificado: es lo que firma el paso 2,
         y sin él el paso 1 responde 400.
 
-        Responde 201 con ``{"software": {...}, "set_pruebas": {...}}``; el
-        ``pin`` no vuelve. Si la DIAN no responde, el software queda registrado
-        igual y el fallo se cuenta en ``set_pruebas.error``, para reintentar sin
-        volver a empezar. ``consecutivo`` (opcional) fuerza el número del par de
-        prueba, que por defecto arranca en el rango de la resolución de pruebas.
+        **Es todo o nada**: si la DIAN rechaza cualquiera de los dos, o no da
+        veredicto a tiempo, no queda registrado nada —ni el software, ni la
+        resolución, ni los documentos— y responde 400 (o 502 si no contesta).
+        Así reintentar es repetir la misma llamada con los mismos datos.
+
+        ``consecutivo`` (opcional) fuerza el número del par de prueba.
         """
         datos = request.data
-        software = serializers.SoftwareDianSerializer(data=datos)
+        software = serializers.HabilitarSerializer(data=datos)
         software.is_valid(raise_exception=True)
         emisor = software.validated_data["emisor"]
         exigir_alcance(request, emisor)
 
-        with transaction.atomic():
-            models.SoftwareDian.objects.filter(
-                emisor=emisor, activo=True
-            ).update(activo=False)
-            software.save(activo=True)
-
         consecutivo = datos.get("consecutivo")
+        # Todo o nada: si la DIAN no responde no puede quedar ni el software ni
+        # la resolución ni los documentos. Media habilitación es peor que
+        # ninguna —el identificador quedaría tomado y el consecutivo gastado—,
+        # y así reintentar es volver a llamar con los mismos datos.
         try:
-            set_pruebas = dian.emitir_set_pruebas(
-                emisor, consecutivo=int(consecutivo) if consecutivo else None
-            )
+            with transaction.atomic():
+                models.SoftwareDian.objects.filter(
+                    emisor=emisor, activo=True
+                ).update(activo=False)
+                software.save(activo=True)
+                documentos = dian.emitir_set_pruebas(
+                    emisor, consecutivo=int(consecutivo) if consecutivo else None
+                )
         except dian.ErrorEmision as exc:
-            # El software queda registrado: el fallo es del envío, y repetir la
-            # llamada reintenta solo eso.
-            set_pruebas = {"error": str(exc)}
+            raise ErrorSolicitud(str(exc))
+        except requests.RequestException as exc:
+            raise error_pasarela_dian(exc)
 
-        return Response(
-            {"software": software.data, "set_pruebas": set_pruebas},
-            status=status.HTTP_201_CREATED,
-        )
+        return Response(documentos, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=["get"], url_path="validar-nit")
     def validar_nit(self, request):

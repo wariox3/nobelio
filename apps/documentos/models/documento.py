@@ -1,8 +1,19 @@
 """Documento electrónico: factura de venta, notas, documento soporte."""
+from django.conf import settings
 from django.db import models
 
 from apps.nucleo.models import ModeloConFechas, ModeloUUID
 from apps.utilidades.almacenamiento import almacenamiento_backblaze
+
+
+def ambiente_por_defecto():
+    """El ambiente DIAN configurado en el servidor al crear el documento.
+
+    Callable y no ``settings.DIAN_ENVIRONMENT`` a secas para que la migración
+    guarde la referencia a la función y no el valor que hubiera el día que se
+    generó: pasar a producción es cambiar el ajuste, no migrar la base.
+    """
+    return settings.DIAN_ENVIRONMENT
 
 
 def _ruta_artefacto(instance, filename):
@@ -22,6 +33,10 @@ class Documento(ModeloUUID, ModeloConFechas):
     ``documento_referencia``.
     """
 
+    class Ambiente(models.IntegerChoices):
+        PRODUCCION = 1, "Producción"
+        PRUEBAS = 2, "Habilitación (Set de Pruebas)"
+
     # ===================== Atributos =====================
     # Identificación del documento
     prefijo = models.CharField("prefijo", max_length=10, blank=True)
@@ -33,6 +48,11 @@ class Documento(ModeloUUID, ModeloConFechas):
     )
 
     # Identificadores DIAN
+    ambiente = models.PositiveSmallIntegerField(
+        "ambiente DIAN", choices=Ambiente.choices, default=ambiente_por_defecto,
+        help_text="ProfileExecutionID del XML: 1 producción, 2 habilitación. "
+        "Se fija al crear el documento y no cambia después.",
+    )
     cufe_cude = models.CharField(
         "CUFE/CUDE", max_length=96, blank=True,
         help_text="Hash SHA-384 (96 hex). CUFE en facturas, CUDE en notas/soporte.",

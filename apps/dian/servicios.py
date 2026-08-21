@@ -11,12 +11,14 @@ pueden inyectar para facilitar las pruebas sin red ni .p12 reales.
 from __future__ import annotations
 
 import re
+import time
 from datetime import date
 from decimal import Decimal
 
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.db import transaction
+from django.db.models import Max
 from django.utils import timezone
 
 from apps.dian import firma, soap, ubl
@@ -357,10 +359,6 @@ def actualizar_estado(documento, *, cliente=None, ambiente=None, **cred):
 # Set de Pruebas (habilitación)
 # ---------------------------------------------------------------------------
 
-class _Descartar(Exception):
-    """Señal interna para deshacer los documentos de prueba."""
-
-
 def _catalogo(Modelo, codigo, que):
     try:
         return Modelo.objects.get(codigo=codigo)
@@ -380,8 +378,8 @@ def _tipo_documento(codigo):
 
 # Resolución del Set de Pruebas. Es la misma para todo el que se habilita —la
 # publica la DIAN con su clave técnica— y no tiene nada que ver con la
-# numeración real del emisor, así que no se guarda: se arma al vuelo, numera los
-# dos documentos de prueba, entra en el CUFE y se va con ellos.
+# numeración real del emisor: queda dada de alta a nombre suyo para que los dos
+# documentos de la habilitación puedan colgar de ella.
 RESOLUCION_PRUEBAS = {
     "numero_resolucion": "18760000001",
     "fecha_resolucion": date(2026, 6, 29),
@@ -395,11 +393,12 @@ RESOLUCION_PRUEBAS = {
 
 
 def _resolucion_de_pruebas(emisor):
-    """La resolución de habilitación, dentro de lo que luego se deshace.
+    """La resolución con la que se numeran los documentos de la habilitación.
 
-    Vive en la base solo mientras dura la emisión porque los documentos la
-    referencian por clave ajena; al revertir la transacción desaparece con
-    ellos. La numeración real del emisor no se toca.
+    Queda guardada: los documentos de prueba la referencian por clave ajena y
+    ahora persisten, así que ella también tiene que hacerlo. La numeración real
+    del emisor no se toca —esta es una resolución aparte, con su propio prefijo
+    ``SETP`` y su rango.
 
     Se usa ``get_or_create`` porque el emisor puede tener ya esa misma
     resolución dada de alta (importada de la DIAN durante la habilitación):
@@ -419,9 +418,15 @@ def _resolucion_de_pruebas(emisor):
     return resolucion
 
 
+@transaction.atomic
 def _armar_documento(emisor, *, tipo, resolucion, consecutivo, referencia=None,
                      valor=Decimal("1000.00"), iva=Decimal("190.00")):
-    """Crea en la base un documento de prueba completo (se deshace después)."""
+    """Crea en la base un documento de prueba completo, con sus líneas.
+
+    Atómico para que documento, adquiriente y líneas entren juntos o no entren.
+    El caller (``crear-habilitacion/``) envuelve además toda la habilitación en
+    su propia transacción: si la DIAN falla a mitad no queda nada.
+    """
     from apps.catalogos.models import Moneda, Tributo, UnidadMedida
 
     prefijo = resolucion.prefijo if referencia is None else ""
@@ -429,6 +434,9 @@ def _armar_documento(emisor, *, tipo, resolucion, consecutivo, referencia=None,
         documento_tipo=tipo,
         estado=_estado(DocumentoEstado.Nombre.BORRADOR),
         emisor=emisor,
+        # El Set de Pruebas solo existe en habilitación: es ambiente 2 por
+        # definición, aunque el servidor ya estuviera configurado en producción.
+        ambiente=Documento.Ambiente.PRUEBAS,
         resolucion=resolucion if referencia is None else None,
         documento_referencia=referencia,
         moneda=_catalogo(Moneda, "COP", "la moneda COP"),
@@ -442,16 +450,21 @@ def _armar_documento(emisor, *, tipo, resolucion, consecutivo, referencia=None,
     )
     # El adquiriente del documento de prueba es el propio emisor: evita depender
     # de datos de un tercero y de códigos de catálogo que quizá no estén.
-    Adquiriente.objects.create(
+    adquiriente = Adquiriente.objects.create(
         documento=documento,
         razon_social=emisor.razon_social,
         tipo_identificacion=emisor.tipo_identificacion,
         numero_identificacion=emisor.numero_identificacion,
-        digito_verificacion=emisor.digito_verificacion,
         tipo_organizacion=emisor.tipo_organizacion,
         pais=emisor.pais, departamento=emisor.departamento,
         municipio=emisor.municipio, direccion=emisor.direccion,
+        # CAK55: sin correo la DIAN notifica; el del emisor sirve, que además
+        # es quien recibe su propia factura de prueba.
+        correo=emisor.correo, telefono=emisor.telefono,
     )
+    # CAK26: sin responsabilidades caería en el "ZZ" del constructor UBL. Como
+    # el adquiriente es el propio emisor, las suyas son las que corresponden.
+    adquiriente.responsabilidades.set(emisor.responsabilidades.all())
     detalle = DocumentoDetalle.objects.create(
         documento=documento, numero_linea=1,
         descripcion="Servicio de prueba", cantidad=Decimal("1"),
@@ -465,55 +478,111 @@ def _armar_documento(emisor, *, tipo, resolucion, consecutivo, referencia=None,
     return documento
 
 
-def _emitir_prueba(documento, *, software, firmador, cliente, ambiente):
-    """Genera, firma y envía al Set de Pruebas. No guarda nada del documento."""
-    constructor = ubl.constructor_para(
-        documento,
-        software=software,
-        resolucion=documento.resolucion,
-        ambiente=ambiente,
-        clave_tecnica=documento.resolucion.clave_tecnica if documento.resolucion else "",
+def _emitir_prueba(documento, *, firmador, cliente, ambiente):
+    """Firma y envía un documento de la habilitación por el camino de siempre.
+
+    Es el mismo pipeline que cualquier factura (``generar_y_firmar`` y luego
+    ``enviar_a_dian``), y a propósito: los documentos del Set de Pruebas quedan
+    guardados con su XML, su CUFE y su track_id, así que se consultan después
+    con los endpoints de siempre. Todo lo que hace falta saber queda en la fila.
+
+    El ``ProfileExecutionID`` del XML sale de ``documento.ambiente`` y no del
+    ajuste del servidor: el Set de Pruebas es ambiente 2 aunque el servidor ya
+    esté configurado en producción. El ``ambiente`` recibido sigue mandando en
+    el envío, que es a qué URL de la DIAN se habla.
+    """
+    generar_y_firmar(documento, firmador=firmador, ambiente=documento.ambiente)
+    enviar_a_dian(documento, cliente=cliente, ambiente=ambiente)
+
+
+def _siguiente_consecutivo_pruebas(emisor):
+    """El primer número libre del rango de pruebas para este emisor.
+
+    Los documentos de la habilitación ahora se guardan, así que reintentar no
+    puede reutilizar los mismos números: chocarían con
+    ``documento_numero_unico_por_emisor``. Cada intento continúa donde quedó el
+    anterior.
+    """
+    ultimo = Documento.objects.filter(
+        emisor=emisor,
+        consecutivo__gte=RESOLUCION_PRUEBAS["rango_desde"],
+        consecutivo__lte=RESOLUCION_PRUEBAS["rango_hasta"],
+    ).aggregate(ultimo=Max("consecutivo"))["ultimo"]
+    if ultimo is None:
+        return RESOLUCION_PRUEBAS["rango_desde"]
+    return ultimo + 1
+
+
+def _exigir_numeracion_libre(emisor, primero):
+    """Corta antes de emitir si los dos números ya están usados.
+
+    Solo puede pasar con un ``consecutivo`` forzado a mano: el automático ya
+    busca hueco. Sin esto saltaría un IntegrityError a mitad del envío, con la
+    factura ya en la DIAN.
+    """
+    if primero + 1 > RESOLUCION_PRUEBAS["rango_hasta"]:
+        raise ErrorEmision(
+            f"El consecutivo {primero} se sale del rango del Set de Pruebas "
+            f"({RESOLUCION_PRUEBAS['rango_desde']}-{RESOLUCION_PRUEBAS['rango_hasta']})."
+        )
+    tomados = sorted(Documento.objects.filter(
+        emisor=emisor, consecutivo__in=(primero, primero + 1),
+    ).values_list("numero", flat=True))
+    if tomados:
+        raise ErrorEmision(
+            f"El emisor ya tiene documentos con esa numeración de pruebas "
+            f"({', '.join(tomados)}). Indique otro 'consecutivo' o deje que lo "
+            f"elija el sistema."
+        )
+
+
+def _esperar_aceptacion(documento, *, cliente, ambiente, intentos, espera):
+    """Consulta a la DIAN hasta que el documento quede aceptado.
+
+    ``SendTestSetAsync`` no dictamina en el envío, así que hay que preguntar.
+    Se sale por tres sitios: aceptado (bien), rechazado (la DIAN ya decidió y
+    reintentar no cambiaría nada) o agotados los intentos.
+
+    La primera consulta va sin esperar: si la DIAN fue rápida, no tiene sentido
+    dormir para nada.
+    """
+    for intento in range(intentos):
+        if intento:
+            time.sleep(espera)
+        actualizar_estado(documento, cliente=cliente, ambiente=ambiente)
+        nombre = documento.estado.nombre
+        if nombre == DocumentoEstado.Nombre.ACEPTADO:
+            return
+        if nombre == DocumentoEstado.Nombre.RECHAZADO:
+            motivos = "; ".join(
+                f"{e.regla}: {e.mensaje}" if e.regla else e.mensaje
+                for e in documento.errores.all()
+            )
+            raise ErrorEmision(
+                f"La DIAN rechazó {documento.documento_tipo.nombre} "
+                f"{documento.numero} del Set de Pruebas: {motivos or 'sin detalle'}"
+            )
+    raise ErrorEmision(
+        f"La DIAN no dio un veredicto para {documento.numero} tras "
+        f"{intentos} consultas. Vuelva a intentar la habilitación más tarde."
     )
-    xml = constructor.generar_xml()
-    documento.cufe_cude = constructor.cufe
-    xml_firmado = firmador.firmar(xml)
-    respuesta = cliente.enviar_set_pruebas(
-        xml_firmado, f"{documento.numero}.xml", software.test_set_id
-    )
-    return {
-        "numero": documento.numero,
-        "cufe_cude": constructor.cufe,
-        "track_id": respuesta.track_id,
-        "es_valido": respuesta.es_valido,
-        "codigo_estado": respuesta.codigo_estado,
-        "descripcion_estado": respuesta.descripcion_estado,
-        "errores": respuesta.errores,
-    }
 
 
 def emitir_set_pruebas(emisor, *, consecutivo=None, cliente=None, firmador=None,
                        ambiente=None, **cred):
-    """Emite la factura y la nota crédito del Set de Pruebas, sin registrarlas.
+    """Corre el Set de Pruebas completo y deja al emisor habilitado.
 
-    Los dos documentos existen solo para que la DIAN acepte la habilitación, así
-    que no tienen por qué quedar en el histórico del emisor: se construyen en la
-    base —el XML se arma leyendo las líneas y el adquiriente, que son filas
-    relacionadas—, se firman, se envían con ``SendTestSetAsync`` y al final se
-    deshace todo. Tampoco se sube nada a B2 ni se guardan los rechazos.
+    Los dos documentos van **en secuencia y no a la vez**: la nota referencia a
+    la factura, y la DIAN rechaza la referencia (CBG04a) si todavía no ha
+    terminado de registrar la factura. Así que se envía la factura, se espera su
+    aceptación, y solo entonces se crea y envía la nota.
 
-    Lo único que queda es lo que devuelve: número, CUFE/CUDE, ZipKey y el
-    veredicto de la DIAN para cada uno.
+    Es todo o nada. Si cualquiera de las dos se rechaza, o la DIAN no contesta a
+    tiempo, se lanza ``ErrorEmision`` sin tocar ``habilitado_facturacion``; quien
+    llama envuelve esto en una transacción, de modo que tampoco quedan el
+    software, la resolución ni los documentos.
 
-    La resolución es la del Set de Pruebas (``RESOLUCION_PRUEBAS``), la misma
-    para todos y con la clave técnica que publica la DIAN: no se guarda ni tiene
-    que ver con la numeración real del emisor. El consecutivo arranca en el
-    principio de su rango y la nota usa el siguiente; repetir la llamada reenvía
-    los mismos números y la DIAN contesta "documento procesado anteriormente"
-    (regla 90), así que para reenviar pásalos en ``consecutivo``.
-
-    Lo único que persiste es ``emisor.habilitado_facturacion``, que queda en
-    ``True`` al enviar: es lo que distingue al emisor recién dado de alta del
-    que ya pasó por el Set de Pruebas.
+    Devuelve los ids de los dos documentos, ya en estado ``aceptado``.
     """
     ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
     if not emisor.activo:
@@ -530,40 +599,39 @@ def emitir_set_pruebas(emisor, *, consecutivo=None, cliente=None, firmador=None,
     if cliente is None:
         cliente = construir_cliente_emisor(emisor, ambiente, **cred)
 
-    primero = consecutivo or RESOLUCION_PRUEBAS["rango_desde"]
-    resultados = {}
-    try:
-        with transaction.atomic():
-            resolucion = _resolucion_de_pruebas(emisor)
-            factura = _armar_documento(
-                emisor,
-                tipo=_tipo_documento(DocumentoTipo.Codigo.FACTURA_VENTA),
-                resolucion=resolucion, consecutivo=primero,
-            )
-            resultados["factura"] = _emitir_prueba(
-                factura, software=software, firmador=firmador,
-                cliente=cliente, ambiente=ambiente,
-            )
-            # La nota corrige a la factura recién emitida: la DIAN exige que la
-            # referencia (número y CUFE) sea de un documento real.
-            nota = _armar_documento(
-                emisor,
-                tipo=_tipo_documento(DocumentoTipo.Codigo.NOTA_CREDITO),
-                resolucion=resolucion, consecutivo=primero + 1, referencia=factura,
-            )
-            resultados["nota_credito"] = _emitir_prueba(
-                nota, software=software, firmador=firmador,
-                cliente=cliente, ambiente=ambiente,
-            )
-            raise _Descartar
-    except _Descartar:
-        pass
+    espera = {
+        "cliente": cliente,
+        "ambiente": ambiente,
+        "intentos": settings.DIAN_SET_PRUEBAS_INTENTOS,
+        "espera": settings.DIAN_SET_PRUEBAS_ESPERA,
+    }
 
-    # Fuera de la transacción, que se deshizo: los documentos de prueba no
-    # quedan, pero el hecho de que el emisor ya pasó por el Set de Pruebas sí.
-    # Se marca por haberlos enviado, no por el veredicto: SendTestSetAsync es
-    # asíncrono y el resultado se consulta después.
-    if not emisor.habilitado_facturacion:
-        emisor.habilitado_facturacion = True
-        emisor.save(update_fields=["habilitado_facturacion", "actualizado_en"])
-    return resultados
+    primero = consecutivo or _siguiente_consecutivo_pruebas(emisor)
+    _exigir_numeracion_libre(emisor, primero)
+    resolucion = _resolucion_de_pruebas(emisor)
+
+    factura = _armar_documento(
+        emisor,
+        tipo=_tipo_documento(DocumentoTipo.Codigo.FACTURA_VENTA),
+        resolucion=resolucion, consecutivo=primero,
+    )
+    _emitir_prueba(factura, firmador=firmador, cliente=cliente, ambiente=ambiente)
+    _esperar_aceptacion(factura, **espera)
+
+    # Solo ahora: la DIAN ya tiene registrada la factura que esta nota corrige.
+    nota = _armar_documento(
+        emisor,
+        tipo=_tipo_documento(DocumentoTipo.Codigo.NOTA_CREDITO),
+        resolucion=resolucion, consecutivo=primero + 1, referencia=factura,
+    )
+    _emitir_prueba(nota, firmador=firmador, cliente=cliente, ambiente=ambiente)
+    _esperar_aceptacion(nota, **espera)
+
+    # Las dos aceptadas: el emisor ya puede facturar y el software deja de
+    # hablarle al Set de Pruebas para pasar a SendBillSync.
+    software.set_pruebas_aceptado = True
+    software.save(update_fields=["set_pruebas_aceptado", "actualizado_en"])
+    emisor.habilitado_facturacion = True
+    emisor.save(update_fields=["habilitado_facturacion", "actualizado_en"])
+
+    return {"factura": str(factura.pk), "nota_credito": str(nota.pk)}
