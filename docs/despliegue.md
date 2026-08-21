@@ -1,8 +1,8 @@
 # Desplegar en producción (manual, sin contenedores)
 
 Guía paso a paso para dejar Nobelio sirviendo en `https://api.nobelio.co` desde
-un VPS Ubuntu 24.04: PostgreSQL nativo, gunicorn bajo systemd y Caddy como
-proxy con HTTPS automático. La contraparte de
+un VPS Ubuntu 24.04: PostgreSQL nativo, gunicorn bajo systemd y nginx como
+proxy, con certificado de Let's Encrypt vía certbot. La contraparte de
 [entorno-desarrollo.md](entorno-desarrollo.md), que cubre la máquina de trabajo.
 
 Sustituye `api.nobelio.co` por tu dominio en todos los comandos.
@@ -11,28 +11,41 @@ Sustituye `api.nobelio.co` por tu dominio en todos los comandos.
 
 ## 0. Antes de empezar
 
-- Un VPS con Ubuntu 24.04. Referencia: 3 vCPU / 4 GB. Conviene una región
+- Un VPS con Ubuntu 24.04 — compruébalo antes de empezar con `lsb_release -ds`.
+  En 22.04 no existe `python3.12` en los repos y el proyecto pide 3.12+; si ya
+  estás en jammy, o reinstalas o tiras del PPA `deadsnakes`. Referencia: 3 vCPU / 4 GB. Conviene una región
   US‑East: el bucket B2 del proyecto está en `us-east-005`, y por ahí pasan los
   `.p12` y los XML firmados.
 - El registro DNS **A** del dominio apuntando a la IP del VPS, **resolviendo ya**.
   Sin eso Let's Encrypt no emite el certificado y el paso 7 falla.
-- Acceso SSH como root para el primer arranque.
+- Acceso SSH como root con llave pública. Toda la guía se ejecuta como root:
+  el único usuario que creamos es el que corre el servicio, y ése no inicia
+  sesión.
 
 ---
 
 ## 1. Servidor base
 
+El usuario `nobelio` existe para que gunicorn no corra como root, no para
+entrar por SSH. Por eso se crea como usuario de sistema: sin contraseña, sin
+shell y sin sudo. Si algún día alguien roba la ejecución del proceso, no hereda
+una sesión utilizable.
+
 ```bash
-# como root, la primera vez
-adduser nobelio && usermod -aG sudo nobelio
+adduser --system --group --no-create-home --shell /usr/sbin/nologin nobelio
 ```
 
-Copia tu llave SSH al nuevo usuario y endurece `/etc/ssh/sshd_config`:
+La administración sigue siendo root, así que el endurecimiento de
+`/etc/ssh/sshd_config` va sobre esa cuenta: llave sí, contraseña no.
 
 ```
-PermitRootLogin no
+PermitRootLogin prohibit-password
 PasswordAuthentication no
 ```
+
+Confirma que tu llave esté en `/root/.ssh/authorized_keys` **antes** de recargar
+SSH, y deja la sesión actual abierta hasta comprobar que puedes entrar en otra:
+con `PasswordAuthentication no` y sin llave válida te quedas fuera del VPS.
 
 ```bash
 systemctl restart ssh
@@ -64,12 +77,22 @@ la misma máquina y no hay razón para exponer el puerto 5432.
 ## 3. Código y entorno virtual
 
 ```bash
-sudo mkdir -p /opt/nobelio && sudo chown nobelio:nobelio /opt/nobelio
 git clone https://github.com/wariox3/nobelio.git /opt/nobelio
 cd /opt/nobelio
 
 python3.12 -m venv .venv
 .venv/bin/pip install -r requirements.txt
+```
+
+El código queda de root y el servicio solo lo lee: `nobelio` no puede reescribir
+la aplicación que ejecuta. Lo único que necesita escribir es `media/`, y solo
+como respaldo — con B2 configurado los XML y PDF ni siquiera pasan por el disco.
+
+```bash
+mkdir -p /opt/nobelio/media
+chown -R root:nobelio /opt/nobelio
+chmod -R g+rX /opt/nobelio
+chown -R nobelio:nobelio /opt/nobelio/media
 ```
 
 `gunicorn` ya viene en `requirements.txt`; no hace falta instalarlo aparte.
@@ -115,8 +138,12 @@ B2_APP_KEY=<applicationKey>
 RESPALDO_PASSPHRASE=<clave larga>
 ```
 
+El archivo lleva la clave de la BD, las de B2 y la del respaldo. Lo lee root
+para los comandos de gestión y `nobelio` para correr el servicio; nadie más:
+
 ```bash
-chmod 600 /opt/nobelio/.env
+chown root:nobelio /opt/nobelio/.env
+chmod 640 /opt/nobelio/.env
 ```
 
 ---
@@ -144,7 +171,7 @@ administración ni browsable API. No hay estáticos que servir.
 ## 6. gunicorn con systemd
 
 ```bash
-sudo tee /etc/systemd/system/nobelio.service > /dev/null <<'EOF'
+tee /etc/systemd/system/nobelio.service > /dev/null <<'EOF'
 [Unit]
 Description=Nobelio — API de facturación electrónica DIAN
 After=network.target postgresql.service
@@ -172,15 +199,15 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/nobelio
+ReadWritePaths=/opt/nobelio/media
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-sudo systemctl daemon-reload
-sudo systemctl enable --now nobelio
-sudo systemctl status nobelio
+systemctl daemon-reload
+systemctl enable --now nobelio
+systemctl status nobelio
 ```
 
 Dos decisiones que importan:
@@ -191,51 +218,116 @@ Dos decisiones que importan:
 - **`--timeout 120`**: por encima de lo que la DIAN llega a tardar. Con el
   timeout por defecto (30 s) gunicorn mataría envíos que iban bien.
 
+`User=nobelio` es la cuenta de sistema del paso 1; systemd no necesita que
+tenga shell para lanzar el proceso. Y como el resto de `/opt/nobelio` queda
+fuera de `ReadWritePaths`, el servicio no puede tocar su propio código ni el
+`.env`.
+
 Solo `DJANGO_SETTINGS_MODULE` va en el unit. El resto lo lee `django-environ` del
 `.env`; y como las variables reales del entorno tienen prioridad sobre ese
 archivo, no hay conflicto entre ambas vías.
 
 ---
 
-## 7. Caddy como proxy
+## 7. nginx como proxy
 
 ```bash
-sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
-  | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
-  | sudo tee /etc/apt/sources.list.d/caddy-stable.list
-sudo apt update && sudo apt install -y caddy
+apt install -y nginx certbot python3-certbot-nginx
+```
 
-sudo tee /etc/caddy/Caddyfile > /dev/null <<'EOF'
-api.nobelio.co {
-	encode gzip
+El sitio se escribe primero **solo en HTTP**: certbot necesita el puerto 80 para
+resolver el reto de Let's Encrypt, y es él quien añade después el bloque TLS.
 
-	# El .p12 y los PDF son los cuerpos más grandes que pasan por aquí.
-	request_body {
-		max_size 10MB
-	}
+```bash
+tee /etc/nginx/sites-available/nobelio > /dev/null <<'EOF'
+server {
+    listen 80;
+    listen [::]:80;
+    server_name api.nobelio.co;
 
-	reverse_proxy 127.0.0.1:8000 {
-		header_up X-Forwarded-Proto {scheme}
+    # El .p12 y los PDF son los cuerpos más grandes que pasan por aquí.
+    client_max_body_size 10M;
 
-		# Por encima del timeout de gunicorn, para que el que corte sea él.
-		transport http {
-			read_timeout 150s
-		}
-	}
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Por encima del timeout de gunicorn (120 s), para que el que corte sea él.
+        proxy_read_timeout 150s;
+        proxy_connect_timeout 10s;
+    }
 }
 EOF
 
-sudo systemctl reload caddy
+ln -s /etc/nginx/sites-available/nobelio /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx
 ```
 
-`header_up X-Forwarded-Proto` no es opcional: `config/settings/prod.py` define
-`SECURE_PROXY_SSL_HEADER` esperando esa cabecera. Sin ella Django se cree en
-HTTP y `SECURE_SSL_REDIRECT` entra en un bucle de redirecciones.
+`proxy_pass` tiene que apuntar al mismo puerto del `--bind` del paso 6. Si el
+8000 ya está ocupado por otra aplicación del servidor, cambia **los dos** — es
+un fallo silencioso: el dominio sirve la app equivocada sin dar ningún error.
 
-Con nginx es lo mismo más `certbot --nginx`, `proxy_set_header X-Forwarded-Proto
-$scheme;` y `proxy_read_timeout 150s;`.
+`proxy_set_header X-Forwarded-Proto $scheme` no es opcional:
+`config/settings/prod.py` define `SECURE_PROXY_SSL_HEADER` esperando esa
+cabecera. Sin ella Django se cree en HTTP y `SECURE_SSL_REDIRECT` entra en un
+bucle de redirecciones.
+
+Comprueba que el 80 ya responde antes de pedir el certificado:
+
+```bash
+curl -i -H "X-Forwarded-Proto: https" http://api.nobelio.co/estado/
+```
+
+### Certificado
+
+```bash
+certbot --nginx -d api.nobelio.co
+```
+
+Certbot reescribe el archivo del sitio: añade `listen 443 ssl`, las rutas del
+certificado y —si se lo pides— el redirect del 80 al 443. La renovación queda en
+un timer de systemd:
+
+```bash
+systemctl list-timers | grep certbot
+certbot renew --dry-run
+```
+
+Si falla la emisión, casi siempre es una de dos: el registro A todavía no
+resuelve, o el 80 está cerrado en `ufw`. `journalctl -u nginx -n 50` y el propio
+mensaje de certbot lo dicen.
+
+### Detrás de Cloudflare
+
+Si el dominio está en Cloudflare, deja el registro A en **DNS only** (nube gris)
+hasta que certbot termine: con el proxy activo Cloudflare termina el TLS por su
+cuenta y el reto HTTP-01 no llega al origen.
+
+Ya con el certificado emitido puedes pasarlo a **Proxied**, y entonces en
+*SSL/TLS → Overview* hay que elegir **Full (strict)**. Con *Flexible*,
+Cloudflare habla HTTP con el origen, Django ve una petición insegura y
+`SECURE_SSL_REDIRECT` devuelve un 301 que Cloudflare vuelve a convertir en HTTP:
+bucle infinito.
+
+### Con Caddy
+
+La alternativa, si prefieres no gestionar certificados a mano — Caddy los pide y
+los renueva solo:
+
+```
+api.nobelio.co {
+	encode gzip
+	request_body { max_size 10MB }
+	reverse_proxy 127.0.0.1:8000 {
+		header_up X-Forwarded-Proto {scheme}
+		transport http { read_timeout 150s }
+	}
+}
+```
 
 ---
 
@@ -245,16 +337,28 @@ $scheme;` y `proxy_read_timeout 150s;`.
 curl https://api.nobelio.co/estado/
 # → {"servicio": "nobelio", "estado": "ok"}
 
-sudo journalctl -u nobelio -f
+journalctl -u nobelio -f
 ```
 
-Si pruebas contra `127.0.0.1` directamente vas a recibir un **400**, y no es un
-fallo del servicio: `localhost` no está en `ALLOWED_HOSTS`. Hay que mandar el
-Host explícito:
+Contra `127.0.0.1` hacen falta dos cabeceras, y sin ellas parecen fallos del
+servicio sin serlo:
 
 ```bash
-curl -H "Host: api.nobelio.co" http://127.0.0.1:8000/estado/
+curl -i -H "Host: api.nobelio.co" -H "X-Forwarded-Proto: https" \
+  http://127.0.0.1:8000/estado/
 ```
+
+- Sin `Host`: **400**. `localhost` no está en `ALLOWED_HOSTS`, y Django compara
+  la cadena exacta — `api.nobelio.co` no encaja con `nobelio.co`.
+- Sin `X-Forwarded-Proto`: **301** a `https://`. `SECURE_SSL_REDIRECT` está en
+  `SecurityMiddleware`, lo primero de la cadena; en el tráfico real esa cabecera
+  la pone nginx.
+
+Si el 400 persiste con el Host correcto, revisa el `.env` con
+`grep ALLOWED_HOSTS /opt/nobelio/.env | cat -A`: `env.list` no recorta espacios
+ni comillas, así que `ALLOWED_HOSTS="api.nobelio.co"` o `a.co, b.co` parsean con
+la basura dentro y siguen rechazando. Y el `.env` se lee al importar los
+settings: tras editarlo, `systemctl restart nobelio`.
 
 ---
 
@@ -307,9 +411,13 @@ aws s3 cp "$ARCHIVO" "s3://${B2_BUCKET}/respaldos/$(basename "$ARCHIVO")" \
 rm -f "$ARCHIVO"
 ```
 
+El script lee el `.env` y produce un volcado completo de la base, así que es de
+root y solo root lo ejecuta:
+
 ```bash
-chmod +x /opt/nobelio/respaldo.sh
-crontab -e
+chown root:root /opt/nobelio/respaldo.sh
+chmod 700 /opt/nobelio/respaldo.sh
+crontab -e   # el de root
 # 0 3 * * * /opt/nobelio/respaldo.sh >> /var/log/nobelio-respaldo.log 2>&1
 ```
 
@@ -326,7 +434,10 @@ export DJANGO_SETTINGS_MODULE=config.settings.prod
 git pull
 .venv/bin/pip install -r requirements.txt
 .venv/bin/python manage.py migrate
-sudo systemctl restart nobelio
+
+# Los archivos nuevos los crea root; el servicio los lee por grupo.
+chmod -R g+rX /opt/nobelio
+systemctl restart nobelio
 ```
 
 ---
@@ -336,7 +447,7 @@ sudo systemctl restart nobelio
 Cuando la DIAN acepte el Set de Pruebas:
 
 1. `DIAN_ENVIRONMENT=1` en el `.env`.
-2. `sudo systemctl restart nobelio`.
+2. `systemctl restart nobelio`.
 3. Confirmar que `SoftwareDian.set_pruebas_aceptado` esté en `True`: es lo que
    hace que el envío pase de `SendTestSetAsync` a `SendBillSync`.
 
@@ -349,7 +460,7 @@ Repasa también los puntos de
 
 - **Ambiente de habilitación en paralelo** (`pruebas.nobelio.co`): sería repetir
   los pasos 2 a 7 con otra base de datos, otro directorio, otro service de
-  systemd escuchando en el 8001 y un segundo bloque de sitio en el `Caddyfile`.
+  systemd escuchando en el 8001 y un segundo `server` en `sites-available`.
   Mantener los dos ambientes separados por host evita el peor error posible:
   emitir contra producción un documento de pruebas.
 - **Reconciliación de estados**: cuando la DIAN deja un documento en `enviado`,
