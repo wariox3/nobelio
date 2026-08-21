@@ -428,6 +428,15 @@ restauró no es un respaldo.
 
 ## 11. Actualizar la aplicación
 
+El repositorio trae `actualizar.sh`, que hace esto mismo —parando el servicio
+mientras migra— y comprueba al final que `/estado/` responda:
+
+```bash
+sudo /opt/nobelio/actualizar.sh
+```
+
+A mano:
+
 ```bash
 cd /opt/nobelio
 export DJANGO_SETTINGS_MODULE=config.settings.prod
