@@ -40,17 +40,11 @@ puede faltar. Las rutas cuelgan de `/api/`.
 - [ ] `POST /api/emisores/emisor/` → crea el emisor ligado a la **cuenta**
       (razón social, NIT + DV, tipo de organización, ubicación, responsabilidades).
 
-## 4. Software DIAN (modalidad software propio)
+## 4. Certificado digital
 
-- [ ] `POST /api/emisores/software/` →
-  - `identificador` (SoftwareID) y `pin` reales registrados ante la DIAN.
-  - El `ProviderID` del XML **no se registra**: en software propio el proveedor
-    tecnológico es el propio emisor, así que sale de su NIT (y el `schemeID`,
-    de su dígito de verificación). La DIAN valida que el `SoftwareID` esté
-    registrado bajo ese NIT.
-  - `test_set_id` solo aplica en **habilitación** (Set de Pruebas).
-
-## 5. Certificado digital
+Va **antes** que el software: es lo que firma la consulta de numeración y los
+documentos del Set de Pruebas, así que sin él los pasos 5 a 7 no arrancan.
+Registrar un software sin certificado vigente responde 400.
 
 - [ ] `POST /api/emisores/certificado/cargar/` (multipart: `emisor`, `archivo` .p12/.pfx, `clave`).
   - Se **valida** antes de guardar: integridad + clave, llave RSA ≥ 2048, vigencia,
@@ -58,6 +52,28 @@ puede faltar. Las rutas cuelgan de `/api/`.
   - `vigente_desde`/`vigente_hasta` se autocompletan del propio certificado.
   - Se guarda en **B2** (`<id_emisor>/certificados/`); un único certificado **activo** por emisor
     (cargar uno nuevo jubila el anterior).
+
+## 5. Software DIAN + Set de Pruebas (una sola llamada)
+
+- [ ] `POST /api/emisores/emisor/habilitar/` con `emisor`, `identificador`, `pin` y
+      `test_set_id` → registra el software (jubilando el anterior) y, seguido,
+      emite contra la DIAN la factura y la nota crédito del Set de Pruebas.
+  - Exige que el emisor ya tenga **certificado** vigente (paso 4): es lo que firma
+    los documentos de prueba. Sin él responde 400.
+  - Los dos documentos y la resolución con la que se numeran **no se registran**:
+    la resolución del Set de Pruebas es la misma para todos (`RESOLUCION_PRUEBAS`
+    en `apps.dian.servicios`, con la clave técnica que publica la DIAN) y no tiene
+    nada que ver con la numeración real del emisor.
+  - Deja `emisor.habilitado_facturacion` en `true`, por el envío y no por el
+    veredicto: `SendTestSetAsync` es asíncrono.
+  - Responde 201 con `{"software": {...}, "set_pruebas": {...}}`. Si la DIAN no
+    responde, el software queda registrado y el fallo va en `set_pruebas.error`;
+    repetir la llamada reintenta. `"consecutivo": <n>` fuerza el número del par.
+  - El `ProviderID` del XML **no se registra**: en software propio el proveedor
+    tecnológico es el propio emisor, así que sale de su NIT (y el `schemeID`, de
+    su dígito de verificación).
+- [ ] *(alternativa)* `POST /api/emisores/software/` registra solo el software,
+      sin emitir nada.
 
 ## 6. Resolución de facturación
 
@@ -135,8 +151,9 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
 
 ```
 Cuenta → Llave API / Usuario
-      └→ Emisor → Software DIAN
-                → Certificado (B2)
+      └→ Emisor → Certificado (B2)
+                    └→ habilitar/ → Software DIAN
+                                  → Set de Pruebas (habilitado_facturacion)
                 → Resolución
                 → Documento (lleva dentro al adquiriente)
                        └→ emitir → enviar → xml/pdf

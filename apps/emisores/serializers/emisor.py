@@ -71,6 +71,9 @@ class EmisorSerializer(serializers.ModelSerializer):
     pais = CodigoDeCatalogo(queryset=Pais.objects.all())
     departamento = CodigoDeCatalogo(queryset=Departamento.objects.all())
     municipio = CodigoDeCatalogo(queryset=Municipio.objects.all())
+    # Lo marca el envío del Set de Pruebas, no el cuerpo de la petición:
+    # decir 'ya estoy habilitado' no habilita a nadie.
+    habilitado_facturacion = serializers.BooleanField(read_only=True)
 
     def validate_cuenta(self, value):
         """Una integración no puede operar fuera de su propia cuenta.
@@ -136,7 +139,8 @@ class EmisorSerializer(serializers.ModelSerializer):
             "tipo_identificacion", "numero_identificacion", "digito_verificacion",
             "tipo_organizacion", "responsabilidades",
             "pais", "departamento", "municipio", "direccion",
-            "telefono", "correo", "activo", "resoluciones",
+            "telefono", "correo", "activo", "habilitado_facturacion",
+            "resoluciones",
         ]
         # Vacío a propósito: desactiva el UniqueTogetherValidator automático de
         # DRF para que la unicidad la explique `validate()` con un mensaje útil.

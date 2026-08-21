@@ -191,14 +191,17 @@ comprobar un NIT (y autocompletar el formulario) está
 Luego registra para ese emisor (ver
 [docs/checklist-emision.md](docs/checklist-emision.md) para el detalle):
 
-- **Software DIAN** — `POST /api/emisores/software/`: `identificador`, `pin` y
-  `test_set_id` (entregado por la DIAN para habilitación). El `ProviderID` del
-  XML no se guarda: en software propio es el NIT del propio emisor.
 - **Certificado digital** — `POST /api/emisores/certificado/cargar/` (multipart
-  con el `.p12` y su `clave`; se valida y se guarda en Backblaze B2).
+  con el `.p12` y su `clave`; se valida y se guarda en Backblaze B2). Va primero:
+  es lo que firma todo lo que sigue, y sin él no se puede registrar el software.
+- **Software DIAN y Set de Pruebas** — `POST /api/emisores/emisor/habilitar/`:
+  `identificador`, `pin` y `test_set_id` (los que entrega la DIAN). Registra el
+  software y a continuación emite la factura y la nota crédito de habilitación,
+  que no se registran, dejando al emisor con `habilitado_facturacion` en `true`.
+  El `ProviderID` del XML no se guarda: en software propio es el NIT del emisor.
 - **Resolución de facturación** — `POST /api/emisores/resolucion/importar-dian/`
   la trae de la DIAN con su `clave_tecnica` (o `POST /api/emisores/resolucion/`
-  para cargarla a mano, sin clave técnica).
+  para cargarla a mano). Es la numeración real, distinta de la del Set de Pruebas.
 
 ### 3. Crear el documento (con receptor, líneas e impuestos)
 

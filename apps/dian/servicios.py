@@ -11,13 +11,25 @@ pueden inyectar para facilitar las pruebas sin red ni .p12 reales.
 from __future__ import annotations
 
 import re
+from datetime import date
+from decimal import Decimal
 
 from django.conf import settings
 from django.core.files.base import ContentFile
+from django.db import transaction
 from django.utils import timezone
 
 from apps.dian import firma, soap, ubl
-from apps.documentos.models import DocumentoError, DocumentoEstado, DocumentoTipo
+from apps.emisores.models import ResolucionFacturacion
+from apps.documentos.models import (
+    Adquiriente,
+    Documento,
+    DocumentoDetalle,
+    DocumentoDetalleImpuesto,
+    DocumentoError,
+    DocumentoEstado,
+    DocumentoTipo,
+)
 from apps.emisores.servicios import (
     MENSAJE_EMISOR_INACTIVO,
     certificado_activo,
@@ -121,8 +133,15 @@ def _certificado_activo(documento):
 
 def construir_firmador(documento, *, llave=None, certificado=None, cadena=None):
     """Crea el FirmadorXAdES, cargando el .p12 del emisor si no se inyecta."""
+    return construir_firmador_emisor(
+        documento.emisor, llave=llave, certificado=certificado, cadena=cadena
+    )
+
+
+def construir_firmador_emisor(emisor, *, llave=None, certificado=None, cadena=None):
+    """Igual que ``construir_firmador`` pero partiendo del emisor."""
     if llave is None or certificado is None:
-        cert_modelo = _certificado_activo(documento)
+        cert_modelo = _certificado_activo_emisor(emisor)
         with cert_modelo.archivo.open("rb") as fh:
             llave, certificado, cadena = firma.cargar_pkcs12(fh.read(), cert_modelo.clave)
     return firma.FirmadorXAdES(
@@ -332,3 +351,219 @@ def actualizar_estado(documento, *, cliente=None, ambiente=None, **cred):
         *_CAMPOS_RESPUESTA, "estado", "fecha_validacion", "actualizado_en",
     ])
     return respuesta
+
+
+# ---------------------------------------------------------------------------
+# Set de Pruebas (habilitación)
+# ---------------------------------------------------------------------------
+
+class _Descartar(Exception):
+    """Señal interna para deshacer los documentos de prueba."""
+
+
+def _catalogo(Modelo, codigo, que):
+    try:
+        return Modelo.objects.get(codigo=codigo)
+    except Modelo.DoesNotExist:
+        raise ErrorEmision(
+            f"Falta {que} (código {codigo}) en los catálogos. "
+            f"Corre 'manage.py cargar_catalogos'."
+        )
+
+
+def _tipo_documento(codigo):
+    try:
+        return DocumentoTipo.objects.get(codigo=codigo)
+    except DocumentoTipo.DoesNotExist:
+        raise ErrorEmision(f"Falta el tipo de documento '{codigo}' en la base.")
+
+
+# Resolución del Set de Pruebas. Es la misma para todo el que se habilita —la
+# publica la DIAN con su clave técnica— y no tiene nada que ver con la
+# numeración real del emisor, así que no se guarda: se arma al vuelo, numera los
+# dos documentos de prueba, entra en el CUFE y se va con ellos.
+RESOLUCION_PRUEBAS = {
+    "numero_resolucion": "18760000001",
+    "fecha_resolucion": date(2026, 6, 29),
+    "prefijo": "SETP",
+    "rango_desde": 990000000,
+    "rango_hasta": 995000000,
+    "clave_tecnica": "fc8eac422eba16e22ffd8c6f94b3f40a6e38162c",
+    "vigente_desde": date(2019, 1, 19),
+    "vigente_hasta": date(2030, 1, 19),
+}
+
+
+def _resolucion_de_pruebas(emisor):
+    """La resolución de habilitación, dentro de lo que luego se deshace.
+
+    Vive en la base solo mientras dura la emisión porque los documentos la
+    referencian por clave ajena; al revertir la transacción desaparece con
+    ellos. La numeración real del emisor no se toca.
+
+    Se usa ``get_or_create`` porque el emisor puede tener ya esa misma
+    resolución dada de alta (importada de la DIAN durante la habilitación):
+    crearla otra vez chocaría con ``resolucion_unica_por_emisor`` y tumbaría el
+    envío. Si ya está, esa vale —y su clave técnica es la suya de verdad.
+    """
+    from apps.catalogos.models import TipoFactura
+
+    clave = {
+        "emisor": emisor,
+        "tipo_factura": _catalogo(TipoFactura, "01", "el tipo de factura 01"),
+        "prefijo": RESOLUCION_PRUEBAS["prefijo"],
+        "numero_resolucion": RESOLUCION_PRUEBAS["numero_resolucion"],
+    }
+    defaults = {c: v for c, v in RESOLUCION_PRUEBAS.items() if c not in clave}
+    resolucion, _ = ResolucionFacturacion.objects.get_or_create(**clave, defaults=defaults)
+    return resolucion
+
+
+def _armar_documento(emisor, *, tipo, resolucion, consecutivo, referencia=None,
+                     valor=Decimal("1000.00"), iva=Decimal("190.00")):
+    """Crea en la base un documento de prueba completo (se deshace después)."""
+    from apps.catalogos.models import Moneda, Tributo, UnidadMedida
+
+    prefijo = resolucion.prefijo if referencia is None else ""
+    documento = Documento.objects.create(
+        documento_tipo=tipo,
+        estado=_estado(DocumentoEstado.Nombre.BORRADOR),
+        emisor=emisor,
+        resolucion=resolucion if referencia is None else None,
+        documento_referencia=referencia,
+        moneda=_catalogo(Moneda, "COP", "la moneda COP"),
+        prefijo=prefijo,
+        consecutivo=consecutivo,
+        numero=f"{prefijo}{consecutivo}",
+        fecha_emision=timezone.localdate(),
+        hora_emision=timezone.localtime().time(),
+        observaciones="Documento del Set de Pruebas (habilitación).",
+        valor_bruto=valor, total_impuestos=iva, total_a_pagar=valor + iva,
+    )
+    # El adquiriente del documento de prueba es el propio emisor: evita depender
+    # de datos de un tercero y de códigos de catálogo que quizá no estén.
+    Adquiriente.objects.create(
+        documento=documento,
+        razon_social=emisor.razon_social,
+        tipo_identificacion=emisor.tipo_identificacion,
+        numero_identificacion=emisor.numero_identificacion,
+        digito_verificacion=emisor.digito_verificacion,
+        tipo_organizacion=emisor.tipo_organizacion,
+        pais=emisor.pais, departamento=emisor.departamento,
+        municipio=emisor.municipio, direccion=emisor.direccion,
+    )
+    detalle = DocumentoDetalle.objects.create(
+        documento=documento, numero_linea=1,
+        descripcion="Servicio de prueba", cantidad=Decimal("1"),
+        unidad_medida=_catalogo(UnidadMedida, "94", "la unidad de medida 94"),
+        valor_unitario=valor, valor_total=valor,
+    )
+    DocumentoDetalleImpuesto.objects.create(
+        detalle=detalle, tributo=_catalogo(Tributo, "01", "el tributo IVA"),
+        tarifa=Decimal("19.00"), base_gravable=valor, valor=iva,
+    )
+    return documento
+
+
+def _emitir_prueba(documento, *, software, firmador, cliente, ambiente):
+    """Genera, firma y envía al Set de Pruebas. No guarda nada del documento."""
+    constructor = ubl.constructor_para(
+        documento,
+        software=software,
+        resolucion=documento.resolucion,
+        ambiente=ambiente,
+        clave_tecnica=documento.resolucion.clave_tecnica if documento.resolucion else "",
+    )
+    xml = constructor.generar_xml()
+    documento.cufe_cude = constructor.cufe
+    xml_firmado = firmador.firmar(xml)
+    respuesta = cliente.enviar_set_pruebas(
+        xml_firmado, f"{documento.numero}.xml", software.test_set_id
+    )
+    return {
+        "numero": documento.numero,
+        "cufe_cude": constructor.cufe,
+        "track_id": respuesta.track_id,
+        "es_valido": respuesta.es_valido,
+        "codigo_estado": respuesta.codigo_estado,
+        "descripcion_estado": respuesta.descripcion_estado,
+        "errores": respuesta.errores,
+    }
+
+
+def emitir_set_pruebas(emisor, *, consecutivo=None, cliente=None, firmador=None,
+                       ambiente=None, **cred):
+    """Emite la factura y la nota crédito del Set de Pruebas, sin registrarlas.
+
+    Los dos documentos existen solo para que la DIAN acepte la habilitación, así
+    que no tienen por qué quedar en el histórico del emisor: se construyen en la
+    base —el XML se arma leyendo las líneas y el adquiriente, que son filas
+    relacionadas—, se firman, se envían con ``SendTestSetAsync`` y al final se
+    deshace todo. Tampoco se sube nada a B2 ni se guardan los rechazos.
+
+    Lo único que queda es lo que devuelve: número, CUFE/CUDE, ZipKey y el
+    veredicto de la DIAN para cada uno.
+
+    La resolución es la del Set de Pruebas (``RESOLUCION_PRUEBAS``), la misma
+    para todos y con la clave técnica que publica la DIAN: no se guarda ni tiene
+    que ver con la numeración real del emisor. El consecutivo arranca en el
+    principio de su rango y la nota usa el siguiente; repetir la llamada reenvía
+    los mismos números y la DIAN contesta "documento procesado anteriormente"
+    (regla 90), así que para reenviar pásalos en ``consecutivo``.
+
+    Lo único que persiste es ``emisor.habilitado_facturacion``, que queda en
+    ``True`` al enviar: es lo que distingue al emisor recién dado de alta del
+    que ya pasó por el Set de Pruebas.
+    """
+    ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
+    if not emisor.activo:
+        raise ErrorEmision(MENSAJE_EMISOR_INACTIVO)
+
+    software = _software_activo_emisor(emisor)
+    if not software.test_set_id:
+        raise ErrorEmision(
+            "El software del emisor no tiene TestSetId; sin él no hay Set de "
+            "Pruebas al que enviar."
+        )
+    if firmador is None:
+        firmador = construir_firmador_emisor(emisor, **cred)
+    if cliente is None:
+        cliente = construir_cliente_emisor(emisor, ambiente, **cred)
+
+    primero = consecutivo or RESOLUCION_PRUEBAS["rango_desde"]
+    resultados = {}
+    try:
+        with transaction.atomic():
+            resolucion = _resolucion_de_pruebas(emisor)
+            factura = _armar_documento(
+                emisor,
+                tipo=_tipo_documento(DocumentoTipo.Codigo.FACTURA_VENTA),
+                resolucion=resolucion, consecutivo=primero,
+            )
+            resultados["factura"] = _emitir_prueba(
+                factura, software=software, firmador=firmador,
+                cliente=cliente, ambiente=ambiente,
+            )
+            # La nota corrige a la factura recién emitida: la DIAN exige que la
+            # referencia (número y CUFE) sea de un documento real.
+            nota = _armar_documento(
+                emisor,
+                tipo=_tipo_documento(DocumentoTipo.Codigo.NOTA_CREDITO),
+                resolucion=resolucion, consecutivo=primero + 1, referencia=factura,
+            )
+            resultados["nota_credito"] = _emitir_prueba(
+                nota, software=software, firmador=firmador,
+                cliente=cliente, ambiente=ambiente,
+            )
+            raise _Descartar
+    except _Descartar:
+        pass
+
+    # Fuera de la transacción, que se deshizo: los documentos de prueba no
+    # quedan, pero el hecho de que el emisor ya pasó por el Set de Pruebas sí.
+    # Se marca por haberlos enviado, no por el veredicto: SendTestSetAsync es
+    # asíncrono y el resultado se consulta después.
+    if not emisor.habilitado_facturacion:
+        emisor.habilitado_facturacion = True
+        emisor.save(update_fields=["habilitado_facturacion", "actualizado_en"])
+    return resultados

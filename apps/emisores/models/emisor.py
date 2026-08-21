@@ -18,6 +18,12 @@ class Emisor(ModeloConFechas):
     telefono = models.CharField("teléfono", max_length=50, blank=True)
     correo = models.EmailField("correo electrónico", blank=True)
     activo = models.BooleanField("activo", default=True)
+    habilitado_facturacion = models.BooleanField(
+        "habilitado para facturar", default=False,
+        help_text="Se marca al enviar el Set de Pruebas a la DIAN. Es el "
+        "paso que separa al emisor recién dado de alta del que ya salió a "
+        "producción.",
+    )
 
     # --- Relaciones ---
     cuenta = models.ForeignKey(

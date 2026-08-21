@@ -2,18 +2,21 @@
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 
-from apps.documentos.tests_utils import crear_catalogos_minimos
+from apps.documentos.tests_utils import crear_catalogos_minimos, crear_certificado
 from apps.emisores.models import Emisor, SoftwareDian
 
 
 def _crear_emisor(cat, nit="901192048"):
-    return Emisor.objects.create(
+    emisor = Emisor.objects.create(
         cuenta=cat["cuenta"], razon_social="Semantica Digital S.A.S",
         tipo_identificacion=cat["nit"], numero_identificacion=nit,
         digito_verificacion="8", tipo_organizacion=cat["juridica"],
         pais=cat["colombia"], departamento=cat["antioquia"], municipio=cat["medellin"],
         direccion="Calle 1 # 2-3",
     )
+    # El certificado va antes que el software: sin él no se puede registrar.
+    crear_certificado(emisor)
+    return emisor
 
 
 class SoftwareDianAPITests(APITestCase):

@@ -37,6 +37,28 @@ def crear_catalogos_minimos():
     }
 
 
+def crear_certificado(emisor, dias=365):
+    """Certificado activo y vigente del emisor, sin .p12 real.
+
+    Desde que el certificado va antes que el software en el flujo, registrar un
+    software exige que el emisor ya lo tenga (ver ``SoftwareDianSerializer``).
+    Las comprobaciones de ``motivo_no_puede_emitir`` son de base de datos, así
+    que basta la fila: el archivo solo se lee al firmar.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from apps.emisores.models import Certificado
+
+    hoy = timezone.localdate()
+    return Certificado.objects.create(
+        emisor=emisor, archivo="certificado-de-prueba.p12", clave="clave",
+        vigente_desde=hoy - timedelta(days=1), vigente_hasta=hoy + timedelta(days=dias),
+        activo=True,
+    )
+
+
 def crear_adquiriente(documento, catalogos):
     """Crea el receptor de un documento: cada documento lleva el suyo."""
     from apps.documentos import models as doc

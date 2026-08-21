@@ -16,6 +16,7 @@ from apps.documentos.models import DocumentoTipo
 from apps.documentos.serializers import DocumentoCrearSerializer
 from apps.documentos.tests_utils import (
     crear_catalogos_minimos,
+    crear_certificado,
     crear_documento_factura,
 )
 from apps.emisores.models import Emisor
@@ -141,6 +142,9 @@ class AlcanceLlaveDeCuentaTests(AlcanceBase):
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_no_puede_escribir_sobre_un_emisor_ajeno(self):
+        # Con certificado, para que lo que corte sea el alcance y no la
+        # validación del software (que ahora lo exige).
+        crear_certificado(self.emisor_ajeno)
         payload = {
             "emisor": self.emisor_ajeno.id,
             "identificador": "abc123-software-id",

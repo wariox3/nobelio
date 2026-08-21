@@ -1,14 +1,17 @@
 """API del emisor."""
+from django.db import transaction
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
+from apps.dian import servicios as dian
 from apps.emisores import models, serializers
 from apps.seguridad.alcance import (
     MENSAJE_SIN_CUENTA,
     AlcanceEmisorMixin,
     es_staff,
+    exigir_alcance,
     exigir_cuenta,
     puede_dar_de_alta,
 )
@@ -60,6 +63,62 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         if es_staff(self.request):
             cuenta = serializer.validated_data.get("cuenta") or cuenta
         serializer.save(cuenta=cuenta)
+
+    @action(detail=False, methods=["post"], url_path="habilitar")
+    def habilitar(self, request):
+        """Habilita al emisor: registra su software y corre el Set de Pruebas.
+
+        ``POST /api/emisores/emisor/habilitar/``
+
+        ```json
+        {"emisor": 2, "identificador": "94966156-8084-428b-b1b1-a903a053aed1",
+         "pin": "12345", "test_set_id": "0d26ba8c-8584-4199-b210-2ddc063c3ddd"}
+        ```
+
+        Dos pasos en una llamada:
+
+        1. Registra el software (``identificador``, ``pin`` y ``test_set_id``
+           son los que entrega la DIAN) y jubila el anterior del emisor.
+        2. Emite contra la DIAN la factura y la nota crédito del Set de Pruebas
+           (``SendTestSetAsync``) y deja al emisor con ``habilitado_facturacion``
+           en ``true``. Ni los documentos ni la resolución con la que se numeran
+           quedan registrados: son de la habilitación, no del emisor.
+
+        El emisor tiene que traer ya su certificado: es lo que firma el paso 2,
+        y sin él el paso 1 responde 400.
+
+        Responde 201 con ``{"software": {...}, "set_pruebas": {...}}``; el
+        ``pin`` no vuelve. Si la DIAN no responde, el software queda registrado
+        igual y el fallo se cuenta en ``set_pruebas.error``, para reintentar sin
+        volver a empezar. ``consecutivo`` (opcional) fuerza el número del par de
+        prueba, que por defecto arranca en el rango de la resolución de pruebas.
+        """
+        datos = request.data
+        software = serializers.SoftwareDianSerializer(data=datos)
+        software.is_valid(raise_exception=True)
+        emisor = software.validated_data["emisor"]
+        exigir_alcance(request, emisor)
+
+        with transaction.atomic():
+            models.SoftwareDian.objects.filter(
+                emisor=emisor, activo=True
+            ).update(activo=False)
+            software.save(activo=True)
+
+        consecutivo = datos.get("consecutivo")
+        try:
+            set_pruebas = dian.emitir_set_pruebas(
+                emisor, consecutivo=int(consecutivo) if consecutivo else None
+            )
+        except dian.ErrorEmision as exc:
+            # El software queda registrado: el fallo es del envío, y repetir la
+            # llamada reintenta solo eso.
+            set_pruebas = {"error": str(exc)}
+
+        return Response(
+            {"software": software.data, "set_pruebas": set_pruebas},
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=False, methods=["get"], url_path="validar-nit")
     def validar_nit(self, request):
