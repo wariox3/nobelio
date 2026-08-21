@@ -172,11 +172,16 @@ curl -X POST http://localhost:8000/api/emisores/emisor/ \
     "digito_verificacion": "1",
     "tipo_organizacion": 1,
     "responsabilidades": [],
-    "pais": 1, "departamento": 1, "municipio": 1,
+    "pais": "CO", "departamento": "05", "municipio": "05001",
     "direccion": "Calle 1 # 2-3",
     "correo": "facturacion@empresa.co"
   }'
 ```
+
+`pais`, `departamento` y `municipio` van por **código** (ISO 3166 y DANE), no
+por id: el id es un serial de cada base y cambia entre ambientes. El servidor
+resuelve el código contra el catálogo y guarda la fila que corresponde; si el
+código no existe, responde 400 en ese campo.
 
 La `cuenta` no se envía: sale de la credencial. El alta no consulta el RUES; lo
 que se rechaza es repetir un emisor ya dado de alta en la misma cuenta. Para

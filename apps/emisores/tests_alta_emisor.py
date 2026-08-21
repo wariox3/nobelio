@@ -37,9 +37,9 @@ class AltaSinValidarRuesTests(APITestCase):
             "tipo_identificacion": c["nit"].id,
             "numero_identificacion": "901192048",
             "tipo_organizacion": c["juridica"].id,
-            "pais": c["colombia"].id,
-            "departamento": c["antioquia"].id,
-            "municipio": c["medellin"].id,
+            "pais": c["colombia"].codigo,
+            "departamento": c["antioquia"].codigo,
+            "municipio": c["medellin"].codigo,
             "direccion": "Calle 1 # 2-3",
         }
         datos.update(extra)
@@ -61,6 +61,38 @@ class AltaSinValidarRuesTests(APITestCase):
         self.assertTrue(
             Emisor.objects.filter(numero_identificacion="000000000").exists()
         )
+
+    # --- Ubicación por código, no por id ----------------------------------
+
+    def test_la_ubicacion_llega_por_codigo_y_se_guarda_la_fila_correcta(self):
+        resp = self.client.post(URL_EMISORES, self.payload(), format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        emisor = Emisor.objects.get(numero_identificacion="901192048")
+        self.assertEqual(emisor.pais, self.cat["colombia"])
+        self.assertEqual(emisor.departamento, self.cat["antioquia"])
+        self.assertEqual(emisor.municipio, self.cat["medellin"])
+
+    def test_la_respuesta_devuelve_los_codigos(self):
+        resp = self.client.post(URL_EMISORES, self.payload(), format="json")
+        self.assertEqual(resp.data["pais"], "CO")
+        self.assertEqual(resp.data["departamento"], "05")
+        self.assertEqual(resp.data["municipio"], "05001")
+
+    def test_un_codigo_que_no_esta_en_el_catalogo_se_rechaza(self):
+        resp = self.client.post(
+            URL_EMISORES, self.payload(municipio="99999"), format="json"
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("municipio", resp.data["errores"])
+
+    def test_mandar_el_id_en_vez_del_codigo_se_rechaza(self):
+        resp = self.client.post(
+            URL_EMISORES,
+            self.payload(municipio=self.cat["medellin"].id),
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("municipio", resp.data["errores"])
 
     def test_editar_el_nit_tampoco_consulta_el_rues(self):
         self.client.post(URL_EMISORES, self.payload(), format="json")

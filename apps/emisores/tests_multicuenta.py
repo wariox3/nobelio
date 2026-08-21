@@ -95,9 +95,9 @@ class MismoNitEnVariasCuentasTests(APITestCase):
             "tipo_identificacion": self.cat["nit"].id,
             "numero_identificacion": NIT,
             "tipo_organizacion": self.cat["juridica"].id,
-            "pais": self.cat["colombia"].id,
-            "departamento": self.cat["antioquia"].id,
-            "municipio": self.cat["medellin"].id,
+            "pais": self.cat["colombia"].codigo,
+            "departamento": self.cat["antioquia"].codigo,
+            "municipio": self.cat["medellin"].codigo,
             "direccion": "Calle 1 # 2-3",
         }
         resp = self.client.post(URL_EMISORES, payload, format="json")

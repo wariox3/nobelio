@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Actualiza Nobelio en el servidor: para el servicio, trae el código, migra,
-# lo levanta y comprueba que responda.
+# recarga catálogos, lo levanta y comprueba que responda.
 #   sudo /opt/nobelio/actualizar.sh
 set -euo pipefail
 
@@ -16,6 +16,9 @@ trap 'echo "Falló la actualización; levantando el servicio." >&2; systemctl st
 
 git pull
 .venv/bin/python manage.py migrate
+# Idempotente (update_or_create por código): recarga las listas .gc por si el
+# pull trajo catálogos nuevos o corregidos.
+.venv/bin/python manage.py cargar_catalogos
 
 # Los archivos nuevos los crea root; el servicio los lee por grupo.
 chmod -R g+rX /opt/nobelio

@@ -1,6 +1,7 @@
 """Serializer del emisor."""
 from rest_framework import serializers
 
+from apps.catalogos.models import Departamento, Municipio, Pais
 from apps.cuentas.models import Cuenta
 from apps.emisores.models import Emisor
 from apps.seguridad.alcance import MENSAJE_FUERA_DE_CUENTA, cuenta_de_la_credencial
@@ -29,6 +30,26 @@ def _cuenta_de(contexto):
     return cuenta_de_la_credencial(request) if request is not None else None
 
 
+class CodigoDeCatalogo(serializers.SlugRelatedField):
+    """Campo de catálogo que entra y sale por su ``codigo``, no por el ``id``.
+
+    El id es un serial de la base y no significa nada fuera de ella: el mismo
+    municipio tiene distinto id en desarrollo y en producción, según en qué
+    orden se cargaron las listas. El código sí es estable y es el que el ERP
+    conoce —ISO 3166 para el país, DANE para departamento (2 dígitos) y
+    municipio (5)—, así que es lo que se recibe y lo que se devuelve.
+    """
+
+    default_error_messages = {
+        "does_not_exist": "No existe en el catálogo el código '{value}'.",
+        "invalid": "Se espera el código del catálogo, no el id.",
+    }
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("slug_field", "codigo")
+        super().__init__(**kwargs)
+
+
 # Nombra la cuenta a propósito: el mismo NIT puede estar dado de alta en otra
 # (ver Emisor.Meta.constraints), así que "ya existe" sin decir dónde parece un
 # error de la plataforma. Formatear con `.format(numero=..., cuenta=...)`.
@@ -45,6 +66,11 @@ class EmisorSerializer(serializers.ModelSerializer):
     cuenta = serializers.PrimaryKeyRelatedField(
         queryset=Cuenta.objects.filter(activa=True), default=CuentaDeLaCredencial()
     )
+    # La ubicación llega por código; el serializer resuelve la fila y guarda su
+    # llave, que es lo que la FK necesita.
+    pais = CodigoDeCatalogo(queryset=Pais.objects.all())
+    departamento = CodigoDeCatalogo(queryset=Departamento.objects.all())
+    municipio = CodigoDeCatalogo(queryset=Municipio.objects.all())
 
     def validate_cuenta(self, value):
         """Una integración no puede operar fuera de su propia cuenta.
