@@ -1,8 +1,10 @@
 """Pruebas de la API de certificado digital (.p12; archivo y clave write-only)."""
 import shutil
 import tempfile
+from unittest import mock
 from datetime import datetime, timedelta, timezone
 
+from botocore.exceptions import ClientError
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -15,6 +17,7 @@ from rest_framework.test import APIClient, APITestCase
 
 from apps.documentos.tests_utils import crear_catalogos_minimos
 from apps.emisores.models import Certificado, Emisor
+from apps.utilidades import almacenamiento
 
 _TMP_MEDIA = tempfile.mkdtemp()
 
@@ -207,3 +210,24 @@ class CertificadoAPITests(APITestCase):
             format="multipart",
         )
         self.assertIn(resp.status_code, (401, 403))
+
+    def test_fallo_de_backblaze_da_502_y_no_crea_el_certificado(self):
+        """Credenciales B2 inválidas: 502 con mensaje, nunca un 500 con traceback.
+
+        Reproduce el fallo real: al guardar, django-storages comprueba primero
+        si el nombre ya existe (``file_overwrite=False``) y ese HeadObject
+        responde 403 cuando la clave no es válida.
+        """
+        storage = Certificado._meta.get_field("archivo").storage
+        error = ClientError(
+            {"Error": {"Code": "403", "Message": "Forbidden"},
+             "ResponseMetadata": {"HTTPStatusCode": 403}},
+            "HeadObject",
+        )
+        with mock.patch.object(storage, "exists", side_effect=error):
+            resp = self._cargar()
+
+        self.assertEqual(resp.status_code, 502, resp.data)
+        self.assertEqual(resp.data["detail"], almacenamiento.MENSAJE_ALMACENAMIENTO)
+        # La transacción se deshace: ni certificado nuevo ni los previos tocados.
+        self.assertFalse(Certificado.objects.filter(emisor=self.emisor).exists())

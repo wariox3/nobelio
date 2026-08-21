@@ -16,6 +16,10 @@ from functools import lru_cache
 from django.conf import settings
 from django.core.files.storage import Storage, default_storage
 
+# Un único mensaje para cualquier fallo del almacenamiento: el detalle (código
+# de botocore, keyID, bucket) va al log del servidor, no a la respuesta HTTP.
+MENSAJE_ALMACENAMIENTO = "No se pudo acceder al almacenamiento."
+
 
 @lru_cache(maxsize=1)
 def _storage_b2() -> Storage:
@@ -46,3 +50,21 @@ def almacenamiento_backblaze() -> Storage:
     if settings.B2_HABILITADO:
         return _storage_b2()
     return default_storage
+
+
+def motivo_error_almacenamiento(exc) -> str | None:
+    """Mensaje para la API si ``exc`` es un fallo del almacenamiento en la nube.
+
+    Devuelve ``None`` cuando la excepción no viene de botocore, para que el
+    resto de errores sigan su curso normal.
+    """
+    try:
+        from botocore.exceptions import BotoCoreError, ClientError
+    except ImportError:  # boto3 no instalado: nada que traducir.
+        return None
+
+    # ClientError (respuesta de error del servicio) y BotoCoreError (conexión,
+    # DNS, timeout) son ramas distintas: hacen falta las dos.
+    if isinstance(exc, (BotoCoreError, ClientError)):
+        return MENSAJE_ALMACENAMIENTO
+    return None

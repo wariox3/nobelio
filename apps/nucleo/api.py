@@ -9,8 +9,14 @@ Todas las respuestas de error (4xx/5xx manejadas por DRF) se normalizan a:
 
 ``errores`` queda vacío (``{}``) cuando el error no es por campo.
 """
+import logging
+
 from rest_framework.exceptions import APIException
 from rest_framework.views import exception_handler as drf_exception_handler
+
+from apps.utilidades.almacenamiento import motivo_error_almacenamiento
+
+logger = logging.getLogger(__name__)
 
 MENSAJE_GENERICO = "La solicitud no es válida."
 
@@ -59,7 +65,20 @@ def _normalizar(data):
 
 
 def exception_handler(exc, context):
-    """Exception handler de DRF que homogeniza el cuerpo de los errores."""
+    """Exception handler de DRF que homogeniza el cuerpo de los errores.
+
+    Además traduce los fallos del almacenamiento en la nube (botocore), que no
+    son excepciones de DRF y sin esto acabarían en un 500 con traceback: una
+    credencial B2 caducada es un problema de configuración conocido, no un bug,
+    y merece un 502 con un mensaje que diga qué revisar.
+    """
+    motivo = motivo_error_almacenamiento(exc)
+    if motivo is not None:
+        # El traceback original (con el keyID) queda en el log del servidor,
+        # nunca en la respuesta.
+        logger.exception("Fallo del almacenamiento de archivos: %s", exc)
+        exc = ErrorPasarela(motivo)
+
     respuesta = drf_exception_handler(exc, context)
     if respuesta is None:
         return None
