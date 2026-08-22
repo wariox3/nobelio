@@ -119,7 +119,7 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         """
         documento = self.get_object()
         try:
-            respuesta = servicios.consultar_estado(documento)
+            respuesta = servicios.consultar_segun_envio(documento)
         except servicios.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
         except requests.RequestException as exc:

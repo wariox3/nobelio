@@ -18,6 +18,7 @@ from django.utils import timezone
 
 from apps.dian import firma, soap, ubl
 from apps.documentos.models import (
+    Documento,
     DocumentoError,
     DocumentoEstado,
     DocumentoTipo,
@@ -282,6 +283,13 @@ def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):
     else:
         respuesta = cliente.enviar_factura_sincrono(xml, nombre)
 
+    # Queda anotado con qué operación salió: es lo que decide cómo se consulta
+    # después. Antes se deducía comparando el track_id con el CUFE, que es una
+    # inferencia que falla cuando la DIAN devuelve un trackId propio.
+    documento.envio = (
+        Documento.Envio.SET_PRUEBAS if usar_set_pruebas else Documento.Envio.SINCRONO
+    )
+
     _guardar_respuesta(documento, respuesta)
     if respuesta.track_id:
         documento.track_id = respuesta.track_id
@@ -296,34 +304,66 @@ def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):
     else:
         documento.estado = _estado(DocumentoEstado.Nombre.ENVIADO)
     documento.save(update_fields=[
-        *_CAMPOS_RESPUESTA, "track_id", "estado", "fecha_validacion", "actualizado_en",
+        *_CAMPOS_RESPUESTA, "track_id", "envio", "estado", "fecha_validacion",
+        "actualizado_en",
     ])
     return respuesta
 
 
-def consultar_estado(documento, *, cliente=None, ambiente=None, track_id=None, **cred):
-    """Consulta (solo lectura) el estado del documento en la DIAN.
-
-    NO modifica el documento; devuelve lo que responde la DIAN. Para aplicar el
-    resultado al documento usa ``actualizar_estado``.
-
-    Elige la operación según cómo se envió: si el identificador es un ZipKey del
-    Set de Pruebas (distinto del CUFE, en habilitación) usa GetStatusZip; si es
-    la clave del documento (CUFE, envíos SendBillSync) usa GetStatus.
-    """
+def _cliente_y_clave(documento, cliente, ambiente, clave, **cred):
+    """Prepara lo común a las dos consultas: cliente SOAP e identificador."""
     ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
     if cliente is None:
         cliente = construir_cliente(documento, ambiente, **cred)
-
-    track_id = track_id or documento.track_id
-    if not track_id:
+    clave = clave or documento.track_id
+    if not clave:
         raise ErrorEmision("El documento no tiene track_id; envíelo a la DIAN primero.")
+    return cliente, clave
 
-    # ZipKey del Set de Pruebas (≠ CUFE) → GetStatusZip; CUFE/trackId → GetStatus.
-    es_zipkey = ambiente == 2 and track_id != documento.cufe_cude
-    if es_zipkey:
-        return cliente.consultar_estado_zip(track_id)
-    return cliente.consultar_estado(track_id)
+
+def consultar_estado(documento, *, cliente=None, ambiente=None, track_id=None, **cred):
+    """GetStatus: pregunta por el **documento**, por su CUFE/trackId.
+
+    Solo lectura: NO modifica el documento; devuelve lo que responde la DIAN.
+    Para aplicar el resultado usa ``actualizar_estado``.
+
+    Es la consulta de los envíos síncronos (SendBillSync), y también la forma de
+    saber cómo quedó un documento del Set de Pruebas cuya entrega ya no dice
+    nada útil —p. ej. cuando el zip responde "procesado anteriormente"—: basta
+    pasarle ``track_id=documento.cufe_cude``.
+    """
+    cliente, clave = _cliente_y_clave(documento, cliente, ambiente, track_id, **cred)
+    return cliente.consultar_estado(clave)
+
+
+def consultar_estado_zip(documento, *, cliente=None, ambiente=None, zip_key=None, **cred):
+    """GetStatusZip: pregunta por el **envío**, por su ZipKey.
+
+    Solo lectura, igual que ``consultar_estado``. Es la consulta de lo que se
+    mandó con SendTestSetAsync, que es asíncrono y devuelve un ZipKey en vez de
+    un veredicto. Cuidado: responde por esa entrega concreta, no por el
+    documento; un reenvío del mismo CUFE sale como duplicado (regla 90) aunque
+    el documento esté aceptado.
+    """
+    cliente, clave = _cliente_y_clave(documento, cliente, ambiente, zip_key, **cred)
+    return cliente.consultar_estado_zip(clave)
+
+
+def consultar_segun_envio(documento, *, cliente=None, ambiente=None, **cred):
+    """La consulta que corresponde a cómo se envió el documento.
+
+    Lo dice ``documento.envio``, que rellena ``enviar_a_dian``. Los documentos
+    enviados antes de que existiera ese campo lo tienen vacío: para ellos se
+    conserva la heurística de siempre —un track_id distinto del CUFE en
+    ambiente 2 es un ZipKey—, que es lo mejor que se puede deducir.
+    """
+    ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
+    if documento.envio:
+        es_zip = documento.envio == Documento.Envio.SET_PRUEBAS
+    else:
+        es_zip = ambiente == 2 and documento.track_id != documento.cufe_cude
+    consulta = consultar_estado_zip if es_zip else consultar_estado
+    return consulta(documento, cliente=cliente, ambiente=ambiente, **cred)
 
 
 # Estados desde los que tiene sentido refrescar contra la DIAN (enviados, no
@@ -347,7 +387,9 @@ def actualizar_estado(documento, *, cliente=None, ambiente=None, **cred):
             "rechazados (no aceptados ni en borrador)."
         )
 
-    respuesta = consultar_estado(documento, cliente=cliente, ambiente=ambiente, **cred)
+    respuesta = consultar_segun_envio(
+        documento, cliente=cliente, ambiente=ambiente, **cred
+    )
     _guardar_respuesta(documento, respuesta)
     if respuesta.es_valido or _ya_procesado(respuesta):
         documento.estado = _estado(DocumentoEstado.Nombre.ACEPTADO)

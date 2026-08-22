@@ -37,6 +37,10 @@ class Documento(ModeloUUID, ModeloConFechas):
         PRODUCCION = 1, "Producción"
         PRUEBAS = 2, "Habilitación (Set de Pruebas)"
 
+    class Envio(models.TextChoices):
+        SET_PRUEBAS = "test_set", "Set de Pruebas (SendTestSetAsync)"
+        SINCRONO = "bill_sync", "Síncrono (SendBillSync)"
+
     # ===================== Atributos =====================
     # Identificación del documento
     prefijo = models.CharField("prefijo", max_length=10, blank=True)
@@ -87,6 +91,13 @@ class Documento(ModeloUUID, ModeloConFechas):
         "track id DIAN", max_length=100, blank=True,
         help_text="Identificador del envío (ZipKey del Set de Pruebas o trackId), "
         "para consultar el estado en la DIAN.",
+    )
+    envio = models.CharField(
+        "operación de envío", max_length=20, choices=Envio.choices, blank=True,
+        help_text="Con qué operación se envió a la DIAN. Decide cómo se "
+        "consulta después el estado: GetStatusZip para el Set de Pruebas "
+        "(el track_id es un ZipKey) y GetStatus para el envío síncrono. "
+        "Vacío mientras no se haya enviado.",
     )
     fecha_validacion = models.DateTimeField(
         "fecha y hora de validación DIAN", null=True, blank=True,
