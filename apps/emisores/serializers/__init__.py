@@ -2,12 +2,11 @@
 from .certificado import CertificadoSerializer
 from .emisor import EmisorSerializer
 from .resolucion import ResolucionFacturacionSerializer
-from .software import HabilitarSerializer, SoftwareDianSerializer
+from .software import SoftwareDianSerializer
 
 __all__ = [
     "EmisorSerializer",
     "SoftwareDianSerializer",
-    "HabilitarSerializer",
     "CertificadoSerializer",
     "ResolucionFacturacionSerializer",
 ]

@@ -457,8 +457,8 @@ Cuando la DIAN acepte el Set de Pruebas:
 
 1. `DIAN_ENVIRONMENT=1` en el `.env`.
 2. `systemctl restart nobelio`.
-3. Confirmar que `SoftwareDian.set_pruebas_aceptado` esté en `True`: es lo que
-   hace que el envío pase de `SendTestSetAsync` a `SendBillSync`.
+3. Poner `SoftwareDian.set_pruebas_aceptado` en `True` (hoy no lo marca nada
+   solo): es lo que hace que el envío pase de `SendTestSetAsync` a `SendBillSync`.
 
 Repasa también los puntos de
 [Pendientes para producción](../README.md#pendientes-para-producción) del README.

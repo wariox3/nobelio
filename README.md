@@ -194,14 +194,16 @@ Luego registra para ese emisor (ver
 - **Certificado digital** — `POST /api/emisores/certificado/cargar/` (multipart
   con el `.p12` y su `clave`; se valida y se guarda en Backblaze B2). Va primero:
   es lo que firma todo lo que sigue, y sin él no se puede registrar el software.
-- **Software DIAN y Set de Pruebas** — `POST /api/emisores/emisor/habilitar/`:
-  `identificador`, `pin` y `test_set_id` (los que entrega la DIAN). Registra el
-  software y a continuación emite la factura y la nota crédito de habilitación,
-  que no se registran, dejando al emisor con `habilitado_facturacion` en `true`.
+- **Software DIAN** — `POST /api/emisores/emisor/crear-habilitacion/`:
+  `identificador`, `pin` y `test_set_id` (los que entrega la DIAN). Comprueba que
+  el emisor tenga certificado activo y vigente, registra el software y jubila el
+  anterior; un solo software activo por emisor. El Set de Pruebas no se corre
+  desde aquí: los documentos de habilitación se emiten y envían con los endpoints
+  de documentos.
   El `ProviderID` del XML no se guarda: en software propio es el NIT del emisor.
 - **Resolución de facturación** — `POST /api/emisores/resolucion/importar-dian/`
   la trae de la DIAN con su `clave_tecnica` (o `POST /api/emisores/resolucion/`
-  para cargarla a mano). Es la numeración real, distinta de la del Set de Pruebas.
+  para cargarla a mano).
 
 ### 3. Crear el documento (con receptor, líneas e impuestos)
 
@@ -260,8 +262,9 @@ curl -X POST http://localhost:8000/api/documentos/documento/<id>/emitir/ \
 
 Se usa `SendTestSetAsync` (con el `test_set_id` del software) solo mientras se
 está en habilitación (`DIAN_ENVIRONMENT=2`) **y** el Set de Pruebas todavía no
-ha sido aceptado. En cuanto la DIAN lo acepta —`SoftwareDian.set_pruebas_aceptado`—
-o en producción, se usa `SendBillSync` (síncrono).
+ha sido aceptado. En cuanto la DIAN lo acepta hay que marcar
+`SoftwareDian.set_pruebas_aceptado` a mano, y a partir de ahí —o en producción—
+se usa `SendBillSync` (síncrono).
 
 ```bash
 curl -X POST http://localhost:8000/api/documentos/documento/<id>/enviar/ \

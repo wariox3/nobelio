@@ -2,24 +2,18 @@
 import requests
 from django.conf import settings
 from django.http import FileResponse, HttpResponse
-from rest_framework import viewsets
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.dian import representacion, servicios
 from apps.documentos import serializers
-from apps.documentos.models import Documento
+from apps.documentos.models import Documento, DocumentoEstado
 from apps.nucleo.api import ErrorSolicitud, error_pasarela_dian
 from apps.seguridad.alcance import AlcanceEmisorMixin
 
 
 class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
-    """CRUD de documentos electrónicos y acciones del ciclo de vida DIAN.
-
-    Todo el conjunto está acotado a los emisores que alcanza el solicitante
-    (ver :mod:`apps.seguridad.alcance`): un documento de otra cuenta no aparece
-    en el listado y responde 404 en el detalle.
-    """
 
     queryset = (
         Documento.objects.select_related(
@@ -54,6 +48,35 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         if tipo := params.get("documento_tipo"):
             qs = qs.filter(documento_tipo__codigo=tipo)
         return qs
+
+    def destroy(self, request, *args, **kwargs):
+
+        borrables = {
+            DocumentoEstado.Nombre.BORRADOR,
+            DocumentoEstado.Nombre.GENERADO,
+            DocumentoEstado.Nombre.FIRMADO,
+            DocumentoEstado.Nombre.ENVIADO,
+            DocumentoEstado.Nombre.RECHAZADO,
+        }
+        documento = self.get_object()
+
+        estado = documento.estado.nombre
+        if estado not in borrables:
+            raise ErrorSolicitud(
+                f"No se puede borrar {documento.numero}: está en estado "
+                f"'{estado}'. Solo se borran los documentos que la DIAN no ha "
+                f"validado ({', '.join(sorted(borrables))})."
+            )
+
+        notas = list(documento.notas.values_list("numero", flat=True))
+        if notas:
+            raise ErrorSolicitud(
+                f"No se puede borrar {documento.numero}: lo referencian las "
+                f"notas {', '.join(notas)}. Bórrelas primero."
+            )
+
+        self.perform_destroy(documento)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=["post"])
     def emitir(self, request, pk=None):

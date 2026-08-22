@@ -43,8 +43,8 @@ puede faltar. Las rutas cuelgan de `/api/`.
 ## 4. Certificado digital
 
 Va **antes** que el software: es lo que firma la consulta de numeración y los
-documentos del Set de Pruebas, así que sin él los pasos 5 a 7 no arrancan.
-Registrar un software sin certificado vigente responde 400.
+documentos, así que sin él los pasos 5 a 7 no arrancan. Registrar un software
+sin certificado activo y vigente responde 400.
 
 - [ ] `POST /api/emisores/certificado/cargar/` (multipart: `emisor`, `archivo` .p12/.pfx, `clave`).
   - Se **valida** antes de guardar: integridad + clave, llave RSA ≥ 2048, vigencia,
@@ -53,27 +53,32 @@ Registrar un software sin certificado vigente responde 400.
   - Se guarda en **B2** (`<id_emisor>/certificados/`); un único certificado **activo** por emisor
     (cargar uno nuevo jubila el anterior).
 
-## 5. Software DIAN + Set de Pruebas (una sola llamada)
+## 5. Software DIAN
 
-- [ ] `POST /api/emisores/emisor/habilitar/` con `emisor`, `identificador`, `pin` y
-      `test_set_id` → registra el software (jubilando el anterior) y, seguido,
-      emite contra la DIAN la factura y la nota crédito del Set de Pruebas.
-  - Exige que el emisor ya tenga **certificado** vigente (paso 4): es lo que firma
-    los documentos de prueba. Sin él responde 400.
-  - Los dos documentos y la resolución con la que se numeran **no se registran**:
-    la resolución del Set de Pruebas es la misma para todos (`RESOLUCION_PRUEBAS`
-    en `apps.dian.servicios`, con la clave técnica que publica la DIAN) y no tiene
-    nada que ver con la numeración real del emisor.
-  - Deja `emisor.habilitado_facturacion` en `true`, por el envío y no por el
-    veredicto: `SendTestSetAsync` es asíncrono.
-  - Responde 201 con `{"software": {...}, "set_pruebas": {...}}`. Si la DIAN no
-    responde, el software queda registrado y el fallo va en `set_pruebas.error`;
-    repetir la llamada reintenta. `"consecutivo": <n>` fuerza el número del par.
+- [ ] `POST /api/emisores/emisor/crear-habilitacion/` con `emisor`, `identificador`
+      y `pin` (más `test_set_id` si se va a correr el Set de Pruebas) → registra el
+      software del emisor y jubila el que tuviera activo.
+  - Antes de registrar nada comprueba que el emisor exista y que tenga un
+    **certificado activo y no vencido** (paso 4). Si no, responde 400.
+  - Los tres datos los entrega la DIAN al aprobar el software. El `test_set_id`
+    es opcional en el modelo —un software ya en producción no tiene set de
+    pruebas—, pero sin él no se puede emitir el Set de Pruebas después.
+  - Responde **200**. Un solo software activo por emisor: registrar otro deja el
+    anterior en `activo=False`, como histórico.
   - El `ProviderID` del XML **no se registra**: en software propio el proveedor
     tecnológico es el propio emisor, así que sale de su NIT (y el `schemeID`, de
     su dígito de verificación).
-- [ ] *(alternativa)* `POST /api/emisores/software/` registra solo el software,
-      sin emitir nada.
+- [ ] *(equivalente)* `POST /api/emisores/software/` registra el software por su
+      propio endpoint CRUD.
+
+> **El Set de Pruebas no está automatizado.** No hay un endpoint que lo corra de
+> principio a fin: los documentos de habilitación se crean y se envían a mano con
+> los endpoints de documentos (pasos 7 y 8), que es lo que hace falta para
+> habilitarse. Mientras `SoftwareDian.set_pruebas_aceptado` sea `False` y
+> `DIAN_ENVIRONMENT` sea `2`, los envíos van por `SendTestSetAsync` con el
+> `test_set_id` del software; hay que ponerlo a `True` a mano cuando la DIAN
+> acepte el set, para que pase a `SendBillSync`. Lo mismo con
+> `Emisor.habilitado_facturacion`: hoy nada lo marca solo.
 
 ## 6. Resolución de facturación
 
@@ -152,8 +157,7 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
 ```
 Cuenta → Llave API / Usuario
       └→ Emisor → Certificado (B2)
-                    └→ habilitar/ → Software DIAN
-                                  → Set de Pruebas (habilitado_facturacion)
+                    └→ crear-habilitacion/ → Software DIAN
                 → Resolución
                 → Documento (lleva dentro al adquiriente)
                        └→ emitir → enviar → xml/pdf

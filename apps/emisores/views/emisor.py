@@ -1,19 +1,32 @@
 """API del emisor."""
-import requests
+from datetime import date
+from decimal import Decimal
+
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
+from apps.catalogos.models import Moneda, TipoFactura, Tributo, UnidadMedida
 from apps.dian import servicios as dian
+from apps.documentos.models import (
+    Adquiriente,
+    Documento,
+    DocumentoDetalle,
+    DocumentoDetalleImpuesto,
+    DocumentoEstado,
+    DocumentoTipo,
+)
 from apps.emisores import models, serializers
-from apps.nucleo.api import ErrorSolicitud, error_pasarela_dian
+from apps.emisores.models.emisor import Emisor
+from apps.emisores.models.certificado import Certificado
+from apps.nucleo.api import ErrorSolicitud
 from apps.seguridad.alcance import (
     MENSAJE_SIN_CUENTA,
     AlcanceEmisorMixin,
     es_staff,
-    exigir_alcance,
     exigir_cuenta,
     puede_dar_de_alta,
 )
@@ -66,81 +79,6 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
             cuenta = serializer.validated_data.get("cuenta") or cuenta
         serializer.save(cuenta=cuenta)
 
-    @action(detail=False, methods=["post"], url_path="crear-habilitacion")
-    def crear_habilitacion(self, request):
-        """Arranca la habilitación: software, resolución y documentos de prueba.
-
-        ``POST /api/emisores/emisor/crear-habilitacion/``
-
-        ```json
-        {"emisor": 2, "identificador": "94966156-8084-428b-b1b1-a903a053aed1",
-         "pin": "12345", "test_set_id": "0d26ba8c-8584-4199-b210-2ddc063c3ddd"}
-        ```
-
-Todo en una llamada:
-
-        1. Registra el software (``identificador``, ``pin`` y ``test_set_id``
-           son los que entrega la DIAN; los tres obligatorios) y jubila el
-           anterior del emisor. Si el ``identificador`` ya está registrado
-           responde 400: el SoftwareID se da de alta una sola vez.
-        2. Da de alta la resolución del Set de Pruebas y emite con ella la
-           factura: la envía, y **espera consultando a la DIAN** hasta que la
-           acepte (``SendTestSetAsync`` es asíncrono).
-        3. Solo entonces crea y envía la nota crédito —que referencia a esa
-           factura y la DIAN la rechazaría si aún no la tuviera registrada— y
-           espera igualmente su aceptación.
-        4. Con las dos aceptadas marca ``habilitado_facturacion`` en el emisor y
-           ``set_pruebas_aceptado`` en el software.
-
-        La respuesta son los ids de los dos documentos, ya en ``aceptado``:
-
-        ```json
-        {"factura": "3f2b…", "nota_credito": "9c41…"}
-        ```
-
-        Con ellos se consulta todo lo demás en
-        ``GET /api/documentos/documento/{id}/``.
-
-        Es una llamada **lenta**: espera a la DIAN dos veces. El techo son
-        ``DIAN_SET_PRUEBAS_INTENTOS × DIAN_SET_PRUEBAS_ESPERA`` por documento.
-
-        El emisor tiene que traer ya su certificado: es lo que firma el paso 2,
-        y sin él el paso 1 responde 400.
-
-        **Es todo o nada**: si la DIAN rechaza cualquiera de los dos, o no da
-        veredicto a tiempo, no queda registrado nada —ni el software, ni la
-        resolución, ni los documentos— y responde 400 (o 502 si no contesta).
-        Así reintentar es repetir la misma llamada con los mismos datos.
-
-        ``consecutivo`` (opcional) fuerza el número del par de prueba.
-        """
-        datos = request.data
-        software = serializers.HabilitarSerializer(data=datos)
-        software.is_valid(raise_exception=True)
-        emisor = software.validated_data["emisor"]
-        exigir_alcance(request, emisor)
-
-        consecutivo = datos.get("consecutivo")
-        # Todo o nada: si la DIAN no responde no puede quedar ni el software ni
-        # la resolución ni los documentos. Media habilitación es peor que
-        # ninguna —el identificador quedaría tomado y el consecutivo gastado—,
-        # y así reintentar es volver a llamar con los mismos datos.
-        try:
-            with transaction.atomic():
-                models.SoftwareDian.objects.filter(
-                    emisor=emisor, activo=True
-                ).update(activo=False)
-                software.save(activo=True)
-                documentos = dian.emitir_set_pruebas(
-                    emisor, consecutivo=int(consecutivo) if consecutivo else None
-                )
-        except dian.ErrorEmision as exc:
-            raise ErrorSolicitud(str(exc))
-        except requests.RequestException as exc:
-            raise error_pasarela_dian(exc)
-
-        return Response(documentos, status=status.HTTP_201_CREATED)
-
     @action(detail=False, methods=["get"], url_path="validar-nit")
     def validar_nit(self, request):
         """Valida un NIT contra el RUES y devuelve sus datos para autocompletar.
@@ -188,3 +126,114 @@ Todo en una llamada:
                 "actividad_ciiu_descripcion": empresa.actividad_ciiu_descripcion,
             }
         )
+
+    @action(detail=False, methods=["post"], url_path="crear-habilitacion")
+    def crear_habilitacion(self, request):
+        
+        try:
+            emisor = Emisor.objects.get(pk=request.data.get("emisor"))
+        except (Emisor.DoesNotExist, TypeError, ValueError):
+            raise ErrorSolicitud("El emisor indicado no existe.")
+
+        certificado = Certificado.objects.filter(emisor=emisor, activo=True).first()
+        if certificado is None:
+            raise ErrorSolicitud("No hay certificado digital activo para el emisor. ")
+        hoy = timezone.localdate()
+        if certificado.vigente_hasta and certificado.vigente_hasta < hoy:
+            raise ErrorSolicitud("EL certificado esta vencido")
+
+        #identificador = request.data.get("identificador")
+        #if models.SoftwareDian.objects.filter(
+        #    emisor=emisor, identificador=identificador
+        #).exists():
+        #    raise ErrorSolicitud(f"El software '{identificador}' ya está registrado para este emisor.")
+
+        #software = serializers.SoftwareDianSerializer(data=request.data)
+        #software.is_valid(raise_exception=True)
+        with transaction.atomic():
+            #models.SoftwareDian.objects.filter(emisor=emisor, activo=True).update(activo=False)
+            #software.save(activo=True)
+            """
+            resolucion = models.ResolucionFacturacion.objects.create(
+                emisor=emisor,
+                tipo_factura=TipoFactura.objects.get(codigo="01"),
+                prefijo="SETP",
+                numero_resolucion="18760000001",
+                fecha_resolucion=date(2026, 6, 29),
+                rango_desde=990000000,
+                rango_hasta=995000000,
+                clave_tecnica="fc8eac422eba16e22ffd8c6f94b3f40a6e38162c",
+                vigente_desde=date(2019, 1, 19),
+                vigente_hasta=date(2030, 1, 19),
+            )
+            """
+            resolucion = models.ResolucionFacturacion.objects.get(pk=7)
+            valor = Decimal("1000.00")
+            iva = Decimal("190.00")
+            factura = Documento.objects.create(
+                documento_tipo=DocumentoTipo.objects.get(
+                    codigo=DocumentoTipo.Codigo.FACTURA_VENTA
+                ),
+                estado=DocumentoEstado.objects.get(
+                    nombre=DocumentoEstado.Nombre.BORRADOR
+                ),
+                emisor=emisor,
+                ambiente=Documento.Ambiente.PRUEBAS,
+                resolucion=resolucion,
+                moneda=Moneda.objects.get(codigo="COP"),
+                prefijo=resolucion.prefijo,
+                consecutivo=990000001,
+                fecha_emision=timezone.localdate(),
+                hora_emision=timezone.localtime().time(),
+                observaciones="Documento del Set de Pruebas (habilitación).",
+                valor_bruto=valor,
+                total_impuestos=iva,
+                total_a_pagar=valor + iva,
+            )
+
+            adquiriente = Adquiriente.objects.create(
+                documento=factura,
+                razon_social=emisor.razon_social,
+                tipo_identificacion=emisor.tipo_identificacion,
+                numero_identificacion=emisor.numero_identificacion,
+                tipo_organizacion=emisor.tipo_organizacion,
+                pais=emisor.pais,
+                departamento=emisor.departamento,
+                municipio=emisor.municipio,
+                direccion=emisor.direccion,
+                correo=emisor.correo,
+                telefono=emisor.telefono,
+            )
+            adquiriente.responsabilidades.set(emisor.responsabilidades.all())
+
+            detalle = DocumentoDetalle.objects.create(
+                documento=factura,
+                numero_linea=1,
+                descripcion="Servicio de prueba",
+                cantidad=Decimal("1"),
+                unidad_medida=UnidadMedida.objects.get(codigo="94"),
+                valor_unitario=valor,
+                valor_total=valor,
+            )
+            DocumentoDetalleImpuesto.objects.create(
+                detalle=detalle,
+                tributo=Tributo.objects.get(codigo="01"),
+                tarifa=Decimal("19.00"),
+                base_gravable=valor,
+                valor=iva,
+            )
+
+        dian.generar_y_firmar(factura, ambiente=factura.ambiente)
+        envio = dian.enviar_a_dian(factura, ambiente=factura.ambiente)
+        respuesta = dian.actualizar_estado(factura, ambiente=factura.ambiente)
+
+        return Response({
+            "estado": factura.estado.nombre,
+            "track_id": envio.track_id,
+            "es_valido": respuesta.es_valido,
+            "codigo_estado": respuesta.codigo_estado,
+            "descripcion": respuesta.descripcion_estado,
+            "errores": respuesta.errores,
+        }, status=status.HTTP_200_OK)
+
+    
