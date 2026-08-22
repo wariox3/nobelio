@@ -1,7 +1,12 @@
 """Serializer del emisor."""
 from rest_framework import serializers
 
-from apps.catalogos.models import Departamento, Municipio, Pais
+from apps.catalogos.models import (
+    Departamento,
+    Municipio,
+    Pais,
+    ResponsabilidadFiscal,
+)
 from apps.cuentas.models import Cuenta
 from apps.emisores.models import Emisor
 from apps.seguridad.alcance import MENSAJE_FUERA_DE_CUENTA, cuenta_de_la_credencial
@@ -71,6 +76,13 @@ class EmisorSerializer(serializers.ModelSerializer):
     pais = CodigoDeCatalogo(queryset=Pais.objects.all())
     departamento = CodigoDeCatalogo(queryset=Departamento.objects.all())
     municipio = CodigoDeCatalogo(queryset=Municipio.objects.all())
+    # Igual que la ubicación: por su código de la lista TipoResponsabilidad
+    # ('O-13', 'O-15', 'O-23', 'O-47', 'R-99-PN'), que es lo que viaja en el
+    # TaxLevelCode del XML y lo que el ERP conoce. Sin ninguna, el XML sale con
+    # 'R-99-PN' (ver `SIN_RESPONSABILIDAD` en apps.dian.ubl).
+    responsabilidades = CodigoDeCatalogo(
+        queryset=ResponsabilidadFiscal.objects.all(), many=True, required=False,
+    )
     # Lo marca el envío del Set de Pruebas, no el cuerpo de la petición:
     # decir 'ya estoy habilitado' no habilita a nadie.
     habilitado_facturacion = serializers.BooleanField(read_only=True)

@@ -34,15 +34,7 @@ from apps.utilidades.rues import RuesNoDisponible, consultar_detalle
 
 
 class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
-    """CRUD de emisores, acotado a los que alcanza el solicitante.
 
-    Aquí el propio modelo es el emisor, así que el alcance se aplica sobre el
-    ``id``. Dar de alta un emisor es cosa de la integración (que lo cuelga de su
-    propia cuenta) o del staff (que indica cuál); un usuario humano no tiene
-    cuenta de la que colgarlo, así que no puede crearlos.
-    """
-
-    # El modelo es el emisor: el alcance filtra por su propia clave.
     campo_emisor = "id"
 
     queryset = models.Emisor.objects.prefetch_related("resoluciones", "responsabilidades")
@@ -167,7 +159,7 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
                 vigente_hasta=date(2030, 1, 19),
             )
             """
-            resolucion = models.ResolucionFacturacion.objects.get(pk=7)
+            resolucion = models.ResolucionFacturacion.objects.get(pk=8)
             valor = Decimal("1000.00")
             iva = Decimal("190.00")
             factura = Documento.objects.create(

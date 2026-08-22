@@ -51,10 +51,10 @@ AGENCIA_DIAN = "CO, DIAN (Dirección de Impuestos y Aduanas Nacionales)"
 # Códigos de tributo relevantes para el CUFE/CUDE.
 COD_IVA = "01"
 
-# TaxLevelCode cuando la entidad no declara ninguna responsabilidad. Es el
-# "No aplica" de la lista TipoResponsabilidad-2.1; el antiguo "R-99-PN" ya no
-# está en esa lista y la DIAN lo rechaza.
-SIN_RESPONSABILIDAD = "ZZ"
+# TaxLevelCode cuando la entidad no declara ninguna responsabilidad. Es el "No
+# responsable" que fijó el anexo técnico 1.8: sustituyó al "ZZ" ("No aplica")
+# de la lista de 2019, que la DIAN rechaza hoy con FAJ26/FAK26.
+SIN_RESPONSABILIDAD = "R-99-PN"
 COD_ICA = "03"
 COD_INC = "04"
 
@@ -440,10 +440,11 @@ class ConstructorUBL:
     # -- Auxiliares ---------------------------------------------------------
 
     def _responsabilidades(self, entidad) -> str:
-        """TaxLevelCode: los códigos de la lista TipoResponsabilidad, o ``ZZ``.
+        """TaxLevelCode: los códigos de la lista TipoResponsabilidad, o ``R-99-PN``.
 
-        ``ZZ`` ("No aplica") es el código de la 2.1; ``R-99-PN`` era el de la
-        versión anterior y la DIAN lo rechaza con CAJ26/CAK26.
+        ``R-99-PN`` ("No responsable") es el que puso el anexo técnico 1.8 para
+        quien no tiene ninguna de las otras cuatro. El ``ZZ`` de la lista de
+        2019 ya no vale: la DIAN lo rechaza con FAJ26/FAK26.
         """
         codigos = [r.codigo for r in entidad.responsabilidades.all()]
         return ";".join(codigos) if codigos else SIN_RESPONSABILIDAD

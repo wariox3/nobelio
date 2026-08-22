@@ -38,15 +38,6 @@ class ErrorEmision(Exception):
     """Error en el proceso de emisión de un documento."""
 
 
-def _ya_procesado(respuesta) -> bool:
-    """Detecta la regla 90 de la DIAN ("Documento procesado anteriormente").
-
-    Significa que el CUFE ya fue recibido y aceptado en un envío previo, así que
-    no es un rechazo de contenido sino un documento ya aceptado.
-    """
-    return any("procesado anteriormente" in e.lower() for e in respuesta.errores)
-
-
 # "Regla: <regla>, <Tipo>: <mensaje>" (Rechazo / Notificación).
 _RE_ERROR = re.compile(
     r"Regla:\s*(?P<regla>[^,]+),\s*(?P<tipo>[^:]+):\s*(?P<mensaje>.*)",
@@ -67,6 +58,31 @@ def _parsear_error(texto: str) -> dict:
     else:
         tipo = DocumentoError.Tipo.OTRO
     return {"regla": m.group("regla").strip(), "tipo": tipo, "mensaje": m.group("mensaje").strip()}
+
+
+def _ya_procesado(respuesta) -> bool:
+    """La regla 90 de la DIAN ("Documento procesado anteriormente"), **sola**.
+
+    Dice que la DIAN ya tiene ese CUFE de un envío previo, no que lo haya
+    aprobado: el envío duplicado vuelve con código 99 tanto si aquella vez se
+    aceptó como si se rechazó. Solo cuenta como aceptación cuando llega sin
+    ningún otro rechazo; si la acompañan reglas de contenido (FAJ26, FAK26…),
+    lo que hubo antes fue un rechazo y darlo por aceptado dejaría el documento
+    con un estado que la DIAN no comparte —y, al ser terminal, sin forma de
+    corregirlo ni de borrarlo—.
+
+    Las notificaciones no estorban: son informativas y no rechazan nada.
+    """
+    procesado = False
+    for texto in respuesta.errores:
+        datos = _parsear_error(texto)
+        if datos["tipo"] == DocumentoError.Tipo.NOTIFICACION:
+            continue
+        if "procesado anteriormente" in datos["mensaje"].lower():
+            procesado = True
+            continue
+        return False
+    return procesado
 
 
 def _guardar_respuesta(documento, respuesta):
