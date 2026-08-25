@@ -310,29 +310,30 @@ def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):
     return respuesta
 
 
-def _cliente_y_clave(documento, cliente, ambiente, clave, **cred):
-    """Prepara lo común a las dos consultas: cliente SOAP e identificador."""
+def _cliente_para(documento, cliente, ambiente, **cred):
+    """El cliente SOAP de las consultas, ya resuelto el ambiente."""
     ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
     if cliente is None:
         cliente = construir_cliente(documento, ambiente, **cred)
-    clave = clave or documento.track_id
-    if not clave:
-        raise ErrorEmision("El documento no tiene track_id; envíelo a la DIAN primero.")
-    return cliente, clave
+    return cliente
 
 
 def consultar_estado(documento, *, cliente=None, ambiente=None, track_id=None, **cred):
-    """GetStatus: pregunta por el **documento**, por su CUFE/trackId.
+    """GetStatus: pregunta por el **documento**, por su CUFE.
 
     Solo lectura: NO modifica el documento; devuelve lo que responde la DIAN.
     Para aplicar el resultado usa ``actualizar_estado``.
 
-    Es la consulta de los envíos síncronos (SendBillSync), y también la forma de
-    saber cómo quedó un documento del Set de Pruebas cuya entrega ya no dice
-    nada útil —p. ej. cuando el zip responde "procesado anteriormente"—: basta
-    pasarle ``track_id=documento.cufe_cude``.
+    El identificador por defecto es el CUFE porque es el del documento: el
+    ``track_id`` de un envío al Set de Pruebas es un ZipKey, que aquí no
+    significa nada. Es también la única forma de saber cómo quedó un documento
+    cuya entrega ya no dice nada útil —cuando el zip responde "procesado
+    anteriormente"—. ``track_id`` sigue disponible para forzar otro.
     """
-    cliente, clave = _cliente_y_clave(documento, cliente, ambiente, track_id, **cred)
+    cliente = _cliente_para(documento, cliente, ambiente, **cred)
+    clave = track_id or documento.cufe_cude
+    if not clave:
+        raise ErrorEmision("El documento no tiene CUFE; emítalo primero.")
     return cliente.consultar_estado(clave)
 
 
@@ -340,12 +341,15 @@ def consultar_estado_zip(documento, *, cliente=None, ambiente=None, zip_key=None
     """GetStatusZip: pregunta por el **envío**, por su ZipKey.
 
     Solo lectura, igual que ``consultar_estado``. Es la consulta de lo que se
-    mandó con SendTestSetAsync, que es asíncrono y devuelve un ZipKey en vez de
-    un veredicto. Cuidado: responde por esa entrega concreta, no por el
-    documento; un reenvío del mismo CUFE sale como duplicado (regla 90) aunque
-    el documento esté aceptado.
+    mandó con SendTestSetAsync, que es asíncrono y devuelve un ZipKey —el
+    ``track_id`` del documento— en vez de un veredicto. Cuidado: responde por
+    esa entrega concreta, no por el documento; un reenvío del mismo CUFE sale
+    como duplicado (regla 90) aunque el documento esté aceptado.
     """
-    cliente, clave = _cliente_y_clave(documento, cliente, ambiente, zip_key, **cred)
+    cliente = _cliente_para(documento, cliente, ambiente, **cred)
+    clave = zip_key or documento.track_id
+    if not clave:
+        raise ErrorEmision("El documento no tiene track_id; envíelo a la DIAN primero.")
     return cliente.consultar_estado_zip(clave)
 
 

@@ -112,14 +112,46 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"])
     def consultar(self, request, pk=None):
-        """Consulta (solo lectura) el estado del documento en la DIAN.
+        """Consulta (solo lectura) el estado del **documento** en la DIAN.
+
+        ``GET /api/documentos/documento/{id}/consultar/`` → GetStatus, por el
+        CUFE. Es la pregunta "¿cómo quedó este documento?", y la respuesta vale
+        igual para un envío síncrono que para uno del Set de Pruebas.
 
         No modifica el documento; devuelve lo que responde la DIAN. Para aplicar
         el resultado usa la acción ``actualizar-estado``.
         """
         documento = self.get_object()
         try:
-            respuesta = servicios.consultar_segun_envio(documento)
+            respuesta = servicios.consultar_estado(documento)
+        except servicios.ErrorEmision as exc:
+            raise ErrorSolicitud(str(exc))
+        except requests.RequestException as exc:
+            raise error_pasarela_dian(exc)
+        return Response({
+            "estado": documento.estado.nombre,  # estado local (sin cambios)
+            "es_valido": respuesta.es_valido,
+            "codigo_estado": respuesta.codigo_estado,
+            "descripcion": respuesta.descripcion_estado,
+            "errores": respuesta.errores,
+        })
+
+    @action(detail=True, methods=["get"], url_path="consultar-zip")
+    def consultar_zip(self, request, pk=None):
+        """Consulta (solo lectura) el **envío** al Set de Pruebas.
+
+        ``GET /api/documentos/documento/{id}/consultar-zip/`` → GetStatusZip,
+        por el ZipKey que devolvió ``SendTestSetAsync`` y que quedó en
+        ``track_id``.
+
+        Responde por esa entrega, no por el documento: si el mismo CUFE se
+        envió más de una vez, sale como duplicado (regla 90) aunque el
+        documento esté aceptado. Para saber cómo quedó el documento, la acción
+        es ``consultar``.
+        """
+        documento = self.get_object()
+        try:
+            respuesta = servicios.consultar_estado_zip(documento)
         except servicios.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
         except requests.RequestException as exc:
