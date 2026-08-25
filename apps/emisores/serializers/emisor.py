@@ -157,3 +157,33 @@ class EmisorSerializer(serializers.ModelSerializer):
         # Vacío a propósito: desactiva el UniqueTogetherValidator automático de
         # DRF para que la unicidad la explique `validate()` con un mensaje útil.
         validators = []
+
+
+# Campos del emisor que el listado no devuelve: la resolución solo interesa en
+# el detalle, el municipio sale desglosado (id, nombre y código) y país y
+# departamento no se muestran en la tabla.
+FUERA_DEL_LISTADO = {"resoluciones", "municipio", "departamento", "pais"}
+
+
+class EmisorListaSerializer(EmisorSerializer):
+    """El emisor tal y como sale en el listado.
+
+    Una resolución solo interesa al abrir el emisor concreto, y anidarlas en el
+    listado infla la respuesta —y obliga a traerlas todas— sin que nadie las
+    mire. ``GET /api/emisores/emisor/{id}/`` las sigue devolviendo.
+    """
+
+    # El listado se pinta en una tabla: necesita el nombre del municipio ya
+    # resuelto, y su id para poder seleccionarlo en un formulario sin volver a
+    # buscarlo en el catálogo. Sustituyen a `municipio`, que aquí solo repetía
+    # el código; el detalle lo sigue devolviendo (y recibiendo) como siempre.
+    municipio_id = serializers.IntegerField(read_only=True)
+    municipio_nombre = serializers.CharField(source="municipio.nombre", read_only=True)
+    municipio_codigo = serializers.CharField(source="municipio.codigo", read_only=True)
+
+    class Meta(EmisorSerializer.Meta):
+        fields = [
+            campo
+            for campo in EmisorSerializer.Meta.fields
+            if campo not in FUERA_DEL_LISTADO
+        ] + ["municipio_id", "municipio_nombre", "municipio_codigo"]

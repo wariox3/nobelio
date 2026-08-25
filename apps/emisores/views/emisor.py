@@ -43,6 +43,22 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
     serializer_class = serializers.EmisorSerializer
     search_fields = ["razon_social", "numero_identificacion", "nombre_comercial"]
 
+    def get_serializer_class(self):
+        """El listado va sin resoluciones; el detalle y las escrituras sí las llevan."""
+        if self.action == "list":
+            return serializers.EmisorListaSerializer
+        return super().get_serializer_class()
+
+    def get_queryset(self):
+        # Sin el campo anidado, traerse las resoluciones del listado entero es
+        # una consulta que nadie aprovecha.
+        consulta = super().get_queryset()
+        if self.action == "list":
+            consulta = consulta.prefetch_related(None).prefetch_related(
+                "responsabilidades"
+            ).select_related("municipio")
+        return consulta
+
     def create(self, request, *args, **kwargs):
         # Se comprueba antes de validar el cuerpo: quien no tiene cuenta de la
         # que colgar el emisor merece un 403 claro, no un 400 sobre los campos.
