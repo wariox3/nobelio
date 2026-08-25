@@ -1,9 +1,6 @@
 """API del emisor."""
-import time
 from datetime import date
-from decimal import Decimal
 
-import requests
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -11,20 +8,12 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
-from apps.catalogos.models import Moneda, TipoFactura, Tributo, UnidadMedida
-from apps.dian import servicios as dian
-from apps.documentos.models import (
-    Adquiriente,
-    Documento,
-    DocumentoDetalle,
-    DocumentoDetalleImpuesto,
-    DocumentoEstado,
-    DocumentoTipo,
-)
+from apps.catalogos.models import TipoFactura
 from apps.emisores import models, serializers
 from apps.emisores.models.emisor import Emisor
 from apps.emisores.models.certificado import Certificado
-from apps.nucleo.api import ErrorSolicitud, error_pasarela_dian
+from apps.emisores.servicios import crear_documento_habilitacion
+from apps.nucleo.api import ErrorSolicitud
 from apps.seguridad.alcance import (
     MENSAJE_SIN_CUENTA,
     AlcanceEmisorMixin,
@@ -152,143 +141,46 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         if certificado.vigente_hasta and certificado.vigente_hasta < hoy:
             raise ErrorSolicitud("EL certificado esta vencido")
 
-        #identificador = request.data.get("identificador")
-        #if models.SoftwareDian.objects.filter(
-        #    emisor=emisor, identificador=identificador
-        #).exists():
-        #    raise ErrorSolicitud(f"El software '{identificador}' ya está registrado para este emisor.")
+        identificador = request.data.get("identificador")
+        existente = models.SoftwareDian.objects.filter(emisor=emisor, identificador=identificador).exists()
 
-        software = serializers.SoftwareDianSerializer(data=request.data)
-        software.is_valid(raise_exception=True)
+        consecutivo = request.data.get("consecutivo")
+        if consecutivo not in (None, ""):
+            try:
+                consecutivo = int(consecutivo)
+            except (TypeError, ValueError):
+                raise ErrorSolicitud("El consecutivo debe ser un número entero.")
+            if consecutivo < 1:
+                raise ErrorSolicitud("El consecutivo debe ser mayor que cero.")
+        else:
+            consecutivo = None
+
+        if not existente:
+            software = serializers.SoftwareDianSerializer(data=request.data)
+            software.is_valid(raise_exception=True)
+
         with transaction.atomic():
-            models.SoftwareDian.objects.filter(emisor=emisor, activo=True).update(activo=False)
-            software.save(activo=True)
-            
-            resolucion = models.ResolucionFacturacion.objects.create(
+            if not existente:
+                models.SoftwareDian.objects.filter(emisor=emisor, activo=True).update(activo=False)
+                software.save(activo=True)
+
+            resolucion, _ = models.ResolucionFacturacion.objects.update_or_create(
                 emisor=emisor,
                 tipo_factura=TipoFactura.objects.get(codigo="01"),
                 prefijo="SETP",
                 numero_resolucion="18760000001",
-                fecha_resolucion=date(2026, 6, 29),
-                rango_desde=990000000,
-                rango_hasta=995000000,
-                clave_tecnica="fc8eac422eba16e22ffd8c6f94b3f40a6e38162c",
-                vigente_desde=date(2019, 1, 19),
-                vigente_hasta=date(2030, 1, 19),
+                defaults={
+                    "fecha_resolucion": date(2026, 6, 29),
+                    "rango_desde": 990000000,
+                    "rango_hasta": 995000000,
+                    "clave_tecnica": "fc8eac422eba16e22ffd8c6f94b3f40a6e38162c",
+                    "vigente_desde": date(2019, 1, 19),
+                    "vigente_hasta": date(2030, 1, 19),
+                    "activa": True,
+                },
             )
-            
-            #resolucion = models.ResolucionFacturacion.objects.get(pk=8)
-            valor = Decimal("1000.00")
-            iva = Decimal("190.00")
-            factura = Documento.objects.create(
-                documento_tipo=DocumentoTipo.objects.get(
-                    codigo=DocumentoTipo.Codigo.FACTURA_VENTA
-                ),
-                estado=DocumentoEstado.objects.get(
-                    nombre=DocumentoEstado.Nombre.BORRADOR
-                ),
-                emisor=emisor,
-                ambiente=Documento.Ambiente.PRUEBAS,
-                resolucion=resolucion,
-                moneda=Moneda.objects.get(codigo="COP"),
-                prefijo=resolucion.prefijo,
-                consecutivo=990000000,
-                fecha_emision=timezone.localdate(),
-                hora_emision=timezone.localtime().time(),
-                observaciones="Documento del Set de Pruebas (habilitación).",
-                valor_bruto=valor,
-                total_impuestos=iva,
-                total_a_pagar=valor + iva,
-            )
+            crear_documento_habilitacion(emisor, resolucion, consecutivo=consecutivo)
 
-            adquiriente = Adquiriente.objects.create(
-                documento=factura,
-                razon_social=emisor.razon_social,
-                tipo_identificacion=emisor.tipo_identificacion,
-                numero_identificacion=emisor.numero_identificacion,
-                tipo_organizacion=emisor.tipo_organizacion,
-                pais=emisor.pais,
-                departamento=emisor.departamento,
-                municipio=emisor.municipio,
-                direccion=emisor.direccion,
-                correo=emisor.correo,
-                telefono=emisor.telefono,
-            )
-            adquiriente.responsabilidades.set(emisor.responsabilidades.all())
-
-            detalle = DocumentoDetalle.objects.create(
-                documento=factura,
-                numero_linea=1,
-                descripcion="Servicio de prueba",
-                cantidad=Decimal("1"),
-                unidad_medida=UnidadMedida.objects.get(codigo="94"),
-                valor_unitario=valor,
-                valor_total=valor,
-            )
-            DocumentoDetalleImpuesto.objects.create(
-                detalle=detalle,
-                tributo=Tributo.objects.get(codigo="01"),
-                tarifa=Decimal("19.00"),
-                base_gravable=valor,
-                valor=iva,
-            )
-
-
-        try:
-            dian.generar_y_firmar(factura, ambiente=factura.ambiente)
-        except dian.ErrorEmision as exc:
-            return Response({
-                "documento": str(factura.pk),
-                "numero": factura.numero,
-                "estado": factura.estado.nombre,
-                "descripcion": "No se pudo firmar la factura del Set de Pruebas.",
-                "errores": [str(exc)],
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        
-        try:
-            envio = dian.enviar_a_dian(factura, ambiente=factura.ambiente)
-        except dian.ErrorEmision as exc:
-            return Response({
-                "documento": str(factura.pk),
-                "numero": factura.numero,
-                "estado": factura.estado.nombre,
-                "descripcion": "No se pudo enviar la factura del Set de Pruebas.",
-                "errores": [str(exc)],
-            }, status=status.HTTP_400_BAD_REQUEST)
-        except requests.RequestException as exc:
-            raise error_pasarela_dian(exc)
-
-        if factura.estado.nombre == DocumentoEstado.Nombre.RECHAZADO:
-            return Response({
-                "documento": str(factura.pk),
-                "numero": factura.numero,
-                "estado": factura.estado.nombre,
-                "descripcion": envio.descripcion_estado,
-                "errores": envio.errores,
-            }, status=status.HTTP_400_BAD_REQUEST)
-
-        # SendTestSetAsync no dictamina en el envío: hay que esperar y preguntar.
-        # Se espera antes de la primera consulta porque la DIAN nunca contesta
-        # en el acto, y se sale en cuanto hay veredicto —aceptado o rechazado—,
-        # que reintentar sobre una decisión tomada no cambia nada. Si se agotan
-        # los intentos la factura se queda en 'enviado' y se remata luego con
-        # POST /api/documentos/documento/{id}/actualizar-estado/.
-        time.sleep(5)
-        for intento in range(3):
-            if intento:
-                time.sleep(3)
-            respuesta = dian.actualizar_estado(factura, ambiente=factura.ambiente)
-            if factura.estado.nombre != DocumentoEstado.Nombre.ENVIADO:
-                break
-
-        return Response({
-            "estado": factura.estado.nombre,
-            "track_id": envio.track_id,
-            "es_valido": respuesta.es_valido,
-            "codigo_estado": respuesta.codigo_estado,
-            "descripcion": respuesta.descripcion_estado,
-            "errores": respuesta.errores,
-        }, status=status.HTTP_200_OK)
+        return Response({}, status=status.HTTP_200_OK)
 
     
