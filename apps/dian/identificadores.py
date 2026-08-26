@@ -78,6 +78,16 @@ def formatear_hora(hora) -> str:
     return str(hora)
 
 
+def nombre_archivo_dian(prefijo: str, *, nit, consecutivo) -> str:
+    """Compone el nombre de un archivo según la convención DIAN, sin extensión.
+
+    ``prefijo`` + NIT del emisor a 10 dígitos + consecutivo a 8, rellenando con
+    ceros a la izquierda. Los prefijos son ``z`` para el zip de entrega y ``ad``
+    para el AttachedDocument.
+    """
+    return f"{prefijo}{str(nit).zfill(10)}{str(consecutivo).zfill(8)}"
+
+
 def _sha384_hex(cadena: str) -> str:
     """SHA-384 en hexadecimal (minúsculas) de una cadena UTF-8."""
     return hashlib.sha384(cadena.encode("utf-8")).hexdigest()

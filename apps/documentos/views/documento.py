@@ -13,6 +13,7 @@ from apps.documentos.servicios import (
     ErrorNotificacion,
     empaquetar_notificacion,
     marcar_notificado,
+    nombre_dian,
 )
 from apps.nucleo.api import ErrorSolicitud, error_pasarela_dian
 from apps.seguridad.alcance import AlcanceEmisorMixin
@@ -236,7 +237,7 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
             raise ErrorSolicitud(str(exc))
         respuesta = HttpResponse(contenido, content_type="application/xml")
         respuesta["Content-Disposition"] = (
-            f'attachment; filename="ad{documento.numero}.xml"'
+            f'attachment; filename="{nombre_dian(documento, "ad")}.xml"'
         )
         return respuesta
 
@@ -245,11 +246,11 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         """Arma lo que se le entrega al adquiriente y lo deja listo para enviar.
 
         ``POST /api/documentos/documento/{id}/notificar/`` en multipart, con
-        ``pdf`` y ``adjuntos`` opcionales (hasta 10 MB entre todos). Siempre
-        viaja el AttachedDocument —el documento firmado y el acuse de la DIAN
-        juntos—: con adjuntos se comprime todo en un zip y sin ellos se entrega
-        solo. Con ``?descargar=1`` devuelve el paquete en vez del resumen, que
-        es la forma de revisarlo mientras el correo no está implementado.
+        ``pdf`` y ``adjuntos`` opcionales (hasta 10 MB entre todos). El
+        resultado es siempre un zip, y dentro va siempre el AttachedDocument
+        —el documento firmado y el acuse de la DIAN juntos—. Con
+        ``?descargar=1`` devuelve el zip en vez del resumen, que es la forma de
+        revisarlo mientras el correo no está implementado.
 
         El envío por correo todavía no existe: por eso la respuesta dice
         ``enviado: false``.
