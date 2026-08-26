@@ -1,10 +1,14 @@
 """
-Cálculo de los identificadores únicos DIAN: CUFE, CUDE y código de seguridad
-del software.
+Cálculo de los identificadores únicos DIAN: CUFE, CUDE, CUDS y código de
+seguridad del software.
 
 Referencia: Anexo Técnico Factura Electrónica de Venta v1.9 (Res. 000165/2023),
 secciones 11.2 (CUFE), 11.4 (CUDE) y 11.8 (SoftwareSecurityCode).
 Resumen en ``docs/anexo-tecnico.md``.
+
+El CUDS es del otro anexo —Documento Soporte v1.1 (Res. 000167/2021), numeral
+14.1.1, resumen en ``docs/anexo-documento-soporte.md``— y no comparte
+composición con los anteriores: ver ``calcular_cuds``.
 
 Reglas de formato (críticas para que el hash coincida con el de la DIAN):
   - Algoritmo: SHA-384 sobre la concatenación de los campos en orden exacto.
@@ -23,6 +27,7 @@ from decimal import ROUND_DOWN, Decimal, InvalidOperation
 # Valores del atributo @schemeName de /cbc:UUID según el tipo de documento.
 SCHEME_NAME_CUFE = "CUFE-SHA384"
 SCHEME_NAME_CUDE = "CUDE-SHA384"
+SCHEME_NAME_CUDS = "CUDS-SHA384"
 
 # Códigos fijos de impuesto usados en la composición (orden definido por la DIAN).
 COD_IMPUESTO_IVA = "01"
@@ -203,6 +208,52 @@ def calcular_cude(
         id_adquirente=id_adquirente,
         clave=pin_software,
         tipo_ambiente=tipo_ambiente,
+    )
+    return _sha384_hex(composicion)
+
+
+def calcular_cuds(
+    *,
+    numero_documento: str,
+    fecha,
+    hora,
+    valor_sin_impuestos,
+    valor_total,
+    nit_vendedor: str,
+    nit_adquiriente: str,
+    pin_software: str,
+    tipo_ambiente,
+    valor_iva=0,
+) -> str:
+    """Calcula el CUDS (Código Único de Documento Soporte).
+
+    **No es el CUDE.** Comparte el algoritmo (SHA-384) y el PIN del software,
+    pero la composición es más corta: lleva un solo impuesto —el IVA— donde el
+    CUFE/CUDE lleva tres pares (IVA, INC, ICA). Pasar por ``calcular_cude`` un
+    documento soporte produce un hash que la DIAN rechaza.
+
+    El orden de los dos identificadores también es propio: primero el del
+    vendedor (el sujeto no obligado, que en el UBL va como *supplier*) y después
+    el del adquiriente que emite y firma (que va como *customer*). Es el reverso
+    de la factura, donde el que firma va primero.
+
+    Aplica al documento soporte (Invoice tipo 05) y a su nota de ajuste
+    (CreditNote tipo 95). Va en ``/cbc:UUID`` con ``@schemeName="CUDS-SHA384"``.
+
+    Referencia: Anexo Técnico Documento Soporte v1.1 (Res. 000167/2021),
+    numeral 14.1.1. Resumen en ``docs/anexo-documento-soporte.md``.
+    """
+    composicion = (
+        f"{numero_documento}"
+        f"{formatear_fecha(fecha)}"
+        f"{formatear_hora(hora)}"
+        f"{formatear_valor(valor_sin_impuestos)}"
+        f"{COD_IMPUESTO_IVA}{formatear_valor(valor_iva)}"
+        f"{formatear_valor(valor_total)}"
+        f"{nit_vendedor}"
+        f"{nit_adquiriente}"
+        f"{pin_software}"
+        f"{tipo_ambiente}"
     )
     return _sha384_hex(composicion)
 

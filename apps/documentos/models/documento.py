@@ -273,6 +273,19 @@ class Documento(ModeloUUID, ModeloConFechas):
         super().save(*args, **kwargs)
 
     @property
+    def contraparte(self):
+        """La otra parte del documento, se llame como se llame en cada tipo.
+
+        En factura y notas el ``adquiriente`` es el receptor. En el documento
+        soporte es el **vendedor** —el sujeto no obligado a facturar—, porque
+        allí quien emite es el comprador. Los datos que hacen falta son los
+        mismos, así que se guardan en la misma fila; este alias existe para que
+        el código que trabaja con documento soporte no tenga que leer
+        "adquiriente" queriendo decir lo contrario.
+        """
+        return self.adquiriente
+
+    @property
     def es_borrador(self) -> bool:
         """Aún no se ha firmado, así que sus datos todavía se pueden cambiar."""
         from .documento_estado import DocumentoEstado

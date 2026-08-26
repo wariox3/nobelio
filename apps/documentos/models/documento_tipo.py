@@ -18,6 +18,25 @@ class DocumentoTipo(ModeloConFechas):
         DOCUMENTO_SOPORTE = "documento_soporte", "Documento soporte"
         NOMINA = "nomina", "Nómina electrónica"
 
+    # Los tipos que se numeran con una resolución autorizada por la DIAN: de
+    # ella sale el bloque sts:InvoiceControl del XML, y en la factura además la
+    # clave técnica del CUFE. El documento soporte tiene numeración propia,
+    # distinta de la de facturación (anexo DS, nota-1 del numeral 14.1.1.2); su
+    # CUDS no usa clave técnica sino el PIN del software, así que su resolución
+    # puede no traerla. Las notas heredan la numeración del documento que
+    # corrigen y no llevan InvoiceControl.
+    CODIGOS_CON_RESOLUCION = frozenset({
+        Codigo.FACTURA_VENTA,
+        Codigo.DOCUMENTO_SOPORTE,
+    })
+
+    # Los tipos que llevan las retenciones aparte: no suman al total a pagar y
+    # en el XML salen en cac:WithholdingTaxTotal (ver `emite_retenciones` en
+    # `apps/dian/ubl.py`). Solo el documento soporte: el anexo de factura no usa
+    # ese elemento, y descontarlas allí del total dejaría el TaxInclusiveAmount
+    # sin cuadrar con los cac:TaxTotal que la factura sí emite.
+    CODIGOS_CON_RETENCIONES = frozenset({Codigo.DOCUMENTO_SOPORTE})
+
     codigo = models.CharField(
         "código", max_length=30, unique=True, choices=Codigo.choices,
         help_text="Discriminador interno que define la lógica de generación.",

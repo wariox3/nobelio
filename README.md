@@ -378,7 +378,11 @@ Estos puntos solo se confirman al integrar contra el ambiente real de la DIAN:
 2. Cargar el `.p12`, el `test_set_id` y las claves técnicas reales del emisor.
 3. Validar contra el **Set de Pruebas** (posibles ajustes de canonicalización
    exclusiva / `X509IssuerName` en la firma del sobre SOAP).
-4. Afinar los roles del **documento soporte** y el QR en **todas las páginas** del PDF.
+4. Poner el QR en **todas las páginas** de la representación gráfica.
+5. **Documento soporte**: el XML ya se genera con los roles invertidos, el CUDS
+   y las retenciones (ver [docs/anexo-documento-soporte.md](docs/anexo-documento-soporte.md)).
+   Falta la representación gráfica con sus rótulos, la nota de ajuste (tipo 95)
+   y el set de pruebas propio de su habilitación.
 
 ---
 

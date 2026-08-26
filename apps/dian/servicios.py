@@ -249,9 +249,14 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
     software = _software_activo(documento)
 
     codigo_tipo = documento.documento_tipo.codigo
-    es_factura = codigo_tipo == DocumentoTipo.Codigo.FACTURA_VENTA
-    if es_factura and documento.resolucion is None:
-        raise ErrorEmision("La factura no tiene resolución de facturación asociada.")
+    # La factura y el documento soporte se numeran con resolución: sin ella no
+    # hay sts:InvoiceControl que emitir. Cada uno con la suya, que la DIAN
+    # autoriza por separado.
+    if codigo_tipo in DocumentoTipo.CODIGOS_CON_RESOLUCION and documento.resolucion is None:
+        raise ErrorEmision(
+            f"{documento.documento_tipo.nombre} no tiene resolución de "
+            "numeración asociada."
+        )
     if (
         codigo_tipo in (DocumentoTipo.Codigo.NOTA_CREDITO,
                         DocumentoTipo.Codigo.NOTA_DEBITO)

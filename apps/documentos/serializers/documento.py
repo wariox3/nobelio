@@ -29,13 +29,16 @@ MENSAJE_DOCUMENTO_NO_EDITABLE = (
 )
 
 
-# El único tipo que se numera con una resolución de facturación: es de donde
-# sale la clave técnica del CUFE y el bloque sts:InvoiceControl del XML.
-TIPO_CON_RESOLUCION = models.DocumentoTipo.Codigo.FACTURA_VENTA
+# Factura y documento soporte. La lista vive en el modelo porque
+# `generar_y_firmar` exige lo mismo al emitir.
+TIPOS_CON_RESOLUCION = models.DocumentoTipo.CODIGOS_CON_RESOLUCION
 
-MENSAJE_FACTURA_SIN_RESOLUCION = (
-    "La factura debe indicar el número de una resolución activa del emisor."
-)
+
+def mensaje_sin_resolucion(tipo):
+    """Mensaje para un documento que se numera con resolución y no la indica."""
+    return (
+        f"{tipo.nombre} debe indicar el número de una resolución activa del emisor."
+    )
 
 # Tipos cuyo XML se construye con DiscrepancyResponse y BillingReference: sin
 # el documento corregido no hay nota que valga (ver `_ConstructorNotaUBL`).
@@ -285,11 +288,12 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
         self._validar_vencimiento(attrs)
 
         resolucion = attrs.get("resolucion") or getattr(self.instance, "resolucion", None)
-        # La factura sí se numera con resolución, y sin ella no hay clave técnica
-        # con la que calcular el CUFE. La misma regla la exige `generar_y_firmar`.
-        if resolucion is None and tipo is not None and tipo.codigo == TIPO_CON_RESOLUCION:
+        # Sin resolución no hay sts:InvoiceControl que emitir —ni clave técnica
+        # con la que calcular el CUFE en la factura—. Lo mismo exige
+        # `generar_y_firmar`.
+        if resolucion is None and tipo is not None and tipo.codigo in TIPOS_CON_RESOLUCION:
             raise serializers.ValidationError(
-                {"numero_resolucion": MENSAJE_FACTURA_SIN_RESOLUCION}
+                {"numero_resolucion": mensaje_sin_resolucion(tipo)}
             )
         if resolucion is not None:
             errores = self._errores_de_numeracion(resolucion, attrs)
@@ -422,12 +426,22 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
         )
         adquiriente.responsabilidades.set(responsabilidades)
 
+        # En el documento soporte las retenciones no suman al total a pagar: el
+        # adquiriente las practica sobre el pago, no se las cobra el vendedor, y
+        # en el XML van fuera del TaxInclusiveAmount.
+        retenciones_aparte = (
+            documento.documento_tipo.codigo
+            in models.DocumentoTipo.CODIGOS_CON_RETENCIONES
+        )
+
         for detalle_data in detalles_data:
             impuestos_data = detalle_data.pop("impuestos", [])
             detalle = models.DocumentoDetalle.objects.create(documento=documento, **detalle_data)
             valor_bruto += detalle.valor_total
             for imp in impuestos_data:
                 impuesto = models.DocumentoDetalleImpuesto.objects.create(detalle=detalle, **imp)
+                if retenciones_aparte and impuesto.tributo.es_retencion:
+                    continue
                 total_impuestos += impuesto.valor
 
         documento.valor_bruto = valor_bruto

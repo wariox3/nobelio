@@ -54,6 +54,27 @@ AGENCIA_DIAN = "CO, DIAN (Dirección de Impuestos y Aduanas Nacionales)"
 # Códigos de tributo relevantes para el CUFE/CUDE.
 COD_IVA = "01"
 
+# Literal exacto del cbc:ProfileID del documento soporte (regla DSAD03): 82
+# caracteres que la DIAN compara tal cual, punto final incluido.
+PROFILE_ID_DOCUMENTO_SOPORTE = (
+    "DIAN 2.1: documento soporte en adquisiciones efectuadas a no obligados a facturar."
+)
+
+# cbc:CustomizationID del documento soporte (lista TipoOperacion del anexo DS).
+# Ojo: aquí no indica el tipo de operación como en la factura, sino de dónde es
+# el vendedor, y de eso dependen qué campos de las partes son obligatorios.
+CUSTOMIZATION_DS_RESIDENTE = "10"
+CUSTOMIZATION_DS_NO_RESIDENTE = "11"
+
+# Código de país de Colombia (ISO 3166-1 alfa-2), para decidir la procedencia.
+COD_PAIS_COLOMBIA = "CO"
+
+# cac:TaxScheme del vendedor en el documento soporte: el sujeto no obligado no
+# es responsable de IVA, así que su tributo es "no aplica" (regla DSAJ40, que
+# solo notifica). El del adquiriente sí es el IVA.
+TRIBUTO_NO_APLICA = ("ZZ", "No aplica")
+TRIBUTO_IVA = (COD_IVA, "IVA")
+
 # TaxLevelCode cuando la entidad no declara ninguna responsabilidad. Es el "No
 # responsable" que fijó el anexo técnico 1.8: sustituyó al "ZZ" ("No aplica")
 # de la lista de 2019, que la DIAN rechaza hoy con FAJ26/FAK26.
@@ -135,6 +156,11 @@ class ConstructorUBL:
     permite_descuento_documento = True
     descuento_linea_antes_de_impuestos = True
     customization_id_default = "10"
+    # Si las retenciones van en cac:WithholdingTaxTotal, aparte de los demás
+    # tributos. Solo el documento soporte: el anexo de factura no usa ese
+    # elemento, así que allí las retenciones siguen saliendo como un TaxTotal
+    # más, que es lo que se venía haciendo.
+    emite_retenciones = False
 
     def __init__(
         self,
@@ -438,18 +464,36 @@ class ConstructorUBL:
             motivo=linea.descuento_motivo,
         )
 
+    def _etiqueta_impuesto(self, codigo) -> str:
+        """Dónde va este tributo: cac:TaxTotal o cac:WithholdingTaxTotal."""
+        if self.emite_retenciones and codigo in _Tributo.CODIGOS_RETENCION:
+            return "WithholdingTaxTotal"
+        return "TaxTotal"
+
+    def _bloque_impuesto(self, padre, etiqueta, *, codigo, nombre, tarifa, base, valor):
+        """Un cac:TaxTotal (o WithholdingTaxTotal) con su único TaxSubtotal."""
+        tax_total = _sub(padre, "cac", etiqueta)
+        _sub(tax_total, "cbc", "TaxAmount", _valor(valor), currencyID=self.moneda)
+        subtotal = _sub(tax_total, "cac", "TaxSubtotal")
+        _sub(subtotal, "cbc", "TaxableAmount", _valor(base), currencyID=self.moneda)
+        _sub(subtotal, "cbc", "TaxAmount", _valor(valor), currencyID=self.moneda)
+        categoria = _sub(subtotal, "cac", "TaxCategory")
+        _sub(categoria, "cbc", "Percent", _valor(tarifa))
+        esquema = _sub(categoria, "cac", "TaxScheme")
+        _sub(esquema, "cbc", "ID", codigo)
+        _sub(esquema, "cbc", "Name", nombre)
+
     def _totales_impuestos(self, raiz):
-        for codigo, datos in self.impuestos.items():
-            tax_total = _sub(raiz, "cac", "TaxTotal")
-            _sub(tax_total, "cbc", "TaxAmount", _valor(datos["valor"]), currencyID=self.moneda)
-            subtotal = _sub(tax_total, "cac", "TaxSubtotal")
-            _sub(subtotal, "cbc", "TaxableAmount", _valor(datos["base"]), currencyID=self.moneda)
-            _sub(subtotal, "cbc", "TaxAmount", _valor(datos["valor"]), currencyID=self.moneda)
-            categoria = _sub(subtotal, "cac", "TaxCategory")
-            _sub(categoria, "cbc", "Percent", _valor(datos["tarifa"]))
-            esquema = _sub(categoria, "cac", "TaxScheme")
-            _sub(esquema, "cbc", "ID", codigo)
-            _sub(esquema, "cbc", "Name", datos["nombre"])
+        # El XSD manda el orden: primero todos los TaxTotal y después todos los
+        # WithholdingTaxTotal, así que se recorre dos veces en vez de una.
+        for etiqueta in ("TaxTotal", "WithholdingTaxTotal"):
+            for codigo, datos in self.impuestos.items():
+                if self._etiqueta_impuesto(codigo) != etiqueta:
+                    continue
+                self._bloque_impuesto(
+                    raiz, etiqueta, codigo=codigo, nombre=datos["nombre"],
+                    tarifa=datos["tarifa"], base=datos["base"], valor=datos["valor"],
+                )
 
     def _total_monetario(self, raiz):
         total = _sub(raiz, "cac", self.etiqueta_total)
@@ -501,17 +545,18 @@ class ConstructorUBL:
             if self.descuento_linea_antes_de_impuestos:
                 self._descuento_linea(il, linea)
 
-            for imp in linea.impuestos.all():
-                tt = _sub(il, "cac", "TaxTotal")
-                _sub(tt, "cbc", "TaxAmount", _valor(imp.valor), currencyID=self.moneda)
-                st = _sub(tt, "cac", "TaxSubtotal")
-                _sub(st, "cbc", "TaxableAmount", _valor(imp.base_gravable), currencyID=self.moneda)
-                _sub(st, "cbc", "TaxAmount", _valor(imp.valor), currencyID=self.moneda)
-                cat = _sub(st, "cac", "TaxCategory")
-                _sub(cat, "cbc", "Percent", _valor(imp.tarifa))
-                esq = _sub(cat, "cac", "TaxScheme")
-                _sub(esq, "cbc", "ID", imp.tributo.codigo)
-                _sub(esq, "cbc", "Name", imp.tributo.nombre)
+            # Mismo orden que en el documento: los TaxTotal y luego, si el tipo
+            # los separa, los WithholdingTaxTotal.
+            impuestos_linea = list(linea.impuestos.all())
+            for etiqueta in ("TaxTotal", "WithholdingTaxTotal"):
+                for imp in impuestos_linea:
+                    if self._etiqueta_impuesto(imp.tributo.codigo) != etiqueta:
+                        continue
+                    self._bloque_impuesto(
+                        il, etiqueta, codigo=imp.tributo.codigo,
+                        nombre=imp.tributo.nombre, tarifa=imp.tarifa,
+                        base=imp.base_gravable, valor=imp.valor,
+                    )
 
             if not self.descuento_linea_antes_de_impuestos:
                 self._descuento_linea(il, linea)
@@ -674,23 +719,111 @@ class ConstructorNotaDebito(_ConstructorNotaUBL):
 
 
 class ConstructorDocumentoSoporte(ConstructorUBL):
-    """Documento soporte en adquisiciones a no obligados (Invoice tipo 05, CUDE).
+    """Documento soporte en adquisiciones a no obligados (Invoice tipo 05, CUDS).
 
-    Nota: usa la estructura ``Invoice`` con InvoiceTypeCode=05 y CUDE. Las
-    particularidades de roles del documento soporte se modelan vía emisor/
-    adquirente; es una aproximación pendiente de validar contra la DIAN.
+    Aquí el que emite y firma es el comprador, así que los roles UBL van al
+    revés que en la factura. La DIAN los llama:
+
+    - **SNO**: el sujeto no obligado a facturar, es decir el *vendedor*. Va en
+      ``cac:AccountingSupplierParty``, y sus datos son los del ``adquiriente``
+      del documento —que en este tipo es la contraparte, no el receptor—.
+    - **ABS**: el adquiriente de bienes y servicios, el obligado que genera el
+      documento. Va en ``cac:AccountingCustomerParty``, y es nuestro ``emisor``.
+
+    El identificador es el CUDS, que no es el CUDE (ver ``calcular_cuds``), y
+    las retenciones van en su propio ``cac:WithholdingTaxTotal``.
+
+    Referencia: Anexo Técnico Documento Soporte v1.1, resumen en
+    ``docs/anexo-documento-soporte.md``.
     """
 
-    scheme_name = ident.SCHEME_NAME_CUDE
-    usa_cude = True
-    customization_id_default = "10"
+    profile_id = PROFILE_ID_DOCUMENTO_SOPORTE
+    scheme_name = ident.SCHEME_NAME_CUDS
+    emite_retenciones = True
 
-    def _linea_extra(self, il, linea):
-        _sub(il, "cbc", "FreeOfChargeIndicator", "false")
+    @property
+    def customization_id_default(self) -> str:
+        """Procedencia del vendedor (DSAD02): 10 residente, 11 no residente.
+
+        Se deduce del país del vendedor en vez de pedirse aparte: es el mismo
+        dato dicho dos veces, y un documento cuyo CustomizationID no case con la
+        dirección que lleva dentro es un rechazo.
+        """
+        pais = self.doc.adquiriente.pais
+        if pais is not None and pais.codigo == COD_PAIS_COLOMBIA:
+            return CUSTOMIZATION_DS_RESIDENTE
+        return CUSTOMIZATION_DS_NO_RESIDENTE
+
+    def calcular_identificador(self) -> str:
+        """CUDS: composición propia, y el vendedor antes que el adquiriente."""
+        return ident.calcular_cuds(
+            numero_documento=self.doc.numero,
+            fecha=self.doc.fecha_emision,
+            hora=self.doc.hora_emision,
+            valor_sin_impuestos=self.doc.valor_bruto,
+            valor_iva=_valor_por_tributo(self.impuestos, COD_IVA),
+            valor_total=self.doc.total_a_pagar,
+            nit_vendedor=self.doc.adquiriente.numero_identificacion,
+            nit_adquiriente=self.doc.emisor.numero_identificacion,
+            pin_software=self.pin,
+            tipo_ambiente=self.ambiente,
+        )
+
+    def _parte_emisor(self, raiz):
+        """``cac:AccountingSupplierParty``, que aquí es el **vendedor** (SNO).
+
+        El nombre del método es el del hueco que deja la base —``construir`` lo
+        llama en el orden que fija el XSD—; lo que se emite dentro no es el
+        emisor sino la contraparte.
+        """
+        self._parte_soporte(
+            raiz, "AccountingSupplierParty", self.doc.adquiriente,
+            tributo=TRIBUTO_NO_APLICA, con_direccion=True,
+        )
+
+    def _parte_adquirente(self, raiz):
+        """``cac:AccountingCustomerParty``: el adquiriente obligado (ABS).
+
+        Es nuestro ``emisor``: el que firma. No lleva dirección física; el anexo
+        solo le pide el grupo tributario.
+        """
+        self._parte_soporte(
+            raiz, "AccountingCustomerParty", self.doc.emisor,
+            tributo=TRIBUTO_IVA, con_direccion=False,
+        )
+
+    def _parte_soporte(self, raiz, etiqueta, entidad, *, tributo, con_direccion):
+        """Bloque de parte del documento soporte: bastante más corto que el de factura.
+
+        No lleva ``PartyName``, ``PartyIdentification``, ``PartyLegalEntity``,
+        ``Contact`` ni ``Person`` —el anexo del DS no los define— y su
+        ``PartyTaxScheme`` va sin ``RegistrationAddress``. Comprobado contra
+        ``apps/dian/datos/ejemplos/documento-soporte/documento-soporte-residente.xml``.
+        """
+        parte = _sub(raiz, "cac", etiqueta)
+        _sub(parte, "cbc", "AdditionalAccountID", self._codigo_organizacion(entidad))
+        party = _sub(parte, "cac", "Party")
+        if con_direccion:
+            self._direccion_fisica(party, entidad)
+        pts = _sub(party, "cac", "PartyTaxScheme")
+        _sub(pts, "cbc", "RegistrationName", entidad.razon_social)
+        _sub(pts, "cbc", "CompanyID", entidad.numero_identificacion,
+             schemeAgencyID="195", schemeAgencyName=AGENCIA_DIAN,
+             schemeID=entidad.digito_verificacion or "0",
+             schemeName=entidad.tipo_identificacion.codigo)
+        _sub(pts, "cbc", "TaxLevelCode", self._responsabilidades(entidad))
+        esquema = _sub(pts, "cac", "TaxScheme")
+        _sub(esquema, "cbc", "ID", tributo[0])
+        _sub(esquema, "cbc", "Name", tributo[1])
 
 
 # Mapeo código de tipo de documento -> constructor.
 from apps.documentos.models import DocumentoTipo as _Tipo  # noqa: E402
+
+# Los códigos de retención, para repartir los impuestos entre cac:TaxTotal y
+# cac:WithholdingTaxTotal. Va aquí abajo, con el otro import de modelos, por la
+# misma razón: los métodos que lo usan solo lo resuelven al ejecutarse.
+from apps.catalogos.models import Tributo as _Tributo  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # AttachedDocument: el "sobre" con el que se entrega el documento al adquiriente
