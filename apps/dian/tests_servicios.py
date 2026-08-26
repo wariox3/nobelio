@@ -52,7 +52,7 @@ class GenerarYFirmarTests(TestCase):
         # El CUFE que se comprueba es el del ejemplo oficial de la DIAN, y en él
         # entra la fecha del documento: hay que firmar "ese día" para que valga,
         # porque `generar_y_firmar` exige que emisión y firma coincidan (FAD09).
-        with hoy_es(self.documento.fecha_emision):
+        with hoy_es(self.documento.fecha_emision, self.documento.hora_emision):
             servicios.generar_y_firmar(self.documento, firmador=firmador, ambiente=1)
 
         self.documento.refresh_from_db()

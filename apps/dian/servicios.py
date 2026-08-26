@@ -196,6 +196,11 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
 
     Guarda ``cufe_cude`` y ``xml_firmado`` y deja el documento en estado FIRMADO.
     Devuelve los bytes del XML firmado.
+
+    La ``hora_emision`` se fija aquí, en el momento de firmar, y la
+    ``fecha_emision`` tiene que ser la de hoy (regla FAD09): lo que el XML
+    declara como emisión y lo que la firma sella como ``SigningTime`` son el
+    mismo acto.
     """
     ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
 
@@ -219,6 +224,13 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
             f"firmaría hoy ({hoy}); la DIAN lo rechazaría (regla FAD09). "
             "Actualice la fecha de emisión antes de emitir."
         )
+
+    # La hora sí se corrige en vez de exigirse: emitir y firmar son el mismo
+    # acto, así que la hora de emisión es la de ahora y no la que trajera el
+    # documento desde que se creó. Va antes de construir el XML porque entra en
+    # el CUFE, y la fecha ya se comprobó justo arriba (así el par fecha+hora que
+    # se firma es coherente).
+    documento.hora_emision = timezone.localtime().time()
 
     # Dar de baja un emisor (activo=False) tiene que cortar la emisión: es la
     # forma de suspender a un cliente sin tocar las credenciales de su cuenta.
@@ -258,7 +270,9 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
         f"{documento.numero}.xml", ContentFile(xml_firmado), save=False
     )
     documento.estado = _estado(DocumentoEstado.Nombre.FIRMADO)
-    documento.save(update_fields=["cufe_cude", "xml_archivo", "estado", "actualizado_en"])
+    documento.save(update_fields=[
+        "cufe_cude", "hora_emision", "xml_archivo", "estado", "actualizado_en",
+    ])
     return xml_firmado
 
 
