@@ -1,8 +1,23 @@
 """Utilidades para construir catálogos y documentos en las pruebas."""
+from contextlib import contextmanager
 from datetime import date, time
 from decimal import Decimal
+from unittest.mock import patch
 
 from apps.catalogos import models as cat
+
+
+@contextmanager
+def hoy_es(fecha):
+    """Hace que ``timezone.localdate()`` devuelva ``fecha``.
+
+    Firmar exige que la fecha de emisión sea la de hoy (regla FAD09), así que
+    las pruebas que emiten un documento con una fecha fija —el ejemplo oficial
+    de la DIAN, del que sale el CUFE que comprueban— tienen que situarse en su
+    día en vez de cambiarle la fecha, que alteraría el CUFE.
+    """
+    with patch("django.utils.timezone.localdate", return_value=fecha):
+        yield
 
 
 def crear_catalogos_minimos():

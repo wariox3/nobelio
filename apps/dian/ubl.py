@@ -547,6 +547,10 @@ def constructor_para(documento, **kwargs) -> ConstructorUBL:
         clase = CONSTRUCTORES[codigo]
     except KeyError:
         raise ValueError(f"Tipo de documento no soportado para UBL: {codigo}")
+    # El concepto de corrección es del documento; el argumento explícito sigue
+    # ganando para que las pruebas puedan forzar uno sin tocar la fila.
+    if documento.concepto_correccion:
+        kwargs.setdefault("concepto", documento.concepto_correccion)
     return clase(documento, **kwargs)
 
 

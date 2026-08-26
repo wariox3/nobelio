@@ -90,6 +90,8 @@ def crear_documento_habilitacion(emisor, resolucion, consecutivo=None):
         ambiente=Documento.Ambiente.PRUEBAS,
         resolucion=resolucion,
         documento_referencia=factura,
+        # Anula la factura entera, no devuelve parte de ella.
+        concepto_correccion=Documento.ConceptoNotaCredito.ANULACION,
         moneda=moneda,
         prefijo=resolucion.prefijo,
         consecutivo=consecutivo,

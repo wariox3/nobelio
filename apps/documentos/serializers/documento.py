@@ -29,6 +29,51 @@ MENSAJE_DOCUMENTO_NO_EDITABLE = (
 )
 
 
+# El único tipo que se numera con una resolución de facturación: es de donde
+# sale la clave técnica del CUFE y el bloque sts:InvoiceControl del XML.
+TIPO_CON_RESOLUCION = models.DocumentoTipo.Codigo.FACTURA_VENTA
+
+MENSAJE_FACTURA_SIN_RESOLUCION = (
+    "La factura debe indicar el número de una resolución activa del emisor."
+)
+
+# Tipos cuyo XML se construye con DiscrepancyResponse y BillingReference: sin
+# el documento corregido no hay nota que valga (ver `_ConstructorNotaUBL`).
+TIPOS_QUE_EXIGEN_REFERENCIA = frozenset({
+    models.DocumentoTipo.Codigo.NOTA_CREDITO,
+    models.DocumentoTipo.Codigo.NOTA_DEBITO,
+})
+
+
+# Lista de conceptos de corrección (ResponseCode) aplicable a cada tipo de nota.
+CONCEPTOS_POR_TIPO = {
+    models.DocumentoTipo.Codigo.NOTA_CREDITO: models.Documento.ConceptoNotaCredito,
+    models.DocumentoTipo.Codigo.NOTA_DEBITO: models.Documento.ConceptoNotaDebito,
+}
+
+
+def mensaje_concepto_invalido(tipo, conceptos):
+    """Mensaje que enumera los conceptos válidos para ese tipo de nota."""
+    opciones = ", ".join(f"{c.value} ({c.label})" for c in conceptos)
+    return (
+        f"Indique por qué se corrige el documento. Para una {tipo.nombre.lower()} "
+        f"los conceptos son: {opciones}."
+    )
+
+
+MENSAJE_CONCEPTO_SOLO_EN_NOTAS = (
+    "Solo las notas crédito y débito llevan concepto de corrección."
+)
+
+
+def mensaje_nota_sin_referencia(tipo):
+    """Mensaje para una nota que no indica el documento que corrige."""
+    return (
+        f"Una {tipo.nombre.lower()} debe referenciar el documento que corrige: "
+        "indique el id de la factura en `documento_referencia`."
+    )
+
+
 def mensaje_fecha_emision_no_es_hoy(hoy):
     """Mensaje para una fecha de emisión que no es la de hoy.
 
@@ -85,6 +130,7 @@ class DocumentoSerializer(serializers.ModelSerializer):
             "emisor", "resolucion", "resolucion_numero", "adquiriente",
             "prefijo", "consecutivo", "numero", "cufe_cude", "track_id",
             "envio", "ambiente", "fecha_validacion", "errores",
+            "concepto_correccion",
             "fecha_emision", "hora_emision", "moneda", "forma_pago", "medio_pago",
             "valor_bruto", "total_impuestos", "total_descuentos", "total_cargos",
             "total_a_pagar", "documento_referencia", "observaciones", "detalles",
@@ -125,7 +171,9 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
     """
 
     detalles = DocumentoDetalleSerializer(many=True)
-    numero_resolucion = serializers.CharField(write_only=True)
+    # Opcional porque solo la factura se numera con resolución: la nota lleva
+    # su propia numeración y su XML ni siquiera incluye el InvoiceControl.
+    numero_resolucion = serializers.CharField(write_only=True, required=False)
     adquiriente = AdquirienteSerializer()
     # Todo lo que se referencia se busca solo dentro del alcance del
     # solicitante: un id de otra cuenta responde igual que uno inexistente.
@@ -141,6 +189,7 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
             "adquiriente", "prefijo", "consecutivo", "numero",
             "fecha_emision", "hora_emision", "moneda", "forma_pago", "medio_pago",
             "total_descuentos", "total_cargos", "documento_referencia",
+            "concepto_correccion",
             "observaciones", "detalles",
         ]
         # Mensaje propio para la unicidad (emisor+prefijo+consecutivo+tipo) en vez
@@ -152,14 +201,6 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
                 message="El documento ya fue creado.",
             )
         ]
-
-    def get_fields(self):
-        campos = super().get_fields()
-        # En un PATCH solo se valida lo que llega: el documento ya tiene su
-        # resolución y no hay por qué obligar a repetir el número.
-        if self.partial:
-            campos["numero_resolucion"].required = False
-        return campos
 
     def validate_fecha_emision(self, fecha):
         """Solo se admite la fecha de hoy (regla FAD09).
@@ -204,12 +245,33 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
         # La resolución no se comprueba aquí: se buscó ya acotada a este emisor.
         # El adquiriente tampoco: sus datos llegan en la propia petición.
         referencia = attrs.get("documento_referencia")
+        if referencia is None and self.instance is not None:
+            referencia = self.instance.documento_referencia
         if referencia is not None and referencia.emisor_id != emisor.pk:
             raise serializers.ValidationError(
                 {"documento_referencia": "No pertenece al emisor del documento."}
             )
+        # Una nota sin referencia es un documento que nace muerto: se crea bien,
+        # consume un consecutivo y solo falla al emitirlo, cuando ya no se puede
+        # editar. La misma regla la exige `generar_y_firmar`.
+        tipo = attrs.get("documento_tipo") or getattr(self.instance, "documento_tipo", None)
+        if (
+            referencia is None
+            and tipo is not None
+            and tipo.codigo in TIPOS_QUE_EXIGEN_REFERENCIA
+        ):
+            raise serializers.ValidationError(
+                {"documento_referencia": mensaje_nota_sin_referencia(tipo)}
+            )
+        self._validar_concepto(attrs, tipo)
 
         resolucion = attrs.get("resolucion") or getattr(self.instance, "resolucion", None)
+        # La factura sí se numera con resolución, y sin ella no hay clave técnica
+        # con la que calcular el CUFE. La misma regla la exige `generar_y_firmar`.
+        if resolucion is None and tipo is not None and tipo.codigo == TIPO_CON_RESOLUCION:
+            raise serializers.ValidationError(
+                {"numero_resolucion": MENSAJE_FACTURA_SIN_RESOLUCION}
+            )
         if resolucion is not None:
             errores = self._errores_de_numeracion(resolucion, attrs)
             if errores:
@@ -223,6 +285,30 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
         if motivo:
             raise serializers.ValidationError({"emisor": motivo})
         return attrs
+
+    def _validar_concepto(self, attrs, tipo):
+        """El concepto de corrección va en las notas, y con su propia lista.
+
+        Se exige en vez de asumir uno: el ``ResponseCode`` es lo que le dice a
+        la DIAN si la nota anula la factura o solo devuelve parte, y ninguna
+        suposición nuestra puede acertar eso por el emisor.
+        """
+        if tipo is None:
+            return
+        concepto = attrs.get("concepto_correccion")
+        if concepto is None and self.instance is not None:
+            concepto = self.instance.concepto_correccion
+        conceptos = CONCEPTOS_POR_TIPO.get(tipo.codigo)
+        if conceptos is None:
+            if concepto:
+                raise serializers.ValidationError(
+                    {"concepto_correccion": MENSAJE_CONCEPTO_SOLO_EN_NOTAS}
+                )
+            return
+        if concepto not in conceptos.values:
+            raise serializers.ValidationError(
+                {"concepto_correccion": mensaje_concepto_invalido(tipo, conceptos)}
+            )
 
     def _errores_de_numeracion(self, resolucion, attrs):
         """Comprueba que el número del documento quepa en lo que autorizó la DIAN.

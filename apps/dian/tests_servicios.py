@@ -5,7 +5,7 @@ from django.test import TestCase
 from apps.dian import servicios, soap
 from apps.dian.tests_firma import _generar_certificado
 from apps.documentos.models import Documento, DocumentoError, DocumentoEstado
-from apps.documentos.tests_utils import crear_documento_factura
+from apps.documentos.tests_utils import crear_documento_factura, hoy_es
 
 
 class FakeCliente:
@@ -49,7 +49,11 @@ class GenerarYFirmarTests(TestCase):
         firmador = firma.FirmadorXAdES(
             self.llave, self.cert, policy_id="x", policy_hash="aGFzaA==",
         )
-        servicios.generar_y_firmar(self.documento, firmador=firmador, ambiente=1)
+        # El CUFE que se comprueba es el del ejemplo oficial de la DIAN, y en él
+        # entra la fecha del documento: hay que firmar "ese día" para que valga,
+        # porque `generar_y_firmar` exige que emisión y firma coincidan (FAD09).
+        with hoy_es(self.documento.fecha_emision):
+            servicios.generar_y_firmar(self.documento, firmador=firmador, ambiente=1)
 
         self.documento.refresh_from_db()
         self.assertEqual(self.documento.estado.nombre, DocumentoEstado.Nombre.FIRMADO)

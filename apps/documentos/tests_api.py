@@ -8,6 +8,7 @@ from cryptography.hazmat.primitives.serialization import (
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 from django.test import override_settings
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -40,6 +41,11 @@ class DocumentoAPITests(APITestCase):
         cls.documento = datos["documento"]
         cls.emisor = datos["emisor"]
         cls.cat = datos["catalogos"]
+        # El documento del helper lleva la fecha del ejemplo oficial de la DIAN,
+        # con la que se comprueba el CUFE en otras pruebas. Aquí se emite de
+        # verdad, y firmar exige la fecha de hoy (regla FAD09).
+        cls.documento.fecha_emision = timezone.localdate()
+        cls.documento.save(update_fields=["fecha_emision"])
 
         # Adjuntar un certificado .p12 real al emisor.
         llave, cert = _generar_certificado()
@@ -131,7 +137,9 @@ class DocumentoAPITests(APITestCase):
             "prefijo": "SETP",
             "consecutivo": 990000130,
             "numero": "SETP990000130",
-            "fecha_emision": "2024-01-10",
+            # Firmar exige la fecha de hoy (FAD09), y el serializer la valida ya
+            # al crear: una fecha fija dejaría de valer al día siguiente.
+            "fecha_emision": timezone.localdate().isoformat(),
             "hora_emision": "10:00:00",
             "moneda": c["cop"].id,
             "detalles": [

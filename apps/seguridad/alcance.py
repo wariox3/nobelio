@@ -16,6 +16,7 @@ Al **crear** un emisor la pregunta es la otra mitad: *¿de qué cuenta puede
 colgarlo?* La responde ``cuenta_permitida``, que es la única definición de esa
 regla en el proyecto (``exigir_cuenta`` es su versión que lanza 403).
 """
+from django.core.exceptions import ValidationError as ErrorValidacionDjango
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
@@ -129,6 +130,20 @@ class RelacionDelAlcance(serializers.PrimaryKeyRelatedField):
     def __init__(self, *args, campo_emisor="emisor", **kwargs):
         self.campo_emisor = campo_emisor
         super().__init__(*args, **kwargs)
+
+    def to_internal_value(self, data):
+        """Un id con formato inválido es un 400, no un 500.
+
+        DRF solo traduce ``TypeError``/``ValueError`` al buscar por pk, y un
+        UUID mal formado hace que Django lance su propio ``ValidationError``,
+        que no hereda de ninguno de los dos: sin esto sale un 500 con traceback.
+        Se responde como un id inexistente —que es lo que es— y de paso se
+        mantiene la indistinguibilidad que persigue este campo.
+        """
+        try:
+            return super().to_internal_value(data)
+        except ErrorValidacionDjango:
+            self.fail("does_not_exist", pk_value=data)
 
     def get_queryset(self):
         qs = super().get_queryset()

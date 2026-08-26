@@ -41,6 +41,23 @@ class Documento(ModeloUUID, ModeloConFechas):
         SET_PRUEBAS = "test_set", "Set de Pruebas (SendTestSetAsync)"
         SINCRONO = "bill_sync", "Síncrono (SendBillSync)"
 
+    # Conceptos de corrección (cbc:ResponseCode del DiscrepancyResponse). Son
+    # dos listas distintas de la DIAN, una por tipo de nota, y comparten los
+    # códigos "1" a "4" con significados que no tienen nada que ver: por eso el
+    # campo no lleva `choices` y la lista aplicable la impone el tipo.
+    class ConceptoNotaCredito(models.TextChoices):
+        DEVOLUCION = "1", "Devolución parcial de bienes o no aceptación parcial del servicio"
+        ANULACION = "2", "Anulación de factura electrónica"
+        REBAJA = "3", "Rebaja o descuento parcial o total"
+        AJUSTE_PRECIO = "4", "Ajuste de precio"
+        OTROS = "5", "Otros"
+
+    class ConceptoNotaDebito(models.TextChoices):
+        INTERESES = "1", "Intereses"
+        GASTOS = "2", "Gastos por cobrar"
+        CAMBIO_VALOR = "3", "Cambio del valor"
+        OTROS = "4", "Otros"
+
     # ===================== Atributos =====================
     # Identificación del documento
     prefijo = models.CharField("prefijo", max_length=10, blank=True)
@@ -151,6 +168,12 @@ class Documento(ModeloUUID, ModeloConFechas):
         "self", on_delete=models.PROTECT,
         related_name="notas", null=True, blank=True,
         verbose_name="documento de referencia",
+    )
+    concepto_correccion = models.CharField(
+        "concepto de corrección", max_length=2, blank=True,
+        help_text="ResponseCode del DiscrepancyResponse: por qué se corrige el "
+        "documento referenciado. Los códigos válidos dependen del tipo de nota "
+        "(ConceptoNotaCredito, ConceptoNotaDebito). Vacío en lo que no es nota.",
     )
 
     class Meta:
