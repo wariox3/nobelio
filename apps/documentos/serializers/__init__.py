@@ -7,6 +7,7 @@ from .documento import (
 )
 from .documento_detalle import DocumentoDetalleImpuestoSerializer, DocumentoDetalleSerializer
 from .documento_error import DocumentoErrorSerializer
+from .notificacion import NotificacionSerializer
 
 __all__ = [
     "AdquirienteSerializer",
@@ -16,4 +17,5 @@ __all__ = [
     "DocumentoSerializer",
     "DocumentoListaSerializer",
     "DocumentoCrearSerializer",
+    "NotificacionSerializer",
 ]

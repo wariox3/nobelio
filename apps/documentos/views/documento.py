@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from apps.dian import representacion, servicios
 from apps.documentos import serializers
 from apps.documentos.models import Documento, DocumentoEstado
+from apps.documentos.servicios import ErrorNotificacion, empaquetar_notificacion
 from apps.nucleo.api import ErrorSolicitud, error_pasarela_dian
 from apps.seguridad.alcance import AlcanceEmisorMixin
 
@@ -209,6 +210,46 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
             filename=f"{documento.numero}.xml",
         )
         return respuesta
+
+    @action(detail=True, methods=["post"])
+    def notificar(self, request, pk=None):
+        """Arma lo que se le entrega al adquiriente y lo deja listo para enviar.
+
+        ``POST /api/documentos/documento/{id}/notificar/`` en multipart, con
+        ``pdf`` y ``adjuntos`` opcionales (hasta 10 MB entre todos). Con
+        adjuntos se comprime todo junto con el XML; sin ellos se entrega el XML
+        solo. Con ``?descargar=1`` devuelve el paquete en vez del resumen, que
+        es la forma de revisarlo mientras el correo no está implementado.
+
+        El envío por correo todavía no existe: por eso la respuesta dice
+        ``enviado: false``.
+        """
+        documento = self.get_object()
+        entrada = serializers.NotificacionSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        try:
+            paquete = empaquetar_notificacion(
+                documento,
+                pdf=entrada.validated_data.get("pdf"),
+                adjuntos=entrada.validated_data.get("adjuntos") or [],
+            )
+        except ErrorNotificacion as exc:
+            raise ErrorSolicitud(str(exc))
+
+        if request.query_params.get("descargar"):
+            respuesta = HttpResponse(paquete.contenido, content_type=paquete.tipo)
+            respuesta["Content-Disposition"] = f'attachment; filename="{paquete.nombre}"'
+            return respuesta
+
+        return Response({
+            "destinatario": paquete.destinatario,
+            "archivo": paquete.nombre,
+            "tipo": paquete.tipo,
+            "tamano": paquete.tamano,
+            "contenido": paquete.archivos,
+            "enviado": False,
+            "detalle": "El paquete quedó armado; el envío por correo aún no está implementado.",
+        })
 
     @action(detail=True, methods=["get"])
     def pdf(self, request, pk=None):
