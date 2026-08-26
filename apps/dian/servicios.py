@@ -39,6 +39,13 @@ class ErrorEmision(Exception):
     """Error en el proceso de emisión de un documento."""
 
 
+MENSAJE_SIN_ACUSE = (
+    "La DIAN todavía no ha acreditado este documento: no hay ApplicationResponse "
+    "con el que armar el contenedor. Consulte el estado y espere a que quede "
+    "aceptado."
+)
+
+
 # "Regla: <regla>, <Tipo>: <mensaje>" (Rechazo / Notificación).
 _RE_ERROR = re.compile(
     r"Regla:\s*(?P<regla>[^,]+),\s*(?P<tipo>[^:]+):\s*(?P<mensaje>.*)",
@@ -276,12 +283,17 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
     return xml_firmado
 
 
-def generar_attached_document(documento, *, firmador=None, ambiente=None, **cred):
+def generar_attached_document(documento, *, firmador=None, ambiente=None,
+                              exigir_acuse=False, **cred):
     """Arma y firma el AttachedDocument: el paquete que se entrega al comprador.
 
     Envuelve el XML firmado y el ApplicationResponse de la DIAN en un solo
     documento. No se guarda: se genera cuando se pide, porque no contiene nada
     que no esté ya en el XML del documento y en su respuesta.
+
+    Con ``exigir_acuse`` falla si la DIAN todavía no ha respondido. Se usa al
+    notificar al adquiriente —donde entregar un documento sin validar sería
+    engañoso— y no al descargarlo, donde el emisor puede querer verlo antes.
     """
     ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
     if not documento.xml_archivo:
@@ -295,6 +307,8 @@ def generar_attached_document(documento, *, firmador=None, ambiente=None, **cred
     if documento.respuesta_archivo:
         with documento.respuesta_archivo.open("rb") as fh:
             acuse = soap.extraer_application_response(fh.read())
+    if exigir_acuse and not acuse:
+        raise ErrorEmision(MENSAJE_SIN_ACUSE)
 
     constructor = ubl.ConstructorAttachedDocument(
         documento,

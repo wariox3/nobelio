@@ -12,6 +12,8 @@ import zipfile
 from io import BytesIO
 from pathlib import PurePath
 
+from apps.documentos.models import DocumentoEstado
+
 # Tope del material adjunto que acepta la notificación. No cuenta el XML, que
 # lo pone el propio sistema y siempre viaja: el límite es para lo que sube el
 # emisor, que es lo que puede hacer que el correo rebote.
@@ -19,6 +21,10 @@ TAMANO_MAXIMO_ADJUNTOS = 10 * 1024 * 1024  # 10 MB
 
 MENSAJE_SIN_XML = (
     "El documento aún no está firmado: no hay nada que notificar."
+)
+MENSAJE_NO_ACEPTADO = (
+    "Solo se notifica lo que la DIAN ya aceptó: entregarle al adquiriente un "
+    "documento sin validar le haría creer que tiene una factura válida."
 )
 MENSAJE_SIN_CORREO = (
     "El adquiriente del documento no tiene correo electrónico; no hay a dónde "
@@ -74,7 +80,7 @@ def _attached_document(documento):
     from apps.dian.servicios import ErrorEmision, generar_attached_document
 
     try:
-        return generar_attached_document(documento)
+        return generar_attached_document(documento, exigir_acuse=True)
     except ErrorEmision as exc:
         raise ErrorNotificacion(str(exc)) from exc
 
@@ -88,6 +94,11 @@ def empaquetar_notificacion(documento, *, pdf=None, adjuntos=()):
     """
     if not documento.xml_archivo:
         raise ErrorNotificacion(MENSAJE_SIN_XML)
+    if documento.estado_id and documento.estado.nombre != DocumentoEstado.Nombre.ACEPTADO:
+        raise ErrorNotificacion(
+            f"{MENSAJE_NO_ACEPTADO} El documento está en estado "
+            f"'{documento.estado.nombre}'."
+        )
     destinatario = getattr(documento.adquiriente, "correo", "")
     if not destinatario:
         raise ErrorNotificacion(MENSAJE_SIN_CORREO)
