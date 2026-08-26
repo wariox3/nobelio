@@ -330,6 +330,7 @@ nobelio/
 │   ├── catalogos/           Catálogos DIAN + parser Genericode (.gc)
 │   │   ├── genericode.py    Parser de listas .gc
 │   │   └── datos/listas/    Listas oficiales DIAN (.gc)
+│   │       └── documento-soporte/  Listas propias del DS (no se cargan aún)
 │   ├── emisores/            Emisor (OFE), software, certificado, resolución
 │   ├── documentos/          Documento electrónico, detalles, impuestos, receptor, API
 │   └── dian/                Núcleo DIAN:
@@ -339,11 +340,13 @@ nobelio/
 │       ├── soap.py             Cliente SOAP + WS-Security
 │       ├── representacion.py   PDF + QR
 │       ├── servicios.py        Orquestación del pipeline
-│       └── datos/xsd/          Esquemas XSD oficiales DIAN
+│       ├── datos/xsd/          Esquemas XSD oficiales DIAN
+│       └── datos/ejemplos/     Ejemplificaciones oficiales DIAN
 ├── docs/
 │   ├── checklist-emision.md    Del alta del tenant a la emisión, paso a paso
 │   ├── autenticacion.md        JWT, API Key y alcance multi-inquilino
 │   ├── anexo-tecnico.md        Resumen del Anexo Técnico v1.9
+│   ├── anexo-documento-soporte.md  Resumen del Anexo del DS v1.1 (Res. 000167)
 │   ├── almacenamiento-xml.md   XML firmado y respuestas DIAN en B2
 │   ├── entorno-desarrollo.md   Montar el proyecto desde cero
 │   └── despliegue.md           Puesta en producción en un VPS
