@@ -126,6 +126,11 @@ class ConstructorUBL:
     usa_cude = False
     incluir_control = True  # sts:InvoiceControl (resolución) solo en factura
     incluir_vencimiento = True  # cbc:DueDate solo existe en el UBL Invoice
+    # Dónde encaja cac:AllowanceCharge según el XSD de cada tipo: en el
+    # documento, la nota débito no lo admite; en la línea, la factura lo pone
+    # antes de los impuestos y las notas después.
+    permite_descuento_documento = True
+    descuento_linea_antes_de_impuestos = True
     customization_id_default = "10"
 
     def __init__(
@@ -193,6 +198,7 @@ class ConstructorUBL:
         self._parte_emisor(raiz)
         self._parte_adquirente(raiz)
         self._medios_pago(raiz)
+        self._descuentos_documento(raiz)
         self._totales_impuestos(raiz)
         self._total_monetario(raiz)
         self._lineas(raiz)
@@ -383,6 +389,52 @@ class ConstructorUBL:
             _sub(medios, "cbc", "PaymentDueDate",
                  self.doc.fecha_vencimiento.isoformat())
 
+    def _descuento_o_cargo(self, padre, *, secuencia, es_cargo, monto, base, motivo):
+        """Un cac:AllowanceCharge: descuento (false) o cargo (true).
+
+        El orden interno lo fija el XSD: ID, ChargeIndicator, Reason, Amount y
+        BaseAmount. No se emite MultiplierFactorNumeric —el porcentaje— porque
+        es opcional y deducirlo de monto/base introduciría un redondeo que la
+        DIAN cuadraría contra los totales.
+        """
+        ac = _sub(padre, "cac", "AllowanceCharge")
+        _sub(ac, "cbc", "ID", secuencia)
+        _sub(ac, "cbc", "ChargeIndicator", "true" if es_cargo else "false")
+        _sub(ac, "cbc", "AllowanceChargeReason",
+             motivo or ("Cargo" if es_cargo else "Descuento"))
+        _sub(ac, "cbc", "Amount", _valor(monto), currencyID=self.moneda)
+        _sub(ac, "cbc", "BaseAmount", _valor(base), currencyID=self.moneda)
+
+    def _descuentos_documento(self, raiz):
+        """Descuentos y cargos globales, como los declara AllowanceTotalAmount."""
+        if not self.permite_descuento_documento:
+            return
+        secuencia = 0
+        if self.doc.total_descuentos:
+            secuencia += 1
+            self._descuento_o_cargo(
+                raiz, secuencia=secuencia, es_cargo=False,
+                monto=self.doc.total_descuentos, base=self.doc.valor_bruto,
+                motivo=self.doc.descuentos_motivo,
+            )
+        if self.doc.total_cargos:
+            secuencia += 1
+            self._descuento_o_cargo(
+                raiz, secuencia=secuencia, es_cargo=True,
+                monto=self.doc.total_cargos, base=self.doc.valor_bruto,
+                motivo=self.doc.cargos_motivo,
+            )
+
+    def _descuento_linea(self, il, linea):
+        """El descuento de la línea. La base es el valor antes de descontarlo."""
+        if not linea.descuento:
+            return
+        self._descuento_o_cargo(
+            il, secuencia=1, es_cargo=False, monto=linea.descuento,
+            base=linea.valor_total + linea.descuento,
+            motivo=linea.descuento_motivo,
+        )
+
     def _totales_impuestos(self, raiz):
         for codigo, datos in self.impuestos.items():
             tax_total = _sub(raiz, "cac", "TaxTotal")
@@ -443,6 +495,9 @@ class ConstructorUBL:
                 if linea.periodo_descripcion:
                     _sub(periodo, "cbc", "Description", linea.periodo_descripcion)
 
+            if self.descuento_linea_antes_de_impuestos:
+                self._descuento_linea(il, linea)
+
             for imp in linea.impuestos.all():
                 tt = _sub(il, "cac", "TaxTotal")
                 _sub(tt, "cbc", "TaxAmount", _valor(imp.valor), currencyID=self.moneda)
@@ -454,6 +509,9 @@ class ConstructorUBL:
                 esq = _sub(cat, "cac", "TaxScheme")
                 _sub(esq, "cbc", "ID", imp.tributo.codigo)
                 _sub(esq, "cbc", "Name", imp.tributo.nombre)
+
+            if not self.descuento_linea_antes_de_impuestos:
+                self._descuento_linea(il, linea)
 
             item = _sub(il, "cac", "Item")
             _sub(item, "cbc", "Description", linea.descripcion)
@@ -565,6 +623,7 @@ class _ConstructorNotaUBL(ConstructorUBL):
     usa_cude = True
     incluir_control = False
     incluir_vencimiento = False
+    descuento_linea_antes_de_impuestos = False
 
     def _discrepancia(self, raiz):
         ref = self.doc.documento_referencia
@@ -608,6 +667,7 @@ class ConstructorNotaDebito(_ConstructorNotaUBL):
     etiqueta_cantidad = "DebitedQuantity"
     etiqueta_total = "RequestedMonetaryTotal"
     customization_id_default = "30"
+    permite_descuento_documento = False  # el DebitNoteType del XSD no lo define
 
 
 class ConstructorDocumentoSoporte(ConstructorUBL):

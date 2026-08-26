@@ -128,10 +128,19 @@ class Documento(ModeloUUID, ModeloConFechas):
         "total impuestos", max_digits=18, decimal_places=2, default=0
     )
     total_descuentos = models.DecimalField(
-        "total descuentos", max_digits=18, decimal_places=2, default=0
+        "total descuentos", max_digits=18, decimal_places=2, default=0,
+        help_text="Descuentos globales del documento (no los de línea).",
+    )
+    descuentos_motivo = models.CharField(
+        "motivo de los descuentos", max_length=255, blank=True,
+        help_text="cbc:AllowanceChargeReason del descuento global.",
     )
     total_cargos = models.DecimalField(
         "total cargos", max_digits=18, decimal_places=2, default=0
+    )
+    cargos_motivo = models.CharField(
+        "motivo de los cargos", max_length=255, blank=True,
+        help_text="cbc:AllowanceChargeReason del cargo global.",
     )
     total_a_pagar = models.DecimalField(
         "total a pagar", max_digits=18, decimal_places=2, default=0,

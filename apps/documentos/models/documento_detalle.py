@@ -24,7 +24,13 @@ class DocumentoDetalle(ModeloConFechas):
         help_text="cantidad × valor unitario (LineExtensionAmount).",
     )
     descuento = models.DecimalField(
-        "descuento", max_digits=18, decimal_places=2, default=0
+        "descuento", max_digits=18, decimal_places=2, default=0,
+        help_text="Descuento ya aplicado en el valor total de la línea: el "
+        "cac:AllowanceCharge lo declara con BaseAmount = valor_total + descuento.",
+    )
+    descuento_motivo = models.CharField(
+        "motivo del descuento", max_length=255, blank=True,
+        help_text="cbc:AllowanceChargeReason de la línea.",
     )
 
     # --- Datos de negocio (opcionales, van al XML si vienen) ---

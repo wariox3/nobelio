@@ -20,7 +20,7 @@ class DocumentoDetalleSerializer(serializers.ModelSerializer):
         fields = [
             "id", "numero_linea", "descripcion", "codigo_producto",
             "cantidad", "unidad_medida", "valor_unitario", "valor_total",
-            "descuento", "impuestos",
+            "descuento", "descuento_motivo", "impuestos",
             # Datos de negocio: opcionales, viajan al XML si vienen.
             "nota", "marca", "modelo", "centro_costo",
             "periodo_desde", "periodo_hasta",
