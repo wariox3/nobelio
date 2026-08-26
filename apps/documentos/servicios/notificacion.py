@@ -71,6 +71,19 @@ def _sin_repetir(nombre, usados):
     raise ErrorNotificacion(f"Demasiados adjuntos llamados {nombre}.")
 
 
+def marcar_notificado(documento):
+    """Deja constancia de que el documento ya se le entregó al adquiriente.
+
+    Se llama cuando la notificación sale bien. El día que exista el envío por
+    correo, la llamada se mueve a después de que el correo salga: la marca debe
+    significar "llegó", no "se armó".
+    """
+    if documento.notificado:
+        return
+    documento.notificado = True
+    documento.save(update_fields=["notificado", "actualizado_en"])
+
+
 def _attached_document(documento):
     """El contenedor firmado que se le entrega al adquiriente.
 

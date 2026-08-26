@@ -4,6 +4,7 @@ from .notificacion import (
     ErrorNotificacion,
     Paquete,
     empaquetar_notificacion,
+    marcar_notificado,
 )
 
 __all__ = [
@@ -11,4 +12,5 @@ __all__ = [
     "ErrorNotificacion",
     "Paquete",
     "empaquetar_notificacion",
+    "marcar_notificado",
 ]

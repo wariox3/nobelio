@@ -162,6 +162,12 @@ class Documento(ModeloUUID, ModeloConFechas):
         "(el track_id es un ZipKey) y GetStatus para el envío síncrono. "
         "Vacío mientras no se haya enviado.",
     )
+    notificado = models.BooleanField(
+        "notificado al adquiriente", default=False,
+        help_text="Si ya se le entregó el documento al comprador. Lo marca la "
+        "acción `notificar`; mientras el envío por correo no exista, significa "
+        "que el paquete se armó y se entregó a quien lo pidió.",
+    )
     fecha_validacion = models.DateTimeField(
         "fecha y hora de validación DIAN", null=True, blank=True,
         help_text="Momento en que la DIAN aceptó el documento.",

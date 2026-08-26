@@ -9,7 +9,11 @@ from rest_framework.response import Response
 from apps.dian import representacion, servicios
 from apps.documentos import serializers
 from apps.documentos.models import Documento, DocumentoEstado
-from apps.documentos.servicios import ErrorNotificacion, empaquetar_notificacion
+from apps.documentos.servicios import (
+    ErrorNotificacion,
+    empaquetar_notificacion,
+    marcar_notificado,
+)
 from apps.nucleo.api import ErrorSolicitud, error_pasarela_dian
 from apps.seguridad.alcance import AlcanceEmisorMixin
 
@@ -30,7 +34,7 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
     ordering_fields = [
         "fecha_emision", "hora_emision", "consecutivo", "numero",
         "total_a_pagar", "fecha_validacion", "creado_en", "actualizado_en",
-        "estado__nombre", "documento_tipo__codigo",
+        "estado__nombre", "documento_tipo__codigo", "notificado",
     ]
 
     def get_serializer_class(self):
@@ -42,8 +46,9 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         """Permite filtrar el listado por ``emisor`` (id), ``estado`` y
-        ``documento_tipo`` (ambos por código): p. ej.
-        ``?emisor=2&estado=aceptado&documento_tipo=factura_venta``.
+        ``documento_tipo`` (ambos por código) y ``notificado`` (true/false):
+        p. ej. ``?emisor=2&estado=aceptado&documento_tipo=factura_venta``, o
+        ``?estado=aceptado&notificado=false`` para lo que falta por entregar.
 
         El filtro por ``emisor`` acota dentro del alcance, nunca lo amplía: el
         mixin ya restringió el queryset antes de llegar aquí.
@@ -59,6 +64,8 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
             qs = qs.filter(estado__nombre=estado)
         if tipo := params.get("documento_tipo"):
             qs = qs.filter(documento_tipo__codigo=tipo)
+        if (notificado := params.get("notificado")) is not None:
+            qs = qs.filter(notificado=notificado.lower() in ("1", "true", "si", "sí"))
         return qs
 
     def destroy(self, request, *args, **kwargs):
@@ -259,6 +266,8 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         except ErrorNotificacion as exc:
             raise ErrorSolicitud(str(exc))
 
+        marcar_notificado(documento)
+
         if request.query_params.get("descargar"):
             respuesta = HttpResponse(paquete.contenido, content_type=paquete.tipo)
             respuesta["Content-Disposition"] = f'attachment; filename="{paquete.nombre}"'
@@ -270,6 +279,7 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
             "tipo": paquete.tipo,
             "tamano": paquete.tamano,
             "contenido": paquete.archivos,
+            "notificado": documento.notificado,
             "enviado": False,
             "detalle": "El paquete quedó armado; el envío por correo aún no está implementado.",
         })
