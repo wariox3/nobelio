@@ -211,13 +211,36 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         )
         return respuesta
 
+    @action(detail=True, methods=["get"])
+    def attached(self, request, pk=None):
+        """Descarga el AttachedDocument: el documento y el acuse de la DIAN juntos.
+
+        ``GET /api/documentos/documento/{id}/attached/``. Es el paquete que se
+        le entrega al adquiriente: dentro viajan el XML firmado y el
+        ApplicationResponse con el que la DIAN acredita la validación.
+
+        Se genera al vuelo, como el PDF: no aporta ningún dato que no esté ya en
+        el XML del documento y en su respuesta guardada.
+        """
+        documento = self.get_object()
+        try:
+            contenido = servicios.generar_attached_document(documento)
+        except servicios.ErrorEmision as exc:
+            raise ErrorSolicitud(str(exc))
+        respuesta = HttpResponse(contenido, content_type="application/xml")
+        respuesta["Content-Disposition"] = (
+            f'attachment; filename="ad{documento.numero}.xml"'
+        )
+        return respuesta
+
     @action(detail=True, methods=["post"])
     def notificar(self, request, pk=None):
         """Arma lo que se le entrega al adquiriente y lo deja listo para enviar.
 
         ``POST /api/documentos/documento/{id}/notificar/`` en multipart, con
-        ``pdf`` y ``adjuntos`` opcionales (hasta 10 MB entre todos). Con
-        adjuntos se comprime todo junto con el XML; sin ellos se entrega el XML
+        ``pdf`` y ``adjuntos`` opcionales (hasta 10 MB entre todos). Siempre
+        viaja el AttachedDocument —el documento firmado y el acuse de la DIAN
+        juntos—: con adjuntos se comprime todo en un zip y sin ellos se entrega
         solo. Con ``?descargar=1`` devuelve el paquete en vez del resumen, que
         es la forma de revisarlo mientras el correo no está implementado.
 

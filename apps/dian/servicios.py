@@ -276,6 +276,39 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
     return xml_firmado
 
 
+def generar_attached_document(documento, *, firmador=None, ambiente=None, **cred):
+    """Arma y firma el AttachedDocument: el paquete que se entrega al comprador.
+
+    Envuelve el XML firmado y el ApplicationResponse de la DIAN en un solo
+    documento. No se guarda: se genera cuando se pide, porque no contiene nada
+    que no esté ya en el XML del documento y en su respuesta.
+    """
+    ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
+    if not documento.xml_archivo:
+        raise ErrorEmision("El documento no está firmado; no hay nada que adjuntar.")
+    if not documento.cufe_cude:
+        raise ErrorEmision("El documento no tiene CUFE; emítalo primero.")
+
+    # El acuse es lo que prueba la validación. Sin él el contenedor se arma
+    # igual —sirve para entregar el documento—, pero no acredita nada.
+    acuse = b""
+    if documento.respuesta_archivo:
+        with documento.respuesta_archivo.open("rb") as fh:
+            acuse = soap.extraer_application_response(fh.read())
+
+    constructor = ubl.ConstructorAttachedDocument(
+        documento,
+        software=_software_activo(documento),
+        ambiente=ambiente,
+        xml_documento=documento.leer_xml(),
+        application_response=acuse,
+    )
+    xml = constructor.generar_xml()
+    if firmador is None:
+        firmador = construir_firmador(documento, **cred)
+    return firmador.firmar(xml)
+
+
 def construir_cliente_emisor(emisor, ambiente, *, llave=None, certificado=None):
     """Crea el ClienteDian con la URL del ambiente y el certificado del emisor."""
     if llave is None or certificado is None:

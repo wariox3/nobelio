@@ -169,6 +169,25 @@ class RespuestaDian:
         )
 
 
+def extraer_application_response(xml: bytes | str) -> bytes:
+    """Saca el ApplicationResponse (UBL) que la DIAN devuelve en el sobre SOAP.
+
+    Viaja en base64 dentro de ``XmlBase64Bytes``. Es el acuse firmado por la
+    DIAN, y es lo que hay que adjuntar al AttachedDocument. Devuelve b"" si la
+    respuesta no lo traía (un rechazo, por ejemplo).
+    """
+    if isinstance(xml, str):
+        xml = xml.encode()
+    raiz = etree.fromstring(xml)
+    nodos = raiz.xpath("//*[local-name()='XmlBase64Bytes']")
+    if not nodos or not nodos[0].text:
+        return b""
+    try:
+        return base64.b64decode(nodos[0].text)
+    except Exception:
+        return b""
+
+
 def _fecha_validacion(raiz) -> "datetime | None":
     """Fecha/hora de validación desde el ApplicationResponse incrustado.
 

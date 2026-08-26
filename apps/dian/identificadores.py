@@ -68,7 +68,10 @@ def formatear_hora(hora) -> str:
         hora = hora.timetz()
     if isinstance(hora, time):
         base = hora.strftime("%H:%M:%S")
-        if hora.tzinfo is not None:
+        # Se pregunta por el desfase, no por el tzinfo: una zona como
+        # ZoneInfo("America/Bogota") pegada a un `time` no puede resolverlo
+        # (necesita una fecha) y devolvía "" -> "HH:MM:SS:", que no es una hora.
+        if hora.utcoffset() is not None:
             desfase = hora.strftime("%z")  # p. ej. -0500
             return f"{base}{desfase[:3]}:{desfase[3:]}"
         return f"{base}-05:00"
