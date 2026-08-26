@@ -125,6 +125,7 @@ class ConstructorUBL:
     scheme_name = ident.SCHEME_NAME_CUFE
     usa_cude = False
     incluir_control = True  # sts:InvoiceControl (resolución) solo en factura
+    incluir_vencimiento = True  # cbc:DueDate solo existe en el UBL Invoice
     customization_id_default = "10"
 
     def __init__(
@@ -184,6 +185,10 @@ class ConstructorUBL:
 
         self._extensiones(raiz, cufe)
         self._cabecera(raiz, cufe)
+        # El orden lo fija el XSD: DiscrepancyResponse, OrderReference y
+        # BillingReference van en esa secuencia (ver UBL-CreditNote-2.1.xsd).
+        self._discrepancia(raiz)
+        self._orden_compra(raiz)
         self._referencias(raiz)
         self._parte_emisor(raiz)
         self._parte_adquirente(raiz)
@@ -257,6 +262,10 @@ class ConstructorUBL:
         _sub(raiz, "cbc", "UUID", cufe, schemeID=str(self.ambiente), schemeName=self.scheme_name)
         _sub(raiz, "cbc", "IssueDate", self.doc.fecha_emision.isoformat())
         _sub(raiz, "cbc", "IssueTime", ident.formatear_hora(self.doc.hora_emision))
+        # DueDate solo existe en el UBL Invoice; las notas no lo tienen, y el
+        # orden del esquema lo sitúa entre IssueTime y el código de tipo.
+        if self.incluir_vencimiento and self.doc.fecha_vencimiento:
+            _sub(raiz, "cbc", "DueDate", self.doc.fecha_vencimiento.isoformat())
         # El UBL DebitNote no tiene elemento de tipo (etiqueta_tipo = None).
         if self.etiqueta_tipo:
             _sub(raiz, "cbc", self.etiqueta_tipo, self.doc.documento_tipo.codigo_dian)
@@ -266,8 +275,21 @@ class ConstructorUBL:
              listID="ISO 4217 Alpha")
         _sub(raiz, "cbc", "LineCountNumeric", self.doc.detalles.count())
 
+    def _discrepancia(self, raiz):
+        """Motivo de la corrección (solo notas)."""
+        return  # la factura no corrige nada
+
+    def _orden_compra(self, raiz):
+        """cac:OrderReference: la orden de compra del adquiriente, si la hubo."""
+        if not self.doc.orden_compra:
+            return
+        orden = _sub(raiz, "cac", "OrderReference")
+        _sub(orden, "cbc", "ID", self.doc.orden_compra)
+        if self.doc.orden_compra_fecha:
+            _sub(orden, "cbc", "IssueDate", self.doc.orden_compra_fecha.isoformat())
+
     def _referencias(self, raiz):
-        """Referencias a la factura corregida (solo notas)."""
+        """Referencia al documento corregido (solo notas)."""
         return  # la factura no lleva referencias
 
     def _parte_emisor(self, raiz):
@@ -320,6 +342,9 @@ class ConstructorUBL:
         _sub(medios, "cbc", "ID", forma)
         _sub(medios, "cbc", "PaymentMeansCode",
              self.doc.medio_pago.codigo if self.doc.medio_pago else "10")
+        if self.doc.fecha_vencimiento:
+            _sub(medios, "cbc", "PaymentDueDate",
+                 self.doc.fecha_vencimiento.isoformat())
 
     def _totales_impuestos(self, raiz):
         for codigo, datos in self.impuestos.items():
@@ -353,10 +378,21 @@ class ConstructorUBL:
         for linea in self.doc.detalles.all():
             il = _sub(raiz, "cac", self.etiqueta_linea)
             _sub(il, "cbc", "ID", linea.numero_linea)
+            if linea.nota:
+                _sub(il, "cbc", "Note", linea.nota)
             _sub(il, "cbc", self.etiqueta_cantidad, _cantidad(linea.cantidad),
                  unitCode=linea.unidad_medida.codigo)
             _sub(il, "cbc", "LineExtensionAmount", _valor(linea.valor_total), currencyID=self.moneda)
+            if linea.centro_costo:
+                _sub(il, "cbc", "AccountingCostCode", linea.centro_costo)
             self._linea_extra(il, linea)
+            # InvoicePeriod va tras FreeOfChargeIndicator y antes de TaxTotal.
+            if linea.periodo_desde or linea.periodo_hasta:
+                periodo = _sub(il, "cac", "InvoicePeriod")
+                if linea.periodo_desde:
+                    _sub(periodo, "cbc", "StartDate", linea.periodo_desde.isoformat())
+                if linea.periodo_hasta:
+                    _sub(periodo, "cbc", "EndDate", linea.periodo_hasta.isoformat())
 
             for imp in linea.impuestos.all():
                 tt = _sub(il, "cac", "TaxTotal")
@@ -372,6 +408,10 @@ class ConstructorUBL:
 
             item = _sub(il, "cac", "Item")
             _sub(item, "cbc", "Description", linea.descripcion)
+            if linea.marca:
+                _sub(item, "cbc", "BrandName", linea.marca)
+            if linea.modelo:
+                _sub(item, "cbc", "ModelName", linea.modelo)
             if linea.codigo_producto:
                 ident_item = _sub(item, "cac", "SellersItemIdentification")
                 _sub(ident_item, "cbc", "ID", linea.codigo_producto)
@@ -472,8 +512,9 @@ class _ConstructorNotaUBL(ConstructorUBL):
     scheme_name = ident.SCHEME_NAME_CUDE
     usa_cude = True
     incluir_control = False
+    incluir_vencimiento = False
 
-    def _referencias(self, raiz):
+    def _discrepancia(self, raiz):
         ref = self.doc.documento_referencia
         if ref is None:
             return
@@ -482,6 +523,10 @@ class _ConstructorNotaUBL(ConstructorUBL):
         _sub(discrepancia, "cbc", "ResponseCode", self.concepto)
         _sub(discrepancia, "cbc", "Description", self.doc.observaciones or "Corrección")
 
+    def _referencias(self, raiz):
+        ref = self.doc.documento_referencia
+        if ref is None:
+            return
         billing = _sub(raiz, "cac", "BillingReference")
         idr = _sub(billing, "cac", "InvoiceDocumentReference")
         _sub(idr, "cbc", "ID", ref.numero)

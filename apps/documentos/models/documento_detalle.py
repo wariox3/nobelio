@@ -27,6 +27,30 @@ class DocumentoDetalle(ModeloConFechas):
         "descuento", max_digits=18, decimal_places=2, default=0
     )
 
+    # --- Datos de negocio (opcionales, van al XML si vienen) ---
+    nota = models.CharField(
+        "nota de la línea", max_length=500, blank=True,
+        help_text="cbc:Note de la línea: aclaración libre sobre este ítem.",
+    )
+    marca = models.CharField(
+        "marca", max_length=100, blank=True, help_text="cbc:BrandName del ítem.",
+    )
+    modelo = models.CharField(
+        "modelo", max_length=100, blank=True, help_text="cbc:ModelName del ítem.",
+    )
+    centro_costo = models.CharField(
+        "centro de costo", max_length=50, blank=True,
+        help_text="cbc:AccountingCostCode: a qué centro de costo se imputa.",
+    )
+    periodo_desde = models.DateField(
+        "periodo facturado desde", null=True, blank=True,
+        help_text="cac:InvoicePeriod/cbc:StartDate: para servicios por periodo.",
+    )
+    periodo_hasta = models.DateField(
+        "periodo facturado hasta", null=True, blank=True,
+        help_text="cac:InvoicePeriod/cbc:EndDate.",
+    )
+
     # --- Relaciones ---
     documento = models.ForeignKey(
         Documento, on_delete=models.CASCADE,

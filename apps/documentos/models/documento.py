@@ -108,6 +108,11 @@ class Documento(ModeloUUID, ModeloConFechas):
         help_text="IssueDate del XML. Si se omite se toma la fecha de hoy, que "
         "es la única con la que se puede firmar (regla FAD09).",
     )
+    fecha_vencimiento = models.DateField(
+        "fecha de vencimiento", null=True, blank=True,
+        help_text="DueDate del XML: hasta cuándo hay plazo para pagar. La DIAN "
+        "la exige cuando la forma de pago es a crédito; en contado sobra.",
+    )
     hora_emision = models.TimeField(
         "hora de emisión", default=hora_por_defecto,
         help_text="IssueTime del XML. Si se omite se toma la hora actual, y al "
@@ -195,6 +200,15 @@ class Documento(ModeloUUID, ModeloConFechas):
         related_name="documentos", verbose_name="medio de pago",
         null=True, blank=True,
     )
+    # Orden de compra del comprador (cac:OrderReference).
+    orden_compra = models.CharField(
+        "orden de compra", max_length=100, blank=True,
+        help_text="Número de la orden de compra del adquiriente, si la hubo.",
+    )
+    orden_compra_fecha = models.DateField(
+        "fecha de la orden de compra", null=True, blank=True,
+    )
+
     # Para notas crédito/débito: referencia al documento corregido.
     documento_referencia = models.ForeignKey(
         "self", on_delete=models.PROTECT,

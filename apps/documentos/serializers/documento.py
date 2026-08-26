@@ -65,6 +65,17 @@ MENSAJE_CONCEPTO_SOLO_EN_NOTAS = (
     "Solo las notas crédito y débito llevan concepto de corrección."
 )
 
+# Forma de pago a crédito (lista FormasPago de la DIAN): 1 contado, 2 crédito.
+CODIGO_FORMA_PAGO_CREDITO = "2"
+
+MENSAJE_CREDITO_SIN_VENCIMIENTO = (
+    "Una venta a crédito debe indicar hasta cuándo hay plazo para pagar: "
+    "informe la fecha de vencimiento."
+)
+MENSAJE_VENCIMIENTO_ANTERIOR_A_EMISION = (
+    "La fecha de vencimiento no puede ser anterior a la de emisión."
+)
+
 
 def mensaje_nota_sin_referencia(tipo):
     """Mensaje para una nota que no indica el documento que corrige."""
@@ -130,7 +141,8 @@ class DocumentoSerializer(serializers.ModelSerializer):
             "emisor", "resolucion", "resolucion_numero", "adquiriente",
             "prefijo", "consecutivo", "numero", "cufe_cude", "track_id",
             "envio", "ambiente", "fecha_validacion", "errores",
-            "concepto_correccion",
+            "concepto_correccion", "fecha_vencimiento",
+            "orden_compra", "orden_compra_fecha",
             "fecha_emision", "hora_emision", "moneda", "forma_pago", "medio_pago",
             "valor_bruto", "total_impuestos", "total_descuentos", "total_cargos",
             "total_a_pagar", "documento_referencia", "observaciones", "detalles",
@@ -189,7 +201,8 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
             "adquiriente", "prefijo", "consecutivo", "numero",
             "fecha_emision", "hora_emision", "moneda", "forma_pago", "medio_pago",
             "total_descuentos", "total_cargos", "documento_referencia",
-            "concepto_correccion",
+            "concepto_correccion", "fecha_vencimiento",
+            "orden_compra", "orden_compra_fecha",
             "observaciones", "detalles",
         ]
         # Mensaje propio para la unicidad (emisor+prefijo+consecutivo+tipo) en vez
@@ -264,6 +277,7 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
                 {"documento_referencia": mensaje_nota_sin_referencia(tipo)}
             )
         self._validar_concepto(attrs, tipo)
+        self._validar_vencimiento(attrs)
 
         resolucion = attrs.get("resolucion") or getattr(self.instance, "resolucion", None)
         # La factura sí se numera con resolución, y sin ella no hay clave técnica
@@ -308,6 +322,30 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
         if concepto not in conceptos.values:
             raise serializers.ValidationError(
                 {"concepto_correccion": mensaje_concepto_invalido(tipo, conceptos)}
+            )
+
+    def _validar_vencimiento(self, attrs):
+        """El plazo de pago: obligatorio a crédito, coherente siempre.
+
+        La DIAN exige el ``DueDate`` cuando la venta es a crédito, y sin campo
+        que lo lleve el documento saldría sin él y lo rechazarían al enviarlo.
+        """
+        def dato(campo):
+            if campo in attrs:
+                return attrs[campo]
+            return getattr(self.instance, campo, None)
+
+        vencimiento = dato("fecha_vencimiento")
+        forma_pago = dato("forma_pago")
+        es_credito = forma_pago is not None and forma_pago.codigo == CODIGO_FORMA_PAGO_CREDITO
+        if es_credito and vencimiento is None:
+            raise serializers.ValidationError(
+                {"fecha_vencimiento": MENSAJE_CREDITO_SIN_VENCIMIENTO}
+            )
+        emision = dato("fecha_emision")
+        if vencimiento is not None and emision is not None and vencimiento < emision:
+            raise serializers.ValidationError(
+                {"fecha_vencimiento": MENSAJE_VENCIMIENTO_ANTERIOR_A_EMISION}
             )
 
     def _errores_de_numeracion(self, resolucion, attrs):
