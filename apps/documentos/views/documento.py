@@ -2,7 +2,7 @@
 import requests
 from django.conf import settings
 from django.http import FileResponse, HttpResponse
-from rest_framework import status, viewsets
+from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -20,6 +20,17 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
             "documento_tipo", "estado", "emisor", "adquiriente", "resolucion", "moneda"
         ).prefetch_related("errores", "adquiriente__responsabilidades")
     )
+
+    # `?ordering=fecha_emision,hora_emision` (el `-` invierte cada campo). Sin
+    # el parámetro manda el orden del modelo: lo más reciente primero. La lista
+    # es explícita para no exponer al ordenamiento columnas sin índice ni rutas
+    # que arrastren joins.
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    ordering_fields = [
+        "fecha_emision", "hora_emision", "consecutivo", "numero",
+        "total_a_pagar", "fecha_validacion", "creado_en", "actualizado_en",
+        "estado__nombre", "documento_tipo__codigo",
+    ]
 
     def get_serializer_class(self):
         if self.action in ("create", "update", "partial_update"):
