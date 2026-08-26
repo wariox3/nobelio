@@ -294,13 +294,46 @@ curl -H "Authorization: Api-Key $API_KEY" \
   http://localhost:8000/api/documentos/documento/<id>/pdf/ -o factura.pdf
 ```
 
-### Notas crédito/débito y documento soporte
+### Notas crédito/débito
 
-Mismo flujo cambiando `documento_tipo`:
+Mismo flujo cambiando `documento_tipo`: `nota_credito` y `nota_debito` requieren
+`documento_referencia` (el id de la factura que corrigen) y un
+`concepto_correccion` de la lista de su tipo. Usan CUDE y no llevan resolución:
+heredan la numeración del documento que corrigen.
 
-- `nota_credito` / `nota_debito`: requieren `documento_referencia` (el id de la
-  factura que corrigen). Usan CUDE.
-- `documento_soporte`: para adquisiciones a no obligados a facturar. Usa CUDE.
+### Documento soporte
+
+Para las adquisiciones a sujetos **no obligados a facturar**. Mismo endpoint,
+pero con tres diferencias que no se ven en la forma del payload —el detalle
+está en [docs/anexo-documento-soporte.md](docs/anexo-documento-soporte.md)—:
+
+**1. El bloque `adquiriente` es el vendedor.** En el documento soporte quien
+emite es el comprador, así que ahí van los datos del no obligado al que se le
+compró. En el XML sale como `AccountingSupplierParty`, y el `emisor` va como
+`AccountingCustomerParty`. El campo se llama `adquiriente` porque la fila es la
+misma para todos los tipos; en código está el alias `Documento.contraparte`.
+
+**2. Lleva resolución de numeración propia**, distinta de la de facturación: la
+DIAN autoriza el rango contra `InvoiceTypeCode=05`. Hay que registrarla con su
+`tipo_factura` (el código `05` del catálogo) y pasar su `numero_resolucion` al
+crear el documento. No necesita clave técnica: el CUDS se calcula con el PIN del
+software.
+
+**3. Las retenciones son un impuesto más de la línea**, con el tributo `05`
+(ReteIVA) o `06` (ReteFuente). Se reconocen por el código: no suman al
+`total_a_pagar` y en el XML salen en su propio `cac:WithholdingTaxTotal`.
+
+El identificador es el **CUDS** (`CUDS-SHA384`), que no es el CUDE: su
+composición lleva un solo impuesto en vez de tres, y el vendedor antes que el
+adquiriente. El `CustomizationID` (10 residente / 11 no residente) se deduce del
+país del vendedor.
+
+> El tipo `05` del catálogo lo carga `cargar_catalogos` desde
+> `datos/listas/documento-soporte/`. Si vienes de una base anterior, vuelve a
+> ejecutarlo.
+
+Pendientes: la representación gráfica todavía usa los rótulos de la factura, y
+faltan la nota de ajuste (tipo 95) y el set de pruebas propio de su habilitación.
 
 ---
 
