@@ -287,6 +287,11 @@ class ConstructorUBL:
         _sub(orden, "cbc", "ID", self.doc.orden_compra)
         if self.doc.orden_compra_fecha:
             _sub(orden, "cbc", "IssueDate", self.doc.orden_compra_fecha.isoformat())
+        if self.doc.orden_compra_tipo:
+            _sub(orden, "cbc", "OrderTypeCode", self.doc.orden_compra_tipo)
+        if self.doc.orden_compra_documento:
+            doc_ref = _sub(orden, "cac", "DocumentReference")
+            _sub(doc_ref, "cbc", "ID", self.doc.orden_compra_documento)
 
     def _referencias(self, raiz):
         """Referencia al documento corregido (solo notas)."""
@@ -335,6 +340,38 @@ class ConstructorUBL:
                 _sub(contacto, "cbc", "Telephone", adq.telefono)
             if adq.correo:
                 _sub(contacto, "cbc", "ElectronicMail", adq.correo)
+        # Person va después de Contact, y dentro de él el orden del XSD no es el
+        # natural: FamilyName antes que MiddleName, y ResidenceAddress al final.
+        self._persona(party, adq)
+
+    def _persona(self, party, adq):
+        """cac:Person: el nombre desglosado del adquiriente persona natural.
+
+        Solo se emite si hay nombre desglosado; para una empresa no aplica y
+        para una persona sin los campos cargados sería un bloque vacío.
+        """
+        campos = (
+            ("FirstName", adq.primer_nombre),
+            ("FamilyName", adq.primer_apellido),
+            ("MiddleName", adq.segundo_nombre),
+            ("OtherName", adq.segundo_apellido),
+        )
+        if not any(valor for _, valor in campos):
+            return
+        persona = _sub(party, "cac", "Person")
+        _sub(persona, "cbc", "ID", adq.numero_identificacion)
+        for etiqueta, valor in campos:
+            if valor:
+                _sub(persona, "cbc", etiqueta, valor)
+        if adq.telefono or adq.correo:
+            contacto = _sub(persona, "cac", "Contact")
+            if adq.telefono:
+                _sub(contacto, "cbc", "Telephone", adq.telefono)
+            if adq.correo:
+                _sub(contacto, "cbc", "ElectronicMail", adq.correo)
+        if adq.municipio or adq.direccion:
+            residencia = _sub(persona, "cac", "ResidenceAddress")
+            self._cuerpo_direccion(residencia, adq)
 
     def _medios_pago(self, raiz):
         medios = _sub(raiz, "cac", "PaymentMeans")
@@ -366,12 +403,18 @@ class ConstructorUBL:
         _sub(total, "cbc", "LineExtensionAmount", _valor(bruto), currencyID=self.moneda)
         _sub(total, "cbc", "TaxExclusiveAmount", _valor(bruto), currencyID=self.moneda)
         _sub(total, "cbc", "TaxInclusiveAmount", _valor(bruto + impuestos), currencyID=self.moneda)
-        if self.doc.total_descuentos:
-            _sub(total, "cbc", "AllowanceTotalAmount",
-                 _valor(self.doc.total_descuentos), currencyID=self.moneda)
-        if self.doc.total_cargos:
-            _sub(total, "cbc", "ChargeTotalAmount",
-                 _valor(self.doc.total_cargos), currencyID=self.moneda)
+        # Los cuatro se emiten siempre, aunque vayan en cero: es lo que hacen
+        # los proveedores tecnológicos, y así el receptor lee todos los sumandos
+        # del total sin tener que deducir cuáles se omitieron. El orden es el del
+        # XSD (Allowance, Charge, Prepaid, PayableRounding, y al final Payable).
+        _sub(total, "cbc", "AllowanceTotalAmount",
+             _valor(self.doc.total_descuentos or 0), currencyID=self.moneda)
+        _sub(total, "cbc", "ChargeTotalAmount",
+             _valor(self.doc.total_cargos or 0), currencyID=self.moneda)
+        # Anticipos y redondeo no se modelan todavía: van en cero, que es su
+        # valor real mientras no existan los campos que los alimenten.
+        _sub(total, "cbc", "PrepaidAmount", _valor(0), currencyID=self.moneda)
+        _sub(total, "cbc", "PayableRoundingAmount", _valor(0), currencyID=self.moneda)
         _sub(total, "cbc", "PayableAmount", _valor(self.doc.total_a_pagar), currencyID=self.moneda)
 
     def _lineas(self, raiz):
@@ -387,12 +430,18 @@ class ConstructorUBL:
                 _sub(il, "cbc", "AccountingCostCode", linea.centro_costo)
             self._linea_extra(il, linea)
             # InvoicePeriod va tras FreeOfChargeIndicator y antes de TaxTotal.
-            if linea.periodo_desde or linea.periodo_hasta:
+            if (linea.periodo_desde or linea.periodo_hasta
+                    or linea.periodo_descripcion or linea.periodo_descripcion_codigo):
                 periodo = _sub(il, "cac", "InvoicePeriod")
                 if linea.periodo_desde:
                     _sub(periodo, "cbc", "StartDate", linea.periodo_desde.isoformat())
                 if linea.periodo_hasta:
                     _sub(periodo, "cbc", "EndDate", linea.periodo_hasta.isoformat())
+                # Ojo al orden: el XSD pone DescriptionCode antes que Description.
+                if linea.periodo_descripcion_codigo:
+                    _sub(periodo, "cbc", "DescriptionCode", linea.periodo_descripcion_codigo)
+                if linea.periodo_descripcion:
+                    _sub(periodo, "cbc", "Description", linea.periodo_descripcion)
 
             for imp in linea.impuestos.all():
                 tt = _sub(il, "cac", "TaxTotal")

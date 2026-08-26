@@ -50,6 +50,15 @@ class DocumentoDetalle(ModeloConFechas):
         "periodo facturado hasta", null=True, blank=True,
         help_text="cac:InvoicePeriod/cbc:EndDate.",
     )
+    periodo_descripcion = models.CharField(
+        "descripción del periodo", max_length=255, blank=True,
+        help_text="cac:InvoicePeriod/cbc:Description: el periodo en palabras "
+        "(p. ej. 'Agosto de 2026').",
+    )
+    periodo_descripcion_codigo = models.CharField(
+        "código de la descripción del periodo", max_length=20, blank=True,
+        help_text="cac:InvoicePeriod/cbc:DescriptionCode.",
+    )
 
     # --- Relaciones ---
     documento = models.ForeignKey(

@@ -208,6 +208,16 @@ class Documento(ModeloUUID, ModeloConFechas):
     orden_compra_fecha = models.DateField(
         "fecha de la orden de compra", null=True, blank=True,
     )
+    orden_compra_tipo = models.CharField(
+        "tipo de la orden de compra", max_length=20, blank=True,
+        help_text="cbc:OrderTypeCode: qué clase de orden es (contrato, pedido…), "
+        "según la codificación que use el comprador.",
+    )
+    orden_compra_documento = models.CharField(
+        "documento de la orden de compra", max_length=100, blank=True,
+        help_text="cac:DocumentReference/cbc:ID: el soporte de la orden "
+        "(contrato, acuerdo marco) cuando es distinto del número de la orden.",
+    )
 
     # Para notas crédito/débito: referencia al documento corregido.
     documento_referencia = models.ForeignKey(

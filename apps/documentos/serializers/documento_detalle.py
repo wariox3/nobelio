@@ -24,4 +24,5 @@ class DocumentoDetalleSerializer(serializers.ModelSerializer):
             # Datos de negocio: opcionales, viajan al XML si vienen.
             "nota", "marca", "modelo", "centro_costo",
             "periodo_desde", "periodo_hasta",
+            "periodo_descripcion", "periodo_descripcion_codigo",
         ]

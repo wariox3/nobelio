@@ -22,6 +22,12 @@ class Adquiriente(ModeloConFechas):
 
     # --- Atributos ---
     razon_social = models.CharField("razón social", max_length=450)
+    # Nombre desglosado de la persona natural (cac:Person). La DIAN lo pide
+    # separado; la razón social sigue siendo el nombre completo para PartyName.
+    primer_nombre = models.CharField("primer nombre", max_length=100, blank=True)
+    segundo_nombre = models.CharField("segundo nombre", max_length=100, blank=True)
+    primer_apellido = models.CharField("primer apellido", max_length=100, blank=True)
+    segundo_apellido = models.CharField("segundo apellido", max_length=100, blank=True)
     numero_identificacion = models.CharField(
         "número de identificación", max_length=20,
         help_text="Sin puntos, sin guiones y sin dígito de verificación.",

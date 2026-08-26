@@ -142,7 +142,8 @@ class DocumentoSerializer(serializers.ModelSerializer):
             "prefijo", "consecutivo", "numero", "cufe_cude", "track_id",
             "envio", "ambiente", "fecha_validacion", "errores",
             "concepto_correccion", "fecha_vencimiento",
-            "orden_compra", "orden_compra_fecha",
+            "orden_compra", "orden_compra_fecha", "orden_compra_tipo",
+            "orden_compra_documento",
             "fecha_emision", "hora_emision", "moneda", "forma_pago", "medio_pago",
             "valor_bruto", "total_impuestos", "total_descuentos", "total_cargos",
             "total_a_pagar", "documento_referencia", "observaciones", "detalles",
@@ -202,7 +203,8 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
             "fecha_emision", "hora_emision", "moneda", "forma_pago", "medio_pago",
             "total_descuentos", "total_cargos", "documento_referencia",
             "concepto_correccion", "fecha_vencimiento",
-            "orden_compra", "orden_compra_fecha",
+            "orden_compra", "orden_compra_fecha", "orden_compra_tipo",
+            "orden_compra_documento",
             "observaciones", "detalles",
         ]
         # Mensaje propio para la unicidad (emisor+prefijo+consecutivo+tipo) en vez

@@ -10,7 +10,9 @@ class AdquirienteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Adquiriente
         fields = [
-            "razon_social", "tipo_identificacion", "numero_identificacion",
+            "razon_social",
+            "primer_nombre", "segundo_nombre", "primer_apellido", "segundo_apellido",
+            "tipo_identificacion", "numero_identificacion",
             "digito_verificacion", "tipo_organizacion", "responsabilidades",
             "pais", "departamento", "municipio", "direccion", "telefono", "correo",
         ]
