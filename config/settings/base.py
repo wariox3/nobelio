@@ -110,6 +110,10 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+# --- Pasarela de correo (Zinc) ---------------------------------------------
+# Servicio HTTP propio para enviar correos; ver apps/utilidades/zinc.py.
+ZINC_URL_BASE = env("ZINC_URL_BASE", default="http://zinc.semantica.com.co")
+
 # --- Almacenamiento en Backblaze B2 (S3-compatible) ------------------------
 # Credenciales de una "Application Key" de B2 con acceso al bucket. Si no están
 # configuradas (dev/test), los archivos caen al almacenamiento local.

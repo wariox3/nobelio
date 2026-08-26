@@ -1,0 +1,55 @@
+{% comment %}
+Cuerpo del correo con el que se le entrega el documento al adquiriente.
+Se edita aquí, sin tocar código. El adjunto es el zip; este HTML solo lo
+acompaña, así que evita imágenes externas y CSS elaborado: los clientes de
+correo los tratan de forma impredecible y muchos los bloquean.
+{% endcomment %}
+<div style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; color: #222;">
+  <p>Señor(a) <strong>{{ adquiriente.razon_social }}</strong>,</p>
+
+  <p>
+    {{ emisor.razon_social }} (NIT {{ emisor.numero_identificacion }}{% if emisor.digito_verificacion %}-{{ emisor.digito_verificacion }}{% endif %})
+    le informa que ha emitido {{ tipo_documento|lower }}
+    <strong>{{ documento.numero }}</strong>, validada por la DIAN.
+  </p>
+
+  <table cellpadding="6" cellspacing="0"
+         style="border-collapse: collapse; font-size: 14px; margin: 16px 0;">
+    <tr>
+      <td style="border: 1px solid #ddd;">Documento</td>
+      <td style="border: 1px solid #ddd;"><strong>{{ documento.numero }}</strong></td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ddd;">Fecha de emisión</td>
+      <td style="border: 1px solid #ddd;">{{ documento.fecha_emision }}</td>
+    </tr>
+    {% if documento.fecha_vencimiento %}
+    <tr>
+      <td style="border: 1px solid #ddd;">Vence</td>
+      <td style="border: 1px solid #ddd;">{{ documento.fecha_vencimiento }}</td>
+    </tr>
+    {% endif %}
+    <tr>
+      <td style="border: 1px solid #ddd;">Total a pagar</td>
+      <td style="border: 1px solid #ddd;">
+        <strong>{{ documento.total_a_pagar }} {{ documento.moneda.codigo }}</strong>
+      </td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #ddd;">CUFE/CUDE</td>
+      <td style="border: 1px solid #ddd; font-family: monospace; font-size: 11px;">
+        {{ documento.cufe_cude }}
+      </td>
+    </tr>
+  </table>
+
+  <p>
+    Adjunto encontrará el archivo <strong>{{ paquete.nombre }}</strong>, que contiene
+    el documento electrónico en formato XML junto con el acuse de la DIAN
+    {% if lleva_pdf %}y su representación gráfica en PDF{% endif %}.
+  </p>
+
+  <p style="color: #666; font-size: 12px;">
+    Este mensaje se generó automáticamente; por favor no lo responda.
+  </p>
+</div>

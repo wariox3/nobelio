@@ -6,6 +6,10 @@ from .notificacion import (
     empaquetar_notificacion,
     marcar_notificado,
     nombre_dian,
+    asunto_notificacion,
+    cuerpo_html,
+    enviar_notificacion,
+    payload_zinc,
 )
 
 __all__ = [
@@ -15,4 +19,8 @@ __all__ = [
     "empaquetar_notificacion",
     "marcar_notificado",
     "nombre_dian",
+    "asunto_notificacion",
+    "cuerpo_html",
+    "enviar_notificacion",
+    "payload_zinc",
 ]

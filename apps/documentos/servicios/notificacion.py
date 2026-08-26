@@ -12,12 +12,16 @@ Lo que viaja es el AttachedDocument y no el XML pelado: es el formato de
 entrega del anexo técnico, y dentro lleva el documento firmado junto al acuse
 con el que la DIAN acredita que lo validó.
 """
+import base64
 import zipfile
 from io import BytesIO
 from pathlib import PurePath
 
+from django.template.loader import render_to_string
+
 from apps.dian.identificadores import nombre_archivo_dian
 from apps.documentos.models import DocumentoEstado
+from apps.utilidades.zinc import Zinc
 
 # Tope del material adjunto que acepta la notificación. No cuenta el XML, que
 # lo pone el propio sistema y siempre viaja: el límite es para lo que sube el
@@ -35,6 +39,9 @@ MENSAJE_SIN_CORREO = (
     "El adquiriente del documento no tiene correo electrónico; no hay a dónde "
     "notificar."
 )
+
+
+PLANTILLA_CORREO = "documentos/notificacion_correo.html"
 
 
 class ErrorNotificacion(Exception):
@@ -160,3 +167,62 @@ def empaquetar_notificacion(documento, *, pdf=None, adjuntos=()):
         nombre=f"{base_paquete}.zip", contenido=buffer.getvalue(),
         tipo="application/zip", destinatario=destinatario, archivos=incluidos,
     )
+
+
+# ---------------------------------------------------------------------------
+# Envío por correo
+# ---------------------------------------------------------------------------
+def asunto_notificacion(documento):
+    """Asunto del correo: lo que el receptor ve en su bandeja.
+
+    Lleva emisor, tipo y número porque quien recibe facturas de varios
+    proveedores las busca por ahí, no abriendo adjuntos.
+    """
+    return (
+        f"{documento.emisor.razon_social} - "
+        f"{documento.documento_tipo.nombre} {documento.numero}"
+    )
+
+
+def cuerpo_html(documento, paquete):
+    """Renderiza el HTML del correo. La plantilla se edita sin tocar código."""
+    return render_to_string(PLANTILLA_CORREO, {
+        "documento": documento,
+        "emisor": documento.emisor,
+        "adquiriente": documento.adquiriente,
+        "tipo_documento": documento.documento_tipo.nombre,
+        "paquete": paquete,
+        "lleva_pdf": any(n.endswith(".pdf") for n in paquete.archivos),
+    })
+
+
+def payload_zinc(documento, paquete, *, asunto=None, html=None):
+    """Arma el cuerpo que espera Zinc en ``/api/correo/html``.
+
+    Aislado a propósito: el contrato lo define Zinc, así que si cambian los
+    nombres de los campos se corrige aquí y en ningún otro sitio.
+    """
+    return {
+        "destinatarios": [paquete.destinatario],
+        "asunto": asunto if asunto is not None else asunto_notificacion(documento),
+        "html": html if html is not None else cuerpo_html(documento, paquete),
+        "adjuntos": [{
+            "nombre": paquete.nombre,
+            "tipo": paquete.tipo,
+            "contenido": base64.b64encode(paquete.contenido).decode(),
+        }],
+    }
+
+
+def enviar_notificacion(documento, *, pdf=None, adjuntos=(), zinc=None):
+    """Arma el paquete, lo envía por correo y marca el documento como notificado.
+
+    La marca va **después** del envío: si Zinc falla, el documento sigue sin
+    notificar y se puede reintentar. El cliente se puede inyectar para las
+    pruebas.
+    """
+    paquete = empaquetar_notificacion(documento, pdf=pdf, adjuntos=adjuntos)
+    cliente = zinc or Zinc()
+    respuesta = cliente.correo_html(payload_zinc(documento, paquete))
+    marcar_notificado(documento)
+    return paquete, respuesta

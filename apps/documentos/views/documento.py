@@ -12,11 +12,12 @@ from apps.documentos.models import Documento, DocumentoEstado
 from apps.documentos.servicios import (
     ErrorNotificacion,
     empaquetar_notificacion,
-    marcar_notificado,
+    enviar_notificacion,
     nombre_dian,
 )
-from apps.nucleo.api import ErrorSolicitud, error_pasarela_dian
+from apps.nucleo.api import ErrorPasarela, ErrorSolicitud, error_pasarela_dian
 from apps.seguridad.alcance import AlcanceEmisorMixin
+from apps.utilidades.zinc import ZincNoDisponible
 
 
 class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
@@ -248,31 +249,36 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         ``POST /api/documentos/documento/{id}/notificar/`` en multipart, con
         ``pdf`` y ``adjuntos`` opcionales (hasta 10 MB entre todos). El
         resultado es siempre un zip, y dentro va siempre el AttachedDocument
-        —el documento firmado y el acuse de la DIAN juntos—. Con
-        ``?descargar=1`` devuelve el zip en vez del resumen, que es la forma de
-        revisarlo mientras el correo no está implementado.
+        —el documento firmado y el acuse de la DIAN juntos—.
 
-        El envío por correo todavía no existe: por eso la respuesta dice
-        ``enviado: false``.
+        Con ``?descargar=1`` **no envía**: devuelve el zip para revisarlo. Es la
+        forma de ver qué se le va a mandar al cliente sin mandárselo.
         """
         documento = self.get_object()
         entrada = serializers.NotificacionSerializer(data=request.data)
         entrada.is_valid(raise_exception=True)
-        try:
-            paquete = empaquetar_notificacion(
-                documento,
-                pdf=entrada.validated_data.get("pdf"),
-                adjuntos=entrada.validated_data.get("adjuntos") or [],
-            )
-        except ErrorNotificacion as exc:
-            raise ErrorSolicitud(str(exc))
-
-        marcar_notificado(documento)
+        pdf = entrada.validated_data.get("pdf")
+        adjuntos = entrada.validated_data.get("adjuntos") or []
 
         if request.query_params.get("descargar"):
+            try:
+                paquete = empaquetar_notificacion(documento, pdf=pdf, adjuntos=adjuntos)
+            except ErrorNotificacion as exc:
+                raise ErrorSolicitud(str(exc))
             respuesta = HttpResponse(paquete.contenido, content_type=paquete.tipo)
             respuesta["Content-Disposition"] = f'attachment; filename="{paquete.nombre}"'
             return respuesta
+
+        try:
+            paquete, respuesta_zinc = enviar_notificacion(
+                documento, pdf=pdf, adjuntos=adjuntos,
+            )
+        except ErrorNotificacion as exc:
+            raise ErrorSolicitud(str(exc))
+        except ZincNoDisponible as exc:
+            # 502: el documento está bien, quien falló fue la pasarela de correo.
+            # El documento NO queda marcado como notificado, así que se reintenta.
+            raise ErrorPasarela(str(exc))
 
         return Response({
             "destinatario": paquete.destinatario,
@@ -281,8 +287,8 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
             "tamano": paquete.tamano,
             "contenido": paquete.archivos,
             "notificado": documento.notificado,
-            "enviado": False,
-            "detalle": "El paquete quedó armado; el envío por correo aún no está implementado.",
+            "enviado": True,
+            "respuesta": respuesta_zinc,
         })
 
     @action(detail=True, methods=["get"])
