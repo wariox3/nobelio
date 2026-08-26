@@ -36,6 +36,10 @@ class Adquiriente(ModeloConFechas):
         "dígito de verificación", max_length=1, blank=True
     )
     direccion = models.CharField("dirección", max_length=255, blank=True)
+    codigo_postal = models.CharField(
+        "código postal", max_length=10, blank=True,
+        help_text="cbc:PostalZone de las direcciones del XML.",
+    )
     telefono = models.CharField("teléfono", max_length=50, blank=True)
     correo = models.EmailField("correo electrónico", blank=True)
 

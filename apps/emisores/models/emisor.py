@@ -16,6 +16,10 @@ class Emisor(ModeloConFechas):
     numero_identificacion = models.CharField("número de identificación", max_length=20, help_text="NIT sin puntos, sin guiones y sin dígito de verificación.",)
     digito_verificacion = models.CharField("dígito de verificación", max_length=1, blank=True)
     direccion = models.CharField("dirección", max_length=255)
+    codigo_postal = models.CharField(
+        "código postal", max_length=10, blank=True,
+        help_text="cbc:PostalZone de las direcciones del XML.",
+    )
     telefono = models.CharField("teléfono", max_length=50, blank=True)
     correo = models.EmailField("correo electrónico", blank=True)
     activo = models.BooleanField("activo", default=True)

@@ -14,5 +14,6 @@ class AdquirienteSerializer(serializers.ModelSerializer):
             "primer_nombre", "segundo_nombre", "primer_apellido", "segundo_apellido",
             "tipo_identificacion", "numero_identificacion",
             "digito_verificacion", "tipo_organizacion", "responsabilidades",
-            "pais", "departamento", "municipio", "direccion", "telefono", "correo",
+            "pais", "departamento", "municipio", "direccion", "codigo_postal",
+            "telefono", "correo",
         ]

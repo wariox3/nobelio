@@ -489,6 +489,9 @@ class ConstructorUBL:
         if entidad.municipio:
             _sub(direccion, "cbc", "ID", entidad.municipio.codigo)
             _sub(direccion, "cbc", "CityName", entidad.municipio.nombre)
+        # El XSD lo sitúa entre CityName y CountrySubentity.
+        if getattr(entidad, "codigo_postal", ""):
+            _sub(direccion, "cbc", "PostalZone", entidad.codigo_postal)
         if entidad.departamento:
             _sub(direccion, "cbc", "CountrySubentity", entidad.departamento.nombre)
             _sub(direccion, "cbc", "CountrySubentityCode", entidad.departamento.codigo)
