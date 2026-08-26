@@ -151,6 +151,7 @@ class EmisorSerializer(serializers.ModelSerializer):
             "tipo_identificacion", "numero_identificacion", "digito_verificacion",
             "tipo_organizacion", "responsabilidades",
             "pais", "departamento", "municipio", "direccion", "codigo_postal",
+            "correo_copia",
             "telefono", "correo", "activo", "habilitado_facturacion",
             "resoluciones",
         ]

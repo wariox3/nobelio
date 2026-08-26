@@ -113,6 +113,8 @@ MEDIA_ROOT = BASE_DIR / "media"
 # --- Pasarela de correo (Zinc) ---------------------------------------------
 # Servicio HTTP propio para enviar correos; ver apps/utilidades/zinc.py.
 ZINC_URL_BASE = env("ZINC_URL_BASE", default="http://zinc.semantica.com.co")
+# Nombre que ve el destinatario como remitente del correo.
+ZINC_NOMBRE_REMITENTE = env("ZINC_NOMBRE_REMITENTE", default="RedDoc ERP")
 
 # --- Almacenamiento en Backblaze B2 (S3-compatible) ------------------------
 # Credenciales de una "Application Key" de B2 con acceso al bucket. Si no están

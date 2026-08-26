@@ -288,6 +288,7 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
             "contenido": paquete.archivos,
             "notificado": documento.notificado,
             "enviado": True,
+            "codigo_envio": respuesta_zinc.get("codigoEnvio", ""),
             "respuesta": respuesta_zinc,
         })
 

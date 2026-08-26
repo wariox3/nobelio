@@ -19,6 +19,8 @@ from pathlib import PurePath
 
 from django.template.loader import render_to_string
 
+from django.conf import settings
+
 from apps.dian.identificadores import nombre_archivo_dian
 from apps.documentos.models import DocumentoEstado
 from apps.utilidades.zinc import Zinc
@@ -43,9 +45,27 @@ MENSAJE_SIN_CORREO = (
 
 PLANTILLA_CORREO = "documentos/notificacion_correo.html"
 
+# Nombre que el destinatario ve como remitente. Es el de la plataforma y no el
+# del emisor: el correo sale de la dirección de la pasarela, y firmarlo con el
+# nombre de un tercero es lo que los filtros antispam leen como suplantación.
+NOMBRE_REMITENTE = "RedDoc ERP"
+
+# Identifica a este sistema entre los que usan la pasarela. Es fijo: no depende
+# del ambiente ni del emisor, sino de quién hace la llamada.
+APLICACION = "nobelio"
+
 
 class ErrorNotificacion(Exception):
     """No se puede armar la notificación del documento."""
+
+
+class ErrorEnvioCorreo(ErrorNotificacion):
+    """Zinc aceptó la petición pero rechazó el envío.
+
+    Responde 200 con ``error: true`` —correo bloqueado, dirección inválida, un
+    fallo del proveedor de salida—, así que sin mirar ese campo un envío
+    fallido pasaría por bueno.
+    """
 
 
 class Paquete:
@@ -173,21 +193,43 @@ def empaquetar_notificacion(documento, *, pdf=None, adjuntos=()):
 # Envío por correo
 # ---------------------------------------------------------------------------
 def asunto_notificacion(documento):
-    """Asunto del correo: lo que el receptor ve en su bandeja.
+    """Asunto del correo con el formato que exige la DIAN.
 
-    Lleva emisor, tipo y número porque quien recibe facturas de varios
-    proveedores las busca por ahí, no abriendo adjuntos.
+    Cinco campos separados por ``;`` y sin espacios alrededor::
+
+        NIT emisor;Razón social emisor;Número;Código del tipo;Razón social del PT
+
+    No es decorativo: el receptor (o su software de recepción) lo parsea para
+    clasificar el documento sin abrir el adjunto, así que el orden y el
+    separador importan más que la legibilidad.
+
+    El quinto campo es el proveedor tecnológico. En modalidad software propio
+    —la de este proyecto— el proveedor es el propio emisor, igual que el
+    ``ProviderID`` del XML, así que su razón social se repite.
     """
-    return (
-        f"{documento.emisor.razon_social} - "
-        f"{documento.documento_tipo.nombre} {documento.numero}"
-    )
+    emisor = documento.emisor
+    return ";".join([
+        emisor.numero_identificacion,
+        emisor.razon_social,
+        documento.numero,
+        documento.documento_tipo.codigo_dian,
+        emisor.razon_social,
+    ])
+
+
+def _moneda(valor):
+    """Un importe como lo muestra la representación gráfica: ``1.785.000,00``."""
+    return f"{valor:,.2f}".translate(str.maketrans(",.", ".,"))
 
 
 def cuerpo_html(documento, paquete):
     """Renderiza el HTML del correo. La plantilla se edita sin tocar código."""
     return render_to_string(PLANTILLA_CORREO, {
         "documento": documento,
+        # Formateado aquí y no en la plantilla: `floatformat` sigue la
+        # localización de Django y saca "1785000,00", sin separador de miles.
+        # Se usa el mismo formato que la representación gráfica.
+        "total": _moneda(documento.total_a_pagar),
         "emisor": documento.emisor,
         "adquiriente": documento.adquiriente,
         "tipo_documento": documento.documento_tipo.nombre,
@@ -200,29 +242,57 @@ def payload_zinc(documento, paquete, *, asunto=None, html=None):
     """Arma el cuerpo que espera Zinc en ``/api/correo/html``.
 
     Aislado a propósito: el contrato lo define Zinc, así que si cambian los
-    nombres de los campos se corrige aquí y en ningún otro sitio.
+    nombres de los campos se corrige aquí y en ningún otro sitio. Los
+    destinatarios van en una sola cadena separada por ``;``, que es como los
+    parte la pasarela.
     """
-    return {
-        "destinatarios": [paquete.destinatario],
+    datos = {
+        "correo": ";".join(_destinatarios(paquete)),
         "asunto": asunto if asunto is not None else asunto_notificacion(documento),
-        "html": html if html is not None else cuerpo_html(documento, paquete),
+        "contenido": html if html is not None else cuerpo_html(documento, paquete),
+        "nombreRemitente": getattr(
+            settings, "ZINC_NOMBRE_REMITENTE", NOMBRE_REMITENTE
+        ),
+        # Identifican el documento en el registro de la pasarela, para poder
+        # cruzar un correo con la factura sin abrir el adjunto.
+        "aplicacion": APLICACION,
+        # Identifica al emisor en el registro de envíos de la pasarela.
+        "operador": documento.emisor_id,
+        "documentoNumero": documento.numero,
+        "documentoFecha": documento.fecha_emision.isoformat(),
         "adjuntos": [{
-            "nombre": paquete.nombre,
-            "tipo": paquete.tipo,
-            "contenido": base64.b64encode(paquete.contenido).decode(),
+            "NombreArchivo": paquete.nombre,
+            "B64": base64.b64encode(paquete.contenido).decode(),
         }],
     }
+    # La copia es del emisor —su archivo, su contador—, no del documento, así
+    # que se resuelve aquí y no viaja en la petición de notificar.
+    if documento.emisor.correo_copia:
+        datos["correoCopia"] = documento.emisor.correo_copia
+    return datos
+
+
+def _destinatarios(paquete):
+    """Los correos a los que va el paquete, ya limpios."""
+    return [c.strip() for c in paquete.destinatario.split(";") if c.strip()]
 
 
 def enviar_notificacion(documento, *, pdf=None, adjuntos=(), zinc=None):
     """Arma el paquete, lo envía por correo y marca el documento como notificado.
 
-    La marca va **después** del envío: si Zinc falla, el documento sigue sin
-    notificar y se puede reintentar. El cliente se puede inyectar para las
-    pruebas.
+    La marca va **después** del envío y solo si Zinc lo dio por bueno: si algo
+    falla, el documento sigue sin notificar y se puede reintentar. El cliente se
+    puede inyectar para las pruebas.
+
+    Devuelve ``(paquete, respuesta)``; en la respuesta viene el ``codigoEnvio``
+    con el que se rastrea el correo en la pasarela.
     """
     paquete = empaquetar_notificacion(documento, pdf=pdf, adjuntos=adjuntos)
     cliente = zinc or Zinc()
     respuesta = cliente.correo_html(payload_zinc(documento, paquete))
+    if respuesta.get("error"):
+        raise ErrorEnvioCorreo(
+            respuesta.get("errorMensaje") or "Zinc rechazó el envío sin dar motivo."
+        )
     marcar_notificado(documento)
     return paquete, respuesta

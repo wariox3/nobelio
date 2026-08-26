@@ -1,6 +1,7 @@
 """Servicios de dominio de la app documentos."""
 from .notificacion import (
     TAMANO_MAXIMO_ADJUNTOS,
+    ErrorEnvioCorreo,
     ErrorNotificacion,
     Paquete,
     empaquetar_notificacion,
@@ -14,6 +15,7 @@ from .notificacion import (
 
 __all__ = [
     "TAMANO_MAXIMO_ADJUNTOS",
+    "ErrorEnvioCorreo",
     "ErrorNotificacion",
     "Paquete",
     "empaquetar_notificacion",

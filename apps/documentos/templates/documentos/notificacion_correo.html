@@ -1,55 +1,125 @@
 {% comment %}
 Cuerpo del correo con el que se le entrega el documento al adquiriente.
-Se edita aquí, sin tocar código. El adjunto es el zip; este HTML solo lo
-acompaña, así que evita imágenes externas y CSS elaborado: los clientes de
-correo los tratan de forma impredecible y muchos los bloquean.
+Se edita aquí, sin tocar código.
+
+Estilo deliberadamente conservador: tablas para maquetar, estilos en línea y
+cero recursos externos. Los clientes de correo (Outlook sobre todo) ignoran las
+hojas de estilo, el flex y el grid, y bloquean las imágenes remotas, así que lo
+que aquí parezca anticuado es lo único que se ve igual en todas partes.
 {% endcomment %}
-<div style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; color: #222;">
-  <p>Señor(a) <strong>{{ adquiriente.razon_social }}</strong>,</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+       style="background-color: #f4f5f7; padding: 24px 12px; margin: 0;">
+  <tr>
+    <td align="center">
 
-  <p>
-    {{ emisor.razon_social }} (NIT {{ emisor.numero_identificacion }}{% if emisor.digito_verificacion %}-{{ emisor.digito_verificacion }}{% endif %})
-    le informa que ha emitido {{ tipo_documento|lower }}
-    <strong>{{ documento.numero }}</strong>, validada por la DIAN.
-  </p>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600"
+             style="max-width: 600px; width: 100%; background-color: #ffffff;
+                    border: 1px solid #e3e5e9; border-radius: 6px;
+                    font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+                    color: #2b2f36;">
 
-  <table cellpadding="6" cellspacing="0"
-         style="border-collapse: collapse; font-size: 14px; margin: 16px 0;">
-    <tr>
-      <td style="border: 1px solid #ddd;">Documento</td>
-      <td style="border: 1px solid #ddd;"><strong>{{ documento.numero }}</strong></td>
-    </tr>
-    <tr>
-      <td style="border: 1px solid #ddd;">Fecha de emisión</td>
-      <td style="border: 1px solid #ddd;">{{ documento.fecha_emision }}</td>
-    </tr>
-    {% if documento.fecha_vencimiento %}
-    <tr>
-      <td style="border: 1px solid #ddd;">Vence</td>
-      <td style="border: 1px solid #ddd;">{{ documento.fecha_vencimiento }}</td>
-    </tr>
-    {% endif %}
-    <tr>
-      <td style="border: 1px solid #ddd;">Total a pagar</td>
-      <td style="border: 1px solid #ddd;">
-        <strong>{{ documento.total_a_pagar }} {{ documento.moneda.codigo }}</strong>
-      </td>
-    </tr>
-    <tr>
-      <td style="border: 1px solid #ddd;">CUFE/CUDE</td>
-      <td style="border: 1px solid #ddd; font-family: monospace; font-size: 11px;">
-        {{ documento.cufe_cude }}
-      </td>
-    </tr>
-  </table>
+        {# Franja superior: el nombre del emisor, sin imágenes. #}
+        <tr>
+          <td style="padding: 20px 28px; border-bottom: 3px solid #1f6feb;">
+            <div style="font-size: 16px; font-weight: 600; letter-spacing: .2px;">
+              {{ emisor.razon_social }}
+            </div>
+            <div style="font-size: 12px; color: #6b7280; padding-top: 2px;">
+              NIT {{ emisor.numero_identificacion }}{% if emisor.digito_verificacion %}-{{ emisor.digito_verificacion }}{% endif %}
+            </div>
+          </td>
+        </tr>
 
-  <p>
-    Adjunto encontrará el archivo <strong>{{ paquete.nombre }}</strong>, que contiene
-    el documento electrónico en formato XML junto con el acuse de la DIAN
-    {% if lleva_pdf %}y su representación gráfica en PDF{% endif %}.
-  </p>
+        <tr>
+          <td style="padding: 26px 28px 8px 28px;">
+            <p style="margin: 0 0 14px 0; font-size: 15px;">
+              Señor(a) <strong>{{ adquiriente.razon_social }}</strong>,
+            </p>
+            <p style="margin: 0 0 22px 0; font-size: 14px; line-height: 22px; color: #4b5563;">
+              Le informamos que hemos emitido {{ tipo_documento|lower }}
+              <strong style="color: #2b2f36;">{{ documento.numero }}</strong>,
+              validada por la DIAN. Encontrará el detalle a continuación.
+            </p>
+          </td>
+        </tr>
 
-  <p style="color: #666; font-size: 12px;">
-    Este mensaje se generó automáticamente; por favor no lo responda.
-  </p>
-</div>
+        {# Datos del documento. #}
+        <tr>
+          <td style="padding: 0 28px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                   style="font-size: 14px; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 9px 0; color: #6b7280; border-bottom: 1px solid #eef0f3;">Documento</td>
+                <td align="right" style="padding: 9px 0; font-weight: 600; border-bottom: 1px solid #eef0f3;">
+                  {{ documento.numero }}
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 9px 0; color: #6b7280; border-bottom: 1px solid #eef0f3;">Fecha de emisión</td>
+                <td align="right" style="padding: 9px 0; border-bottom: 1px solid #eef0f3;">
+                  {{ documento.fecha_emision }}
+                </td>
+              </tr>
+              {% if documento.fecha_vencimiento %}
+              <tr>
+                <td style="padding: 9px 0; color: #6b7280; border-bottom: 1px solid #eef0f3;">Vence</td>
+                <td align="right" style="padding: 9px 0; border-bottom: 1px solid #eef0f3;">
+                  {{ documento.fecha_vencimiento }}
+                </td>
+              </tr>
+              {% endif %}
+              <tr>
+                <td style="padding: 14px 0 4px 0; color: #6b7280;">Total a pagar</td>
+                <td align="right" style="padding: 14px 0 4px 0;">
+                  <span style="font-size: 20px; font-weight: 600; color: #1f6feb;">
+                    ${{ total }}
+                  </span>
+                  <span style="font-size: 12px; color: #6b7280;">{{ documento.moneda.codigo }}</span>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        {# Adjunto. #}
+        <tr>
+          <td style="padding: 22px 28px 4px 28px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                   style="background-color: #f7f9fc; border: 1px solid #e3e8f0; border-radius: 5px;">
+              <tr>
+                <td style="padding: 14px 16px; font-size: 13px; line-height: 20px; color: #4b5563;">
+                  Adjunto va <strong style="color: #2b2f36;">{{ paquete.nombre }}</strong>, con el
+                  documento electrónico en XML y el acuse de la DIAN{% if lleva_pdf %},
+                  además de su representación gráfica en PDF{% endif %}.
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        {# CUFE: largo y feo, pero es el identificador con el que se verifica. #}
+        <tr>
+          <td style="padding: 18px 28px 24px 28px;">
+            <div style="font-size: 11px; color: #9aa1ac; text-transform: uppercase;
+                        letter-spacing: .6px; padding-bottom: 4px;">
+              CUFE / CUDE
+            </div>
+            <div style="font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11px;
+                        color: #6b7280; word-break: break-all; line-height: 16px;">
+              {{ documento.cufe_cude }}
+            </div>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding: 16px 28px 22px 28px; border-top: 1px solid #eef0f3;
+                     font-size: 12px; line-height: 18px; color: #9aa1ac;">
+            Este mensaje se generó automáticamente; por favor no lo responda.
+          </td>
+        </tr>
+
+      </table>
+
+    </td>
+  </tr>
+</table>

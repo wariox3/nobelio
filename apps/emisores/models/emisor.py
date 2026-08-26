@@ -16,6 +16,11 @@ class Emisor(ModeloConFechas):
     numero_identificacion = models.CharField("número de identificación", max_length=20, help_text="NIT sin puntos, sin guiones y sin dígito de verificación.",)
     digito_verificacion = models.CharField("dígito de verificación", max_length=1, blank=True)
     direccion = models.CharField("dirección", max_length=255)
+    correo_copia = models.CharField(
+        "correo en copia", max_length=255, blank=True,
+        help_text="Copia de las notificaciones al adquiriente. Varios correos "
+        "separados por punto y coma. Vacío = no se envía copia.",
+    )
     codigo_postal = models.CharField(
         "código postal", max_length=10, blank=True,
         help_text="cbc:PostalZone de las direcciones del XML.",

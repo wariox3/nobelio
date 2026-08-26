@@ -4,9 +4,9 @@ Envía correos a través de un servicio HTTP propio en vez de hablar SMTP: el
 proyecto no necesita saber de servidores de correo, credenciales ni colas, solo
 publicar el mensaje en la pasarela.
 
-Dos formas de enviar, que son dos endpoints distintos de Zinc:
-  - :meth:`Zinc.correo_electronico`: el envío general (``/api/correo/electronico/v2``).
-  - :meth:`Zinc.correo_html`: el envío con cuerpo HTML (``/api/correo/html``).
+Se expone solo :meth:`Zinc.correo_html` (``/api/correo/html``), que es el envío
+que usa el proyecto: los documentos se entregan con un cuerpo HTML y el zip
+adjunto. Zinc tiene más endpoints; se añaden aquí cuando hagan falta.
 
 El contenido de ``datos`` lo define Zinc, no este cliente: se manda tal cual
 como JSON. Eso mantiene al cliente al margen de los cambios de la pasarela, a
@@ -23,7 +23,6 @@ from django.conf import settings
 ZINC_URL_BASE = "http://zinc.semantica.com.co"
 ZINC_TIMEOUT = 30  # segundos: un correo con adjuntos tarda más que una consulta
 
-RUTA_CORREO_ELECTRONICO = "/api/correo/electronico/v2"
 RUTA_CORREO_HTML = "/api/correo/html"
 
 
@@ -52,10 +51,6 @@ class Zinc:
         self.timeout = timeout
 
     # -- Envíos -------------------------------------------------------------
-
-    def correo_electronico(self, datos: dict) -> dict:
-        """Envía un correo por el endpoint general. Devuelve la respuesta de Zinc."""
-        return self._post(RUTA_CORREO_ELECTRONICO, datos)
 
     def correo_html(self, datos: dict) -> dict:
         """Envía un correo con cuerpo HTML. Devuelve la respuesta de Zinc."""
