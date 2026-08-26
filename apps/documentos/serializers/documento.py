@@ -2,6 +2,7 @@
 from decimal import Decimal
 
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
 
@@ -26,6 +27,20 @@ MENSAJE_RESOLUCION_AMBIGUA = (
 MENSAJE_DOCUMENTO_NO_EDITABLE = (
     "El documento ya fue firmado y no se puede modificar."
 )
+
+
+def mensaje_fecha_emision_no_es_hoy(hoy):
+    """Mensaje para una fecha de emisión que no es la de hoy.
+
+    La regla FAD09 de la DIAN exige que la fecha de generación coincida con la
+    de la firma, y se firma en el momento de emitir: cualquier otra fecha
+    produce un rechazo que ya cuesta un consecutivo.
+    """
+    return (
+        f"La fecha de emisión debe ser la de hoy ({hoy}): la DIAN rechaza "
+        "(regla FAD09) los documentos cuya fecha de generación no coincide "
+        "con la fecha de la firma."
+    )
 
 
 def mensaje_prefijo_ajeno(resolucion):
@@ -145,6 +160,17 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
         if self.partial:
             campos["numero_resolucion"].required = False
         return campos
+
+    def validate_fecha_emision(self, fecha):
+        """Solo se admite la fecha de hoy (regla FAD09).
+
+        Vale igual para una fecha pasada que para una futura: lo que la DIAN
+        compara es el día del ``IssueDate`` contra el del ``SigningTime``.
+        """
+        hoy = timezone.localdate()
+        if fecha != hoy:
+            raise serializers.ValidationError(mensaje_fecha_emision_no_es_hoy(hoy))
+        return fecha
 
     def validate_detalles(self, detalles):
         if not detalles:

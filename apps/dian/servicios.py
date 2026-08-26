@@ -207,6 +207,19 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
     if documento.estado_id and documento.estado.nombre in bloqueados:
         raise ErrorEmision(bloqueados[documento.estado.nombre])
 
+    # Firmar es emitir: el SigningTime es de ahora, así que un IssueDate de otro
+    # día es un rechazo seguro (regla FAD09). Se corta antes de construir el XML
+    # porque el documento ya tiene su consecutivo reservado y el rechazo lo
+    # gastaría. El serializer valida lo mismo al crear, pero entre crear y
+    # firmar puede haber pasado un día: aquí es donde la comparación es cierta.
+    hoy = timezone.localdate()
+    if documento.fecha_emision != hoy:
+        raise ErrorEmision(
+            f"El documento tiene fecha de emisión {documento.fecha_emision} y se "
+            f"firmaría hoy ({hoy}); la DIAN lo rechazaría (regla FAD09). "
+            "Actualice la fecha de emisión antes de emitir."
+        )
+
     # Dar de baja un emisor (activo=False) tiene que cortar la emisión: es la
     # forma de suspender a un cliente sin tocar las credenciales de su cuenta.
     # El certificado no se exige aquí sino en `construir_firmador`, que es quien
