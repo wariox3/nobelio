@@ -16,6 +16,30 @@ def ambiente_por_defecto():
     return settings.DIAN_ENVIRONMENT
 
 
+def fecha_por_defecto():
+    """La fecha local al crear el documento.
+
+    Es también la única que se puede firmar: la DIAN exige que la fecha de
+    emisión coincida con la de la firma (regla FAD09), así que un documento que
+    no se emite el mismo día que se crea hay que refecharlo antes.
+    """
+    from django.utils import timezone
+
+    return timezone.localdate()
+
+
+def hora_por_defecto():
+    """La hora local al crear el documento.
+
+    Es solo un valor de partida: al firmar, ``generar_y_firmar`` la reescribe
+    con la hora de la firma, que es la que la DIAN espera ver en el IssueTime.
+    Existe para que quien crea el documento no tenga que inventarse una hora.
+    """
+    from django.utils import timezone
+
+    return timezone.localtime().time()
+
+
 def _ruta_artefacto(instance, filename):
     """Ruta en el bucket: ``<emisor_id>/documentos/<aaaa>/<mm>/<archivo>``.
 
@@ -79,8 +103,16 @@ class Documento(ModeloUUID, ModeloConFechas):
         help_text="Hash SHA-384 (96 hex). CUFE en facturas, CUDE en notas/soporte.",
     )
 
-    fecha_emision = models.DateField("fecha de emisión")
-    hora_emision = models.TimeField("hora de emisión")
+    fecha_emision = models.DateField(
+        "fecha de emisión", default=fecha_por_defecto,
+        help_text="IssueDate del XML. Si se omite se toma la fecha de hoy, que "
+        "es la única con la que se puede firmar (regla FAD09).",
+    )
+    hora_emision = models.TimeField(
+        "hora de emisión", default=hora_por_defecto,
+        help_text="IssueTime del XML. Si se omite se toma la hora actual, y al "
+        "firmar se reescribe con la hora de la firma.",
+    )
 
     # Totales (cac:LegalMonetaryTotal)
     valor_bruto = models.DecimalField(

@@ -151,46 +151,91 @@ class EnviarADianTests(TestCase):
 
 
 class ConsultarEstadoTests(TestCase):
-    """consultar_estado es solo lectura: enruta la operación y NO muta el documento."""
+    """Las consultas son solo lectura y cada una pregunta por lo suyo.
+
+    ``consultar_estado`` (GetStatus) pregunta por el **documento** y va con el
+    CUFE; ``consultar_estado_zip`` (GetStatusZip) pregunta por la **entrega** y
+    va con el ZipKey. Cuál corresponde no lo decide el ambiente sino cómo se
+    envió: eso es ``consultar_segun_envio``.
+    """
 
     @classmethod
     def setUpTestData(cls):
         cls.documento = crear_documento_factura()["documento"]
+        cls.documento.cufe_cude = "CUFE123"
         cls.documento.track_id = "zip-123"
         cls.documento.save()
 
-    def test_habilitacion_usa_getstatuszip(self):
-        cliente = FakeCliente(soap.RespuestaDian(es_valido=True, codigo_estado="00"))
+    def _cliente(self):
+        return FakeCliente(soap.RespuestaDian(es_valido=True, codigo_estado="00"))
+
+    def test_getstatus_pregunta_por_el_cufe(self):
+        # Aun en habilitación: el ZipKey no identifica al documento.
+        cliente = self._cliente()
         servicios.consultar_estado(self.documento, cliente=cliente, ambiente=2)
+        self.assertEqual(cliente.llamadas[0], ("estado", "CUFE123"))
+
+    def test_getstatus_admite_forzar_otro_identificador(self):
+        cliente = self._cliente()
+        servicios.consultar_estado(
+            self.documento, cliente=cliente, ambiente=1, track_id="otro-id"
+        )
+        self.assertEqual(cliente.llamadas[0], ("estado", "otro-id"))
+
+    def test_getstatuszip_pregunta_por_el_zipkey(self):
+        cliente = self._cliente()
+        servicios.consultar_estado_zip(self.documento, cliente=cliente, ambiente=2)
         self.assertEqual(cliente.llamadas[0], ("estado_zip", "zip-123"))
 
-    def test_produccion_usa_getstatus(self):
-        cliente = FakeCliente(soap.RespuestaDian(es_valido=False, errores=["X"]))
-        servicios.consultar_estado(self.documento, cliente=cliente, ambiente=1)
-        self.assertEqual(cliente.llamadas[0], ("estado", "zip-123"))
+    def test_enviado_al_set_de_pruebas_se_consulta_con_getstatuszip(self):
+        self.documento.envio = Documento.Envio.SET_PRUEBAS
+        self.documento.save(update_fields=["envio"])
+        cliente = self._cliente()
+        servicios.consultar_segun_envio(self.documento, cliente=cliente, ambiente=2)
+        self.assertEqual(cliente.llamadas[0], ("estado_zip", "zip-123"))
 
-    def test_sendbillsync_usa_getstatus_por_cufe(self):
-        # Si el track_id es el CUFE (envío SendBillSync), aun en habilitación
-        # se consulta con GetStatus, no GetStatusZip.
-        self.documento.cufe_cude = "CUFE123"
+    def test_enviado_con_sendbillsync_se_consulta_con_getstatus(self):
+        # Aunque siga en habilitación: lo que manda es la operación del envío.
+        self.documento.envio = Documento.Envio.SINCRONO
+        self.documento.save(update_fields=["envio"])
+        cliente = self._cliente()
+        servicios.consultar_segun_envio(self.documento, cliente=cliente, ambiente=2)
+        self.assertEqual(cliente.llamadas[0], ("estado", "CUFE123"))
+
+    def test_sin_envio_registrado_se_deduce_del_track_id(self):
+        # Documentos anteriores al campo `envio`: un track_id distinto del CUFE
+        # en ambiente 2 solo puede ser un ZipKey.
+        self.assertEqual(self.documento.envio, "")
+        cliente = self._cliente()
+        servicios.consultar_segun_envio(self.documento, cliente=cliente, ambiente=2)
+        self.assertEqual(cliente.llamadas[0], ("estado_zip", "zip-123"))
+
         self.documento.track_id = "CUFE123"
-        self.documento.save(update_fields=["cufe_cude", "track_id"])
-        cliente = FakeCliente(soap.RespuestaDian(es_valido=True, codigo_estado="00"))
-        servicios.consultar_estado(self.documento, cliente=cliente, ambiente=2)
+        self.documento.save(update_fields=["track_id"])
+        cliente = self._cliente()
+        servicios.consultar_segun_envio(self.documento, cliente=cliente, ambiente=2)
         self.assertEqual(cliente.llamadas[0], ("estado", "CUFE123"))
 
     def test_no_modifica_el_documento(self):
         estado_previo = self.documento.estado_id
-        cliente = FakeCliente(soap.RespuestaDian(es_valido=True, codigo_estado="00"))
+        cliente = self._cliente()
         servicios.consultar_estado(self.documento, cliente=cliente, ambiente=2)
         self.documento.refresh_from_db()
         self.assertEqual(self.documento.estado_id, estado_previo)
 
-    def test_sin_track_id_falla(self):
-        self.documento.track_id = ""
-        self.documento.save()
+    def test_sin_cufe_no_se_puede_preguntar_por_el_documento(self):
+        self.documento.cufe_cude = ""
+        self.documento.save(update_fields=["cufe_cude"])
         with self.assertRaises(servicios.ErrorEmision):
             servicios.consultar_estado(self.documento, cliente=FakeCliente(None), ambiente=2)
+
+    def test_sin_track_id_no_se_puede_preguntar_por_la_entrega(self):
+        self.documento.track_id = ""
+        self.documento.save(update_fields=["track_id"])
+        with self.assertRaises(servicios.ErrorEmision):
+            servicios.consultar_estado_zip(
+                self.documento, cliente=FakeCliente(None), ambiente=2
+            )
 
 
 class ActualizarEstadoTests(TestCase):
