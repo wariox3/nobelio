@@ -86,6 +86,36 @@ def _ya_procesado(respuesta) -> bool:
     return procesado
 
 
+def _set_pruebas_cerrado(respuesta) -> bool:
+    """La DIAN dice que el Set de Pruebas ya está aceptado.
+
+    ``SendTestSetAsync`` deja de admitir envíos en cuanto la habilitación se
+    aprueba y responde "Set de prueba con identificador <uuid> se encuentra
+    Aceptado" —sin ``ErrorMessage``, así que no es un rechazo del documento:
+    es que la operación ya no aplica y toca pasarse a ``SendBillSync``.
+    """
+    textos = [respuesta.descripcion_estado, *respuesta.errores]
+    return any(
+        "set de prueba" in t.lower() and "aceptado" in t.lower()
+        for t in textos if t
+    )
+
+
+def _marcar_habilitacion_superada(software, emisor):
+    """Deja constancia de que la habilitación terminó.
+
+    Es el único momento en que la DIAN lo dice por sí misma; hasta ahora ambas
+    banderas se marcaban a mano y olvidarlas dejaba al emisor enviando al Set
+    de Pruebas para siempre.
+    """
+    if not software.set_pruebas_aceptado:
+        software.set_pruebas_aceptado = True
+        software.save(update_fields=["set_pruebas_aceptado", "actualizado_en"])
+    if not emisor.habilitado_facturacion:
+        emisor.habilitado_facturacion = True
+        emisor.save(update_fields=["habilitado_facturacion", "actualizado_en"])
+
+
 def _guardar_respuesta(documento, respuesta):
     """Registra el resultado DIAN: SOAP crudo en B2 y los rechazos como filas.
 
@@ -263,6 +293,10 @@ def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):
     en habilitación y el Set de Pruebas aún NO ha sido aceptado. Una vez
     aceptado (``software.set_pruebas_aceptado``) o en producción, usa
     SendBillSync (síncrono).
+
+    Si la DIAN responde que el Set de Pruebas ya está aceptado, se marcan las
+    banderas de habilitación y el documento sale por SendBillSync en el mismo
+    envío (ver ``_set_pruebas_cerrado``).
     """
     ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
     if documento.estado_id and documento.estado.nombre == DocumentoEstado.Nombre.ACEPTADO:
@@ -280,6 +314,13 @@ def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):
     usar_set_pruebas = ambiente == 2 and not software.set_pruebas_aceptado
     if usar_set_pruebas:
         respuesta = cliente.enviar_set_pruebas(xml, nombre, software.test_set_id)
+        # La DIAN aceptó la habilitación entre un envío y otro: se anota y se
+        # reenvía por el camino que ya corresponde, en vez de dejar el
+        # documento en 'enviado' con un mensaje que no habla de él.
+        if _set_pruebas_cerrado(respuesta):
+            _marcar_habilitacion_superada(software, documento.emisor)
+            usar_set_pruebas = False
+            respuesta = cliente.enviar_factura_sincrono(xml, nombre)
     else:
         respuesta = cliente.enviar_factura_sincrono(xml, nombre)
 

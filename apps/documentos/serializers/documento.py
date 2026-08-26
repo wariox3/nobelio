@@ -69,14 +69,14 @@ class DocumentoSerializer(serializers.ModelSerializer):
             "estado", "estado_nombre", "estado_descripcion",
             "emisor", "resolucion", "resolucion_numero", "adquiriente",
             "prefijo", "consecutivo", "numero", "cufe_cude", "track_id",
-            "ambiente", "fecha_validacion", "errores",
+            "envio", "ambiente", "fecha_validacion", "errores",
             "fecha_emision", "hora_emision", "moneda", "forma_pago", "medio_pago",
             "valor_bruto", "total_impuestos", "total_descuentos", "total_cargos",
             "total_a_pagar", "documento_referencia", "observaciones", "detalles",
             "creado_en", "actualizado_en",
         ]
         read_only_fields = [
-            "estado", "cufe_cude", "track_id", "ambiente", "fecha_validacion",
+            "estado", "cufe_cude", "track_id", "envio", "ambiente", "fecha_validacion",
             "valor_bruto", "total_impuestos",
             "total_a_pagar", "creado_en", "actualizado_en",
         ]
