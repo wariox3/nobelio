@@ -1,0 +1,212 @@
+"""Documento soporte de pago de nómina electrónica (``NominaIndividual``)."""
+from django.conf import settings
+from django.db import models
+
+from apps.nucleo.models import ModeloConFechas, ModeloUUID
+from apps.utilidades.almacenamiento import almacenamiento_backblaze
+
+
+def ambiente_por_defecto():
+    """El ambiente DIAN configurado en el servidor al crear la nómina."""
+    return settings.DIAN_ENVIRONMENT
+
+
+def _ruta_artefacto(instance, filename):
+    """Ruta en el bucket: ``<emisor_id>/nomina/<aaaa>/<mm>/<archivo>``.
+
+    Mismo criterio que los documentos electrónicos: aislado por emisor y
+    agrupado por año/mes, pero en su propia carpeta para no mezclar los dos
+    flujos.
+    """
+    fecha = instance.fecha_generacion
+    return f"{instance.emisor_id}/nomina/{fecha:%Y/%m}/{filename}"
+
+
+class Nomina(ModeloUUID, ModeloConFechas):
+    """Un comprobante de nómina de un empleado en un periodo.
+
+    No hereda de ``Documento`` ni comparte tabla con él a propósito: el XML de
+    nómina no es UBL —otra raíz, otro namespace, la información en atributos y
+    sin resolución, impuestos ni adquiriente—, así que lo único que tienen en
+    común son el emisor, el software, el certificado y el ciclo de estados. Esos
+    sí se reutilizan (ver ``estado``).
+
+    Los totales se calculan desde los conceptos y se guardan porque entran en el
+    CUNE: recalcularlos después de firmar cambiaría el hash del documento ya
+    emitido. Ver ``docs/anexo-nomina.md`` §3.
+    """
+
+    class Ambiente(models.IntegerChoices):
+        PRODUCCION = 1, "Producción"
+        PRUEBAS = 2, "Habilitación"
+
+    class TipoXML(models.TextChoices):
+        NOMINA = "102", "Documento soporte de pago de nómina electrónica"
+        AJUSTE = "103", "Nota de ajuste de documento soporte de pago de nómina"
+
+    class TipoNota(models.TextChoices):
+        """Qué le hace la nota al documento anterior (numeral 5.5.8).
+
+        No hay "corrección parcial" como en las notas de factura: o se
+        reemplaza el documento entero, o se elimina.
+        """
+
+        REEMPLAZAR = "1", "Reemplazar"
+        ELIMINAR = "2", "Eliminar"
+
+    # --- Identificación del documento ---
+    prefijo = models.CharField(
+        "prefijo", max_length=10, blank=True,
+        help_text="Lo elige el emisor: la nómina no se numera con resolución "
+                  "de la DIAN (regla NIE010).",
+    )
+    consecutivo = models.PositiveBigIntegerField("consecutivo")
+    numero = models.CharField(
+        "número", max_length=30, blank=True,
+        help_text="Número del documento. Si se omite, se arma como prefijo + "
+                  "consecutivo.",
+    )
+
+    # --- Periodo que se liquida ---
+    fecha_liquidacion_inicio = models.DateField("inicio de la liquidación")
+    fecha_liquidacion_fin = models.DateField("fin de la liquidación")
+    tiempo_laborado = models.PositiveIntegerField(
+        "tiempo laborado", help_text="Días laborados en el periodo (numeral 8.3.1).",
+    )
+    fecha_generacion = models.DateField("fecha de generación")
+    hora_generacion = models.TimeField("hora de generación")
+    # El XML admite varias (``FechasPagos`` es una lista), pero el caso normal
+    # es una: se guarda una y el constructor emite ese único ``FechaPago``.
+    fecha_pago = models.DateField("fecha de pago")
+
+    # --- Identificadores DIAN ---
+    ambiente = models.PositiveSmallIntegerField(
+        "ambiente DIAN", choices=Ambiente.choices, default=ambiente_por_defecto,
+    )
+    tipo_xml = models.CharField(
+        "tipo de XML", max_length=3, choices=TipoXML.choices,
+        default=TipoXML.NOMINA,
+    )
+    cune = models.CharField(
+        "CUNE", max_length=96, blank=True,
+        help_text="Código Único de Nómina Electrónica (SHA-384). Se calcula al firmar.",
+    )
+    # `Novedad`: marca que el documento recoge un cambio contractual y remite al
+    # CUNE del documento donde estaba el dato anterior.
+    novedad = models.BooleanField("novedad contractual", default=False)
+    cune_novedad = models.CharField("CUNE de la novedad", max_length=96, blank=True)
+
+    # --- Solo en la nota de ajuste ---
+    tipo_nota = models.CharField(
+        "tipo de nota", max_length=1, choices=TipoNota.choices, blank=True,
+        help_text="Vacío en la nómina; obligatorio en la nota de ajuste.",
+    )
+
+    notas = models.TextField("notas", blank=True)
+    trm = models.DecimalField(
+        "TRM", max_digits=15, decimal_places=2, null=True, blank=True,
+        help_text="Solo cuando la moneda no es COP.",
+    )
+
+    # --- Totales (entran en el CUNE) ---
+    total_devengados = models.DecimalField(
+        "total devengados", max_digits=15, decimal_places=2, default=0,
+    )
+    total_deducciones = models.DecimalField(
+        "total deducciones", max_digits=15, decimal_places=2, default=0,
+    )
+    redondeo = models.DecimalField(
+        "redondeo", max_digits=15, decimal_places=2, default=0,
+    )
+    total_comprobante = models.DecimalField(
+        "total del comprobante", max_digits=15, decimal_places=2, default=0,
+        help_text="Devengados menos deducciones, más el redondeo.",
+    )
+
+    fecha_validacion = models.DateTimeField(
+        "fecha de validación DIAN", null=True, blank=True,
+    )
+
+    # --- Artefactos ---
+    xml_archivo = models.FileField(
+        "XML firmado", upload_to=_ruta_artefacto,
+        storage=almacenamiento_backblaze, blank=True,
+    )
+    respuesta_archivo = models.FileField(
+        "respuesta DIAN (cruda)", upload_to=_ruta_artefacto,
+        storage=almacenamiento_backblaze, blank=True,
+    )
+
+    # --- Relaciones ---
+    emisor = models.ForeignKey(
+        "emisores.Emisor", on_delete=models.PROTECT,
+        related_name="nominas", verbose_name="emisor",
+    )
+    empleado = models.ForeignKey(
+        "nomina.Empleado", on_delete=models.PROTECT,
+        related_name="nominas", verbose_name="empleado",
+    )
+    periodo_nomina = models.ForeignKey(
+        "catalogos.PeriodoNomina", on_delete=models.PROTECT,
+        related_name="nominas", verbose_name="periodo de nómina",
+    )
+    moneda = models.ForeignKey(
+        "catalogos.Moneda", on_delete=models.PROTECT,
+        related_name="nominas", verbose_name="moneda",
+    )
+    # El ciclo de vida es el mismo que el de los documentos electrónicos
+    # (borrador → firmado → enviado → aceptado/rechazado) y la tabla de estados
+    # ya existe: duplicarla solo daría dos catálogos que se desincronizan.
+    estado = models.ForeignKey(
+        "documentos.DocumentoEstado", on_delete=models.PROTECT,
+        related_name="nominas", verbose_name="estado",
+    )
+    # La nómina que ajusta esta nota. De ella salen los tres datos del
+    # `ReemplazandoPredecesor`/`EliminandoPredecesor`: número, CUNE y fecha.
+    nomina_predecesora = models.ForeignKey(
+        "nomina.Nomina", on_delete=models.PROTECT, null=True, blank=True,
+        related_name="ajustes", verbose_name="nómina que ajusta",
+    )
+
+    class Meta:
+        db_table = "nom_nomina"
+        verbose_name = "nómina electrónica"
+        verbose_name_plural = "nóminas electrónicas"
+        ordering = ["-fecha_generacion", "-consecutivo"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["emisor", "prefijo", "consecutivo"],
+                name="nomina_numero_unico_por_emisor",
+            )
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self.numero:
+            self.numero = f"{self.prefijo}{self.consecutivo}"
+        if not self.estado_id:
+            from apps.documentos.models import DocumentoEstado
+            self.estado = DocumentoEstado.objects.get(
+                nombre=DocumentoEstado.Nombre.BORRADOR
+            )
+        super().save(*args, **kwargs)
+
+    @property
+    def es_borrador(self) -> bool:
+        """Aún no se ha firmado, así que sus datos todavía se pueden cambiar."""
+        from apps.documentos.models import DocumentoEstado
+
+        if not self.estado_id:
+            return True
+        return self.estado.nombre in (
+            DocumentoEstado.Nombre.BORRADOR, DocumentoEstado.Nombre.GENERADO,
+        )
+
+    def leer_xml(self) -> bytes:
+        """Devuelve los bytes del XML firmado desde el storage (B2/local)."""
+        if not self.xml_archivo:
+            return b""
+        with self.xml_archivo.open("rb") as fh:
+            return fh.read()
+
+    def __str__(self):
+        return f"Nómina {self.numero} — {self.empleado}"

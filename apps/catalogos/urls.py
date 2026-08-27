@@ -16,5 +16,9 @@ router.register("moneda", views.MonedaViewSet)
 router.register("pais", views.PaisViewSet)
 router.register("departamento", views.DepartamentoViewSet)
 router.register("municipio", views.MunicipioViewSet)
+router.register("periodo-nomina", views.PeriodoNominaViewSet)
+router.register("tipo-contrato", views.TipoContratoViewSet)
+router.register("tipo-trabajador", views.TipoTrabajadorViewSet)
+router.register("subtipo-trabajador", views.SubTipoTrabajadorViewSet)
 
 urlpatterns = router.urls

@@ -14,10 +14,14 @@ from .medio_pago import MedioPago
 from .moneda import Moneda
 from .municipio import Municipio
 from .pais import Pais
+from .periodo_nomina import PeriodoNomina
 from .responsabilidad_fiscal import ResponsabilidadFiscal
+from .subtipo_trabajador import SubTipoTrabajador
+from .tipo_contrato import TipoContrato
 from .tipo_factura import TipoFactura
 from .tipo_identificacion import TipoIdentificacion
 from .tipo_organizacion import TipoOrganizacion
+from .tipo_trabajador import TipoTrabajador
 from .tributo import Tributo
 from .unidad_medida import UnidadMedida
 
@@ -37,4 +41,9 @@ __all__ = [
     "Municipio",
     "ConceptoNotaCredito",
     "ConceptoNotaDebito",
+    # Nómina electrónica (sin `.gc`: se siembran por migración).
+    "PeriodoNomina",
+    "TipoContrato",
+    "TipoTrabajador",
+    "SubTipoTrabajador",
 ]

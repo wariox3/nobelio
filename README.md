@@ -383,6 +383,7 @@ nobelio/
 │   │       └── documento-soporte/  Listas propias del DS (no se cargan aún)
 │   ├── emisores/            Emisor (OFE), software, certificado, resolución
 │   ├── documentos/          Documento electrónico, detalles, impuestos, receptor, API
+│   ├── nomina/              Nómina electrónica: empleado, nómina y sus conceptos
 │   └── dian/                Núcleo DIAN:
 │       ├── identificadores.py   CUFE / CUDE / código de seguridad
 │       ├── ubl.py              Generación XML UBL 2.1 (factura, notas, soporte)
@@ -391,6 +392,7 @@ nobelio/
 │       ├── representacion.py   PDF + QR
 │       ├── servicios.py        Orquestación del pipeline
 │       ├── datos/xsd/          Esquemas XSD oficiales DIAN
+│       │   └── nomina/         XSD propios de nómina (no es UBL)
 │       └── datos/ejemplos/     Ejemplificaciones oficiales DIAN
 ├── docs/
 │   ├── checklist-emision.md    Del alta del tenant a la emisión, paso a paso

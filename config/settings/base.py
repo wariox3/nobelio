@@ -46,6 +46,7 @@ LOCAL_APPS = [
     "apps.catalogos",
     "apps.emisores",
     "apps.documentos",
+    "apps.nomina",
     "apps.dian",
 ]
 

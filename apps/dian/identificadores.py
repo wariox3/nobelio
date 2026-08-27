@@ -10,6 +10,10 @@ El CUDS es del otro anexo —Documento Soporte v1.1 (Res. 000167/2021), numeral
 14.1.1, resumen en ``docs/anexo-documento-soporte.md``— y no comparte
 composición con los anteriores: ver ``calcular_cuds``.
 
+El CUNE es de un tercer anexo —Nómina Electrónica v1.0 (Res. 000013/2021),
+numeral 8.1, resumen en ``docs/anexo-nomina.md``— y tampoco: ver
+``calcular_cune``.
+
 Reglas de formato (críticas para que el hash coincida con el de la DIAN):
   - Algoritmo: SHA-384 sobre la concatenación de los campos en orden exacto.
   - Valores monetarios: punto decimal, exactamente 2 decimales TRUNCADOS
@@ -28,6 +32,9 @@ from decimal import ROUND_DOWN, Decimal, InvalidOperation
 SCHEME_NAME_CUFE = "CUFE-SHA384"
 SCHEME_NAME_CUDE = "CUDE-SHA384"
 SCHEME_NAME_CUDS = "CUDS-SHA384"
+# En la nómina no es un @schemeName sino el atributo @EncripCUNE, pero cumple lo
+# mismo: declarar con qué algoritmo se calculó el identificador.
+SCHEME_NAME_CUNE = "CUNE-SHA384"
 
 # Códigos fijos de impuesto usados en la composición (orden definido por la DIAN).
 COD_IMPUESTO_IVA = "01"
@@ -91,6 +98,22 @@ def nombre_archivo_dian(prefijo: str, *, nit, consecutivo) -> str:
     para el AttachedDocument.
     """
     return f"{prefijo}{str(nit).zfill(10)}{str(consecutivo).zfill(8)}"
+
+
+def nombre_archivo_nomina(prefijo: str, *, nit, anio, consecutivo) -> str:
+    """Compone el nombre de un archivo de nómina, sin extensión.
+
+    Otra convención que la de factura (``nombre_archivo_dian``): lleva los dos
+    últimos dígitos del año entre el NIT y el consecutivo, y el consecutivo va
+    en **hexadecimal** de ocho dígitos, no en decimal. Los prefijos son ``nie``
+    para la nómina, ``niae`` para la nota de ajuste y ``z`` para el zip.
+
+    Numerales 3.3 a 3.5 del anexo de nómina.
+    """
+    return (
+        f"{prefijo}{str(nit).zfill(10)}{str(anio)[-2:]}"
+        f"{format(int(consecutivo), 'X').zfill(8)}"
+    )
 
 
 def _sha384_hex(cadena: str) -> str:
@@ -252,6 +275,52 @@ def calcular_cuds(
         f"{formatear_valor(valor_total)}"
         f"{nit_vendedor}"
         f"{nit_adquiriente}"
+        f"{pin_software}"
+        f"{tipo_ambiente}"
+    )
+    return _sha384_hex(composicion)
+
+
+def calcular_cune(
+    *,
+    numero_documento: str,
+    fecha,
+    hora,
+    valor_devengado,
+    valor_deduccion,
+    valor_total,
+    nit_empleador: str,
+    documento_empleado: str,
+    tipo_xml: str,
+    pin_software: str,
+    tipo_ambiente,
+) -> str:
+    """Calcula el CUNE (Código Único de Nómina Electrónica).
+
+    No comparte composición con el CUFE, el CUDE ni el CUDS: no hay impuestos
+    sino los dos totales de la nómina, y entra el tipo de XML (``102`` nómina,
+    ``103`` nota de ajuste), que en los otros documentos no existe.
+
+    Aplica al documento soporte de pago de nómina y a su nota de ajuste. Va en
+    ``@CUNE``, con ``@EncripCUNE = "CUNE-SHA384"``.
+
+    ⚠️ El ejemplo del anexo (numeral 8.1.1.3) **no reproduce su propio hash**:
+    ni con la composición documentada ni con ninguna variante razonable. Los
+    ejemplos del CUFE, el CUDE y el CUDS sí cuadran, así que aquí no hay vector
+    de prueba oficial con el que confirmar esta función; solo la DIAN.
+
+    Referencia: Anexo Técnico Nómina Electrónica v1.0, numeral 8.1.1.1.
+    """
+    composicion = (
+        f"{numero_documento}"
+        f"{formatear_fecha(fecha)}"
+        f"{formatear_hora(hora)}"
+        f"{formatear_valor(valor_devengado)}"
+        f"{formatear_valor(valor_deduccion)}"
+        f"{formatear_valor(valor_total)}"
+        f"{nit_empleador}"
+        f"{documento_empleado}"
+        f"{tipo_xml}"
         f"{pin_software}"
         f"{tipo_ambiente}"
     )

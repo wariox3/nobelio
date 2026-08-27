@@ -16,7 +16,7 @@ from django.conf import settings
 from django.core.files.base import ContentFile
 from django.utils import timezone
 
-from apps.dian import firma, soap, ubl
+from apps.dian import firma, identificadores as ident, soap, ubl
 from apps.documentos.models import (
     Documento,
     DocumentoError,
@@ -531,3 +531,159 @@ def actualizar_estado(documento, *, cliente=None, ambiente=None, **cred):
         *_CAMPOS_RESPUESTA, "estado", "fecha_validacion", "actualizado_en",
     ])
     return respuesta
+
+
+# ===========================================================================
+# Nómina electrónica
+# ===========================================================================
+# Prefijos del nombre de archivo (numerales 3.3 a 3.5 del anexo de nómina).
+PREFIJO_ARCHIVO_NOMINA = "nie"
+PREFIJO_ARCHIVO_NOTA_AJUSTE_NOMINA = "niae"
+PREFIJO_ARCHIVO_ZIP_NOMINA = "z"
+
+
+def _software_activo_nomina(nomina):
+    return _software_activo_emisor(nomina.emisor)
+
+
+def _nombres_archivo_nomina(nomina):
+    """Nombres del XML y del ZIP de un envío, reservando su consecutivo.
+
+    El consecutivo es de **archivos enviados** y se reinicia cada año, así que
+    se pide al numerador del emisor en el momento de enviar y no antes: si se
+    reservara al firmar, cada reintento gastaría uno.
+    """
+    from apps.nomina.models import ConsecutivoArchivo, Nomina
+
+    anio = timezone.localdate().year
+    consecutivo = ConsecutivoArchivo.siguiente(nomina.emisor, anio)
+    prefijo = (
+        PREFIJO_ARCHIVO_NOTA_AJUSTE_NOMINA
+        if nomina.tipo_xml == Nomina.TipoXML.AJUSTE
+        else PREFIJO_ARCHIVO_NOMINA
+    )
+    datos = {
+        "nit": nomina.emisor.numero_identificacion,
+        "anio": anio,
+        "consecutivo": consecutivo,
+    }
+    return (
+        f"{ident.nombre_archivo_nomina(prefijo, **datos)}.xml",
+        f"{ident.nombre_archivo_nomina(PREFIJO_ARCHIVO_ZIP_NOMINA, **datos)}.zip",
+    )
+
+
+def _guardar_respuesta_nomina(nomina, respuesta):
+    """Registra el resultado DIAN de una nómina: SOAP crudo y rechazos."""
+    from apps.nomina.models import NominaError
+
+    if respuesta.xml_crudo:
+        nomina.respuesta_archivo.save(
+            f"{nomina.numero}.dian.xml",
+            ContentFile(respuesta.xml_crudo.encode("utf-8")),
+            save=False,
+        )
+    nomina.errores.all().delete()
+    filas = []
+    for e in respuesta.errores:
+        datos = _parsear_error(e)
+        if datos["tipo"] == NominaError.Tipo.NOTIFICACION:
+            continue
+        filas.append(NominaError(nomina=nomina, **datos))
+    NominaError.objects.bulk_create(filas)
+
+
+def generar_y_firmar_nomina(nomina, *, firmador=None, ambiente=None, **cred):
+    """Genera el XML de la nómina, calcula el CUNE y la firma.
+
+    A diferencia de la factura **no se toca la fecha ni la hora de generación**:
+    la nómina no tiene la regla FAD09 —lo único que pide el anexo es que el
+    ``SigningTime`` no sea posterior al reloj de la DIAN (regla DC24)—, así que
+    el par fecha/hora es el que el emisor liquidó y no el del momento de firmar.
+
+    El CUNE sí se recalcula en cada firma: entra en él todo lo que se puede
+    haber corregido tras un rechazo, y reutilizar el anterior dejaría el XML con
+    un hash que no corresponde a su propio contenido.
+    """
+    from apps.nomina import models as nom
+    from apps.dian import nomina as xml_nomina
+
+    ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
+
+    bloqueados = {
+        DocumentoEstado.Nombre.FIRMADO: "La nómina ya está firmada.",
+        DocumentoEstado.Nombre.ENVIADO: "La nómina ya fue enviada a la DIAN.",
+        DocumentoEstado.Nombre.ACEPTADO: "La nómina ya fue aceptada por la DIAN.",
+    }
+    if nomina.estado_id and nomina.estado.nombre in bloqueados:
+        raise ErrorEmision(bloqueados[nomina.estado.nombre])
+
+    if not nomina.emisor.activo:
+        raise ErrorEmision(MENSAJE_EMISOR_INACTIVO)
+
+    software = _software_activo_nomina(nomina)
+    nomina.cune = ""
+    constructor = xml_nomina.constructor_nomina_para(
+        nomina, software=software, ambiente=ambiente,
+    )
+    xml = constructor.generar_xml()
+    nomina.cune = constructor.cune
+
+    if firmador is None:
+        firmador = construir_firmador_emisor(nomina.emisor, **cred)
+    xml_firmado = firmador.firmar(xml)
+
+    nomina.xml_archivo.save(
+        f"{nomina.numero}.xml", ContentFile(xml_firmado), save=False
+    )
+    nomina.ambiente = ambiente
+    nomina.estado = _estado(DocumentoEstado.Nombre.FIRMADO)
+    nomina.save(update_fields=[
+        "cune", "xml_archivo", "ambiente", "estado", "actualizado_en",
+    ])
+    return xml_firmado
+
+
+def enviar_nomina_a_dian(nomina, *, cliente=None, ambiente=None, **cred):
+    """Envía la nómina firmada por SendNominaSync y actualiza su estado.
+
+    Siempre síncrono: la nómina no tiene Set de Pruebas propio, así que no hay
+    que decidir entre dos operaciones como en la factura.
+    """
+    ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
+    if nomina.estado_id and nomina.estado.nombre == DocumentoEstado.Nombre.ACEPTADO:
+        raise ErrorEmision("La nómina ya fue aceptada por la DIAN.")
+    if not nomina.xml_archivo:
+        raise ErrorEmision(
+            "La nómina no está firmada; ejecute generar_y_firmar_nomina primero."
+        )
+
+    if cliente is None:
+        cliente = construir_cliente_emisor(nomina.emisor, ambiente, **cred)
+
+    nombre_xml, nombre_zip = _nombres_archivo_nomina(nomina)
+    respuesta = cliente.enviar_nomina_sincrono(nomina.leer_xml(), nombre_xml)
+
+    _guardar_respuesta_nomina(nomina, respuesta)
+    if respuesta.es_valido:
+        nomina.estado = _estado(DocumentoEstado.Nombre.ACEPTADO)
+        if not nomina.fecha_validacion:
+            nomina.fecha_validacion = respuesta.fecha_validacion or timezone.now()
+    elif respuesta.errores:
+        nomina.estado = _estado(DocumentoEstado.Nombre.RECHAZADO)
+    else:
+        nomina.estado = _estado(DocumentoEstado.Nombre.ENVIADO)
+    nomina.save(update_fields=[
+        "respuesta_archivo", "estado", "fecha_validacion", "actualizado_en",
+    ])
+    return respuesta
+
+
+def consultar_estado_nomina(nomina, *, cliente=None, ambiente=None, **cred):
+    """GetStatus por el CUNE. Solo lectura: no toca la nómina."""
+    ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
+    if cliente is None:
+        cliente = construir_cliente_emisor(nomina.emisor, ambiente, **cred)
+    if not nomina.cune:
+        raise ErrorEmision("La nómina no tiene CUNE; emítala primero.")
+    return cliente.consultar_estado(nomina.cune)

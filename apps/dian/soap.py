@@ -420,6 +420,20 @@ class ClienteDian:
         cuerpo = {"fileName": nombre_archivo, "contentFile": contenido}
         return self._invocar("SendBillSync", cuerpo)
 
+    def enviar_nomina_sincrono(self, xml_firmado: bytes, nombre_archivo: str) -> RespuestaDian:
+        """SendNominaSync: envío síncrono de una nómina o su nota de ajuste.
+
+        Es la única operación propia de nómina y va sobre el mismo servicio que
+        la factura. A diferencia de SendBillSync **solo recibe el contenido**:
+        el nombre del archivo no es un parámetro del método, aunque el zip sí
+        tiene que llamarse como manda el anexo (numeral 9.7.2).
+
+        No tiene equivalente asíncrono: la habilitación de nómina se hace
+        contra este mismo método, no contra un Set de Pruebas.
+        """
+        contenido = empaquetar_base64(nombre_archivo, xml_firmado)
+        return self._invocar("SendNominaSync", {"contentFile": contenido})
+
     def consultar_estado(self, track_id: str) -> RespuestaDian:
         """GetStatus: consulta el estado de un documento por su trackId."""
         return self._invocar("GetStatus", {"trackId": track_id})

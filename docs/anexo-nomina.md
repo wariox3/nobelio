@@ -65,7 +65,7 @@ NominaIndividual
 │                    @TipoDocumento @NumeroDocumento @TipoContrato @Sueldo
 │                    @SalarioIntegral @CodigoTrabajador @LugarTrabajo* (+ nombres)
 ├── Pago             @Forma @Metodo @Banco @TipoCuenta @NumeroCuenta
-├── FechasPagos      FechaPago+
+├── FechasPagos      FechaPago+   (el modelo guarda una sola: `Nomina.fecha_pago`)
 ├── Devengados       Basico, Transporte, HEDs/HENs/HRNs/HEDDFs/HRDDFs/HENDFs/
 │                    HRNDFs, Vacaciones, Primas, Cesantias, Incapacidades,
 │                    Licencias, Bonificaciones, Auxilios, HuelgasLegales,
@@ -145,7 +145,13 @@ bloques hermanos:
   Deducciones, totales…) y añade `ReemplazandoPredecesor` con `@NumeroPred`,
   `@CUNEPred` y `@FechaGenPred`.
 - `Eliminar`: solo la cabecera (sin Trabajador, Devengados ni totales) y
-  `EliminandoPredecesor` con los mismos tres datos.
+  `EliminandoPredecesor` con los mismos tres datos. Ojo: ahí el
+  `InformacionGeneral` va **recortado** (sin `PeriodoNomina`, `TipoMoneda` ni
+  `TRM`) y el `NumeroSecuenciaXML` sin `@CodigoTrabajador`.
+
+Los dos bloques viven en el namespace `…:NominaIndividualDeAjuste`, no en el de
+la nómina: el cuerpo se arma con el mismo código pero los elementos cuelgan de
+otro namespace.
 
 O sea: el "ajuste" no lleva diferencias sino el documento corregido completo. No
 hay `DiscrepancyResponse` ni conceptos de corrección.
@@ -186,7 +192,15 @@ extranjería · 31 NIT · 41 Pasaporte · 42 Documento extranjero · 47 PEP ·
 50 NIT de otro país · 91 NUIP (**solo para el empleado**: no existe en el RUT).
 
 País, departamento, municipio, idioma y moneda salen de las mismas listas ISO
-que ya usa la factura.
+que ya usa la factura, y la identificación del trabajador reutiliza
+`catalogos.TipoIdentificacion`: de los once códigos del numeral 5.2.1 solo
+faltaba el `47` (PEP), porque el `91` (NUIP) ya venía en la lista de factura.
+
+Las cuatro listas propias y ese `47` los siembra la migración
+`catalogos/0006_datos_nomina`; `cargar_catalogos` no interviene porque no hay
+`.gc` que leer. Todas quedan expuestas en `/api/catalogos/` como los demás
+catálogos (`periodo-nomina`, `tipo-contrato`, `tipo-trabajador`,
+`subtipo-trabajador`).
 
 ## 8. Nombre de los archivos (§3.3–3.5)
 
@@ -223,6 +237,9 @@ certificado, el cliente SOAP y el manejo de la respuesta.
 
 1. **XSD**: el `NominaIndividual` y el `NominaIndividualDeAjuste` que emitamos
    validan contra `apps/dian/datos/xsd/nomina/`. Las ejemplificaciones oficiales
-   fallan por una sola razón esperable: traen `<ext:UBLExtensions>` vacío.
+   fallan por una sola razón esperable: traen `<ext:UBLExtensions>` vacío, que
+   es también el estado en que `ConstructorNominaXML` deja el XML antes de
+   firmarlo. **Comprobado** el 2026-08-27: firmado con el certificado real, el
+   `NominaIndividual` valida.
 2. **SoftwareSC**: el mismo cálculo que la factura, ya cubierto.
 3. **CUNE**: no hay vector de prueba oficial válido (ver §3).
