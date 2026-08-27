@@ -16,7 +16,7 @@ from apps.catalogos.models import (
 )
 from apps.nomina.models import Empleado, Nomina, NominaConcepto
 
-PREFIJO_POR_DEFECTO = "NE"
+PREFIJO_POR_DEFECTO = "NESETP"
 
 # Importes de la nómina de prueba: un básico redondo con la salud y la pensión
 # de ley, para que los totales cuadren a la vista.
