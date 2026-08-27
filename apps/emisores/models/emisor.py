@@ -96,7 +96,7 @@ class Emisor(ModeloConFechas):
             # otra para nómina, o las dos a la vez mientras el cliente migra de
             # proveedor— y cada fila lleva sus propios datos (correo, resolución,
             # certificado). Lo que no puede repetirse entre esas filas es una
-            # resolución de numeración activa; ver ResolucionFacturacion.
+            # resolución de numeración activa; ver Resolucion.
             models.UniqueConstraint(
                 fields=["cuenta", "tipo_identificacion", "numero_identificacion"],
                 name="emisor_identificacion_unica_por_cuenta",

@@ -7,7 +7,7 @@ from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
 
 from apps.documentos import models
-from apps.emisores.models import Emisor, ResolucionFacturacion
+from apps.emisores.models import Emisor, Resolucion
 from apps.emisores.servicios import motivo_no_puede_emitir
 from apps.seguridad.alcance import RelacionDelAlcance
 
@@ -259,9 +259,10 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
         if emisor is None:
             # Falta el emisor: ya lo reporta la validación de campo obligatorio.
             return attrs
+        tipo = attrs.get("documento_tipo") or getattr(self.instance, "documento_tipo", None)
         if numero_resolucion:
             attrs["resolucion"] = self._resolucion_por_numero(
-                emisor, numero_resolucion, attrs,
+                emisor, numero_resolucion, attrs, tipo,
             )
         # La resolución no se comprueba aquí: se buscó ya acotada a este emisor.
         # El adquiriente tampoco: sus datos llegan en la propia petición.
@@ -275,7 +276,6 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
         # Una nota sin referencia es un documento que nace muerto: se crea bien,
         # consume un consecutivo y solo falla al emitirlo, cuando ya no se puede
         # editar. La misma regla la exige `generar_y_firmar`.
-        tipo = attrs.get("documento_tipo") or getattr(self.instance, "documento_tipo", None)
         if (
             referencia is None
             and tipo is not None
@@ -380,7 +380,7 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
             errores["consecutivo"] = mensaje_consecutivo_fuera_de_rango(resolucion)
         return errores
 
-    def _resolucion_por_numero(self, emisor, numero, attrs):
+    def _resolucion_por_numero(self, emisor, numero, attrs, tipo):
         """Busca la resolución del emisor por su número DIAN.
 
         Se acota al emisor —que el campo `emisor` ya restringió al alcance del
@@ -388,16 +388,26 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
         inexistente. Solo se consideran las activas: numerar con una dada de
         baja es justo lo que la bandera impide.
         """
-        candidatas = list(ResolucionFacturacion.objects.filter(
-            emisor=emisor, numero_resolucion=numero, activa=True,
-        ))
+        candidatas = list(
+            Resolucion.objects
+            .filter(emisor=emisor, numero_resolucion=numero, activa=True)
+            .select_related("tipo_factura")
+        )
         if not candidatas:
             raise serializers.ValidationError(
                 {"numero_resolucion": MENSAJE_RESOLUCION_NO_ENCONTRADA}
             )
+        # El número se repite si se importó para varios tipos de documento o
+        # prefijos. Desempata primero el tipo del documento —el `codigo_dian`
+        # del tipo es el código del catálogo con el que se guardó la
+        # resolución—, y si eso no basta, el prefijo.
+        if len(candidatas) > 1 and tipo is not None and tipo.codigo_dian:
+            del_tipo = [r for r in candidatas if r.tipo_factura.codigo == tipo.codigo_dian]
+            # Si ninguna es de ese tipo no se descarta nada: el emisor puede
+            # haber registrado su numeración bajo un solo tipo.
+            if del_tipo:
+                candidatas = del_tipo
         if len(candidatas) > 1:
-            # El número se repite si se importó para varios tipos de factura o
-            # prefijos; el prefijo del documento es lo que desempata.
             candidatas = [r for r in candidatas if r.prefijo == (attrs.get("prefijo") or "")]
             if len(candidatas) != 1:
                 raise serializers.ValidationError(

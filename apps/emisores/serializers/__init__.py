@@ -1,7 +1,7 @@
 """Serializers de la API de emisores."""
 from .certificado import CertificadoSerializer
 from .emisor import EmisorListaSerializer, EmisorSerializer
-from .resolucion import ResolucionFacturacionSerializer
+from .resolucion import ResolucionSerializer
 from .software import SoftwareDianSerializer
 
 __all__ = [
@@ -9,5 +9,5 @@ __all__ = [
     "EmisorListaSerializer",
     "SoftwareDianSerializer",
     "CertificadoSerializer",
-    "ResolucionFacturacionSerializer",
+    "ResolucionSerializer",
 ]

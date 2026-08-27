@@ -24,7 +24,7 @@ from apps.documentos.serializers.documento import (
     mensaje_prefijo_ajeno,
 )
 from apps.documentos.tests_utils import crear_documento_factura
-from apps.emisores.models import Certificado, Emisor, ResolucionFacturacion
+from apps.emisores.models import Certificado, Emisor, Resolucion
 from apps.emisores.servicios import (
     MENSAJE_EMISOR_INACTIVO,
     MENSAJE_SIN_CERTIFICADO,
@@ -290,7 +290,7 @@ class DocumentoAPITests(APITestCase):
         otro_emisor.pk = None
         otro_emisor.numero_identificacion = "900000001"
         otro_emisor.save(force_insert=True)
-        ajena = ResolucionFacturacion.objects.create(
+        ajena = Resolucion.objects.create(
             emisor=otro_emisor, tipo_factura=original.tipo_factura,
             numero_resolucion=original.numero_resolucion,
             fecha_resolucion=original.fecha_resolucion, prefijo=original.prefijo,
@@ -323,7 +323,7 @@ class DocumentoAPITests(APITestCase):
         otro_tipo, _ = TipoFactura.objects.get_or_create(
             codigo="91", defaults={"nombre": "Nota Crédito"}
         )
-        gemela = ResolucionFacturacion.objects.create(
+        gemela = Resolucion.objects.create(
             emisor=self.emisor, tipo_factura=otro_tipo,
             numero_resolucion=original.numero_resolucion,
             fecha_resolucion=original.fecha_resolucion, prefijo="NC",
@@ -346,7 +346,7 @@ class DocumentoAPITests(APITestCase):
         self.assertEqual(
             resp.data["errores"]["numero_resolucion"], [MENSAJE_RESOLUCION_AMBIGUA]
         )
-        self.assertTrue(ResolucionFacturacion.objects.filter(pk=gemela.pk).exists())
+        self.assertTrue(Resolucion.objects.filter(pk=gemela.pk).exists())
 
     # --- El número tiene que caber en lo que autorizó la resolución --------
 

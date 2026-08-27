@@ -11,7 +11,7 @@ from apps.cuentas.models import Cuenta
 from apps.emisores.models import Emisor
 from apps.seguridad.alcance import MENSAJE_FUERA_DE_CUENTA, cuenta_de_la_credencial
 
-from .resolucion import ResolucionFacturacionSerializer
+from .resolucion import ResolucionSerializer
 
 
 class CuentaDeLaCredencial:
@@ -64,7 +64,7 @@ MENSAJE_DUPLICADO = (
 
 
 class EmisorSerializer(serializers.ModelSerializer):
-    resoluciones = ResolucionFacturacionSerializer(many=True, read_only=True)
+    resoluciones = ResolucionSerializer(many=True, read_only=True)
     # No se exige en el cuerpo: para una integración sale de la credencial; solo
     # el staff de la plataforma la indica explícitamente.
     # Solo cuentas activas: una cuenta desactivada no admite emisores nuevos.

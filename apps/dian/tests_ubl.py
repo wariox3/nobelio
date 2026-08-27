@@ -9,7 +9,7 @@ from lxml import etree
 from apps.dian import ubl
 from apps.documentos import models as doc
 from apps.documentos.tests_utils import crear_catalogos_minimos
-from apps.emisores.models import Emisor, ResolucionFacturacion, SoftwareDian
+from apps.emisores.models import Emisor, Resolucion, SoftwareDian
 
 
 class GeneracionUBLTests(TestCase):
@@ -41,7 +41,7 @@ class GeneracionUBLTests(TestCase):
         from apps.catalogos.models import TipoFactura
 
         tipo_factura = TipoFactura.objects.create(codigo="01", nombre="Factura de Venta")
-        cls.resolucion = ResolucionFacturacion.objects.create(
+        cls.resolucion = Resolucion.objects.create(
             emisor=cls.emisor,
             tipo_factura=tipo_factura,
             numero_resolucion="18760000001",

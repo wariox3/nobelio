@@ -197,7 +197,7 @@ class Documento(ModeloUUID, ModeloConFechas):
         related_name="documentos", verbose_name="emisor",
     )
     resolucion = models.ForeignKey(
-        "emisores.ResolucionFacturacion", on_delete=models.PROTECT,
+        "emisores.Resolucion", on_delete=models.PROTECT,
         related_name="documentos", verbose_name="resolución",
         null=True, blank=True,
     )

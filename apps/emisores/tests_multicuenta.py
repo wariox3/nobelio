@@ -22,7 +22,7 @@ from rest_framework.test import APITestCase
 from apps.catalogos.models import TipoFactura
 from apps.cuentas.models import Cuenta
 from apps.documentos.tests_utils import crear_catalogos_minimos
-from apps.emisores.models import Emisor, ResolucionFacturacion
+from apps.emisores.models import Emisor, Resolucion
 from apps.emisores.serializers.emisor import MENSAJE_DUPLICADO
 from apps.nucleo.api import MENSAJE_GENERICO
 from apps.seguridad.models import Usuario
@@ -165,7 +165,7 @@ class MismoNitEnVariasCuentasTests(APITestCase):
 
         # El histórico de la cuenta anterior sigue ahí, solo que inactivo.
         self.assertEqual(
-            ResolucionFacturacion.objects.filter(emisor=self.emisor1).count(), 1
+            Resolucion.objects.filter(emisor=self.emisor1).count(), 1
         )
 
     def test_reactivar_la_vieja_tras_migrar_tampoco_se_permite(self):
@@ -200,5 +200,5 @@ class MismoNitEnVariasCuentasTests(APITestCase):
         creada = self.client.post(
             URL_RESOLUCIONES, self.payload_resolucion(self.emisor1), format="json"
         )
-        resolucion = ResolucionFacturacion.objects.get(pk=creada.data["id"])
+        resolucion = Resolucion.objects.get(pk=creada.data["id"])
         self.assertEqual(resolucion.fecha_resolucion, date(2024, 1, 1))

@@ -103,7 +103,7 @@ def crear_documento_factura(catalogos=None):
     """
     from apps.catalogos.models import TipoFactura
     from apps.documentos import models as doc
-    from apps.emisores.models import Emisor, ResolucionFacturacion, SoftwareDian
+    from apps.emisores.models import Emisor, Resolucion, SoftwareDian
 
     c = catalogos or crear_catalogos_minimos()
 
@@ -122,7 +122,7 @@ def crear_documento_factura(catalogos=None):
     tipo_factura, _ = TipoFactura.objects.get_or_create(
         codigo="01", defaults={"nombre": "Factura de Venta"}
     )
-    resolucion = ResolucionFacturacion.objects.create(
+    resolucion = Resolucion.objects.create(
         emisor=emisor, tipo_factura=tipo_factura, numero_resolucion="18760000001",
         fecha_resolucion=date(2019, 1, 19), prefijo="SETP",
         rango_desde=990000000, rango_hasta=995000000,

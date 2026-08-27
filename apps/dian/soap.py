@@ -216,13 +216,13 @@ def _fecha_validacion(raiz) -> "datetime | None":
 
 
 # ===========================================================================
-# Rango de numeración (resolución de facturación)
+# Rango de numeración (resolución)
 # ===========================================================================
 @dataclass
 class RangoNumeracion:
     """Un rango de numeración autorizado por la DIAN (resolución).
 
-    Mapea uno a uno con ``ResolucionFacturacion``. La ``clave_tecnica`` es el
+    Mapea uno a uno con ``Resolucion``. La ``clave_tecnica`` es el
     dato clave que entrega esta operación: se necesita para calcular el CUFE y
     no se puede obtener de otra forma por servicio web.
     """

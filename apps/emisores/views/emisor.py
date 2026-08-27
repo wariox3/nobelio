@@ -164,7 +164,7 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
                 models.SoftwareDian.objects.filter(emisor=emisor, activo=True).update(activo=False)
                 software.save(activo=True)
 
-            resolucion, _ = models.ResolucionFacturacion.objects.update_or_create(
+            resolucion, _ = models.Resolucion.objects.update_or_create(
                 emisor=emisor,
                 tipo_factura=TipoFactura.objects.get(codigo="01"),
                 prefijo="SETP",

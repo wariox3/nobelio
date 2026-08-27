@@ -6,7 +6,7 @@ from apps.nucleo.models import ModeloConFechas
 from .emisor import Emisor
 
 
-class ResolucionFacturacion(ModeloConFechas):
+class Resolucion(ModeloConFechas):
     """Resolución de numeración (autorización de rango y clave técnica).
 
     La ``clave_tecnica`` es la que se usa para calcular el CUFE y NO viaja en
@@ -47,9 +47,9 @@ class ResolucionFacturacion(ModeloConFechas):
     )
 
     class Meta:
-        db_table = "emi_resolucion_facturacion"
-        verbose_name = "resolución de facturación"
-        verbose_name_plural = "resoluciones de facturación"
+        db_table = "emi_resolucion"
+        verbose_name = "resolución"
+        verbose_name_plural = "resoluciones"
         ordering = ["-fecha_resolucion"]
         constraints = [
             models.UniqueConstraint(
@@ -81,7 +81,7 @@ def resolucion_activa_en_otra_cuenta(emisor, prefijo, numero_resolucion, excluir
     integración se desactiva la resolución en la cuenta que deja, y con eso
     queda libre para registrarla en la nueva.
     """
-    consulta = ResolucionFacturacion.objects.filter(
+    consulta = Resolucion.objects.filter(
         activa=True,
         prefijo=prefijo,
         numero_resolucion=numero_resolucion,

@@ -1,14 +1,14 @@
-"""Serializer de resoluciones de facturación."""
+"""Serializer de resoluciones de numeración."""
 from rest_framework import serializers
 
 from apps.emisores.models import (
-    ResolucionFacturacion,
+    Resolucion,
     mensaje_resolucion_ocupada,
     resolucion_activa_en_otra_cuenta,
 )
 
 
-class ResolucionFacturacionSerializer(serializers.ModelSerializer):
+class ResolucionSerializer(serializers.ModelSerializer):
     # La clave técnica es sensible: se puede escribir (necesaria para el CUFE)
     # pero nunca se devuelve en las respuestas.
     clave_tecnica = serializers.CharField(
@@ -17,7 +17,7 @@ class ResolucionFacturacionSerializer(serializers.ModelSerializer):
     )
 
     class Meta:
-        model = ResolucionFacturacion
+        model = Resolucion
         fields = [
             "id", "emisor", "tipo_factura", "numero_resolucion", "fecha_resolucion",
             "prefijo", "rango_desde", "rango_hasta", "vigente_desde", "vigente_hasta",
