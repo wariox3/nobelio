@@ -6,7 +6,8 @@ from .emision import (
     certificado_activo,
     motivo_no_puede_emitir,
 )
-from .habilitacion import crear_documento_habilitacion
+from .factura_prueba import crear_factura_prueba
+from .nomina_prueba import crear_nomina_prueba
 
 __all__ = [
     "CertificadoInvalido",
@@ -15,5 +16,6 @@ __all__ = [
     "MENSAJE_SIN_CERTIFICADO",
     "certificado_activo",
     "motivo_no_puede_emitir",
-    "crear_documento_habilitacion",
+    "crear_factura_prueba",
+    "crear_nomina_prueba",
 ]

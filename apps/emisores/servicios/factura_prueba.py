@@ -1,3 +1,4 @@
+"""Factura y nota crédito de prueba para la habilitación."""
 from decimal import Decimal
 
 from django.db import transaction
@@ -14,7 +15,14 @@ from apps.documentos.models import (
 )
 
 @transaction.atomic
-def crear_documento_habilitacion(emisor, resolucion, consecutivo=None):
+def crear_factura_prueba(emisor, resolucion, consecutivo=None):
+    """Crea —solo crea— una factura de prueba y su nota crédito, en borrador.
+
+    No las firma ni las envía. Es el material del Set de Pruebas: la nota anula
+    la factura entera y la referencia, que es lo que la DIAN espera ver.
+
+    Devuelve las dos, en ese orden.
+    """
     if consecutivo is None:
         consecutivo = 990000000
 
@@ -134,3 +142,5 @@ def crear_documento_habilitacion(emisor, resolucion, consecutivo=None):
         base_gravable=valor,
         valor=iva,
     )
+
+    return factura, nota_credito

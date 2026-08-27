@@ -44,6 +44,18 @@ class Nomina(ModeloUUID, ModeloConFechas):
         NOMINA = "102", "Documento soporte de pago de nómina electrónica"
         AJUSTE = "103", "Nota de ajuste de documento soporte de pago de nómina"
 
+    class Envio(models.TextChoices):
+        """Con qué operación salió a la DIAN.
+
+        Hoy solo hay una: la nómina no tiene Set de Pruebas, así que no hay que
+        elegir entre dos caminos como en la factura. Se guarda igual —y con el
+        mismo nombre que en `Documento`— porque es parte del registro de qué se
+        hizo con el documento, y porque el día que la DIAN añada una operación
+        asíncrona el campo ya está.
+        """
+
+        SINCRONO = "nomina_sync", "Síncrono (SendNominaSync)"
+
     class TipoNota(models.TextChoices):
         """Qué le hace la nota al documento anterior (numeral 5.5.8).
 
@@ -117,6 +129,11 @@ class Nomina(ModeloUUID, ModeloConFechas):
     cune = models.CharField(
         "CUNE", max_length=96, blank=True,
         help_text="Código Único de Nómina Electrónica (SHA-384). Se calcula al firmar.",
+    )
+    envio = models.CharField(
+        "operación de envío", max_length=20, choices=Envio.choices, blank=True,
+        help_text="Con qué operación se envió a la DIAN. Vacío mientras no se "
+        "haya enviado.",
     )
     # `Novedad`: marca que el documento recoge un cambio contractual y remite al
     # CUNE del documento donde estaba el dato anterior.

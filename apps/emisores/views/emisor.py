@@ -12,12 +12,13 @@ from apps.catalogos.models import TipoFactura
 from apps.emisores import models, serializers
 from apps.emisores.models.emisor import Emisor
 from apps.emisores.models.certificado import Certificado
-from apps.emisores.servicios import crear_documento_habilitacion
+from apps.emisores.servicios import crear_factura_prueba, crear_nomina_prueba
 from apps.nucleo.api import ErrorSolicitud
 from apps.seguridad.alcance import (
     MENSAJE_SIN_CUENTA,
     AlcanceEmisorMixin,
     es_staff,
+    exigir_alcance,
     exigir_cuenta,
     puede_dar_de_alta,
 )
@@ -126,13 +127,27 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
             }
         )
 
+    def _emisor_del_cuerpo(self, request):
+        """El emisor que indica el cuerpo de la petición.
+
+        Distingue los dos motivos por los que antes se respondía siempre "el
+        emisor indicado no existe": que no venga —el caso habitual, y que se
+        daba también cuando el cuerpo llegaba sin parsear por faltar el
+        Content-Type— y que venga uno que de verdad no está.
+        """
+        identificador = request.data.get("emisor")
+        if identificador in (None, ""):
+            raise ErrorSolicitud("Indique el emisor en el campo 'emisor'.")
+        try:
+            return Emisor.objects.get(pk=identificador)
+        except (Emisor.DoesNotExist, TypeError, ValueError):
+            raise ErrorSolicitud("El emisor indicado no existe.")
+
     @action(detail=False, methods=["post"], url_path="crear-habilitacion")
     def crear_habilitacion(self, request):
         
-        try:
-            emisor = Emisor.objects.get(pk=request.data.get("emisor"))
-        except (Emisor.DoesNotExist, TypeError, ValueError):
-            raise ErrorSolicitud("El emisor indicado no existe.")
+        emisor = self._emisor_del_cuerpo(request)
+        exigir_alcance(request, emisor)
 
         certificado = Certificado.objects.filter(emisor=emisor, activo=True).first()
         if certificado is None:
@@ -144,17 +159,6 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         identificador = request.data.get("identificador")
         existente = models.SoftwareDian.objects.filter(emisor=emisor, identificador=identificador).exists()
 
-        consecutivo = request.data.get("consecutivo")
-        if consecutivo not in (None, ""):
-            try:
-                consecutivo = int(consecutivo)
-            except (TypeError, ValueError):
-                raise ErrorSolicitud("El consecutivo debe ser un número entero.")
-            if consecutivo < 1:
-                raise ErrorSolicitud("El consecutivo debe ser mayor que cero.")
-        else:
-            consecutivo = None
-
         if not existente:
             software = serializers.SoftwareDianSerializer(data=request.data)
             software.is_valid(raise_exception=True)
@@ -164,7 +168,7 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
                 models.SoftwareDian.objects.filter(emisor=emisor, activo=True).update(activo=False)
                 software.save(activo=True)
 
-            resolucion, _ = models.Resolucion.objects.update_or_create(
+            models.Resolucion.objects.update_or_create(
                 emisor=emisor,
                 tipo_factura=TipoFactura.objects.get(codigo="01"),
                 prefijo="SETP",
@@ -179,8 +183,95 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
                     "activa": True,
                 },
             )
-            crear_documento_habilitacion(emisor, resolucion, consecutivo=consecutivo)
 
         return Response({}, status=status.HTTP_200_OK)
 
-    
+    @action(detail=False, methods=["post"], url_path="crear-factura-prueba")
+    def crear_factura_prueba(self, request):
+        """Crea una factura de prueba y su nota crédito, en borrador.
+
+        ``POST /api/emisores/emisor/crear-factura-prueba/`` con
+        ``{"emisor": <id>}``, y opcionalmente ``consecutivo``.
+
+        Solo las crea: no las firma ni las envía. Usa la resolución activa del
+        emisor para factura de venta, que es la que deja ``crear-habilitacion``.
+        """
+        emisor = self._emisor_del_cuerpo(request)
+        exigir_alcance(request, emisor)
+
+        consecutivo = request.data.get("consecutivo")
+        if consecutivo not in (None, ""):
+            try:
+                consecutivo = int(consecutivo)
+            except (TypeError, ValueError):
+                raise ErrorSolicitud("El consecutivo debe ser un número entero.")
+            if consecutivo < 1:
+                raise ErrorSolicitud("El consecutivo debe ser mayor que cero.")
+        else:
+            consecutivo = None
+
+        resolucion = models.Resolucion.objects.filter(
+            emisor=emisor, activa=True, tipo_factura__codigo="01",
+        ).order_by("-fecha_resolucion").first()
+        if resolucion is None:
+            raise ErrorSolicitud(
+                "El emisor no tiene una resolución activa de facturación: "
+                "ejecute antes crear-habilitacion."
+            )
+
+        factura, nota_credito = crear_factura_prueba(
+            emisor, resolucion, consecutivo=consecutivo,
+        )
+        return Response(
+            {
+                "factura": {
+                    "id": str(factura.id),
+                    "numero": factura.numero,
+                    "estado": factura.estado.nombre,
+                },
+                "nota_credito": {
+                    "id": str(nota_credito.id),
+                    "numero": nota_credito.numero,
+                    "estado": nota_credito.estado.nombre,
+                },
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=False, methods=["post"], url_path="crear-nomina-prueba")
+    def crear_nomina_prueba(self, request):
+        """Crea una nómina de prueba en borrador para el emisor.
+
+        ``POST /api/emisores/emisor/crear-nomina-prueba/`` con
+        ``{"emisor": <id>}``, y opcionalmente ``prefijo`` y ``consecutivo``.
+
+        Solo la crea: no la firma ni la envía. Para eso están las acciones
+        ``emitir`` y ``enviar`` de ``/api/nomina/nomina/{id}/``.
+        """
+        emisor = self._emisor_del_cuerpo(request)
+        exigir_alcance(request, emisor)
+
+        consecutivo = request.data.get("consecutivo")
+        if consecutivo not in (None, ""):
+            try:
+                consecutivo = int(consecutivo)
+            except (TypeError, ValueError):
+                raise ErrorSolicitud("El consecutivo debe ser un número entero.")
+        else:
+            consecutivo = None
+
+        nomina = crear_nomina_prueba(
+            emisor,
+            prefijo=request.data.get("prefijo") or None,
+            consecutivo=consecutivo,
+        )
+        return Response(
+            {
+                "id": str(nomina.id),
+                "numero": nomina.numero,
+                "estado": nomina.estado.nombre,
+                "empleado": nomina.empleado_id,
+                "total_comprobante": str(nomina.total_comprobante),
+            },
+            status=status.HTTP_201_CREATED,
+        )

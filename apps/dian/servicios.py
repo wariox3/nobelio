@@ -650,6 +650,8 @@ def enviar_nomina_a_dian(nomina, *, cliente=None, ambiente=None, **cred):
     Siempre síncrono: la nómina no tiene Set de Pruebas propio, así que no hay
     que decidir entre dos operaciones como en la factura.
     """
+    from apps.nomina.models import Nomina
+
     ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
     if nomina.estado_id and nomina.estado.nombre == DocumentoEstado.Nombre.ACEPTADO:
         raise ErrorEmision("La nómina ya fue aceptada por la DIAN.")
@@ -663,6 +665,9 @@ def enviar_nomina_a_dian(nomina, *, cliente=None, ambiente=None, **cred):
 
     nombre_xml, nombre_zip = _nombres_archivo_nomina(nomina)
     respuesta = cliente.enviar_nomina_sincrono(nomina.leer_xml(), nombre_xml)
+    # Queda anotado con qué operación salió, igual que en los documentos. Aquí
+    # no hay alternativa que elegir, pero sí registro de lo que se hizo.
+    nomina.envio = Nomina.Envio.SINCRONO
 
     _guardar_respuesta_nomina(nomina, respuesta)
     if respuesta.es_valido:
@@ -674,7 +679,7 @@ def enviar_nomina_a_dian(nomina, *, cliente=None, ambiente=None, **cred):
     else:
         nomina.estado = _estado(DocumentoEstado.Nombre.ENVIADO)
     nomina.save(update_fields=[
-        "respuesta_archivo", "estado", "fecha_validacion", "actualizado_en",
+        "respuesta_archivo", "envio", "estado", "fecha_validacion", "actualizado_en",
     ])
     return respuesta
 
