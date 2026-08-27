@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from django.utils import timezone
 from lxml import etree
 
 from apps.dian import identificadores as ident
@@ -29,6 +30,14 @@ NS = {
     "xades": "http://uri.etsi.org/01903/v1.3.2#",
     "xades141": "http://uri.etsi.org/01903/v1.4.1#",
     "xsi": "http://www.w3.org/2001/XMLSchema-instance",
+    # Duplica el URI de `xsi` y no lo usa nadie, pero la ejemplificación oficial
+    # lo declara y la regla NIE901 exige "todos los Namespace correspondientes a
+    # su estructura": sin él la DIAN rechaza el documento en la raíz.
+    #
+    # Va **después** de `xsi` a propósito: lxml serializa los atributos con el
+    # primer prefijo declarado para el URI, así que con `xs` delante el
+    # `schemaLocation` salía como `xs:schemaLocation`.
+    "xs": "http://www.w3.org/2001/XMLSchema-instance",
 }
 
 # Literal exacto de @Version (regla NIE022): es el equivalente del ProfileID.
@@ -89,6 +98,22 @@ def _valor(monto) -> str:
 
 def _fecha(valor) -> str | None:
     return valor.isoformat() if valor is not None else None
+
+
+def _fecha_hora(valor) -> str | None:
+    """Fecha y hora **local y sin zona**: ``YYYY-MM-DDTHH:MM:SS``.
+
+    Es el formato que piden las reglas NIE074/NIE075 para las horas extra, y
+    tiene dos trampas. La primera es que `isoformat()` añade el desfase, que
+    aquí sobra. La segunda, más silenciosa: Django guarda los datetime en UTC,
+    así que sin convertir a la hora local una extra de las 18:00 viajaría como
+    las 23:00 del mismo día —o de la madrugada del siguiente—.
+    """
+    if valor is None:
+        return None
+    if timezone.is_aware(valor):
+        valor = timezone.localtime(valor)
+    return valor.strftime("%Y-%m-%dT%H:%M:%S")
 
 
 def _booleano(valor) -> str:
@@ -556,8 +581,8 @@ class ConstructorNominaXML:
         cont = _sub(padre, contenedor)
         for fila in filas:
             _sub(cont, etiqueta,
-                 HoraInicio=fila.hora_inicio.isoformat() if fila.hora_inicio else None,
-                 HoraFin=fila.hora_fin.isoformat() if fila.hora_fin else None,
+                 HoraInicio=_fecha_hora(fila.hora_inicio),
+                 HoraFin=_fecha_hora(fila.hora_fin),
                  Cantidad=int(fila.cantidad or 0),
                  Porcentaje=_valor(fila.porcentaje),
                  Pago=_valor(fila.valor))
