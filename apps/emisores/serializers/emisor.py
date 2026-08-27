@@ -86,6 +86,10 @@ class EmisorSerializer(serializers.ModelSerializer):
     # Lo marca el envío del Set de Pruebas, no el cuerpo de la petición:
     # decir 'ya estoy habilitado' no habilita a nadie.
     habilitado_facturacion = serializers.BooleanField(read_only=True)
+    # La de nómina no la marca ningún envío: el trámite es en el portal de la
+    # DIAN. De solo lectura por lo mismo que la anterior —decirlo no habilita—,
+    # así que hoy se marca fuera de esta API.
+    habilitado_nomina = serializers.BooleanField(read_only=True)
 
     def validate_cuenta(self, value):
         """Una integración no puede operar fuera de su propia cuenta.
@@ -152,7 +156,8 @@ class EmisorSerializer(serializers.ModelSerializer):
             "tipo_organizacion", "responsabilidades",
             "pais", "departamento", "municipio", "direccion", "codigo_postal",
             "correo_copia",
-            "telefono", "correo", "activo", "habilitado_facturacion",
+            "telefono", "correo", "activo",
+            "habilitado_facturacion", "habilitado_nomina",
             "resoluciones",
         ]
         # Vacío a propósito: desactiva el UniqueTogetherValidator automático de

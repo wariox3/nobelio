@@ -34,6 +34,13 @@ class Emisor(ModeloConFechas):
         "paso que separa al emisor recién dado de alta del que ya salió a "
         "producción.",
     )
+    habilitado_nomina = models.BooleanField(
+        "habilitado para nómina", default=False,
+        help_text="La nómina se habilita aparte de la facturación y sin Set de "
+        "Pruebas: el trámite es en el portal de la DIAN, así que esta bandera "
+        "no la marca el sistema por sí solo. Sin ella, la DIAN rechaza con la "
+        "regla 92 ('El Emisor del Documento no se encuentra Habilitado').",
+    )
 
     # --- Relaciones ---
     cuenta = models.ForeignKey(
