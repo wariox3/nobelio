@@ -17,3 +17,10 @@ class AdquirienteSerializer(serializers.ModelSerializer):
             "pais", "departamento", "municipio", "direccion", "codigo_postal",
             "telefono", "correo",
         ]
+        # El código postal se exige siempre, aunque el modelo lo admita vacío:
+        # es el `cbc:PostalZone` del XML y no hay forma de completarlo después
+        # —un documento firmado ya no se edita—, así que se pide al crear y no
+        # cuando la DIAN lo rechace con el consecutivo ya gastado.
+        extra_kwargs = {
+            "codigo_postal": {"required": True, "allow_blank": False},
+        }

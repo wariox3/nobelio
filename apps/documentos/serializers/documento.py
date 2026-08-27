@@ -102,6 +102,34 @@ def mensaje_fecha_emision_no_es_hoy(hoy):
     )
 
 
+# País del vendedor que hace residente al documento soporte: con él el
+# CustomizationID sale `10` (ver `customization_id_default` en `apps/dian/ubl.py`)
+# y el anexo pasa a exigir la dirección física del vendedor.
+CODIGO_PAIS_COLOMBIA = "CO"
+
+# Campos del vendedor que el documento soporte con CustomizationID=10 necesita
+# para armar el `cac:PhysicalLocation/cac:Address`, con el nombre que el emisor
+# reconoce.
+CAMPOS_DIRECCION_VENDEDOR = (
+    ("municipio", "municipio"),
+    ("direccion", "dirección"),
+    ("codigo_postal", "código postal"),
+)
+
+
+def mensaje_vendedor_sin_direccion(faltantes):
+    """Mensaje para el documento soporte cuyo vendedor residente no trae dirección.
+
+    Se corta al crear y no al emitir: la DIAN rechaza el documento (regla
+    DSAJ08a) cuando el grupo de la dirección no está completo, y para entonces
+    el consecutivo ya está reservado y el documento firmado no se puede editar.
+    """
+    return (
+        "Un documento soporte con vendedor residente en Colombia debe informar "
+        f"la dirección del vendedor; falta: {', '.join(faltantes)}."
+    )
+
+
 def mensaje_prefijo_ajeno(resolucion):
     """Mensaje para un prefijo que no es el que autorizó la resolución."""
     prefijo = f"'{resolucion.prefijo}'" if resolucion.prefijo else "sin prefijo"
@@ -286,6 +314,7 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
             )
         self._validar_concepto(attrs, tipo)
         self._validar_vencimiento(attrs)
+        self._validar_direccion_vendedor(attrs, tipo)
 
         resolucion = attrs.get("resolucion") or getattr(self.instance, "resolucion", None)
         # Sin resolución no hay sts:InvoiceControl que emitir —ni clave técnica
@@ -331,6 +360,41 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
         if concepto not in conceptos.values:
             raise serializers.ValidationError(
                 {"concepto_correccion": mensaje_concepto_invalido(tipo, conceptos)}
+            )
+
+    def _validar_direccion_vendedor(self, attrs, tipo):
+        """El vendedor de un documento soporte residente lleva dirección física.
+
+        En el documento soporte el `adquiriente` no es el receptor sino el
+        vendedor (el sujeto no obligado), y su país es lo que decide el
+        `CustomizationID`: residente en Colombia -> `10`, y entonces el anexo
+        exige el bloque `cac:PhysicalLocation`. Al no residente (`11`) no se le
+        pide: se identifica por la lista TipoIdFiscal y no lleva ese bloque.
+        """
+        if tipo is None or tipo.codigo != models.DocumentoTipo.Codigo.DOCUMENTO_SOPORTE:
+            return
+        adquiriente = attrs.get("adquiriente")
+        if adquiriente is None and self.instance is not None:
+            adquiriente = self.instance.adquiriente
+        if adquiriente is None:
+            return
+
+        def dato(campo):
+            # Al crear llega el dict validado del serializer anidado; al editar,
+            # la instancia que ya está guardada.
+            if isinstance(adquiriente, dict):
+                return adquiriente.get(campo)
+            return getattr(adquiriente, campo, None)
+
+        pais = dato("pais")
+        if pais is None or pais.codigo != CODIGO_PAIS_COLOMBIA:
+            return
+        faltantes = [
+            etiqueta for campo, etiqueta in CAMPOS_DIRECCION_VENDEDOR if not dato(campo)
+        ]
+        if faltantes:
+            raise serializers.ValidationError(
+                {"adquiriente": mensaje_vendedor_sin_direccion(faltantes)}
             )
 
     def _validar_vencimiento(self, attrs):

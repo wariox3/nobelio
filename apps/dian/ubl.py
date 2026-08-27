@@ -23,6 +23,7 @@ from django.utils import timezone
 from lxml import etree
 
 from apps.dian import identificadores as ident
+from apps.utilidades.nit import digito_verificacion
 
 # --- Namespaces UBL / DIAN --------------------------------------------------
 NS = {
@@ -68,6 +69,18 @@ CUSTOMIZATION_DS_NO_RESIDENTE = "11"
 
 # Código de país de Colombia (ISO 3166-1 alfa-2), para decidir la procedencia.
 COD_PAIS_COLOMBIA = "CO"
+
+# cac:StandardItemIdentification: código y nombre del estándar con el que se
+# identifica el bien o servicio. El 999 es el "de adopción del contribuyente"
+# (código interno del emisor); el nombre es obligatorio (DSAZ13/FAZ10) y su
+# literal es el de las ejemplificaciones oficiales.
+COD_ESTANDAR_CONTRIBUYENTE = "999"
+NOMBRE_ESTANDAR_CONTRIBUYENTE = "Estándar de adopción del contribuyente"
+
+# schemeName del cbc:CompanyID cuando la parte se identifica con NIT. El
+# documento soporte lo exige literal para el vendedor residente (DSAJ25a),
+# aunque su identificación sea una cédula.
+SCHEME_NAME_NIT = "31"
 
 # cac:TaxScheme del vendedor en el documento soporte: el sujeto no obligado no
 # es responsable de IVA, así que su tributo es "no aplica" (regla DSAJ40, que
@@ -528,19 +541,7 @@ class ConstructorUBL:
             if linea.centro_costo:
                 _sub(il, "cbc", "AccountingCostCode", linea.centro_costo)
             self._linea_extra(il, linea)
-            # InvoicePeriod va tras FreeOfChargeIndicator y antes de TaxTotal.
-            if (linea.periodo_desde or linea.periodo_hasta
-                    or linea.periodo_descripcion or linea.periodo_descripcion_codigo):
-                periodo = _sub(il, "cac", "InvoicePeriod")
-                if linea.periodo_desde:
-                    _sub(periodo, "cbc", "StartDate", linea.periodo_desde.isoformat())
-                if linea.periodo_hasta:
-                    _sub(periodo, "cbc", "EndDate", linea.periodo_hasta.isoformat())
-                # Ojo al orden: el XSD pone DescriptionCode antes que Description.
-                if linea.periodo_descripcion_codigo:
-                    _sub(periodo, "cbc", "DescriptionCode", linea.periodo_descripcion_codigo)
-                if linea.periodo_descripcion:
-                    _sub(periodo, "cbc", "Description", linea.periodo_descripcion)
+            self._periodo_linea(il, linea)
 
             if self.descuento_linea_antes_de_impuestos:
                 self._descuento_linea(il, linea)
@@ -574,12 +575,29 @@ class ConstructorUBL:
             # 999 = estándar de adopción del contribuyente (código interno).
             std_item = _sub(item, "cac", "StandardItemIdentification")
             _sub(std_item, "cbc", "ID", linea.codigo_producto or str(linea.numero_linea),
-                 schemeID="999", schemeAgencyID="195")
+                 schemeID=COD_ESTANDAR_CONTRIBUYENTE, schemeAgencyID="195",
+                 schemeName=NOMBRE_ESTANDAR_CONTRIBUYENTE)
 
             precio = _sub(il, "cac", "Price")
             _sub(precio, "cbc", "PriceAmount", _valor(linea.valor_unitario), currencyID=self.moneda)
             _sub(precio, "cbc", "BaseQuantity", _cantidad(linea.cantidad),
                  unitCode=linea.unidad_medida.codigo)
+
+    def _periodo_linea(self, il, linea):
+        """cac:InvoicePeriod de la línea: va tras FreeOfChargeIndicator y antes de TaxTotal."""
+        if not (linea.periodo_desde or linea.periodo_hasta
+                or linea.periodo_descripcion or linea.periodo_descripcion_codigo):
+            return
+        periodo = _sub(il, "cac", "InvoicePeriod")
+        if linea.periodo_desde:
+            _sub(periodo, "cbc", "StartDate", linea.periodo_desde.isoformat())
+        if linea.periodo_hasta:
+            _sub(periodo, "cbc", "EndDate", linea.periodo_hasta.isoformat())
+        # Ojo al orden: el XSD pone DescriptionCode antes que Description.
+        if linea.periodo_descripcion_codigo:
+            _sub(periodo, "cbc", "DescriptionCode", linea.periodo_descripcion_codigo)
+        if linea.periodo_descripcion:
+            _sub(periodo, "cbc", "Description", linea.periodo_descripcion)
 
     def _linea_extra(self, il, linea):
         """Hook para campos de línea propios de la factura (FreeOfChargeIndicator)."""
@@ -769,6 +787,22 @@ class ConstructorDocumentoSoporte(ConstructorUBL):
             tipo_ambiente=self.ambiente,
         )
 
+    def _periodo_linea(self, il, linea):
+        """El DS exige la **fecha de compra** en cada línea (regla DSFC02a).
+
+        Va en ``cac:InvoicePeriod/cbc:StartDate``. Si la línea no trae periodo
+        propio se usa la fecha de emisión: la compra que soporta el documento es
+        la que se está documentando, y omitir el elemento es un rechazo.
+        """
+        if linea.periodo_desde or linea.periodo_hasta:
+            return super()._periodo_linea(il, linea)
+        periodo = _sub(il, "cac", "InvoicePeriod")
+        _sub(periodo, "cbc", "StartDate", self.doc.fecha_emision.isoformat())
+        if linea.periodo_descripcion_codigo:
+            _sub(periodo, "cbc", "DescriptionCode", linea.periodo_descripcion_codigo)
+        if linea.periodo_descripcion:
+            _sub(periodo, "cbc", "Description", linea.periodo_descripcion)
+
     def _parte_emisor(self, raiz):
         """``cac:AccountingSupplierParty``, que aquí es el **vendedor** (SNO).
 
@@ -809,12 +843,40 @@ class ConstructorDocumentoSoporte(ConstructorUBL):
         _sub(pts, "cbc", "RegistrationName", entidad.razon_social)
         _sub(pts, "cbc", "CompanyID", entidad.numero_identificacion,
              schemeAgencyID="195", schemeAgencyName=AGENCIA_DIAN,
-             schemeID=entidad.digito_verificacion or "0",
-             schemeName=entidad.tipo_identificacion.codigo)
+             schemeID=self._scheme_id_identificacion(entidad),
+             schemeName=self._scheme_name_identificacion(entidad))
         _sub(pts, "cbc", "TaxLevelCode", self._responsabilidades(entidad))
         esquema = _sub(pts, "cac", "TaxScheme")
         _sub(esquema, "cbc", "ID", tributo[0])
         _sub(esquema, "cbc", "Name", tributo[1])
+
+    def _scheme_name_identificacion(self, entidad) -> str:
+        """``@schemeName`` del CompanyID: ``31`` (NIT) mientras el SNO sea residente.
+
+        La regla DSAJ25a lo compara con el literal ``31`` aunque la parte se
+        identifique con cédula —así aparece en la ejemplificación oficial, con un
+        vendedor persona natural—. Con un vendedor no residente
+        (``CustomizationID`` = 11) la identificación sale de la lista
+        ``TipoIdFiscal`` y se emite la del propio tipo de identificación.
+        """
+        if self.customization_id == CUSTOMIZATION_DS_RESIDENTE:
+            return SCHEME_NAME_NIT
+        return entidad.tipo_identificacion.codigo
+
+    def _scheme_id_identificacion(self, entidad) -> str:
+        """``@schemeID``: el dígito de verificación del número.
+
+        Va de la mano de `_scheme_name_identificacion`: si la parte se declara
+        como NIT (``31``), la DIAN comprueba el dígito contra el número. El
+        modelo solo guarda DV para los NIT —una cédula con DV inventado la
+        rechaza la DIAN—, así que para el vendedor residente se calcula aquí; la
+        ejemplificación oficial hace lo mismo con un SNO persona natural.
+        """
+        if entidad.digito_verificacion:
+            return entidad.digito_verificacion
+        if self.customization_id == CUSTOMIZATION_DS_RESIDENTE:
+            return digito_verificacion(entidad.numero_identificacion) or "0"
+        return "0"
 
 
 # Mapeo código de tipo de documento -> constructor.

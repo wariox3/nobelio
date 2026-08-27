@@ -264,6 +264,13 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
     ):
         raise ErrorEmision("La nota debe referenciar el documento que corrige.")
 
+    # El identificador se recalcula en cada firma. `construir` reutiliza el
+    # `cufe_cude` que ya tenga el documento, y la `hora_emision` que acaba de
+    # fijarse arriba entra en el CUFE/CUDE/CUDS: al re-firmar (p. ej. tras un
+    # rechazo) el XML saldría con el hash del intento anterior y su propio
+    # contenido no lo reproduciría -> rechazo FAD06/DSAD06.
+    documento.cufe_cude = ""
+
     constructor = ubl.constructor_para(
         documento,
         software=software,
