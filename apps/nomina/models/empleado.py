@@ -47,7 +47,6 @@ class Empleado(ModeloConFechas):
     salario_integral = models.BooleanField("salario integral", default=False)
     sueldo = models.DecimalField("sueldo", max_digits=15, decimal_places=2)
     fecha_ingreso = models.DateField("fecha de ingreso")
-    fecha_retiro = models.DateField("fecha de retiro", null=True, blank=True)
 
     # --- Lugar de trabajo ---
     direccion = models.CharField("dirección del lugar de trabajo", max_length=255)
@@ -58,8 +57,6 @@ class Empleado(ModeloConFechas):
         "tipo de cuenta", max_length=10, choices=TipoCuenta.choices, blank=True,
     )
     numero_cuenta = models.CharField("número de cuenta", max_length=30, blank=True)
-
-    activo = models.BooleanField("activo", default=True)
 
     # --- Relaciones ---
     emisor = models.ForeignKey(
@@ -112,6 +109,17 @@ class Empleado(ModeloConFechas):
                 name="empleado_identificacion_unica_por_emisor",
             )
         ]
+
+    @property
+    def activo(self) -> bool:
+        """Sigue vinculado mientras ninguna de sus nóminas reporte el retiro.
+
+        El retiro es un dato del documento —es lo que se emitió y lo que la
+        DIAN ve—, así que el maestro no lo guarda y esta pregunta se responde
+        mirando las nóminas. Cuenta cualquiera que lo traiga, incluso en
+        borrador: es el ERP quien la creó diciendo que esa persona se va.
+        """
+        return not self.nominas.filter(fecha_retiro__isnull=False).exists()
 
     @property
     def nombre_completo(self) -> str:

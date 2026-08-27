@@ -9,9 +9,32 @@ from apps.emisores.models import Emisor
 from apps.nomina import models
 from apps.seguridad.alcance import RelacionDelAlcance
 
+from .empleado import EmpleadoAnidadoSerializer
 from .nomina_concepto import NominaConceptoSerializer
 
 CERO = Decimal("0")
+
+# Condiciones del trabajador que el documento congela al crearse. Si no vienen
+# en la petición se copian del empleado, que es donde están las vigentes: así el
+# ERP solo manda lo que cambió ese mes y no repite trece campos cada vez.
+CONDICIONES_DEL_EMPLEADO = {
+    "codigo_trabajador": "codigo_trabajador",
+    "alto_riesgo_pension": "alto_riesgo_pension",
+    "salario_integral": "salario_integral",
+    "sueldo": "sueldo",
+    "tipo_trabajador": "tipo_trabajador",
+    "subtipo_trabajador": "subtipo_trabajador",
+    "tipo_contrato": "tipo_contrato",
+    "lugar_trabajo_pais": "pais",
+    "lugar_trabajo_departamento": "departamento",
+    "lugar_trabajo_municipio": "municipio",
+    "lugar_trabajo_direccion": "direccion",
+    "forma_pago": "forma_pago",
+    "medio_pago": "medio_pago",
+    "banco": "banco",
+    "tipo_cuenta": "tipo_cuenta",
+    "numero_cuenta": "numero_cuenta",
+}
 
 MENSAJE_NOMINA_NO_EDITABLE = (
     "La nómina ya fue firmada y no se puede modificar."
@@ -70,6 +93,8 @@ class NominaSerializer(serializers.ModelSerializer):
             "total_devengados", "total_deducciones", "redondeo",
             "total_comprobante",
             "cune", "ambiente", "fecha_validacion", "errores", "conceptos",
+            # Las condiciones con las que se emitió, congeladas al crear.
+            *CONDICIONES_DEL_EMPLEADO, "fecha_retiro",
             "creado_en", "actualizado_en",
         ]
 
@@ -102,9 +127,12 @@ class NominaCrearSerializer(serializers.ModelSerializer):
 
     conceptos = NominaConceptoSerializer(many=True)
     emisor = RelacionDelAlcance(queryset=Emisor.objects.all(), campo_emisor="id")
-    empleado = RelacionDelAlcance(
-        queryset=models.Empleado.objects.all(), campo_emisor="emisor",
-    )
+    # Anidado, como el adquiriente de la factura: el ERP manda al trabajador en
+    # la misma petición y no tiene que conocer nuestros ids ni dar de alta al
+    # empleado aparte. La diferencia con el adquiriente es que aquí sí hay
+    # maestro: la fila se busca por emisor + identificación y se actualiza, en
+    # vez de crear una nueva por documento.
+    empleado = EmpleadoAnidadoSerializer()
     nomina_predecesora = RelacionDelAlcance(
         queryset=models.Nomina.objects.all(), required=False, allow_null=True,
     )
@@ -119,8 +147,16 @@ class NominaCrearSerializer(serializers.ModelSerializer):
             "moneda", "trm", "notas", "novedad", "cune_novedad",
             "total_devengados", "total_deducciones", "redondeo",
             "total_comprobante", "conceptos",
+            *CONDICIONES_DEL_EMPLEADO,
+            # No se hereda de nadie: el maestro ya no guarda el retiro, así que
+            # llega solo cuando el trabajador se va y es un dato del documento.
+            "fecha_retiro",
         ]
         read_only_fields = ["numero"]
+        # Todas opcionales: se heredan del empleado si no vienen.
+        extra_kwargs = {
+            campo: {"required": False} for campo in CONDICIONES_DEL_EMPLEADO
+        }
         validators = [
             UniqueTogetherValidator(
                 queryset=models.Nomina.objects.all(),
@@ -142,10 +178,63 @@ class NominaCrearSerializer(serializers.ModelSerializer):
         if self.instance is not None and not self.instance.es_borrador:
             raise serializers.ValidationError(MENSAJE_NOMINA_NO_EDITABLE)
 
+        self._heredar_condiciones(attrs)
         self._validar_periodo(attrs)
+        self._validar_retiro(attrs)
         self._validar_ajuste(attrs)
         self._validar_totales(attrs)
         return attrs
+
+    def _heredar_condiciones(self, attrs):
+        """Rellena con los datos del trabajador las condiciones que no vengan.
+
+        La fuente es lo que trae la petición y, para lo que no traiga, la fila
+        del maestro que ya exista. Así el ERP puede mandar el bloque completo
+        del empleado, mandar solo lo que cambió, o poner la condición suelta en
+        la nómina cuando quiera que valga para ese periodo y no se guarde como
+        vigente.
+
+        Solo al crear: en una edición, un campo ausente es "no lo toques", no
+        "vuelve a copiarlo" —que pisaría lo corregido a mano en el borrador—.
+        """
+        if self.instance is not None:
+            return
+        datos = attrs.get("empleado") or {}
+        existente = self._empleado_existente(attrs)
+        for campo, origen in CONDICIONES_DEL_EMPLEADO.items():
+            if origen in datos:
+                attrs.setdefault(campo, datos[origen])
+            elif existente is not None:
+                attrs.setdefault(campo, getattr(existente, origen))
+
+    def _empleado_existente(self, attrs):
+        """La fila del maestro que corresponde al trabajador de la petición."""
+        datos = attrs.get("empleado") or {}
+        emisor = attrs.get("emisor") or getattr(self.instance, "emisor", None)
+        if not (emisor and datos.get("numero_documento")):
+            return None
+        return models.Empleado.objects.filter(
+            emisor=emisor,
+            tipo_identificacion=datos.get("tipo_identificacion"),
+            numero_documento=datos["numero_documento"],
+        ).first()
+
+    def _guardar_empleado(self, emisor, datos):
+        """Crea o actualiza el empleado del emisor y lo devuelve.
+
+        La clave es emisor + tipo y número de identificación, la misma que
+        impone la restricción del modelo. Lo que llegue en la petición pasa a
+        ser lo vigente en el maestro: el documento ya se quedó con su copia, así
+        que actualizarlo no reescribe nada de lo emitido.
+        """
+        identificacion = {
+            "tipo_identificacion": datos.pop("tipo_identificacion"),
+            "numero_documento": datos.pop("numero_documento"),
+        }
+        empleado, _ = models.Empleado.objects.update_or_create(
+            emisor=emisor, **identificacion, defaults=datos,
+        )
+        return empleado
 
     def _dato(self, attrs, campo):
         if campo in attrs:
@@ -158,6 +247,29 @@ class NominaCrearSerializer(serializers.ModelSerializer):
         if inicio and fin and fin < inicio:
             raise serializers.ValidationError(
                 {"fecha_liquidacion_fin": "No puede ser anterior al inicio del periodo."}
+            )
+
+    def _validar_retiro(self, attrs):
+        """El retiro no puede ser anterior al ingreso del trabajador.
+
+        Las dos fechas van juntas en el ``Periodo`` del XML y la DIAN las
+        compara; un par invertido es un rechazo con el consecutivo ya gastado.
+        El retiro es del documento y el ingreso del maestro, así que la
+        comprobación cruza los dos.
+        """
+        retiro = self._dato(attrs, "fecha_retiro")
+        if retiro is None:
+            return
+        datos = attrs.get("empleado") or {}
+        ingreso = datos.get("fecha_ingreso")
+        if ingreso is None:
+            existente = self._empleado_existente(attrs)
+            if existente is None:
+                existente = getattr(self.instance, "empleado", None)
+            ingreso = getattr(existente, "fecha_ingreso", None)
+        if ingreso and retiro < ingreso:
+            raise serializers.ValidationError(
+                {"fecha_retiro": "No puede ser anterior a la fecha de ingreso."}
             )
 
     def _validar_ajuste(self, attrs):
@@ -235,7 +347,10 @@ class NominaCrearSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         conceptos = validated_data.pop("conceptos")
-        nomina = models.Nomina.objects.create(**validated_data)
+        empleado = self._guardar_empleado(
+            validated_data["emisor"], validated_data.pop("empleado"),
+        )
+        nomina = models.Nomina.objects.create(empleado=empleado, **validated_data)
         models.NominaConcepto.objects.bulk_create([
             models.NominaConcepto(nomina=nomina, **datos) for datos in conceptos
         ])
@@ -244,6 +359,11 @@ class NominaCrearSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def update(self, instance, validated_data):
         conceptos = validated_data.pop("conceptos", None)
+        if "empleado" in validated_data:
+            validated_data["empleado"] = self._guardar_empleado(
+                validated_data.get("emisor") or instance.emisor,
+                validated_data.pop("empleado"),
+            )
         for campo, valor in validated_data.items():
             setattr(instance, campo, valor)
         instance.save()

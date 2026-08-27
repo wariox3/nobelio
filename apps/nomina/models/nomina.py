@@ -79,6 +79,33 @@ class Nomina(ModeloUUID, ModeloConFechas):
     # es una: se guarda una y el constructor emite ese único ``FechaPago``.
     fecha_pago = models.DateField("fecha de pago")
 
+    # --- Condiciones del trabajador en este periodo ---
+    # Copia de lo que decía el maestro al crear la nómina. No es duplicación
+    # ociosa: el sueldo de agosto es un hecho de agosto, y con un solo valor
+    # mutable en `Empleado` no habría forma de representarlo —al firmar se
+    # emitiría el de hoy—. El maestro guarda lo vigente; el documento, lo que
+    # se emitió. Los datos de identidad (documento y nombres) no se copian:
+    # ahí un cambio es una corrección y debe propagarse a todo.
+    codigo_trabajador = models.CharField(
+        "código del trabajador", max_length=20, blank=True,
+        help_text="Va en NumeroSecuenciaXML, que identifica el documento.",
+    )
+    alto_riesgo_pension = models.BooleanField("alto riesgo de pensión", default=False)
+    salario_integral = models.BooleanField("salario integral", default=False)
+    sueldo = models.DecimalField("sueldo", max_digits=15, decimal_places=2)
+    # Nula mientras el trabajador siga vinculado; en la liquidación es un dato
+    # de ese documento. La de ingreso no cambia y se queda en el maestro.
+    fecha_retiro = models.DateField("fecha de retiro", null=True, blank=True)
+    lugar_trabajo_direccion = models.CharField(
+        "dirección del lugar de trabajo", max_length=255,
+    )
+    banco = models.CharField("banco", max_length=100, blank=True)
+    tipo_cuenta = models.CharField(
+        "tipo de cuenta", max_length=10, blank=True,
+        choices=[("ahorros", "Ahorros"), ("corriente", "Corriente")],
+    )
+    numero_cuenta = models.CharField("número de cuenta", max_length=30, blank=True)
+
     # --- Identificadores DIAN ---
     ambiente = models.PositiveSmallIntegerField(
         "ambiente DIAN", choices=Ambiente.choices, default=ambiente_por_defecto,
@@ -149,6 +176,39 @@ class Nomina(ModeloUUID, ModeloConFechas):
     periodo_nomina = models.ForeignKey(
         "catalogos.PeriodoNomina", on_delete=models.PROTECT,
         related_name="nominas", verbose_name="periodo de nómina",
+    )
+    # Las demás condiciones del periodo, las que sí son catálogo.
+    tipo_trabajador = models.ForeignKey(
+        "catalogos.TipoTrabajador", on_delete=models.PROTECT,
+        related_name="nominas", verbose_name="tipo de trabajador",
+    )
+    subtipo_trabajador = models.ForeignKey(
+        "catalogos.SubTipoTrabajador", on_delete=models.PROTECT,
+        related_name="nominas", verbose_name="subtipo de trabajador",
+    )
+    tipo_contrato = models.ForeignKey(
+        "catalogos.TipoContrato", on_delete=models.PROTECT,
+        related_name="nominas", verbose_name="tipo de contrato",
+    )
+    lugar_trabajo_pais = models.ForeignKey(
+        "catalogos.Pais", on_delete=models.PROTECT,
+        related_name="nominas", verbose_name="país del lugar de trabajo",
+    )
+    lugar_trabajo_departamento = models.ForeignKey(
+        "catalogos.Departamento", on_delete=models.PROTECT,
+        related_name="nominas", verbose_name="departamento del lugar de trabajo",
+    )
+    lugar_trabajo_municipio = models.ForeignKey(
+        "catalogos.Municipio", on_delete=models.PROTECT,
+        related_name="nominas", verbose_name="municipio del lugar de trabajo",
+    )
+    forma_pago = models.ForeignKey(
+        "catalogos.FormaPago", on_delete=models.PROTECT,
+        related_name="nominas", verbose_name="forma de pago",
+    )
+    medio_pago = models.ForeignKey(
+        "catalogos.MedioPago", on_delete=models.PROTECT,
+        related_name="nominas", verbose_name="medio de pago",
     )
     moneda = models.ForeignKey(
         "catalogos.Moneda", on_delete=models.PROTECT,

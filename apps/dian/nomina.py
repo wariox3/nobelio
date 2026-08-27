@@ -201,7 +201,7 @@ class ConstructorNominaXML:
         _sub(
             raiz, "Periodo",
             FechaIngreso=_fecha(self.empleado.fecha_ingreso),
-            FechaRetiro=_fecha(self.empleado.fecha_retiro),
+            FechaRetiro=_fecha(self.doc.fecha_retiro),
             FechaLiquidacionInicio=_fecha(self.doc.fecha_liquidacion_inicio),
             FechaLiquidacionFin=_fecha(self.doc.fecha_liquidacion_fin),
             TiempoLaborado=self.doc.tiempo_laborado,
@@ -211,7 +211,7 @@ class ConstructorNominaXML:
     def _numero_secuencia(self, raiz, *, con_codigo_trabajador=True):
         _sub(
             raiz, "NumeroSecuenciaXML",
-            CodigoTrabajador=(self.empleado.codigo_trabajador or None)
+            CodigoTrabajador=(self.doc.codigo_trabajador or None)
             if con_codigo_trabajador else None,
             Prefijo=self.doc.prefijo or None,
             Consecutivo=self.doc.consecutivo,
@@ -275,37 +275,43 @@ class ConstructorNominaXML:
         )
 
     def _trabajador(self, raiz):
-        emp = self.empleado
+        """La identidad sale del empleado; las condiciones, de la nómina.
+
+        Es el reparto del modelo: en el maestro un cambio es una corrección y
+        debe propagarse; en las condiciones es un hecho nuevo y el documento se
+        quedó con las suyas al crearse.
+        """
+        emp, doc = self.empleado, self.doc
         _sub(
             raiz, "Trabajador",
-            TipoTrabajador=emp.tipo_trabajador.codigo,
-            SubTipoTrabajador=emp.subtipo_trabajador.codigo,
-            AltoRiesgoPension=_booleano(emp.alto_riesgo_pension),
+            TipoTrabajador=doc.tipo_trabajador.codigo,
+            SubTipoTrabajador=doc.subtipo_trabajador.codigo,
+            AltoRiesgoPension=_booleano(doc.alto_riesgo_pension),
             TipoDocumento=emp.tipo_identificacion.codigo,
             NumeroDocumento=emp.numero_documento,
             PrimerApellido=emp.primer_apellido,
             SegundoApellido=emp.segundo_apellido,
             PrimerNombre=emp.primer_nombre,
             OtrosNombres=emp.otros_nombres or None,
-            LugarTrabajoPais=emp.pais.codigo,
-            LugarTrabajoDepartamentoEstado=emp.departamento.codigo,
-            LugarTrabajoMunicipioCiudad=emp.municipio.codigo,
-            LugarTrabajoDireccion=emp.direccion,
-            SalarioIntegral=_booleano(emp.salario_integral),
-            TipoContrato=emp.tipo_contrato.codigo,
-            Sueldo=_valor(emp.sueldo),
-            CodigoTrabajador=emp.codigo_trabajador or None,
+            LugarTrabajoPais=doc.lugar_trabajo_pais.codigo,
+            LugarTrabajoDepartamentoEstado=doc.lugar_trabajo_departamento.codigo,
+            LugarTrabajoMunicipioCiudad=doc.lugar_trabajo_municipio.codigo,
+            LugarTrabajoDireccion=doc.lugar_trabajo_direccion,
+            SalarioIntegral=_booleano(doc.salario_integral),
+            TipoContrato=doc.tipo_contrato.codigo,
+            Sueldo=_valor(doc.sueldo),
+            CodigoTrabajador=doc.codigo_trabajador or None,
         )
 
     def _pago(self, raiz):
-        emp = self.empleado
+        doc = self.doc
         _sub(
             raiz, "Pago",
-            Forma=emp.forma_pago.codigo,
-            Metodo=emp.medio_pago.codigo,
-            Banco=emp.banco or None,
-            TipoCuenta=emp.get_tipo_cuenta_display() if emp.tipo_cuenta else None,
-            NumeroCuenta=emp.numero_cuenta or None,
+            Forma=doc.forma_pago.codigo,
+            Metodo=doc.medio_pago.codigo,
+            Banco=doc.banco or None,
+            TipoCuenta=doc.get_tipo_cuenta_display() if doc.tipo_cuenta else None,
+            NumeroCuenta=doc.numero_cuenta or None,
         )
 
     def _fechas_pagos(self, raiz):

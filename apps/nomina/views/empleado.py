@@ -1,4 +1,5 @@
 """API de empleados."""
+from django.db.models import Q
 from rest_framework import filters, viewsets
 
 from apps.nomina import serializers
@@ -29,6 +30,9 @@ class EmpleadoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         """Filtra por ``emisor`` (id) y ``activo`` (true/false).
 
+        ``activo`` no es una columna: el retiro vive en la nómina, así que la
+        pregunta se le hace a los documentos del empleado.
+
         El filtro por emisor acota dentro del alcance, nunca lo amplía: el mixin
         ya restringió el queryset antes de llegar aquí.
         """
@@ -37,5 +41,7 @@ class EmpleadoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         if emisor := params.get("emisor"):
             qs = qs.filter(emisor=emisor)
         if (activo := params.get("activo")) is not None:
-            qs = qs.filter(activo=activo.lower() in ("1", "true", "si", "sí"))
+            retirados = Q(nominas__fecha_retiro__isnull=False)
+            esta_activo = activo.lower() in ("1", "true", "si", "sí")
+            qs = qs.exclude(retirados) if esta_activo else qs.filter(retirados).distinct()
         return qs
