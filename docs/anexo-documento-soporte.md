@@ -45,9 +45,13 @@ el `sts:InvoiceControl` y el certificado son todos del **ABS**.
 | `cbc:UUID/@schemeID` | ambiente (1 ó 2) | ambiente |
 
 Los literales del `ProfileID` se comparan exactos (reglas DSAD03 / NSAD03): 82
-caracteres el del DS y 139 el de la nota de ajuste. **El de la nota de ajuste termina en espacio** —así aparece
-tanto en la regla como en la ejemplificación oficial—; el punto final del DS
-también es parte del literal.
+caracteres el del DS —el punto final es parte del literal— y **138 el de la nota
+de ajuste, sin el espacio final** con que lo escriben el anexo y la
+ejemplificación. Emitirlo con ese espacio lo rechaza la DIAN por NSAD03
+(comprobado el 2026-08-27), y en el rechazo devuelve como esperado un literal
+que es byte a byte el enviado: el espacio viene de cómo enmarca el mensaje
+(`“<literal> ”`), igual que el que mete antes de los dos puntos en
+`ProfileID :`.
 
 > ⚠️ **Discrepancia del anexo consigo mismo.** La ejemplificación
 > `nota-de-ajuste.xml` emite `cbc:InvoiceTypeCode` dentro de un `CreditNote`, que

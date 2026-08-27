@@ -62,12 +62,18 @@ PROFILE_ID_DOCUMENTO_SOPORTE = (
     "DIAN 2.1: documento soporte en adquisiciones efectuadas a no obligados a facturar."
 )
 
-# Literal exacto del cbc:ProfileID de la nota de ajuste (regla NSAD03). Son 139
-# caracteres y **termina en espacio**: así aparece en la regla y en la
-# ejemplificación oficial, y la DIAN lo compara tal cual.
+# Literal exacto del cbc:ProfileID de la nota de ajuste (regla NSAD03): 138
+# caracteres, **sin** espacio final.
+#
+# El anexo y la ejemplificación oficial lo escriben con un espacio al final, y
+# emitirlo así lo rechaza la DIAN (2026-08-27, documento NADS1) devolviendo un
+# literal esperado que es byte a byte el que se le mandó. Su mensaje lo enmarca
+# como “<literal> ”, con el mismo espacio de más que mete antes de los dos
+# puntos en "ProfileID :": el espacio es del formato del mensaje, no del
+# literal, y la comparación es por igualdad.
 PROFILE_ID_NOTA_AJUSTE = (
     "DIAN 2.1: Nota de ajuste al documento soporte en adquisiciones efectuadas "
-    "a sujetos no obligados a expedir factura o documento equivalente "
+    "a sujetos no obligados a expedir factura o documento equivalente"
 )
 
 # cbc:CustomizationID del documento soporte (lista TipoOperacion del anexo DS).
