@@ -383,7 +383,7 @@ nobelio/
 │   │       └── documento-soporte/  Listas propias del DS (no se cargan aún)
 │   ├── emisores/            Emisor (OFE), software, certificado, resolución
 │   ├── documentos/          Documento electrónico, detalles, impuestos, receptor, API
-│   ├── nomina/              Nómina electrónica: empleado, nómina y sus conceptos
+│   ├── nomina/              Nómina electrónica: empleado, nómina, conceptos y API
 │   └── dian/                Núcleo DIAN:
 │       ├── identificadores.py   CUFE / CUDE / código de seguridad
 │       ├── ubl.py              Generación XML UBL 2.1 (factura, notas, soporte)
