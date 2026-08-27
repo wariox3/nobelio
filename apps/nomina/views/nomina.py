@@ -1,5 +1,6 @@
 """API de nóminas electrónicas y acciones del ciclo de vida DIAN."""
 import requests
+from django.db.models import Count
 from django.http import HttpResponse
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
@@ -47,7 +48,11 @@ class NominaViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         de ajuste.
         """
         qs = super().get_queryset()
-        if self.action != "list":
+        # Igual que en documentos: en la lista los errores van contados, así que
+        # se anotan y no se traen sus filas.
+        if self.action == "list":
+            qs = qs.prefetch_related(None).annotate(total_errores=Count("errores"))
+        else:
             qs = qs.prefetch_related("conceptos")
         params = self.request.query_params
         if emisor := params.get("emisor"):

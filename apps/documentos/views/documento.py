@@ -1,6 +1,7 @@
 """API de documentos electrónicos y acciones del ciclo de vida DIAN."""
 import requests
 from django.conf import settings
+from django.db.models import Count
 from django.http import FileResponse, HttpResponse
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
@@ -57,7 +58,17 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         """
         qs = super().get_queryset()
         # El listado no incluye las líneas; solo el detalle/retrieve las precarga.
-        if self.action != "list":
+        # De los errores, en la lista solo va el conteo: se anota con un COUNT y
+        # se deja de traer las filas, que son las que engordan la respuesta.
+        if self.action == "list":
+            # `prefetch_related(None)` limpia los del queryset base; se repone el
+            # del adquiriente, que la lista sí serializa con sus responsabilidades.
+            qs = (
+                qs.prefetch_related(None)
+                .prefetch_related("adquiriente__responsabilidades")
+                .annotate(total_errores=Count("errores"))
+            )
+        else:
             qs = qs.prefetch_related("detalles__impuestos")
         params = self.request.query_params
         if emisor := params.get("emisor"):

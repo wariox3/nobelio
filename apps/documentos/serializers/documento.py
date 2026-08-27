@@ -193,20 +193,36 @@ class DocumentoSerializer(serializers.ModelSerializer):
 
 
 class DocumentoListaSerializer(DocumentoSerializer):
-    """Versión para el listado: sin las líneas anidadas y, del estado, solo el nombre."""
+    """Versión para el listado: sin las líneas anidadas y, del estado, solo el nombre.
+
+    De los errores va solo cuántos son: para pintar la lista basta saber que un
+    documento tiene rechazos, y el detalle es quien los explica. Además el
+    ViewSet lo resuelve anotando un ``COUNT``, así que ni siquiera se traen las
+    filas de error.
+    """
 
     detalles = None  # se quita el campo heredado
     estado_descripcion = None  # en la lista solo va estado_nombre
+    errores = None  # en la lista solo va el conteo
+    total_errores = serializers.SerializerMethodField()
 
     class Meta(DocumentoSerializer.Meta):
         fields = [
-            f for f in DocumentoSerializer.Meta.fields
-            if f not in {"detalles", "estado_descripcion"}
+            *[
+                f for f in DocumentoSerializer.Meta.fields
+                if f not in {"detalles", "estado_descripcion", "errores"}
+            ],
+            "total_errores",
         ]
         read_only_fields = [
             f for f in DocumentoSerializer.Meta.read_only_fields
             if f not in {"detalles", "estado_descripcion"}
         ]
+
+    def get_total_errores(self, obj):
+        """Usa la anotación del ViewSet; si no está, cuenta a mano."""
+        anotado = getattr(obj, "total_errores", None)
+        return anotado if anotado is not None else obj.errores.count()
 
 
 class DocumentoCrearSerializer(serializers.ModelSerializer):

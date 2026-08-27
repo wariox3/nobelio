@@ -106,16 +106,30 @@ class NominaSerializer(serializers.ModelSerializer):
 
 
 class NominaListaSerializer(NominaSerializer):
-    """Versión para el listado: sin los conceptos ni los errores."""
+    """Versión para el listado: sin los conceptos y con los errores contados.
+
+    Mismo criterio que el listado de documentos: para pintar la lista basta
+    saber cuántos rechazos tiene, y el detalle es quien los explica. El ViewSet
+    lo resuelve anotando un ``COUNT``, así que no se traen las filas de error.
+    """
 
     conceptos = None
     errores = None
+    total_errores = serializers.SerializerMethodField()
 
     class Meta(NominaSerializer.Meta):
         fields = [
-            f for f in NominaSerializer.Meta.fields
-            if f not in {"conceptos", "errores"}
+            *[
+                f for f in NominaSerializer.Meta.fields
+                if f not in {"conceptos", "errores"}
+            ],
+            "total_errores",
         ]
+
+    def get_total_errores(self, obj):
+        """Usa la anotación del ViewSet; si no está, cuenta a mano."""
+        anotado = getattr(obj, "total_errores", None)
+        return anotado if anotado is not None else obj.errores.count()
 
 
 class NominaCrearSerializer(serializers.ModelSerializer):
