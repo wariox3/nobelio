@@ -1,7 +1,8 @@
 # Nobelio — Servicio de Facturación Electrónica DIAN (Colombia)
 
 Servicio en **Django + DRF** para emitir documentos electrónicos ante la DIAN:
-**factura de venta, notas crédito/débito y documento soporte**. Implementa el
+**factura de venta, notas crédito/débito, documento soporte y su nota de
+ajuste**. Implementa el
 pipeline completo conforme al Anexo Técnico v1.9 (Resolución DIAN 000165/2023):
 
 ```
@@ -332,8 +333,24 @@ país del vendedor.
 > `datos/listas/documento-soporte/`. Si vienes de una base anterior, vuelve a
 > ejecutarlo.
 
-Pendientes: la representación gráfica todavía usa los rótulos de la factura, y
-faltan la nota de ajuste (tipo 95) y el set de pruebas propio de su habilitación.
+#### Nota de ajuste (tipo 95)
+
+Es a la que se corrige un documento soporte lo que la nota crédito es a la
+factura: se crea con `documento_tipo` = `nota_ajuste`, el `documento_referencia`
+del DS que ajusta y un `concepto_correccion` de su **propia** lista
+(`ConceptoNotaAjuste`: 1 devolución parcial, 2 anulación, 3 rebaja o descuento,
+4 ajuste de precio, 5 otros). Repite las partes del DS —el `adquiriente` sigue
+siendo el vendedor— y con ellas las retenciones y la fecha de compra de cada
+línea, pero como toda nota hereda la numeración del documento que corrige: no
+lleva resolución ni `InvoiceControl`. Su raíz es `CreditNote` con
+`CreditNoteTypeCode=95`, su identificador es un CUDS y el `BillingReference`
+apunta al CUDS del DS ajustado.
+
+El documento soporte **no tiene habilitación propia**: con el Set de Pruebas de
+la factura aceptado, el emisor ya queda habilitado también para emitirlo, así
+que el `test_set_id` único de `SoftwareDian` basta.
+
+Pendiente: la representación gráfica todavía usa los rótulos de la factura.
 
 ---
 
@@ -414,8 +431,8 @@ Estos puntos solo se confirman al integrar contra el ambiente real de la DIAN:
 4. Poner el QR en **todas las páginas** de la representación gráfica.
 5. **Documento soporte**: el XML ya se genera con los roles invertidos, el CUDS
    y las retenciones (ver [docs/anexo-documento-soporte.md](docs/anexo-documento-soporte.md)).
-   Falta la representación gráfica con sus rótulos, la nota de ajuste (tipo 95)
-   y el set de pruebas propio de su habilitación.
+   La nota de ajuste (tipo 95) ya se emite y no necesita habilitación aparte.
+   Falta la representación gráfica con sus rótulos.
 
 ---
 

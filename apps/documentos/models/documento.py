@@ -76,6 +76,16 @@ class Documento(ModeloUUID, ModeloConFechas):
         AJUSTE_PRECIO = "4", "Ajuste de precio"
         OTROS = "5", "Otros"
 
+    class ConceptoNotaAjuste(models.TextChoices):
+        """Lista ConceptoNotaAjuste del anexo DS: redacción propia, no la de la nota crédito."""
+
+        DEVOLUCION = "1", ("Devolución parcial de los bienes y/o no aceptación "
+                           "parcial del servicio")
+        ANULACION = "2", "Anulación del documento soporte"
+        REBAJA = "3", "Rebaja o descuento parcial o total"
+        AJUSTE_PRECIO = "4", "Ajuste de precio"
+        OTROS = "5", "Otros"
+
     class ConceptoNotaDebito(models.TextChoices):
         INTERESES = "1", "Intereses"
         GASTOS = "2", "Gastos por cobrar"
@@ -244,7 +254,8 @@ class Documento(ModeloUUID, ModeloConFechas):
         "concepto de corrección", max_length=2, blank=True,
         help_text="ResponseCode del DiscrepancyResponse: por qué se corrige el "
         "documento referenciado. Los códigos válidos dependen del tipo de nota "
-        "(ConceptoNotaCredito, ConceptoNotaDebito). Vacío en lo que no es nota.",
+        "(ConceptoNotaCredito, ConceptoNotaDebito, ConceptoNotaAjuste). Vacío "
+        "en lo que no es nota.",
     )
 
     class Meta:

@@ -258,8 +258,7 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
             "numeración asociada."
         )
     if (
-        codigo_tipo in (DocumentoTipo.Codigo.NOTA_CREDITO,
-                        DocumentoTipo.Codigo.NOTA_DEBITO)
+        codigo_tipo in DocumentoTipo.CODIGOS_CON_REFERENCIA
         and documento.documento_referencia is None
     ):
         raise ErrorEmision("La nota debe referenciar el documento que corrige.")

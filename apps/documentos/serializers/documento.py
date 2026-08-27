@@ -41,17 +41,19 @@ def mensaje_sin_resolucion(tipo):
     )
 
 # Tipos cuyo XML se construye con DiscrepancyResponse y BillingReference: sin
-# el documento corregido no hay nota que valga (ver `_ConstructorNotaUBL`).
-TIPOS_QUE_EXIGEN_REFERENCIA = frozenset({
-    models.DocumentoTipo.Codigo.NOTA_CREDITO,
-    models.DocumentoTipo.Codigo.NOTA_DEBITO,
-})
+# el documento corregido no hay nota que valga (ver `_ConstructorNotaUBL`). La
+# lista vive en el modelo porque `generar_y_firmar` exige lo mismo al emitir.
+TIPOS_QUE_EXIGEN_REFERENCIA = models.DocumentoTipo.CODIGOS_CON_REFERENCIA
 
 
 # Lista de conceptos de corrección (ResponseCode) aplicable a cada tipo de nota.
 CONCEPTOS_POR_TIPO = {
     models.DocumentoTipo.Codigo.NOTA_CREDITO: models.Documento.ConceptoNotaCredito,
     models.DocumentoTipo.Codigo.NOTA_DEBITO: models.Documento.ConceptoNotaDebito,
+    # La nota de ajuste tiene su propia lista (ConceptoNotaAjuste del anexo DS):
+    # los códigos coinciden en número con los de la nota crédito pero no en
+    # redacción, y es la que la DIAN valida en el ResponseCode.
+    models.DocumentoTipo.Codigo.NOTA_AJUSTE: models.Documento.ConceptoNotaAjuste,
 }
 
 
@@ -65,7 +67,7 @@ def mensaje_concepto_invalido(tipo, conceptos):
 
 
 MENSAJE_CONCEPTO_SOLO_EN_NOTAS = (
-    "Solo las notas crédito y débito llevan concepto de corrección."
+    "Solo las notas —crédito, débito y de ajuste— llevan concepto de corrección."
 )
 
 # Forma de pago a crédito (lista FormasPago de la DIAN): 1 contado, 2 crédito.
@@ -125,8 +127,9 @@ def mensaje_vendedor_sin_direccion(faltantes):
     el consecutivo ya está reservado y el documento firmado no se puede editar.
     """
     return (
-        "Un documento soporte con vendedor residente en Colombia debe informar "
-        f"la dirección del vendedor; falta: {', '.join(faltantes)}."
+        "Un documento soporte (o su nota de ajuste) con vendedor residente en "
+        "Colombia debe informar la dirección del vendedor; falta: "
+        f"{', '.join(faltantes)}."
     )
 
 
@@ -365,13 +368,14 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
     def _validar_direccion_vendedor(self, attrs, tipo):
         """El vendedor de un documento soporte residente lleva dirección física.
 
+        Vale igual para su nota de ajuste, que repite las mismas partes.
         En el documento soporte el `adquiriente` no es el receptor sino el
         vendedor (el sujeto no obligado), y su país es lo que decide el
         `CustomizationID`: residente en Colombia -> `10`, y entonces el anexo
         exige el bloque `cac:PhysicalLocation`. Al no residente (`11`) no se le
         pide: se identifica por la lista TipoIdFiscal y no lleva ese bloque.
         """
-        if tipo is None or tipo.codigo != models.DocumentoTipo.Codigo.DOCUMENTO_SOPORTE:
+        if tipo is None or tipo.codigo not in models.DocumentoTipo.CODIGOS_CON_VENDEDOR_NO_OBLIGADO:
             return
         adquiriente = attrs.get("adquiriente")
         if adquiriente is None and self.instance is not None:

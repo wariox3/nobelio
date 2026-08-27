@@ -2,7 +2,8 @@
 Generación del XML UBL 2.1 para la DIAN.
 
 Construye los documentos electrónicos (factura de venta, nota crédito, nota
-débito y documento soporte) conforme al Anexo Técnico v1.9, incluyendo las
+débito, documento soporte y su nota de ajuste) conforme al Anexo Técnico v1.9,
+incluyendo las
 extensiones DIAN (sts:DianExtensions). El XML resultante NO está firmado: el
 módulo ``apps/dian/firma`` añade la firma XAdES-EPES en una segunda
 ``UBLExtension``.
@@ -59,6 +60,14 @@ COD_IVA = "01"
 # caracteres que la DIAN compara tal cual, punto final incluido.
 PROFILE_ID_DOCUMENTO_SOPORTE = (
     "DIAN 2.1: documento soporte en adquisiciones efectuadas a no obligados a facturar."
+)
+
+# Literal exacto del cbc:ProfileID de la nota de ajuste (regla NSAD03). Son 139
+# caracteres y **termina en espacio**: así aparece en la regla y en la
+# ejemplificación oficial, y la DIAN lo compara tal cual.
+PROFILE_ID_NOTA_AJUSTE = (
+    "DIAN 2.1: Nota de ajuste al documento soporte en adquisiciones efectuadas "
+    "a sujetos no obligados a expedir factura o documento equivalente "
 )
 
 # cbc:CustomizationID del documento soporte (lista TipoOperacion del anexo DS).
@@ -690,6 +699,9 @@ class _ConstructorNotaUBL(ConstructorUBL):
     incluir_control = False
     incluir_vencimiento = False
     descuento_linea_antes_de_impuestos = False
+    # @schemeName del UUID del documento corregido, que es el suyo y no el de la
+    # nota: una nota de factura referencia un CUFE y la de ajuste, un CUDS.
+    scheme_name_referencia = ident.SCHEME_NAME_CUFE
 
     def _discrepancia(self, raiz):
         ref = self.doc.documento_referencia
@@ -707,7 +719,7 @@ class _ConstructorNotaUBL(ConstructorUBL):
         billing = _sub(raiz, "cac", "BillingReference")
         idr = _sub(billing, "cac", "InvoiceDocumentReference")
         _sub(idr, "cbc", "ID", ref.numero)
-        _sub(idr, "cbc", "UUID", ref.cufe_cude, schemeName=ident.SCHEME_NAME_CUFE)
+        _sub(idr, "cbc", "UUID", ref.cufe_cude, schemeName=self.scheme_name_referencia)
         _sub(idr, "cbc", "IssueDate", ref.fecha_emision.isoformat())
 
 
@@ -879,6 +891,32 @@ class ConstructorDocumentoSoporte(ConstructorUBL):
         return "0"
 
 
+class ConstructorNotaAjuste(ConstructorDocumentoSoporte, _ConstructorNotaUBL):
+    """Nota de ajuste al documento soporte (CreditNote, tipo 95, CUDS).
+
+    Es un documento soporte por dentro y una nota por fuera, y hereda de los dos
+    en ese orden: del ``ConstructorDocumentoSoporte`` toma las partes invertidas
+    (el vendedor como *supplier*), el CUDS, las retenciones aparte y la fecha de
+    compra de la línea; de ``_ConstructorNotaUBL``, la raíz de nota con su
+    ``cac:DiscrepancyResponse`` y su ``cac:BillingReference``, que no lleva
+    resolución ni vencimiento.
+
+    El documento corregido es un DS, así que su UUID se referencia como
+    ``CUDS-SHA384`` y no como el CUFE de una nota de factura.
+
+    Referencia: Anexo Técnico Documento Soporte v1.1, numeral 14.1.1.2; resumen
+    en ``docs/anexo-documento-soporte.md`` §9.
+    """
+
+    profile_id = PROFILE_ID_NOTA_AJUSTE
+    nombre_raiz = "CreditNote"
+    etiqueta_tipo = "CreditNoteTypeCode"
+    etiqueta_linea = "CreditNoteLine"
+    etiqueta_cantidad = "CreditedQuantity"
+    etiqueta_total = "LegalMonetaryTotal"
+    scheme_name_referencia = ident.SCHEME_NAME_CUDS
+
+
 # Mapeo código de tipo de documento -> constructor.
 from apps.documentos.models import DocumentoTipo as _Tipo  # noqa: E402
 
@@ -902,6 +940,8 @@ PERFILES_ADJUNTO = {
         "Nota Débito Electrónica", "Contenedor de Nota Débito Electrónica"),
     _Tipo.Codigo.DOCUMENTO_SOPORTE: (
         "Documento Soporte Electrónico", "Contenedor de Documento Soporte"),
+    _Tipo.Codigo.NOTA_AJUSTE: (
+        "Nota de Ajuste Electrónica", "Contenedor de Nota de Ajuste"),
 }
 
 VALIDADOR_DIAN = "Unidad Especial Dirección de Impuestos y Aduanas Nacionales"
@@ -1022,6 +1062,7 @@ CONSTRUCTORES = {
     _Tipo.Codigo.NOTA_CREDITO: ConstructorNotaCredito,
     _Tipo.Codigo.NOTA_DEBITO: ConstructorNotaDebito,
     _Tipo.Codigo.DOCUMENTO_SOPORTE: ConstructorDocumentoSoporte,
+    _Tipo.Codigo.NOTA_AJUSTE: ConstructorNotaAjuste,
 }
 
 

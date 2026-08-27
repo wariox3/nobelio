@@ -44,8 +44,8 @@ el `sts:InvoiceControl` y el certificado son todos del **ABS**.
 | `cbc:UUID/@schemeName` | `CUDS-SHA384` | `CUDS-SHA384` |
 | `cbc:UUID/@schemeID` | ambiente (1 ó 2) | ambiente |
 
-Los literales del `ProfileID` son de longitud fija 82 (reglas DSAD03 / NSAD03) y
-se comparan exactos. **El de la nota de ajuste termina en espacio** —así aparece
+Los literales del `ProfileID` se comparan exactos (reglas DSAD03 / NSAD03): 82
+caracteres el del DS y 139 el de la nota de ajuste. **El de la nota de ajuste termina en espacio** —así aparece
 tanto en la regla como en la ejemplificación oficial—; el punto final del DS
 también es parte del literal.
 

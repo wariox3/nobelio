@@ -16,6 +16,7 @@ class DocumentoTipo(ModeloConFechas):
         NOTA_CREDITO = "nota_credito", "Nota crédito"
         NOTA_DEBITO = "nota_debito", "Nota débito"
         DOCUMENTO_SOPORTE = "documento_soporte", "Documento soporte"
+        NOTA_AJUSTE = "nota_ajuste", "Nota de ajuste al documento soporte"
         NOMINA = "nomina", "Nómina electrónica"
 
     # Los tipos que se numeran con una resolución autorizada por la DIAN: de
@@ -32,10 +33,32 @@ class DocumentoTipo(ModeloConFechas):
 
     # Los tipos que llevan las retenciones aparte: no suman al total a pagar y
     # en el XML salen en cac:WithholdingTaxTotal (ver `emite_retenciones` en
-    # `apps/dian/ubl.py`). Solo el documento soporte: el anexo de factura no usa
-    # ese elemento, y descontarlas allí del total dejaría el TaxInclusiveAmount
-    # sin cuadrar con los cac:TaxTotal que la factura sí emite.
-    CODIGOS_CON_RETENCIONES = frozenset({Codigo.DOCUMENTO_SOPORTE})
+    # `apps/dian/ubl.py`). Solo el régimen del documento soporte: el anexo de
+    # factura no usa ese elemento, y descontarlas allí del total dejaría el
+    # TaxInclusiveAmount sin cuadrar con los cac:TaxTotal que la factura sí
+    # emite.
+    CODIGOS_CON_RETENCIONES = frozenset({
+        Codigo.DOCUMENTO_SOPORTE,
+        Codigo.NOTA_AJUSTE,
+    })
+
+    # Los tipos que corrigen otro documento: su XML se construye con
+    # cac:DiscrepancyResponse y cac:BillingReference, así que sin el documento
+    # referenciado no hay nada que emitir (ver `_ConstructorNotaUBL`).
+    CODIGOS_CON_REFERENCIA = frozenset({
+        Codigo.NOTA_CREDITO,
+        Codigo.NOTA_DEBITO,
+        Codigo.NOTA_AJUSTE,
+    })
+
+    # Los tipos en los que el `adquiriente` del documento no es el receptor sino
+    # el **vendedor** no obligado a facturar (SNO), y el que emite y firma es el
+    # comprador. De ahí salen los roles UBL invertidos y el CustomizationID por
+    # procedencia del vendedor.
+    CODIGOS_CON_VENDEDOR_NO_OBLIGADO = frozenset({
+        Codigo.DOCUMENTO_SOPORTE,
+        Codigo.NOTA_AJUSTE,
+    })
 
     codigo = models.CharField(
         "código", max_length=30, unique=True, choices=Codigo.choices,
