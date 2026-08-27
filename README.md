@@ -397,6 +397,7 @@ nobelio/
 │   ├── autenticacion.md        JWT, API Key y alcance multi-inquilino
 │   ├── anexo-tecnico.md        Resumen del Anexo Técnico v1.9
 │   ├── anexo-documento-soporte.md  Resumen del Anexo del DS v1.1 (Res. 000167)
+│   ├── anexo-nomina.md         Resumen del Anexo de Nómina v1.0 (Res. 000013)
 │   ├── almacenamiento-xml.md   XML firmado y respuestas DIAN en B2
 │   ├── entorno-desarrollo.md   Montar el proyecto desde cero
 │   └── despliegue.md           Puesta en producción en un VPS
