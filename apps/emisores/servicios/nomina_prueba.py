@@ -39,7 +39,8 @@ def _siguiente_consecutivo(emisor, prefijo) -> int:
 
 
 @transaction.atomic
-def crear_nomina_prueba(emisor, *, prefijo=None, consecutivo=None) -> Nomina:
+def crear_nomina_prueba(emisor, *, prefijo=None, consecutivo=None,
+                        periodo_inicio=None, periodo_fin=None) -> Nomina:
     """Crea —solo crea— una nómina en borrador para el emisor.
 
     No la firma ni la envía: es material para probar la emisión de nómina
@@ -48,11 +49,29 @@ def crear_nomina_prueba(emisor, *, prefijo=None, consecutivo=None) -> Nomina:
     El trabajador se toma del propio emisor, como allí se toma el adquiriente:
     así el documento sale con una identificación real y registrada, sin
     inventar una persona.
+
+    El **periodo de liquidación** se puede fijar, y hace falta para llenar el
+    Set de Pruebas: la DIAN rechaza con la regla 90 ("documento procesado
+    anteriormente") una segunda nómina del mismo trabajador para el mismo
+    periodo, porque a nadie se le paga dos veces el mismo mes. Sin fechas, sale
+    el mes en curso, que es lo útil para una prueba suelta pero repetido diez
+    veces son nueve rechazos.
     """
     hoy = timezone.localdate()
     prefijo = PREFIJO_POR_DEFECTO if prefijo is None else prefijo
     if consecutivo is None:
         consecutivo = _siguiente_consecutivo(emisor, prefijo)
+
+    fin = periodo_fin or hoy
+    inicio = periodo_inicio or fin.replace(day=1)
+    if inicio > fin:
+        raise ValueError(
+            "El periodo de liquidación empieza después de terminar: "
+            f"{inicio} -> {fin}."
+        )
+    # El ingreso tiene que ser anterior al periodo que se liquida, o el propio
+    # documento se contradice.
+    ingreso = min(inicio, hoy).replace(month=1, day=1)
 
     empleado, _ = Empleado.objects.update_or_create(
         emisor=emisor,
@@ -63,7 +82,7 @@ def crear_nomina_prueba(emisor, *, prefijo=None, consecutivo=None) -> Nomina:
             "primer_apellido": "De Prueba",
             "codigo_trabajador": "PRUEBA-1",
             "sueldo": SUELDO,
-            "fecha_ingreso": hoy.replace(month=1, day=1),
+            "fecha_ingreso": ingreso,
             "tipo_trabajador": TipoTrabajador.objects.get(codigo="01"),
             "subtipo_trabajador": SubTipoTrabajador.objects.get(codigo="00"),
             "tipo_contrato": TipoContrato.objects.get(codigo="2"),
@@ -76,7 +95,6 @@ def crear_nomina_prueba(emisor, *, prefijo=None, consecutivo=None) -> Nomina:
         },
     )
 
-    inicio = hoy.replace(day=1)
     nomina = Nomina.objects.create(
         emisor=emisor,
         empleado=empleado,
@@ -86,11 +104,11 @@ def crear_nomina_prueba(emisor, *, prefijo=None, consecutivo=None) -> Nomina:
         periodo_nomina=PeriodoNomina.objects.get(codigo="5"),
         moneda=Moneda.objects.get(codigo="COP"),
         fecha_liquidacion_inicio=inicio,
-        fecha_liquidacion_fin=hoy,
-        tiempo_laborado=(hoy - inicio).days + 1,
+        fecha_liquidacion_fin=fin,
+        tiempo_laborado=(fin - inicio).days + 1,
         fecha_generacion=hoy,
         hora_generacion=timezone.localtime().time(),
-        fecha_pago=hoy,
+        fecha_pago=fin,
         notas="Nómina de prueba (habilitación).",
         # Las condiciones se copian del empleado, como haría el serializer.
         codigo_trabajador=empleado.codigo_trabajador,

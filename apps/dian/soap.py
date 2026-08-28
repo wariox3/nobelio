@@ -122,6 +122,31 @@ def empaquetar_base64(nombre_xml: str, contenido_xml: bytes) -> str:
 
 
 # ===========================================================================
+# Captura de tráfico (diagnóstico)
+# ===========================================================================
+# **TEMPORAL.** Con un directorio aquí, cada invocación deja en disco el sobre
+# SOAP que se transmite y la respuesta cruda. Existe para poder verificar la
+# firma sobre los bytes que la DIAN recibe de verdad, y no sobre los que
+# creemos que le mandamos: es el único tramo del camino que no se puede
+# comprobar desde el modelo. Vacío = no captura nada, que es el estado normal.
+DIRECTORIO_CAPTURA = ""
+
+
+def _capturar(operacion: str, sobre: bytes, respuesta: bytes) -> None:
+    """Deja en disco el sobre enviado y la respuesta, si hay captura activa."""
+    if not DIRECTORIO_CAPTURA:
+        return
+    import pathlib
+    from datetime import datetime
+
+    carpeta = pathlib.Path(DIRECTORIO_CAPTURA)
+    carpeta.mkdir(parents=True, exist_ok=True)
+    sello = datetime.now().strftime("%H%M%S%f")
+    (carpeta / f"{sello}-{operacion}-enviado.xml").write_bytes(sobre)
+    (carpeta / f"{sello}-{operacion}-respuesta.xml").write_bytes(respuesta)
+
+
+# ===========================================================================
 # Respuesta DIAN
 # ===========================================================================
 @dataclass
@@ -493,6 +518,7 @@ class ClienteDian:
         sobre = self.construir_sobre(operacion, parametros)
         accion = f"{ACCION_BASE}/{operacion}"
         respuesta = self._post(sobre, accion)
+        _capturar(operacion, sobre, respuesta)
         return RespuestaDian.desde_xml(respuesta)
 
     def _post(self, sobre: bytes, accion: str) -> bytes:

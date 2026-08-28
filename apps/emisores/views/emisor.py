@@ -249,7 +249,13 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         """Crea una nómina de prueba en borrador para el emisor.
 
         ``POST /api/emisores/emisor/crear-nomina-prueba/`` con
-        ``{"emisor": <id>}``, y opcionalmente ``prefijo`` y ``consecutivo``.
+        ``{"emisor": <id>}``, y opcionalmente ``prefijo``, ``consecutivo`` y el
+        periodo de liquidación (``periodo_inicio`` y ``periodo_fin``, en
+        formato ``AAAA-MM-DD``).
+
+        El periodo hace falta para llenar el Set de Pruebas: la DIAN rechaza con
+        la regla 90 una segunda nómina del mismo trabajador para el mismo
+        periodo. Sin fechas sale el mes en curso.
 
         Solo la crea: no la firma ni la envía. Para eso están las acciones
         ``emitir`` y ``enviar`` de ``/api/nomina/nomina/{id}/``.
@@ -266,17 +272,37 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         else:
             consecutivo = None
 
-        nomina = crear_nomina_prueba(
-            emisor,
-            prefijo=request.data.get("prefijo") or None,
-            consecutivo=consecutivo,
-        )
+        def fecha(campo):
+            valor = request.data.get(campo)
+            if valor in (None, ""):
+                return None
+            try:
+                return date.fromisoformat(valor)
+            except (TypeError, ValueError):
+                raise ErrorSolicitud(
+                    f"'{campo}' debe ser una fecha con formato AAAA-MM-DD."
+                )
+
+        try:
+            nomina = crear_nomina_prueba(
+                emisor,
+                prefijo=request.data.get("prefijo") or None,
+                consecutivo=consecutivo,
+                periodo_inicio=fecha("periodo_inicio"),
+                periodo_fin=fecha("periodo_fin"),
+            )
+        except ValueError as exc:
+            raise ErrorSolicitud(str(exc))
         return Response(
             {
                 "id": str(nomina.id),
                 "numero": nomina.numero,
                 "estado": nomina.estado.nombre,
                 "empleado": nomina.empleado_id,
+                "periodo": [
+                    str(nomina.fecha_liquidacion_inicio),
+                    str(nomina.fecha_liquidacion_fin),
+                ],
                 "total_comprobante": str(nomina.total_comprobante),
             },
             status=status.HTTP_201_CREATED,
