@@ -12,10 +12,12 @@ class SoftwareDianSerializer(serializers.ModelSerializer):
             "id", "emisor", "tipo", "identificador", "pin",
             "test_set_id", "set_pruebas_aceptado", "activo",
         ]
-        extra_kwargs = {
-            # El PIN es sensible: se acepta al crear/editar pero nunca se devuelve.
-            "pin": {"write_only": True},
-        }
+        # El PIN se devuelve en el listado y en el detalle a petición de MarioA
+        # (2026-08-28). Antes era `write_only`: se aceptaba al crear y no salía
+        # nunca. Es un dato sensible —entra en el SoftwareSecurityCode y en el
+        # CUDE/CUNE—, así que lo que lo contiene es el alcance: `AlcanceEmisorMixin`
+        # limita el queryset a los emisores que alcanza quien pregunta, de modo
+        # que una cuenta no ve los softwares de otra.
 
     def validate(self, attrs):
         """El emisor tiene que traer ya su certificado digital.
