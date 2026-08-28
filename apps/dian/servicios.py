@@ -207,8 +207,13 @@ def construir_firmador(documento, *, llave=None, certificado=None, cadena=None):
     )
 
 
-def construir_firmador_emisor(emisor, *, llave=None, certificado=None, cadena=None):
-    """Igual que ``construir_firmador`` pero partiendo del emisor."""
+def construir_firmador_emisor(emisor, *, llave=None, certificado=None, cadena=None,
+                              policy_name=None):
+    """Igual que ``construir_firmador`` pero partiendo del emisor.
+
+    ``policy_name`` es el ``xades:Description`` de la política de firma, que el
+    anexo fija distinto para cada operación; sin él sale el de facturación.
+    """
     if llave is None or certificado is None:
         cert_modelo = _certificado_activo_emisor(emisor)
         with cert_modelo.archivo.open("rb") as fh:
@@ -217,7 +222,7 @@ def construir_firmador_emisor(emisor, *, llave=None, certificado=None, cadena=No
         llave, certificado, cadena=cadena,
         policy_id=settings.DIAN_POLICY_ID,
         policy_hash=settings.DIAN_POLICY_HASH,
-        policy_name=settings.DIAN_POLICY_NAME,
+        policy_name=policy_name or settings.DIAN_POLICY_NAME,
     )
 
 
@@ -694,7 +699,11 @@ def generar_y_firmar_nomina(nomina, *, firmador=None, ambiente=None,
     nomina.cune = constructor.cune
 
     if firmador is None:
-        firmador = construir_firmador_emisor(nomina.emisor, **cred)
+        # El Description de la política es el de nómina, que el anexo fija
+        # aparte del de factura (numeral 7.10).
+        firmador = construir_firmador_emisor(
+            nomina.emisor, policy_name=settings.DIAN_POLICY_NAME_NOMINA, **cred
+        )
         firmador.variantes = variantes
     xml_firmado = firmador.firmar(xml)
 
