@@ -23,6 +23,7 @@ from apps.documentos.models import (
     DocumentoEstado,
     DocumentoTipo,
 )
+from apps.emisores.models import SoftwareDian
 from apps.emisores.servicios import (
     MENSAJE_EMISOR_INACTIVO,
     certificado_activo,
@@ -150,10 +151,21 @@ def _guardar_respuesta(documento, respuesta):
 _CAMPOS_RESPUESTA = ["respuesta_archivo"]
 
 
-def _software_activo_emisor(emisor):
-    software = emisor.softwares.filter(activo=True).first()
+def _software_activo_emisor(emisor, tipo=SoftwareDian.Tipo.FACTURACION):
+    """El software DIAN activo del emisor para esa operación.
+
+    Facturación y nómina se habilitan por separado, cada una con su SoftwareID
+    y su PIN, y los dos entran en el identificador (CUFE/CUDE de la factura,
+    CUNE de la nómina). Firmar con el software de la otra operación daría un
+    identificador que la DIAN no puede reproducir, así que se exige el del tipo
+    que corresponde en vez de caer al que haya.
+    """
+    software = emisor.softwares.filter(activo=True, tipo=tipo).first()
     if software is None:
-        raise ErrorEmision("El emisor no tiene un software DIAN activo.")
+        etiqueta = SoftwareDian.Tipo(tipo).label.lower()
+        raise ErrorEmision(
+            f"El emisor no tiene un software DIAN de {etiqueta} activo."
+        )
     return software
 
 
@@ -170,7 +182,9 @@ def _certificado_activo_emisor(emisor):
 
 
 def _software_activo(documento):
-    return _software_activo_emisor(documento.emisor)
+    """Todo lo que es ``Documento`` —factura, notas, documento soporte— sale
+    con el software de facturación; la nómina es la única que va aparte."""
+    return _software_activo_emisor(documento.emisor, SoftwareDian.Tipo.FACTURACION)
 
 
 def _certificado_activo(documento):
@@ -543,7 +557,7 @@ PREFIJO_ARCHIVO_ZIP_NOMINA = "z"
 
 
 def _software_activo_nomina(nomina):
-    return _software_activo_emisor(nomina.emisor)
+    return _software_activo_emisor(nomina.emisor, SoftwareDian.Tipo.NOMINA)
 
 
 def _nombres_archivo_nomina(nomina):

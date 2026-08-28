@@ -18,7 +18,23 @@ class SoftwareDian(ModeloConFechas):
     ``SoftwareSecurityCode``.
     """
 
+    class Tipo(models.TextChoices):
+        """Qué operación habilita el software.
+
+        La DIAN habilita facturación y nómina electrónica por separado, cada
+        una con su propio SoftwareID y su PIN, así que un emisor puede tener
+        registrados dos softwares a la vez y hay que saber cuál usar en cada
+        documento.
+        """
+
+        FACTURACION = "facturacion", "Facturación electrónica"
+        NOMINA = "nomina", "Nómina electrónica"
+
     # --- Atributos ---
+    tipo = models.CharField(
+        "tipo de software", max_length=20, choices=Tipo.choices,
+        help_text="Operación que habilita: facturación o nómina electrónica.",
+    )
     identificador = models.CharField(
         "ID del software", max_length=100,
         help_text="SoftwareID asignado por la DIAN.",

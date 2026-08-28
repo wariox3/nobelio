@@ -165,7 +165,13 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
 
         with transaction.atomic():
             if not existente:
-                models.SoftwareDian.objects.filter(emisor=emisor, activo=True).update(activo=False)
+                # Solo se desactivan los del mismo tipo: el emisor puede tener
+                # a la vez el software de facturación y el de nómina activos, y
+                # registrar uno no debe dejar sin software a la otra operación.
+                models.SoftwareDian.objects.filter(
+                    emisor=emisor, activo=True,
+                    tipo=software.validated_data["tipo"],
+                ).update(activo=False)
                 software.save(activo=True)
 
             models.Resolucion.objects.update_or_create(
