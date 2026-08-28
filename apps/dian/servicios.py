@@ -539,6 +539,17 @@ _ESTADOS_ACTUALIZABLES = {
 }
 
 
+def estado_actualizable(documento_o_nomina) -> bool:
+    """¿Tiene sentido refrescar su estado contra la DIAN?
+
+    Sirve a quien consulta para decidir si además de leer puede aplicar: un
+    ``aceptado`` es terminal y uno sin enviar no tiene nada que consultar, así
+    que en esos dos casos la consulta se queda en lectura.
+    """
+    nombre = documento_o_nomina.estado.nombre if documento_o_nomina.estado_id else ""
+    return nombre in _ESTADOS_ACTUALIZABLES
+
+
 def actualizar_estado(documento, *, cliente=None, ambiente=None, **cred):
     """Consulta la DIAN y aplica el resultado al documento.
 

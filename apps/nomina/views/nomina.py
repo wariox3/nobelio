@@ -124,43 +124,33 @@ class NominaViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
             "errores": respuesta.errores,
         })
 
-    @action(detail=True, methods=["get"])
+    @action(detail=True, methods=["get", "post"])
     def consultar(self, request, pk=None):
-        """Consulta el estado en la DIAN. Solo lectura: no toca la nómina.
+        """Consulta el estado en la DIAN y lo aplica a la nómina.
 
         Pregunta por el ZipKey si la nómina salió al Set de Pruebas y por el
         CUNE si salió por la operación síncrona: son dos consultas distintas y
         la entrega asíncrona no se puede consultar por CUNE.
+
+        Y **aplica** lo que responda: guarda la respuesta cruda, deja los
+        rechazos en ``NominaError`` y mueve el estado. Hace falta porque el
+        envío al Set de Pruebas no trae veredicto —es asíncrono y solo devuelve
+        el ZipKey—, así que sin esto una nómina rechazada se queda en
+        ``enviado`` y sin errores, y encima bloqueada para volver a emitirse.
+
+        Desde ``aceptado`` o sin enviar se limita a leer: el primero es terminal
+        y el segundo no tiene nada que consultar.
+
+        Acepta GET y POST. El GET escribe, que no es lo ortodoxo, pero es lo que
+        ya llamaba el ERP y tener dos acciones para esto resultó ser una fuente
+        de confusión más que una ayuda.
         """
         nomina = self.get_object()
         try:
-            respuesta = servicios.consultar_segun_envio_nomina(nomina)
-        except servicios.ErrorEmision as exc:
-            raise ErrorSolicitud(str(exc))
-        except requests.RequestException as exc:
-            raise error_pasarela_dian(exc)
-        return Response({
-            "es_valido": respuesta.es_valido,
-            "codigo_estado": respuesta.codigo_estado,
-            "descripcion": respuesta.descripcion_estado,
-            "errores": respuesta.errores,
-        })
-
-    @action(detail=True, methods=["post"], url_path="actualizar-estado")
-    def actualizar_estado(self, request, pk=None):
-        """Consulta la DIAN y actualiza el estado de la nómina.
-
-        A diferencia de ``consultar``, esta sí escribe: guarda la respuesta, deja
-        registrados los rechazos en ``NominaError`` y mueve el estado. Hace falta
-        porque el envío al Set de Pruebas es asíncrono y no trae veredicto, así
-        que sin llamar aquí la nómina se queda en ``enviado`` y sin errores
-        aunque la DIAN ya la haya rechazado.
-
-        Solo aplica a nóminas enviadas o rechazadas.
-        """
-        nomina = self.get_object()
-        try:
-            respuesta = servicios.actualizar_estado_nomina(nomina)
+            if servicios.estado_actualizable(nomina):
+                respuesta = servicios.actualizar_estado_nomina(nomina)
+            else:
+                respuesta = servicios.consultar_segun_envio_nomina(nomina)
         except servicios.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
         except requests.RequestException as exc:
