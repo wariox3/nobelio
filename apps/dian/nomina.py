@@ -133,7 +133,10 @@ class ConstructorNominaXML:
     version = VERSION_NOMINA
     tipo_xml = TIPO_XML_NOMINA
 
-    def __init__(self, nomina, *, software, ambiente: int, pin: str = ""):
+    def __init__(self, nomina, *, software, ambiente: int, pin: str = "",
+                 variantes: frozenset = frozenset()):
+        # TEMPORAL: ver apps/dian/variantes_firma.py.
+        self.variantes = variantes
         self.doc = nomina
         self.software = software
         self.ambiente = ambiente
@@ -202,7 +205,7 @@ class ConstructorNominaXML:
         self._proveedor(raiz)
         _sub(raiz, "CodigoQR", self._url_qr(cune))
         self._informacion_general(raiz, cune)
-        if self.doc.notas:
+        if self.doc.notas and "contenido" not in self.variantes:
             _sub(raiz, "Notas", self.doc.notas)
         self._empleador(raiz)
         self._trabajador(raiz)
@@ -219,6 +222,11 @@ class ConstructorNominaXML:
     def _novedad(self, raiz):
         """Cambio contractual: apunta al CUNE donde estaba el dato anterior."""
         if not self.doc.novedad:
+            if "contenido" not in self.variantes:
+                return
+            # El documento aceptado la emite siempre, en false y con el atributo
+            # vacío; el XSD la declara opcional y nosotros la omitimos.
+            _sub(raiz, "Novedad", _booleano(False), CUNENov="")
             return
         _sub(raiz, "Novedad", _booleano(True), CUNENov=self.doc.cune_novedad or None)
 

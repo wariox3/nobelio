@@ -78,6 +78,7 @@ class FirmadorXAdES:
         policy_name: str = "",
         signing_time: datetime | None = None,
         rol: str = "supplier",
+        variantes: frozenset = frozenset(),
     ):
         self.llave = llave_privada
         self.cert = certificado
@@ -87,6 +88,8 @@ class FirmadorXAdES:
         self.policy_name = policy_name
         self.signing_time = signing_time or datetime.now(TZ_COLOMBIA)
         self.rol = rol
+        # TEMPORAL: ver apps/dian/variantes_firma.py.
+        self.variantes = variantes
 
         sid = uuid.uuid4()
         self.id_firma = f"xmldsig-{sid}"
@@ -104,6 +107,33 @@ class FirmadorXAdES:
         contenido = self._segunda_extension(raiz)
         firma = self._construir_firma(raiz, contenido)
 
+        if "ns-propios" in self.variantes:
+            # lxml suprime una declaración de namespace que el ancestro ya trae,
+            # así que se inserta sobre los bytes. Es seguro hacerlo después de
+            # firmar: la C14N inclusiva no emite declaraciones redundantes, de
+            # modo que ningún digest cambia (se comprueba con el verificador).
+            cuerpo = etree.tostring(raiz, encoding="UTF-8")
+            cuerpo = cuerpo.replace(
+                b"<ds:Signature ",
+                b'<ds:Signature xmlns:ds="%s" ' % NS["ds"].encode(), 1,
+            )
+            cuerpo = cuerpo.replace(
+                b"<xades:QualifyingProperties ",
+                b'<xades:QualifyingProperties xmlns:xades="%s" xmlns:xades141="%s" '
+                % (NS["xades"].encode(), NS["xades141"].encode()), 1,
+            )
+            comillas = b'"' if "decl-comillas" in self.variantes else b"'"
+            declaracion = (
+                b"<?xml version=%(c)s1.0%(c)s encoding=%(c)sUTF-8%(c)s "
+                b"standalone=%(c)sno%(c)s?>\n" % {b"c": comillas}
+            )
+            return declaracion + cuerpo
+        if "decl-comillas" in self.variantes:
+            # La declaración va fuera de la canonicalización, así que ponerla a
+            # mano después de firmar no toca ningún digest.
+            cuerpo = etree.tostring(raiz, encoding="UTF-8")
+            declaracion = b'<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n'
+            return declaracion + cuerpo
         return etree.tostring(
             raiz, xml_declaration=True, encoding="UTF-8", standalone=False
         )
@@ -157,15 +187,27 @@ class FirmadorXAdES:
         _sub(ref0, "ds", "DigestValue")
 
         # Reference 1: KeyInfo.
-        ref1 = _sub(si, "ds", "Reference", URI=f"#{self.id_keyinfo}")
+        if "ref1-id" in self.variantes:
+            ref1 = _sub(
+                si, "ds", "Reference",
+                Id=f"{self.id_firma}-ref1", URI=f"#{self.id_keyinfo}",
+            )
+        else:
+            ref1 = _sub(si, "ds", "Reference", URI=f"#{self.id_keyinfo}")
         _sub(ref1, "ds", "DigestMethod", Algorithm=ALG_DIGEST_SHA256)
         _sub(ref1, "ds", "DigestValue")
 
         # Reference 2: SignedProperties.
-        ref2 = _sub(
-            si, "ds", "Reference",
-            URI=f"#{self.id_signed_props}", Type=TIPO_SIGNED_PROPERTIES,
-        )
+        if "ref2-orden" in self.variantes:
+            ref2 = _sub(
+                si, "ds", "Reference",
+                Type=TIPO_SIGNED_PROPERTIES, URI=f"#{self.id_signed_props}",
+            )
+        else:
+            ref2 = _sub(
+                si, "ds", "Reference",
+                URI=f"#{self.id_signed_props}", Type=TIPO_SIGNED_PROPERTIES,
+            )
         _sub(ref2, "ds", "DigestMethod", Algorithm=ALG_DIGEST_SHA256)
         _sub(ref2, "ds", "DigestValue")
         return si

@@ -628,7 +628,8 @@ def _guardar_respuesta_nomina(nomina, respuesta):
     NominaError.objects.bulk_create(filas)
 
 
-def generar_y_firmar_nomina(nomina, *, firmador=None, ambiente=None, **cred):
+def generar_y_firmar_nomina(nomina, *, firmador=None, ambiente=None,
+                            variante=None, **cred):
     """Genera el XML de la nómina, calcula el CUNE y la firma.
 
     ``FechaGen``/``HoraGen`` se fijan aquí, en el momento de firmar. No son la
@@ -645,6 +646,10 @@ def generar_y_firmar_nomina(nomina, *, firmador=None, ambiente=None, **cred):
     """
     from apps.nomina import models as nom
     from apps.dian import nomina as xml_nomina
+    from apps.dian import variantes_firma
+
+    # TEMPORAL: variantes de firma para acorralar el ZE02. Ver el módulo.
+    variantes = variantes_firma.normalizar(variante)
 
     # El de la nómina, que lo heredó del ``ambiente_nomina`` de su emisor —la
     # DIAN habilita la nómina aparte de la facturación—. Antes se resolvía con
@@ -672,13 +677,14 @@ def generar_y_firmar_nomina(nomina, *, firmador=None, ambiente=None, **cred):
     software = _software_activo_nomina(nomina)
     nomina.cune = ""
     constructor = xml_nomina.constructor_nomina_para(
-        nomina, software=software, ambiente=ambiente,
+        nomina, software=software, ambiente=ambiente, variantes=variantes,
     )
     xml = constructor.generar_xml()
     nomina.cune = constructor.cune
 
     if firmador is None:
         firmador = construir_firmador_emisor(nomina.emisor, **cred)
+        firmador.variantes = variantes
     xml_firmado = firmador.firmar(xml)
 
     nomina.xml_archivo.save(
@@ -816,3 +822,39 @@ def consultar_segun_envio_nomina(nomina, *, cliente=None, ambiente=None, **cred)
         else consultar_estado_nomina
     )
     return consulta(nomina, cliente=cliente, ambiente=ambiente, **cred)
+
+
+def actualizar_estado_nomina(nomina, *, cliente=None, ambiente=None, **cred):
+    """Consulta la DIAN y **aplica** el resultado a la nómina.
+
+    El gemelo de ``actualizar_estado`` para documentos, y hace falta por lo
+    mismo: el envío al Set de Pruebas es asíncrono y solo devuelve un ZipKey, de
+    modo que en ese momento no hay veredicto que guardar. El rechazo aparece
+    después, al consultar, y las funciones de consulta son de solo lectura a
+    propósito. Sin esto, una nómina rechazada se queda en ``enviado`` y con cero
+    errores para siempre, aunque la DIAN ya la haya rechazado.
+
+    Solo desde ``enviado`` o ``rechazado``: un ``aceptado`` es terminal y una
+    que no se ha enviado no tiene nada que consultar.
+    """
+    codigo_actual = nomina.estado.nombre if nomina.estado_id else ""
+    if codigo_actual not in _ESTADOS_ACTUALIZABLES:
+        raise ErrorEmision(
+            "Solo se puede actualizar el estado de nóminas enviadas o "
+            "rechazadas (no aceptadas ni en borrador)."
+        )
+
+    respuesta = consultar_segun_envio_nomina(
+        nomina, cliente=cliente, ambiente=ambiente, **cred
+    )
+    _guardar_respuesta_nomina(nomina, respuesta)
+    if respuesta.es_valido or _ya_procesado(respuesta):
+        nomina.estado = _estado(DocumentoEstado.Nombre.ACEPTADO)
+        if not nomina.fecha_validacion:
+            nomina.fecha_validacion = respuesta.fecha_validacion or timezone.now()
+    elif respuesta.errores:
+        nomina.estado = _estado(DocumentoEstado.Nombre.RECHAZADO)
+    nomina.save(update_fields=[
+        "respuesta_archivo", "estado", "fecha_validacion", "actualizado_en",
+    ])
+    return respuesta

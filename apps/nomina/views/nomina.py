@@ -81,13 +81,25 @@ class NominaViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def emitir(self, request, pk=None):
-        """Genera el XML, calcula el CUNE y firma la nómina."""
+        """Genera el XML, calcula el CUNE y firma la nómina.
+
+        Admite ``{"variante": "..."}`` mientras dure la investigación del
+        rechazo ZE02: firma alineando con el documento que la DIAN aceptó el
+        detalle que indique la variante. Ver ``apps.dian.variantes_firma``.
+        """
         nomina = self.get_object()
+        variante = request.data.get("variante")
         try:
-            servicios.generar_y_firmar_nomina(nomina)
+            servicios.generar_y_firmar_nomina(nomina, variante=variante)
+        except ValueError as exc:
+            raise ErrorSolicitud(str(exc))
         except servicios.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
-        return Response({"estado": nomina.estado.nombre, "cune": nomina.cune})
+        return Response({
+            "estado": nomina.estado.nombre,
+            "cune": nomina.cune,
+            "variante": variante or "(ninguna)",
+        })
 
     @action(detail=True, methods=["post"])
     def enviar(self, request, pk=None):
@@ -128,6 +140,33 @@ class NominaViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         except requests.RequestException as exc:
             raise error_pasarela_dian(exc)
         return Response({
+            "es_valido": respuesta.es_valido,
+            "codigo_estado": respuesta.codigo_estado,
+            "descripcion": respuesta.descripcion_estado,
+            "errores": respuesta.errores,
+        })
+
+    @action(detail=True, methods=["post"], url_path="actualizar-estado")
+    def actualizar_estado(self, request, pk=None):
+        """Consulta la DIAN y actualiza el estado de la nómina.
+
+        A diferencia de ``consultar``, esta sí escribe: guarda la respuesta, deja
+        registrados los rechazos en ``NominaError`` y mueve el estado. Hace falta
+        porque el envío al Set de Pruebas es asíncrono y no trae veredicto, así
+        que sin llamar aquí la nómina se queda en ``enviado`` y sin errores
+        aunque la DIAN ya la haya rechazado.
+
+        Solo aplica a nóminas enviadas o rechazadas.
+        """
+        nomina = self.get_object()
+        try:
+            respuesta = servicios.actualizar_estado_nomina(nomina)
+        except servicios.ErrorEmision as exc:
+            raise ErrorSolicitud(str(exc))
+        except requests.RequestException as exc:
+            raise error_pasarela_dian(exc)
+        return Response({
+            "estado": nomina.estado.nombre,
             "es_valido": respuesta.es_valido,
             "codigo_estado": respuesta.codigo_estado,
             "descripcion": respuesta.descripcion_estado,
