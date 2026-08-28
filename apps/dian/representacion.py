@@ -57,9 +57,9 @@ def _moneda(valor, codigo="COP") -> str:
 class GeneradorPDF:
     """Construye la representación gráfica en PDF de un documento."""
 
-    def __init__(self, documento, *, ambiente: int):
+    def __init__(self, documento, *, ambiente: int | None = None):
         self.doc = documento
-        self.ambiente = ambiente
+        self.ambiente = ambiente if ambiente is not None else documento.ambiente
         self.estilos = getSampleStyleSheet()
         self.estilos.add(ParagraphStyle("Mini", fontSize=7, leading=9))
         self.estilos.add(ParagraphStyle("MiniBold", fontSize=7, leading=9, fontName="Helvetica-Bold"))
@@ -213,6 +213,12 @@ class GeneradorPDF:
         return [tabla]
 
 
-def generar_pdf(documento, *, ambiente: int) -> bytes:
-    """Genera el PDF de la representación gráfica de un documento."""
+def generar_pdf(documento, *, ambiente: int | None = None) -> bytes:
+    """Genera el PDF de la representación gráfica de un documento.
+
+    El ambiente sale del propio documento —el que se le selló al firmarlo— y no
+    del ajuste del servidor: de él depende el subdominio del QR, así que un
+    documento emitido en habilitación al que se le pida el PDF después de haber
+    pasado a producción llevaría un enlace al catálogo que no le corresponde.
+    """
     return GeneradorPDF(documento, ambiente=ambiente).generar()

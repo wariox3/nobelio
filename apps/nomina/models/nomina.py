@@ -2,12 +2,17 @@
 from django.conf import settings
 from django.db import models
 
-from apps.nucleo.models import ModeloConFechas, ModeloUUID
+from apps.nucleo.models import Ambiente as AmbienteDian, ModeloConFechas, ModeloUUID
 from apps.utilidades.almacenamiento import almacenamiento_backblaze
 
 
 def ambiente_por_defecto():
-    """El ambiente DIAN configurado en el servidor al crear la nómina."""
+    """El ambiente DIAN configurado en el servidor.
+
+    Ya no es el default del campo: la nómina hereda el ambiente de su emisor
+    (ver ``save``), que lo tiene aparte del de facturación. Se conserva porque
+    las migraciones ya hechas la referencian por su ruta de import.
+    """
     return settings.DIAN_ENVIRONMENT
 
 
@@ -36,9 +41,9 @@ class Nomina(ModeloUUID, ModeloConFechas):
     emitido. Ver ``docs/anexo-nomina.md`` §3.
     """
 
-    class Ambiente(models.IntegerChoices):
-        PRODUCCION = 1, "Producción"
-        PRUEBAS = 2, "Habilitación"
+    # La misma lista que usa el documento electrónico (``apps.nucleo``): los
+    # dos valores los define la DIAN y son los mismos para las dos operaciones.
+    Ambiente = AmbienteDian
 
     class TipoXML(models.TextChoices):
         NOMINA = "102", "Documento soporte de pago de nómina electrónica"
@@ -120,7 +125,11 @@ class Nomina(ModeloUUID, ModeloConFechas):
 
     # --- Identificadores DIAN ---
     ambiente = models.PositiveSmallIntegerField(
-        "ambiente DIAN", choices=Ambiente.choices, default=ambiente_por_defecto,
+        "ambiente DIAN", choices=Ambiente.choices,
+        help_text="Se hereda del ``ambiente_nomina`` del emisor al crear y se "
+        "sella al firmar: la DIAN habilita la nómina aparte de la facturación, "
+        "así que un emisor puede estar en producción para una y en "
+        "habilitación para la otra.",
     )
     tipo_xml = models.CharField(
         "tipo de XML", max_length=3, choices=TipoXML.choices,
@@ -260,6 +269,12 @@ class Nomina(ModeloUUID, ModeloConFechas):
     def save(self, *args, **kwargs):
         if not self.numero:
             self.numero = f"{self.prefijo}{self.consecutivo}"
+        # Del emisor y de su ambiente **de nómina**, que la DIAN habilita
+        # aparte del de facturación. Se resuelve al crear y la nómina se lo
+        # queda: entra en el CUNE y decide el servidor de envío, así que
+        # cambiarlo después descuadraría uno con el otro.
+        if self.ambiente is None:
+            self.ambiente = self.emisor.ambiente_nomina
         if not self.estado_id:
             from apps.documentos.models import DocumentoEstado
             self.estado = DocumentoEstado.objects.get(

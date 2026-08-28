@@ -1,6 +1,5 @@
 """API de documentos electrónicos y acciones del ciclo de vida DIAN."""
 import requests
-from django.conf import settings
 from django.db.models import Count
 from django.http import FileResponse, HttpResponse
 from rest_framework import filters, status, viewsets
@@ -309,7 +308,7 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         documento = self.get_object()
         if not documento.cufe_cude:
             raise ErrorSolicitud("El documento debe emitirse antes de generar el PDF.")
-        contenido = representacion.generar_pdf(documento, ambiente=settings.DIAN_ENVIRONMENT)
+        contenido = representacion.generar_pdf(documento)
         respuesta = HttpResponse(contenido, content_type="application/pdf")
         respuesta["Content-Disposition"] = f'inline; filename="{documento.numero}.pdf"'
         return respuesta

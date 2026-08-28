@@ -6,7 +6,7 @@ certificado digital de firma y las resoluciones de numeración (rangos y clave
 técnica).
 """
 from .certificado import Certificado
-from .emisor import Emisor
+from .emisor import Emisor, ambiente_por_defecto
 from .resolucion import (
     Resolucion,
     mensaje_resolucion_ocupada,
@@ -16,6 +16,7 @@ from .software import SoftwareDian
 
 __all__ = [
     "Emisor",
+    "ambiente_por_defecto",
     "SoftwareDian",
     "Certificado",
     "Resolucion",

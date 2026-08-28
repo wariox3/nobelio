@@ -2,16 +2,17 @@
 from django.conf import settings
 from django.db import models
 
-from apps.nucleo.models import ModeloConFechas, ModeloUUID
+from apps.nucleo.models import Ambiente as AmbienteDian, ModeloConFechas, ModeloUUID
 from apps.utilidades.almacenamiento import almacenamiento_backblaze
 
 
 def ambiente_por_defecto():
-    """El ambiente DIAN configurado en el servidor al crear el documento.
+    """El ambiente DIAN configurado en el servidor.
 
-    Callable y no ``settings.DIAN_ENVIRONMENT`` a secas para que la migración
-    guarde la referencia a la función y no el valor que hubiera el día que se
-    generó: pasar a producción es cambiar el ajuste, no migrar la base.
+    Ya no es el default del campo: el documento hereda el ambiente de su emisor
+    (ver ``save``), que es quien sabe si está en habilitación o en producción, y
+    para cada operación por separado. Se conserva porque las migraciones ya
+    hechas la referencian por su ruta de import y borrarla las rompería.
     """
     return settings.DIAN_ENVIRONMENT
 
@@ -57,9 +58,10 @@ class Documento(ModeloUUID, ModeloConFechas):
     ``documento_referencia``.
     """
 
-    class Ambiente(models.IntegerChoices):
-        PRODUCCION = 1, "Producción"
-        PRUEBAS = 2, "Habilitación (Set de Pruebas)"
+    # La misma lista que usa la nómina: los dos valores los define la DIAN.
+    # Se expone aquí para que ``Documento.Ambiente`` siga siendo el nombre por
+    # el que se le llama desde fuera.
+    Ambiente = AmbienteDian
 
     class Envio(models.TextChoices):
         SET_PRUEBAS = "test_set", "Set de Pruebas (SendTestSetAsync)"
@@ -104,9 +106,10 @@ class Documento(ModeloUUID, ModeloConFechas):
 
     # Identificadores DIAN
     ambiente = models.PositiveSmallIntegerField(
-        "ambiente DIAN", choices=Ambiente.choices, default=ambiente_por_defecto,
+        "ambiente DIAN", choices=Ambiente.choices,
         help_text="ProfileExecutionID del XML: 1 producción, 2 habilitación. "
-        "Se fija al crear el documento y no cambia después.",
+        "Se hereda del emisor al crear y se sella al firmar; no lo decide el "
+        "ajuste del servidor.",
     )
     cufe_cude = models.CharField(
         "CUFE/CUDE", max_length=96, blank=True,
@@ -275,6 +278,14 @@ class Documento(ModeloUUID, ModeloConFechas):
         # explícitamente (p. ej. para reproducir un número específico).
         if not self.numero:
             self.numero = f"{self.prefijo}{self.consecutivo}"
+        # El ambiente lo pone el emisor, no el ajuste global: puede haber unos
+        # en habilitación y otros en producción a la vez. Se resuelve al crear
+        # y el documento se lo queda, porque es lo que entra en el CUFE y lo
+        # que decide a qué servidor se envía; si cambiara después, el
+        # identificador y el destino dejarían de corresponderse. Un valor
+        # explícito manda (lo usa la factura de prueba).
+        if self.ambiente is None:
+            self.ambiente = self.emisor.ambiente_facturacion
         # Estado inicial por defecto: borrador.
         if not self.estado_id:
             from .documento_estado import DocumentoEstado

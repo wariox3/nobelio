@@ -223,7 +223,11 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
     declara como emisión y lo que la firma sella como ``SigningTime`` son el
     mismo acto.
     """
-    ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
+    # El ambiente es el del documento, que lo heredó de su emisor al crearse.
+    # Se puede forzar por parámetro (lo usan las pruebas), y en ese caso queda
+    # sellado abajo: lo que entra en el CUFE tiene que ser lo mismo que después
+    # decide a qué servidor se envía.
+    ambiente = ambiente if ambiente is not None else documento.ambiente
 
     bloqueados = {
         DocumentoEstado.Nombre.FIRMADO: "El documento ya está firmado.",
@@ -301,9 +305,11 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
     documento.xml_archivo.save(
         f"{documento.numero}.xml", ContentFile(xml_firmado), save=False
     )
+    documento.ambiente = ambiente
     documento.estado = _estado(DocumentoEstado.Nombre.FIRMADO)
     documento.save(update_fields=[
-        "cufe_cude", "hora_emision", "xml_archivo", "estado", "actualizado_en",
+        "cufe_cude", "hora_emision", "xml_archivo", "ambiente", "estado",
+        "actualizado_en",
     ])
     return xml_firmado
 
@@ -320,7 +326,7 @@ def generar_attached_document(documento, *, firmador=None, ambiente=None,
     notificar al adquiriente —donde entregar un documento sin validar sería
     engañoso— y no al descargarlo, donde el emisor puede querer verlo antes.
     """
-    ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
+    ambiente = ambiente if ambiente is not None else documento.ambiente
     if not documento.xml_archivo:
         raise ErrorEmision("El documento no está firmado; no hay nada que adjuntar.")
     if not documento.cufe_cude:
@@ -374,7 +380,11 @@ def consultar_rangos_numeracion(emisor, *, cliente=None, ambiente=None,
     va el del emisor en los dos. Devuelve un ``soap.RespuestaRangos`` con el
     código/descripción de la DIAN y los rangos (cada uno con su clave técnica).
     """
-    ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
+    # Aquí no hay documento del que heredar: la consulta es del emisor y de sus
+    # resoluciones, así que manda su ambiente de facturación.
+    ambiente = (
+        ambiente if ambiente is not None else emisor.ambiente_facturacion
+    )
     software = software or _software_activo_emisor(emisor)
     if cliente is None:
         cliente = construir_cliente_emisor(emisor, ambiente, **cred)
@@ -397,7 +407,9 @@ def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):
     banderas de habilitación y el documento sale por SendBillSync en el mismo
     envío (ver ``_set_pruebas_cerrado``).
     """
-    ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
+    # El mismo que se selló al firmar: enviar a un servidor distinto del que
+    # declara el XML es un rechazo seguro.
+    ambiente = ambiente if ambiente is not None else documento.ambiente
     if documento.estado_id and documento.estado.nombre == DocumentoEstado.Nombre.ACEPTADO:
         raise ErrorEmision("El documento ya fue aceptado por la DIAN.")
     if not documento.xml_archivo:
@@ -452,7 +464,7 @@ def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):
 
 def _cliente_para(documento, cliente, ambiente, **cred):
     """El cliente SOAP de las consultas, ya resuelto el ambiente."""
-    ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
+    ambiente = ambiente if ambiente is not None else documento.ambiente
     if cliente is None:
         cliente = construir_cliente(documento, ambiente, **cred)
     return cliente
@@ -501,7 +513,7 @@ def consultar_segun_envio(documento, *, cliente=None, ambiente=None, **cred):
     conserva la heurística de siempre —un track_id distinto del CUFE en
     ambiente 2 es un ZipKey—, que es lo mejor que se puede deducir.
     """
-    ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
+    ambiente = ambiente if ambiente is not None else documento.ambiente
     if documento.envio:
         es_zip = documento.envio == Documento.Envio.SET_PRUEBAS
     else:
@@ -622,7 +634,12 @@ def generar_y_firmar_nomina(nomina, *, firmador=None, ambiente=None, **cred):
     from apps.nomina import models as nom
     from apps.dian import nomina as xml_nomina
 
-    ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
+    # El de la nómina, que lo heredó del ``ambiente_nomina`` de su emisor —la
+    # DIAN habilita la nómina aparte de la facturación—. Antes se resolvía con
+    # el ajuste global y se escribía encima del campo, así que una nómina
+    # creada como de prueba se firmaba como producción en cuanto el despliegue
+    # pasaba a producción.
+    ambiente = ambiente if ambiente is not None else nomina.ambiente
 
     bloqueados = {
         DocumentoEstado.Nombre.FIRMADO: "La nómina ya está firmada.",
@@ -666,7 +683,9 @@ def enviar_nomina_a_dian(nomina, *, cliente=None, ambiente=None, **cred):
     """
     from apps.nomina.models import Nomina
 
-    ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
+    # El mismo con el que se firmó: es el que declara el XML y el que entró en
+    # el CUNE.
+    ambiente = ambiente if ambiente is not None else nomina.ambiente
     if nomina.estado_id and nomina.estado.nombre == DocumentoEstado.Nombre.ACEPTADO:
         raise ErrorEmision("La nómina ya fue aceptada por la DIAN.")
     if not nomina.xml_archivo:
@@ -700,7 +719,7 @@ def enviar_nomina_a_dian(nomina, *, cliente=None, ambiente=None, **cred):
 
 def consultar_estado_nomina(nomina, *, cliente=None, ambiente=None, **cred):
     """GetStatus por el CUNE. Solo lectura: no toca la nómina."""
-    ambiente = ambiente if ambiente is not None else settings.DIAN_ENVIRONMENT
+    ambiente = ambiente if ambiente is not None else nomina.ambiente
     if cliente is None:
         cliente = construir_cliente_emisor(nomina.emisor, ambiente, **cred)
     if not nomina.cune:

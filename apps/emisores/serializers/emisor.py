@@ -8,7 +8,8 @@ from apps.catalogos.models import (
     ResponsabilidadFiscal,
 )
 from apps.cuentas.models import Cuenta
-from apps.emisores.models import Emisor
+from apps.emisores.models import Emisor, ambiente_por_defecto
+from apps.nucleo.models import Ambiente
 from apps.seguridad.alcance import MENSAJE_FUERA_DE_CUENTA, cuenta_de_la_credencial
 
 from .resolucion import ResolucionSerializer
@@ -62,6 +63,15 @@ MENSAJE_DUPLICADO = (
     "El emisor con identificación {numero} ya existe en la cuenta '{cuenta}'."
 )
 
+# La DIAN rechaza con la regla 92 ("El Emisor del Documento no se encuentra
+# Habilitado"), un mensaje que hace buscar el error dentro de la nómina cuando
+# lo que falta es el trámite. Mejor decirlo aquí, que es donde se decide.
+MENSAJE_NOMINA_SIN_HABILITAR = (
+    "El emisor no está habilitado para nómina electrónica, así que no puede "
+    "emitirla en producción. Marque 'habilitado_nomina' cuando la DIAN acepte "
+    "la habilitación en su portal."
+)
+
 
 class EmisorSerializer(serializers.ModelSerializer):
     resoluciones = ResolucionSerializer(many=True, read_only=True)
@@ -86,10 +96,17 @@ class EmisorSerializer(serializers.ModelSerializer):
     # Lo marca el envío del Set de Pruebas, no el cuerpo de la petición:
     # decir 'ya estoy habilitado' no habilita a nadie.
     habilitado_facturacion = serializers.BooleanField(read_only=True)
-    # La de nómina no la marca ningún envío: el trámite es en el portal de la
-    # DIAN. De solo lectura por lo mismo que la anterior —decirlo no habilita—,
-    # así que hoy se marca fuera de esta API.
-    habilitado_nomina = serializers.BooleanField(read_only=True)
+    # La de nómina sí es de escritura, y es la excepción justificada: no la
+    # marca ningún envío porque el trámite se hace en el portal de la DIAN y
+    # nada nos avisa. Alguien tiene que poder constatarlo, y hasta ahora solo
+    # se podía por fuera de esta API. Es además la condición para poner
+    # `ambiente_nomina` en producción (ver `validate`).
+    habilitado_nomina = serializers.BooleanField(required=False)
+    # Los ambientes también son de escritura, y ahí está la diferencia con la
+    # bandera de facturación: 'estoy habilitado' es un hecho que constata la
+    # DIAN, mientras que 'emite contra producción' es una decisión nuestra
+    # sobre este emisor. Es lo que permite pasar a uno a producción sin mover
+    # a los demás.
 
     def validate_cuenta(self, value):
         """Una integración no puede operar fuera de su propia cuenta.
@@ -114,6 +131,17 @@ class EmisorSerializer(serializers.ModelSerializer):
         def valor(campo):
             return attrs.get(campo, getattr(self.instance, campo, None))
 
+        # En un alta que no trae `ambiente_nomina` el valor lo pone el default
+        # del modelo, así que es el que hay que comprobar: con el servidor ya
+        # en producción, un emisor nuevo nacería en producción sin haber hecho
+        # el trámite y sin pasar por ninguna validación.
+        ambiente_nomina = valor("ambiente_nomina")
+        if ambiente_nomina is None:
+            ambiente_nomina = ambiente_por_defecto()
+        self.exigir_habilitacion_de_nomina(
+            ambiente_nomina, valor("habilitado_nomina"),
+        )
+
         cuenta = valor("cuenta")
         tipo = valor("tipo_identificacion")
         numero = valor("numero_identificacion")
@@ -124,6 +152,26 @@ class EmisorSerializer(serializers.ModelSerializer):
 
         self.exigir_no_duplicado(cuenta, tipo, numero)
         return attrs
+
+    def exigir_habilitacion_de_nomina(self, ambiente, habilitado):
+        """Producción de nómina solo después del trámite ante la DIAN.
+
+        Es lo único que ata las dos parejas de campos: el ambiente decide contra
+        qué servidor se emite y la bandera dice si la DIAN ya habilitó a este
+        emisor para nómina. Sin el trámite, todo lo que salga a producción se
+        rechaza, así que dejarlo pasar solo aplaza el fallo hasta la primera
+        nómina y lo disfraza de error del documento.
+
+        No existe la simétrica para facturación a propósito: allí la bandera la
+        marca la propia DIAN al cerrar el Set de Pruebas
+        (``_marcar_habilitacion_superada``) y sigue siendo de solo lectura, así
+        que exigirla aquí dejaría encerrado a cualquier emisor que se habilitara
+        por fuera de ese automatismo.
+        """
+        if ambiente == Ambiente.PRODUCCION and not habilitado:
+            raise serializers.ValidationError(
+                {"ambiente_nomina": MENSAJE_NOMINA_SIN_HABILITAR}
+            )
 
     def exigir_no_duplicado(self, cuenta, tipo, numero):
         """La unicidad del emisor dentro de su cuenta.
@@ -158,6 +206,7 @@ class EmisorSerializer(serializers.ModelSerializer):
             "correo_copia",
             "telefono", "correo", "activo",
             "habilitado_facturacion", "habilitado_nomina",
+            "ambiente_facturacion", "ambiente_nomina",
             "resoluciones",
         ]
         # Vacío a propósito: desactiva el UniqueTogetherValidator automático de

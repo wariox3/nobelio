@@ -1,8 +1,20 @@
 """Modelo del emisor (Obligado a Facturar Electrónicamente — OFE)."""
+from django.conf import settings
 from django.db import models
 
-from apps.nucleo.models import ModeloConFechas
+from apps.nucleo.models import Ambiente, ModeloConFechas
 from apps.utilidades.nit import dv_de_entidad
+
+
+def ambiente_por_defecto():
+    """El ambiente configurado en el servidor al dar de alta al emisor.
+
+    El ajuste global pasa a decidir solo con qué ambiente **nace** un emisor;
+    contra qué servidor se emite lo dice ya el emisor, y el documento se lo
+    queda al crearse. Callable y no el valor a secas para que la migración
+    guarde la referencia a la función.
+    """
+    return settings.DIAN_ENVIRONMENT
 
 
 class Emisor(ModeloConFechas):
@@ -40,6 +52,22 @@ class Emisor(ModeloConFechas):
         "Pruebas: el trámite es en el portal de la DIAN, así que esta bandera "
         "no la marca el sistema por sí solo. Sin ella, la DIAN rechaza con la "
         "regla 92 ('El Emisor del Documento no se encuentra Habilitado').",
+    )
+
+    ambiente_facturacion = models.PositiveSmallIntegerField(
+        "ambiente DIAN de facturación", choices=Ambiente.choices,
+        default=ambiente_por_defecto,
+        help_text="Contra qué servidor de la DIAN salen las facturas, notas y "
+        "documentos soporte de este emisor. Es por emisor y no del despliegue: "
+        "unos pueden seguir en habilitación mientras otros ya están en "
+        "producción.",
+    )
+    ambiente_nomina = models.PositiveSmallIntegerField(
+        "ambiente DIAN de nómina", choices=Ambiente.choices,
+        default=ambiente_por_defecto,
+        help_text="Lo mismo para la nómina, que la DIAN habilita aparte: el "
+        "mismo emisor puede estar en producción para factura y todavía en "
+        "habilitación para nómina.",
     )
 
     # --- Relaciones ---
