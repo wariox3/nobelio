@@ -91,7 +91,12 @@ class NominaViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def enviar(self, request, pk=None):
-        """Envía la nómina firmada a la DIAN (SendNominaSync)."""
+        """Envía la nómina firmada a la DIAN.
+
+        Va al Set de Pruebas (``SendTestSetAsync``) mientras el emisor esté en
+        habilitación de nómina, y por ``SendNominaSync`` después; lo decide el
+        servicio, no el llamador.
+        """
         nomina = self.get_object()
         try:
             respuesta = servicios.enviar_nomina_a_dian(nomina)
@@ -109,10 +114,15 @@ class NominaViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"])
     def consultar(self, request, pk=None):
-        """GetStatus por el CUNE. Solo lectura: no toca la nómina."""
+        """Consulta el estado en la DIAN. Solo lectura: no toca la nómina.
+
+        Pregunta por el ZipKey si la nómina salió al Set de Pruebas y por el
+        CUNE si salió por la operación síncrona: son dos consultas distintas y
+        la entrega asíncrona no se puede consultar por CUNE.
+        """
         nomina = self.get_object()
         try:
-            respuesta = servicios.consultar_estado_nomina(nomina)
+            respuesta = servicios.consultar_segun_envio_nomina(nomina)
         except servicios.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
         except requests.RequestException as exc:

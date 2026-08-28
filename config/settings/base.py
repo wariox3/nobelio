@@ -170,9 +170,11 @@ CORS_ALLOW_CREDENTIALS = env.bool("CORS_ALLOW_CREDENTIALS", default=False)
 # ===========================================================================
 # Configuración DIAN
 # ===========================================================================
-# Ambiente de operación frente a la DIAN:
-#   2 = Habilitación / Set de Pruebas
-#   1 = Producción
+# Ambiente con el que nace un emisor nuevo (2 = habilitación, 1 = producción).
+# Ya no gobierna la emisión: contra qué servidor se emite lo dicen los campos
+# `ambiente_facturacion` y `ambiente_nomina` del emisor, y el documento se lleva
+# el valor al crearse y lo sella al firmar. Solo lo lee `ambiente_por_defecto()`
+# de `apps.emisores.models.emisor`.
 DIAN_ENVIRONMENT = env.int("DIAN_ENVIRONMENT", default=2)
 
 # Endpoints de los Web Services de la DIAN por ambiente.

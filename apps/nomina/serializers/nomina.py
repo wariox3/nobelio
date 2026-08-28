@@ -92,7 +92,8 @@ class NominaSerializer(serializers.ModelSerializer):
             "novedad", "cune_novedad",
             "total_devengados", "total_deducciones", "redondeo",
             "total_comprobante",
-            "cune", "envio", "ambiente", "fecha_validacion", "errores", "conceptos",
+            "cune", "envio", "track_id", "ambiente", "fecha_validacion",
+            "errores", "conceptos",
             # Las condiciones con las que se emitió, congeladas al crear.
             *CONDICIONES_DEL_EMPLEADO, "fecha_retiro",
             "creado_en", "actualizado_en",

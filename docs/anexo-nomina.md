@@ -219,10 +219,23 @@ enero y no tiene nada que ver con el consecutivo del documento. El repo ya tiene
 Mismo servicio y mismo certificado de transmisión que factura
 (`WcfDianCustomerServices`), con una operación nueva:
 
-- **`SendNominaSync`**: síncrona, un solo documento por ZIP. No hay
-  `SendTestSetAsync` para nómina: la habilitación se hace contra este mismo
-  método.
-- **`GetStatus`**: se amplía para consultar documentos de nómina.
+- **`SendNominaSync`**: síncrona, un solo documento por ZIP. Es la operación de
+  producción, la que se usa **una vez superada la habilitación**.
+- **`SendTestSetAsync`**: la misma de factura, y también la de la habilitación
+  de nómina. La nómina tiene su propio Set de Pruebas, con su `TestSetId` y su
+  software, separados de los de facturación: se obtienen en el portal al
+  asociar el modo de operación de nómina electrónica.
+- **`GetStatus`** / **`GetStatusZip`**: por CUNE lo enviado en síncrono, por
+  ZipKey la entrega asíncrona al Set de Pruebas.
+
+> **Corregido el 2026-08-28.** Este apartado afirmaba que no había
+> `SendTestSetAsync` para nómina y que la habilitación se hacía contra
+> `SendNominaSync`. Es falso, y costó una tanda de rechazos: enviar por la
+> operación de producción sin estar habilitado devuelve la regla 92 ("El Emisor
+> del Documento no se encuentra Habilitado"), con NIE017, NIE033 y ZE02
+> detrás. La pista definitiva es que `SendNominaSync` no recibe `testSetId`
+> (solo `contentFile`), así que el `TestSetId` que la DIAN entrega para nómina
+> no tendría dónde viajar.
 
 ## 10. Qué NO aplica
 

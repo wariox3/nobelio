@@ -115,13 +115,22 @@ def _marcar_habilitacion_superada(software, emisor):
     Es el único momento en que la DIAN lo dice por sí misma; hasta ahora ambas
     banderas se marcaban a mano y olvidarlas dejaba al emisor enviando al Set
     de Pruebas para siempre.
+
+    Cada operación tiene su bandera y su software, y se habilitan por separado:
+    cerrar el Set de Pruebas de nómina no dice nada de la facturación ni al
+    revés, así que se marca la que corresponde al software que se usó.
     """
     if not software.set_pruebas_aceptado:
         software.set_pruebas_aceptado = True
         software.save(update_fields=["set_pruebas_aceptado", "actualizado_en"])
-    if not emisor.habilitado_facturacion:
-        emisor.habilitado_facturacion = True
-        emisor.save(update_fields=["habilitado_facturacion", "actualizado_en"])
+    campo = (
+        "habilitado_nomina"
+        if software.tipo == SoftwareDian.Tipo.NOMINA
+        else "habilitado_facturacion"
+    )
+    if not getattr(emisor, campo):
+        setattr(emisor, campo, True)
+        emisor.save(update_fields=[campo, "actualizado_en"])
 
 
 def _guardar_respuesta(documento, respuesta):
@@ -622,14 +631,17 @@ def _guardar_respuesta_nomina(nomina, respuesta):
 def generar_y_firmar_nomina(nomina, *, firmador=None, ambiente=None, **cred):
     """Genera el XML de la nómina, calcula el CUNE y la firma.
 
-    A diferencia de la factura **no se toca la fecha ni la hora de generación**:
-    la nómina no tiene la regla FAD09 —lo único que pide el anexo es que el
-    ``SigningTime`` no sea posterior al reloj de la DIAN (regla DC24)—, así que
-    el par fecha/hora es el que el emisor liquidó y no el del momento de firmar.
+    ``FechaGen``/``HoraGen`` se fijan aquí, en el momento de firmar. No son la
+    fecha de liquidación —esa va en ``FechaLiquidacionInicio/Fin`` y no se toca—
+    sino cuándo se generó el XML, y generarlo y firmarlo son el mismo acto: el
+    ``SigningTime`` de la firma tiene que poder cuadrar con lo que el documento
+    dice de sí mismo. Se refecha en vez de fallar como hace la factura (regla
+    FAD09) porque aquí no hay consecutivo de resolución que se gaste, y generar
+    hoy la nómina de un periodo pasado es lo normal.
 
-    El CUNE sí se recalcula en cada firma: entra en él todo lo que se puede
-    haber corregido tras un rechazo, y reutilizar el anterior dejaría el XML con
-    un hash que no corresponde a su propio contenido.
+    El CUNE se recalcula en cada firma: entra en él todo lo que se puede haber
+    corregido tras un rechazo, y reutilizar el anterior dejaría el XML con un
+    hash que no corresponde a su propio contenido.
     """
     from apps.nomina import models as nom
     from apps.dian import nomina as xml_nomina
@@ -652,6 +664,11 @@ def generar_y_firmar_nomina(nomina, *, firmador=None, ambiente=None, **cred):
     if not nomina.emisor.activo:
         raise ErrorEmision(MENSAJE_EMISOR_INACTIVO)
 
+    # Antes se respetaba el par que trajera la nómina, y eso dejaba documentos
+    # que declaraban haberse generado horas después de estar firmados.
+    nomina.fecha_generacion = timezone.localdate()
+    nomina.hora_generacion = timezone.localtime().time()
+
     software = _software_activo_nomina(nomina)
     nomina.cune = ""
     constructor = xml_nomina.constructor_nomina_para(
@@ -670,16 +687,23 @@ def generar_y_firmar_nomina(nomina, *, firmador=None, ambiente=None, **cred):
     nomina.ambiente = ambiente
     nomina.estado = _estado(DocumentoEstado.Nombre.FIRMADO)
     nomina.save(update_fields=[
-        "cune", "xml_archivo", "ambiente", "estado", "actualizado_en",
+        "cune", "fecha_generacion", "hora_generacion", "xml_archivo", "ambiente",
+        "estado", "actualizado_en",
     ])
     return xml_firmado
 
 
 def enviar_nomina_a_dian(nomina, *, cliente=None, ambiente=None, **cred):
-    """Envía la nómina firmada por SendNominaSync y actualiza su estado.
+    """Envía la nómina firmada a la DIAN y actualiza su estado.
 
-    Siempre síncrono: la nómina no tiene Set de Pruebas propio, así que no hay
-    que decidir entre dos operaciones como en la factura.
+    Igual que la factura, elige entre dos operaciones: ``SendTestSetAsync`` con
+    el ``TestSetId`` del software mientras el emisor está en habilitación y su
+    Set de Pruebas de nómina no ha sido aceptado, y ``SendNominaSync`` después.
+    La nómina tiene su propio Set de Pruebas, con su ``TestSetId`` y su software,
+    separados de los de facturación.
+
+    Si la DIAN responde que el Set ya está aceptado, se marcan las banderas y la
+    nómina sale por ``SendNominaSync`` en el mismo envío.
     """
     from apps.nomina.models import Nomina
 
@@ -693,16 +717,46 @@ def enviar_nomina_a_dian(nomina, *, cliente=None, ambiente=None, **cred):
             "La nómina no está firmada; ejecute generar_y_firmar_nomina primero."
         )
 
+    software = _software_activo_nomina(nomina)
     if cliente is None:
         cliente = construir_cliente_emisor(nomina.emisor, ambiente, **cred)
 
+    xml = nomina.leer_xml()
     nombre_xml, nombre_zip = _nombres_archivo_nomina(nomina)
-    respuesta = cliente.enviar_nomina_sincrono(nomina.leer_xml(), nombre_xml)
-    # Queda anotado con qué operación salió, igual que en los documentos. Aquí
-    # no hay alternativa que elegir, pero sí registro de lo que se hizo.
-    nomina.envio = Nomina.Envio.SINCRONO
+
+    usar_set_pruebas = ambiente == 2 and not software.set_pruebas_aceptado
+    if usar_set_pruebas:
+        # Sin TestSetId el envío sale con el campo vacío y la DIAN lo rechaza
+        # con un mensaje que no habla de esto. Es un dato del portal, así que
+        # es más útil pararlo aquí y decir dónde se consigue.
+        if not software.test_set_id:
+            raise ErrorEmision(
+                "El software de nómina no tiene TestSetId, y sin él no se puede "
+                "enviar al Set de Pruebas. Cópielo del portal de la DIAN "
+                "(modo de operación de nómina electrónica) y guárdelo en el "
+                "software antes de enviar."
+            )
+        respuesta = cliente.enviar_set_pruebas(
+            xml, nombre_xml, software.test_set_id, nombre_zip=nombre_zip,
+        )
+        # La DIAN cerró la habilitación entre un envío y otro: se anota y se
+        # reenvía por el camino que ya corresponde.
+        if _set_pruebas_cerrado(respuesta):
+            _marcar_habilitacion_superada(software, nomina.emisor)
+            usar_set_pruebas = False
+            respuesta = cliente.enviar_nomina_sincrono(xml, nombre_xml)
+    else:
+        respuesta = cliente.enviar_nomina_sincrono(xml, nombre_xml)
+
+    # Queda anotado con qué operación salió: es lo que decide cómo se consulta
+    # después, porque el Set de Pruebas es asíncrono y se pregunta por ZipKey.
+    nomina.envio = (
+        Nomina.Envio.SET_PRUEBAS if usar_set_pruebas else Nomina.Envio.SINCRONO
+    )
 
     _guardar_respuesta_nomina(nomina, respuesta)
+    if respuesta.track_id:
+        nomina.track_id = respuesta.track_id
     if respuesta.es_valido:
         nomina.estado = _estado(DocumentoEstado.Nombre.ACEPTADO)
         if not nomina.fecha_validacion:
@@ -712,7 +766,8 @@ def enviar_nomina_a_dian(nomina, *, cliente=None, ambiente=None, **cred):
     else:
         nomina.estado = _estado(DocumentoEstado.Nombre.ENVIADO)
     nomina.save(update_fields=[
-        "respuesta_archivo", "envio", "estado", "fecha_validacion", "actualizado_en",
+        "respuesta_archivo", "track_id", "envio", "estado", "fecha_validacion",
+        "actualizado_en",
     ])
     return respuesta
 
@@ -725,3 +780,39 @@ def consultar_estado_nomina(nomina, *, cliente=None, ambiente=None, **cred):
     if not nomina.cune:
         raise ErrorEmision("La nómina no tiene CUNE; emítala primero.")
     return cliente.consultar_estado(nomina.cune)
+
+
+def consultar_estado_zip_nomina(nomina, *, cliente=None, ambiente=None,
+                                zip_key=None, **cred):
+    """GetStatusZip: pregunta por la **entrega**, por su ZipKey.
+
+    Es la consulta de lo que se mandó al Set de Pruebas, que es asíncrono y
+    devuelve un ZipKey en vez de un veredicto. Responde por esa entrega
+    concreta, no por la nómina.
+    """
+    ambiente = ambiente if ambiente is not None else nomina.ambiente
+    if cliente is None:
+        cliente = construir_cliente_emisor(nomina.emisor, ambiente, **cred)
+    clave = zip_key or nomina.track_id
+    if not clave:
+        raise ErrorEmision(
+            "La nómina no tiene track_id; envíela a la DIAN primero."
+        )
+    return cliente.consultar_estado_zip(clave)
+
+
+def consultar_segun_envio_nomina(nomina, *, cliente=None, ambiente=None, **cred):
+    """La consulta que corresponde a cómo se envió la nómina.
+
+    Lo dice ``nomina.envio``. Las enviadas antes de que la nómina tuviera Set de
+    Pruebas lo tienen en ``nomina_sync`` o vacío, y para ellas la consulta por
+    CUNE sigue siendo la correcta.
+    """
+    from apps.nomina.models import Nomina
+
+    consulta = (
+        consultar_estado_zip_nomina
+        if nomina.envio == Nomina.Envio.SET_PRUEBAS
+        else consultar_estado_nomina
+    )
+    return consulta(nomina, cliente=cliente, ambiente=ambiente, **cred)

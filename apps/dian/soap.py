@@ -404,11 +404,19 @@ class ClienteDian:
     # -- Operaciones --------------------------------------------------------
 
     def enviar_set_pruebas(self, xml_firmado: bytes, nombre_archivo: str,
-                           test_set_id: str) -> RespuestaDian:
-        """SendTestSetAsync: envía al Set de Pruebas (habilitación)."""
+                           test_set_id: str, *,
+                           nombre_zip: str = "") -> RespuestaDian:
+        """SendTestSetAsync: envía al Set de Pruebas (habilitación).
+
+        ``nombre_archivo`` nombra al XML dentro del ZIP; ``fileName`` nombra al
+        ZIP, que es lo que de verdad viaja en ``contentFile``. En factura los
+        dos van iguales y la DIAN lo acepta, pero el anexo de nómina fija los
+        dos nombres por separado (numerales 3.3 a 3.5), así que ahí se pasa
+        cada uno en su sitio.
+        """
         contenido = empaquetar_base64(nombre_archivo, xml_firmado)
         cuerpo = {
-            "fileName": nombre_archivo,
+            "fileName": nombre_zip or nombre_archivo,
             "contentFile": contenido,
             "testSetId": test_set_id,
         }

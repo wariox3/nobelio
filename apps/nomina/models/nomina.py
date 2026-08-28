@@ -52,13 +52,15 @@ class Nomina(ModeloUUID, ModeloConFechas):
     class Envio(models.TextChoices):
         """Con qué operación salió a la DIAN.
 
-        Hoy solo hay una: la nómina no tiene Set de Pruebas, así que no hay que
-        elegir entre dos caminos como en la factura. Se guarda igual —y con el
-        mismo nombre que en `Documento`— porque es parte del registro de qué se
-        hizo con el documento, y porque el día que la DIAN añada una operación
-        asíncrona el campo ya está.
+        Las mismas dos que en la factura, y por el mismo motivo: mientras el
+        emisor está en habilitación los documentos van al Set de Pruebas —que
+        para nómina también existe, con su propio ``TestSetId``— y solo después
+        se emite por la operación de producción. Es lo que decide cómo se
+        consulta el resultado: el Set de Pruebas es asíncrono y devuelve un
+        ZipKey, no un veredicto.
         """
 
+        SET_PRUEBAS = "test_set", "Set de Pruebas (SendTestSetAsync)"
         SINCRONO = "nomina_sync", "Síncrono (SendNominaSync)"
 
     class TipoNota(models.TextChoices):
@@ -143,6 +145,12 @@ class Nomina(ModeloUUID, ModeloConFechas):
         "operación de envío", max_length=20, choices=Envio.choices, blank=True,
         help_text="Con qué operación se envió a la DIAN. Vacío mientras no se "
         "haya enviado.",
+    )
+    track_id = models.CharField(
+        "trackId / ZipKey", max_length=100, blank=True,
+        help_text="Lo devuelve el envío al Set de Pruebas, que es asíncrono: es "
+        "la llave con la que se consulta esa entrega (GetStatusZip). El envío "
+        "síncrono no devuelve ninguno; ahí se consulta por el CUNE.",
     )
     # `Novedad`: marca que el documento recoge un cambio contractual y remite al
     # CUNE del documento donde estaba el dato anterior.
