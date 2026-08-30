@@ -644,8 +644,7 @@ def _guardar_respuesta_nomina(nomina, respuesta):
     NominaError.objects.bulk_create(filas)
 
 
-def generar_y_firmar_nomina(nomina, *, firmador=None, ambiente=None,
-                            variante=None, **cred):
+def generar_y_firmar_nomina(nomina, *, firmador=None, ambiente=None, **cred):
     """Genera el XML de la nómina, calcula el CUNE y la firma.
 
     ``FechaGen``/``HoraGen`` se fijan aquí, en el momento de firmar. No son la
@@ -662,10 +661,6 @@ def generar_y_firmar_nomina(nomina, *, firmador=None, ambiente=None,
     """
     from apps.nomina import models as nom
     from apps.dian import nomina as xml_nomina
-    from apps.dian import variantes_firma
-
-    # TEMPORAL: variantes de firma para acorralar el ZE02. Ver el módulo.
-    variantes = variantes_firma.normalizar(variante)
 
     # El de la nómina, que lo heredó del ``ambiente_nomina`` de su emisor —la
     # DIAN habilita la nómina aparte de la facturación—. Antes se resolvía con
@@ -693,7 +688,7 @@ def generar_y_firmar_nomina(nomina, *, firmador=None, ambiente=None,
     software = _software_activo_nomina(nomina)
     nomina.cune = ""
     constructor = xml_nomina.constructor_nomina_para(
-        nomina, software=software, ambiente=ambiente, variantes=variantes,
+        nomina, software=software, ambiente=ambiente,
     )
     xml = constructor.generar_xml()
     nomina.cune = constructor.cune
@@ -704,7 +699,6 @@ def generar_y_firmar_nomina(nomina, *, firmador=None, ambiente=None,
         firmador = construir_firmador_emisor(
             nomina.emisor, policy_name=settings.DIAN_POLICY_NAME_NOMINA, **cred
         )
-        firmador.variantes = variantes
     xml_firmado = firmador.firmar(xml)
 
     nomina.xml_archivo.save(

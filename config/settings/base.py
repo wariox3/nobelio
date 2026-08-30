@@ -203,8 +203,7 @@ DIAN_POLICY_NAME = env(
 # La nómina lleva su propio texto en xades:SigPolicyId/xades:Description: el
 # anexo de nómina lo fija en el numeral 7.10 y dice "nóminas" donde el de
 # factura dice "facturas". Es la misma política —mismo Identifier y mismo
-# SigPolicyHash—, solo cambia la descripción. Se probó el 2026-08-28 y no
-# resuelve el rechazo ZE02, pero es lo que exige el anexo.
+# SigPolicyHash—, solo cambia la descripción.
 DIAN_POLICY_NAME_NOMINA = env(
     "DIAN_POLICY_NAME_NOMINA",
     default="Política de firma para nóminas electrónicas de la República de Colombia.",

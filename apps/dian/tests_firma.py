@@ -1,5 +1,6 @@
 """Pruebas de la firma XAdES-EPES (verificación criptográfica independiente)."""
 import base64
+import re
 import datetime as dt
 import hashlib
 from datetime import date, time
@@ -162,3 +163,152 @@ class FirmaXAdESTests(TestCase):
         arbol = etree.fromstring(xml)
         if not esquema.validate(arbol):
             self.fail("XML firmado inválido contra XSD:\n" + str(esquema.error_log))
+
+
+class FirmaAisladaTests(FirmaXAdESTests):
+    """Regresión del rechazo **ZE02** ("Valor de la firma inválido").
+
+    La DIAN lo devolvía en nómina con una firma que verificaba bien en tres
+    implementaciones independientes. La causa no era el cálculo sino los bytes
+    transmitidos: el ``ds:SignedInfo`` se canonicaliza con C14N inclusiva, que
+    emite *todas* las declaraciones de namespace en ámbito, y la firma heredaba
+    de la raíz varias sin declararlas. Un validador que extrae el nodo
+    ``ds:Signature`` y lo canonicaliza suelto pierde esas declaraciones y
+    obtiene otro ``SignedInfo``.
+
+    Estas pruebas fijan las dos mitades de la corrección: que la firma siga
+    verificando **fuera** de su documento, y que escribir las declaraciones no
+    haya movido ningún digest. Ver ``FirmadorXAdES._declarar_contexto_heredado``.
+    """
+
+    def _signature_suelta(self, xml):
+        """El nodo ``ds:Signature`` extraído, serializado y vuelto a parsear.
+
+        Es exactamente lo que hace el validador que provocaba el ZE02. Recibe
+        el XML ya firmado en vez de firmarlo: cada firma lleva un UUID nuevo,
+        así que dos llamadas a ``_firmar`` no son comparables entre sí.
+        """
+        sig = etree.fromstring(xml).find(f".//{{{ubl.NS['ds']}}}Signature")
+        return etree.fromstring(etree.tostring(sig, encoding="UTF-8"))
+
+    def test_la_firma_verifica_extraida_del_documento(self):
+        suelta = self._signature_suelta(self._firmar())
+        ns = ubl.NS
+        signed_info = suelta.find(f"{{{ns['ds']}}}SignedInfo")
+        firmado = base64.b64decode(suelta.find(f"{{{ns['ds']}}}SignatureValue").text)
+
+        # No lanza si la firma sigue siendo válida sin el contexto de la raíz.
+        self.cert.public_key().verify(
+            firmado,
+            etree.tostring(signed_info, method="c14n", exclusive=False),
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+
+    def test_el_signed_info_canonicaliza_igual_dentro_y_fuera(self):
+        """Es la razón por la que lo anterior funciona, dicha byte a byte."""
+        xml = self._firmar()
+        ns = ubl.NS
+        dentro = etree.tostring(
+            etree.fromstring(xml).find(f".//{{{ns['ds']}}}SignedInfo"),
+            method="c14n", exclusive=False,
+        )
+        fuera = etree.tostring(
+            self._signature_suelta(xml).find(f"{{{ns['ds']}}}SignedInfo"),
+            method="c14n", exclusive=False,
+        )
+        self.assertEqual(dentro, fuera)
+
+    def test_la_firma_declara_el_contexto_que_heredaba(self):
+        """Las declaraciones están en los bytes, no solo resueltas en el árbol."""
+        xml = self._firmar()
+        apertura = xml[xml.find(b"<ds:Signature"):xml.find(b">", xml.find(b"<ds:Signature"))]
+
+        arbol = etree.fromstring(xml)
+        contenido = arbol.findall(f".//{{{ubl.NS['ext']}}}ExtensionContent")[-1]
+        for prefijo in contenido.nsmap:
+            if prefijo == "xml":
+                continue
+            esperado = b"xmlns=" if prefijo is None else f"xmlns:{prefijo}=".encode()
+            self.assertIn(esperado, apertura)
+
+    def test_la_declaracion_xml_usa_comillas_dobles(self):
+        """Como los documentos aceptados; queda fuera de la canonicalización."""
+        self.assertTrue(
+            self._firmar().startswith(
+                b'<?xml version="1.0" encoding="UTF-8" standalone="no"?>'
+            )
+        )
+
+
+class OrdenDeclaracionesNominaTests(TestCase):
+    """Regresión del **ZE02**: la raíz debe copiar el orden del anexo.
+
+    El validador de nómina de la DIAN rechazó quince documentos con "Valor de
+    la firma inválido" cuyas firmas eran correctas. Lo único que los separaba de
+    los aceptados era el **orden de las declaraciones de namespace y de los
+    atributos** del elemento raíz, que canónicamente no significa nada —la C14N
+    los ordena— pero que allí sí se mira.
+
+    Estas pruebas fijan ese orden contra la **ejemplificación oficial** que está
+    en el repositorio, de modo que si alguien vuelve a construir la raíz con
+    `nsmap` (que es lo natural, y lo que fallaba) el test lo detecta sin gastar
+    un envío del Set de Pruebas. Ver ``docs/anexo-nomina.md`` §9 bis.
+    """
+
+    RUTA_EJEMPLO = "apps/dian/datos/ejemplos/nomina/nomina-individual.xml"
+
+    def _declaraciones(self, xml: bytes) -> list[str]:
+        """Los nombres de las declaraciones y atributos de la raíz, en orden.
+
+        Se leen de los bytes y no del árbol a propósito: es justo el orden que
+        el árbol no conserva y que aquí importa.
+        """
+        apertura = xml[:xml.index(b">", xml.index(b"<Nomina"))].decode("utf-8")
+        return re.findall(r'\s(xmlns(?::[\w]+)?|SchemaLocation|xsi:schemaLocation)=', apertura)
+
+    def test_la_raiz_copia_el_orden_de_la_ejemplificacion_oficial(self):
+        from apps.dian import nomina as xml_nomina
+
+        with open(self.RUTA_EJEMPLO, "rb") as fh:
+            oficial = self._declaraciones(fh.read().lstrip(b"\xef\xbb\xbf"))
+
+        raiz = xml_nomina.ConstructorNominaXML._raiz(
+            _ConstructorFalso(xml_nomina.ConstructorNominaXML)
+        )
+        nuestro = self._declaraciones(etree.tostring(raiz, encoding="UTF-8"))
+
+        self.assertEqual(
+            nuestro, oficial,
+            "El orden de la raíz dejó de coincidir con la ejemplificación oficial. "
+            "La DIAN rechaza con ZE02 cuando difiere; ver docs/anexo-nomina.md §9 bis.",
+        )
+
+    def test_el_namespace_por_defecto_va_primero(self):
+        """Lo más fácil de romper al reintroducir un `nsmap`."""
+        from apps.dian import nomina as xml_nomina
+
+        raiz = xml_nomina.ConstructorNominaXML._raiz(
+            _ConstructorFalso(xml_nomina.ConstructorNominaXML)
+        )
+        self.assertEqual(self._declaraciones(etree.tostring(raiz, encoding="UTF-8"))[0], "xmlns")
+
+    def test_schemalocation_va_antes_que_xsi_schemalocation(self):
+        from apps.dian import nomina as xml_nomina
+
+        raiz = xml_nomina.ConstructorNominaXML._raiz(
+            _ConstructorFalso(xml_nomina.ConstructorNominaXML)
+        )
+        nombres = self._declaraciones(etree.tostring(raiz, encoding="UTF-8"))
+        self.assertLess(nombres.index("SchemaLocation"), nombres.index("xsi:schemaLocation"))
+
+
+class _ConstructorFalso:
+    """Lo mínimo que `_raiz` necesita: el nombre y el namespace de la raíz.
+
+    Evita montar una nómina entera en la base para comprobar una cadena.
+    """
+
+    def __init__(self, clase):
+        self.nombre_raiz = clase.nombre_raiz
+        self.ns_raiz = clase.ns_raiz

@@ -34,7 +34,10 @@ de la DIAN; el CUFE/CUDE se verifica contra los ejemplos oficiales del Anexo.
 - **Catálogos DIAN** cargados desde las listas oficiales Genericode (`.gc`).
 - **Generación XML UBL 2.1** para los 4 tipos de documento, validada contra XSD.
 - **CUFE/CUDE** (SHA-384) según el Anexo Técnico (verificado con los ejemplos oficiales).
-- **Firma XAdES-EPES** con certificado `.p12` (verificada criptográficamente).
+- **Firma XAdES-EPES** con certificado `.p12`, verificada criptográficamente y
+  también fuera de su documento.
+- **Nómina electrónica** aceptada por la DIAN en habilitación. Ojo al orden de
+  las declaraciones de la raíz: ver [docs/anexo-nomina.md](docs/anexo-nomina.md) §9 bis.
 - **Cliente SOAP** de los Web Services DIAN con WS-Security (Set de Pruebas y producción).
 - **Representación gráfica PDF** con código QR.
 - **API REST** (DRF) que orquesta todo el ciclo de vida.
@@ -429,8 +432,13 @@ Estos puntos solo se confirman al integrar contra el ambiente real de la DIAN:
 1. Configurar `DIAN_POLICY_HASH` con el SHA-256 (base64) del PDF de la política
    de firma (`apps/dian/firma.calcular_hash_politica()` lo calcula).
 2. Cargar el `.p12`, el `test_set_id` y las claves técnicas reales del emisor.
-3. Validar contra el **Set de Pruebas** (posibles ajustes de canonicalización
-   exclusiva / `X509IssuerName` en la firma del sobre SOAP).
+3. Validar contra el **Set de Pruebas**. El de nómina ya pasa: el rechazo ZE02
+   que lo bloqueaba está resuelto. Su causa no era la firma sino el **orden de
+   las declaraciones de namespace de la raíz**, que debe copiar el de la
+   ejemplificación oficial; ver [docs/anexo-nomina.md](docs/anexo-nomina.md)
+   §9 bis, que además explica cómo diagnosticar un ZE02 futuro sin gastar
+   envíos. Del sobre SOAP quedan por confirmar la canonicalización exclusiva y
+   el `X509IssuerName`.
 4. Poner el QR en **todas las páginas** de la representación gráfica.
 5. **Documento soporte**: el XML ya se genera con los roles invertidos, el CUDS
    y las retenciones (ver [docs/anexo-documento-soporte.md](docs/anexo-documento-soporte.md)).

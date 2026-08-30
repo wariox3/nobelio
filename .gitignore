@@ -7,7 +7,9 @@ build/
 dist/
 
 # Entornos virtuales
-.venv/
+# Sin barra final a propósito: aquí `.venv` es un symlink a ~/.venvs/nobelio,
+# y `.venv/` solo casaría con un directorio de verdad.
+.venv
 venv/
 env/
 
@@ -15,9 +17,21 @@ env/
 *.log
 /staticfiles/
 /media/
+# Base local de pruebas rápidas (ver DATABASE_URL en .env.example).
+*.sqlite3
+db.sqlite3
 
 # Entorno / secretos
+# `.env.example` SÍ se versiona: es la plantilla. `.env` nunca.
 .env
+.env.local
+.env.*.local
+
+# Capturas de tráfico DIAN: apps/dian/soap.DIRECTORIO_CAPTURA vuelca ahí los
+# sobres SOAP transmitidos, que llevan el documento firmado y el certificado.
+/capturas/
+*-enviado.xml
+*-respuesta.xml
 
 # Certificados y llaves (NUNCA versionar)
 *.p12
@@ -26,8 +40,14 @@ env/
 *.key
 *.crt
 
+# Cobertura y cachés de pruebas
+.coverage
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+
 # IDE / SO
 .vscode/
 .idea/
 .DS_Store
-.venv
+Thumbs.db

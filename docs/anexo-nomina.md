@@ -237,6 +237,132 @@ Mismo servicio y mismo certificado de transmisión que factura
 > (solo `contentFile`), así que el `TestSetId` que la DIAN entrega para nómina
 > no tendría dónde viajar.
 
+## 9 bis. El rechazo ZE02 — causa raíz y cómo no repetirlo
+
+Durante la habilitación la DIAN rechazó **quince** nóminas seguidas con
+**ZE02, "Valor de la firma inválido"** (código 99), mientras todas las reglas
+NIE pasaban. Costó dos días y quince envíos del cupo del Set de Pruebas. Esto es
+lo que era, cómo se encontró y qué hay que respetar para que no vuelva.
+
+### El síntoma engaña
+
+`ZE02` dice "firma inválida", pero **la firma nunca estuvo mal**. En todas las
+nóminas rechazadas:
+
+- los tres digests (`documento`, `KeyInfo`, `SignedProperties`) recalculaban exactos;
+- el `SignatureValue` verificaba contra el certificado incrustado;
+- la estructura XAdES era idéntica, elemento a elemento, a la de un documento
+  que la DIAN sí había aceptado;
+- el XML validaba contra `NominaIndividualElectronicaXSDV1.0.6.xsd`;
+- los totales cuadraban con los conceptos.
+
+Por eso la investigación se fue durante dos días detrás de la criptografía y de
+los datos, que era donde no estaba.
+
+### La causa raíz
+
+**El documento tiene que reproducir el orden de declaraciones y atributos de la
+ejemplificación oficial de la DIAN.** Concretamente, en el elemento raíz:
+
+```xml
+<NominaIndividual xmlns="dian:gov:co:facturaelectronica:NominaIndividual"
+                  xmlns:xs="http://www.w3.org/2001/XMLSchema-instance"
+                  xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
+                  xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2"
+                  xmlns:xades="http://uri.etsi.org/01903/v1.3.2#"
+                  xmlns:xades141="http://uri.etsi.org/01903/v1.4.1#"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  SchemaLocation=""
+                  xsi:schemaLocation="…">
+```
+
+El namespace por defecto **primero**, después `xs`, `ds`, `ext`, `xades`,
+`xades141`, `xsi`, y `SchemaLocation=""` **antes** de `xsi:schemaLocation`.
+Emitíamos el mismo conjunto de declaraciones en otro orden, y eso bastaba para
+el rechazo.
+
+Esto **no debería importar**. La C14N ordena declaraciones y atributos antes de
+digerir, así que el orden no cambia ningún digest —lo comprobamos: el digest del
+documento es byte a byte el mismo antes y después de reordenar— y cualquier
+validador conforme aceptaría las dos formas. El validador de nómina de la DIAN
+no lo hace. No hay explicación pública; lo que hay es la evidencia de abajo.
+
+### La evidencia
+
+Quince rechazos y tres aceptaciones, con el contenido controlado:
+
+| Documento | Contenido | Generado por | Orden de la raíz | Resultado |
+|---|---|---|---|---|
+| NE1000–NE1012 | variado | nobelio | propio | ZE02 ×13 |
+| NESETP1, NESETP2 | mínimo | Platino (PHP) | el del anexo | **aceptado** |
+| NESETP3 | rico (transporte, hora extra) | nobelio | propio | ZE02 |
+| NESETP4 | mínimo, empleado real | nobelio | propio | ZE02 |
+| NESETP5 | **idéntico a NESETP2** | nobelio | propio | ZE02 |
+| NESETP6 | **idéntico a NESETP5** | nobelio | **el del anexo** | **aceptado** |
+
+Las dos filas que cierran el caso son las dos últimas: NESETP5 tenía exactamente
+los mismos datos que una nómina aceptada y se rechazó, lo que descarta el
+contenido; NESETP6 tenía exactamente los mismos datos que NESETP5 y se aceptó,
+con el orden de la raíz como único cambio del documento.
+
+### Lo que está confirmado y lo que no
+
+Entre NESETP5 y NESETP6 se cambiaron **dos cosas a la vez**, así que lo
+confirmado es la combinación, no cada parte por separado:
+
+1. El orden de declaraciones y atributos de la raíz (arriba).
+2. `xades:QualifyingProperties` declara `xmlns:xades` y `xmlns:xades141`.
+
+Y arrastramos una tercera de antes, tampoco aislada:
+
+3. `ds:Signature` declara **todas** las declaraciones que heredaba de la raíz.
+
+Las tres las cumplen los documentos que la DIAN acepta. **No se sabe cuáles son
+individualmente necesarias**, y aislarlo cuesta envíos del cupo, así que se
+dejan las tres. Si alguna vez hay que tocar una, hay que saber que se está
+moviendo algo que la DIAN mira.
+
+Todas son inocuas para la firma: ninguna cambia el conjunto de namespaces en
+ámbito ni el orden canónico, así que ningún digest se altera. Lo comprueba
+`FirmaAisladaTests`.
+
+### Cómo se implementa
+
+- **La raíz se parsea de una plantilla** (`ConstructorNominaXML._raiz`), no se
+  construye con `nsmap`. Por el árbol es imposible: lxml emite el `nsmap` en el
+  orden del diccionario y, al pedirle un atributo por URI, reutiliza el primer
+  prefijo declarado para esa URI —lo que con `xs` delante convierte
+  `xsi:schemaLocation` en `xs:schemaLocation`—.
+- **Las declaraciones de la firma se escriben sobre los bytes**
+  (`FirmadorXAdES._declarar_contexto_heredado`), no con `etree`: lxml descarta
+  en silencio una declaración que un ancestro ya trae idéntica. Va después de
+  firmar, y es seguro porque queda fuera de todo lo canonicalizado.
+
+### Cómo diagnosticar un ZE02 futuro
+
+En este orden, que es el barato primero:
+
+1. **Verificar la firma en local**, incluida la comprobación **aislada** (la
+   firma extraída de su documento): `FirmaAisladaTests`. Si falla ahí, es la
+   firma de verdad y no hace falta gastar un envío.
+2. **Validar contra el XSD** de `apps/dian/datos/xsd/nomina/`.
+3. **Diffear el XML contra uno aceptado**, normalizando lo que cambia
+   legítimamente (CUNE, digests, `SignatureValue`, UUID de la firma,
+   `SigningTime`, fechas). Cualquier diferencia que quede —aunque sea de orden
+   de atributos o de declaraciones— es sospechosa. **Ahí estaba esta.**
+4. Solo entonces mirar los datos.
+
+Y la regla de oro que nos habría ahorrado dos días: **no cambiar dos variables a
+la vez**. Las dos primeras aceptadas venían de otra implementación *y* con
+contenido más simple, y esa confusión hizo dar por resuelto el caso antes de
+tiempo.
+
+> **Confirmado el 2026-08-30** con NESETP6: "Procesado Correctamente", código 00.
+
+> Esto retiró `apps/dian/variantes_firma.py`, el módulo temporal que servía para
+> mandar una variante por documento e ir acorralando el rechazo, junto con el
+> parámetro `variante` del endpoint `emitir` y del servicio.
+
 ## 10. Qué NO aplica
 
 Resolución de numeración, `sts:DianExtensions`, `InvoiceControl`, clave técnica,
@@ -256,3 +382,6 @@ certificado, el cliente SOAP y el manejo de la respuesta.
    `NominaIndividual` valida.
 2. **SoftwareSC**: el mismo cálculo que la factura, ya cubierto.
 3. **CUNE**: no hay vector de prueba oficial válido (ver §3).
+4. **Firma**: además de verificarla en su documento, hay que verificarla
+   **extraída** de él (`FirmaAisladaTests`). Es la comprobación que distingue un
+   ZE02 por cálculo mal hecho de uno por representación; ver §9 bis.

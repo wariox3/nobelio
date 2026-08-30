@@ -133,10 +133,7 @@ class ConstructorNominaXML:
     version = VERSION_NOMINA
     tipo_xml = TIPO_XML_NOMINA
 
-    def __init__(self, nomina, *, software, ambiente: int, pin: str = "",
-                 variantes: frozenset = frozenset()):
-        # TEMPORAL: ver apps/dian/variantes_firma.py.
-        self.variantes = variantes
+    def __init__(self, nomina, *, software, ambiente: int, pin: str = ""):
         self.doc = nomina
         self.software = software
         self.ambiente = ambiente
@@ -167,18 +164,51 @@ class ConstructorNominaXML:
         cune = self.doc.cune or self.calcular_identificador()
         self.cune = cune
 
-        nsmap = {**NS, None: self.ns_raiz}
-        raiz = etree.Element(etree.QName(self.ns_raiz, self.nombre_raiz), nsmap=nsmap)
-        raiz.set(
-            _q("xsi", "schemaLocation"),
-            f"{self.ns_raiz} {self.nombre_raiz}ElectronicaXSD.xsd",
-        )
-        # El XSD lo declara obligatorio aunque no signifique nada para nosotros.
-        raiz.set("SchemaLocation", "")
-
+        raiz = self._raiz()
         self._extensiones(raiz)
         self._cuerpo(raiz, cune)
         return raiz
+
+    def _raiz(self) -> etree._Element:
+        """El elemento raíz con sus declaraciones, en el orden del anexo.
+
+        Se **parsea de una plantilla** en vez de construirse con `nsmap` porque
+        el orden de las declaraciones y el prefijo de `schemaLocation` tienen
+        que salir exactamente como en la ejemplificación oficial, y por el árbol
+        no se puede conseguir: lxml emite el `nsmap` en el orden del diccionario
+        y, al pedirle un atributo por URI, reutiliza el primer prefijo que
+        encuentre para esa URI —lo que con `xs` delante convertía
+        `xsi:schemaLocation` en `xs:schemaLocation`—.
+
+        Que el orden importe no debería: la C14N ordena declaraciones y
+        atributos, así que nada de esto cambia un digest y cualquier validador
+        conforme aceptaría las dos formas. El de nómina de la DIAN no: quince
+        documentos con la firma correcta se rechazaron con **ZE02** ("valor de
+        la firma inválido") por emitir el mismo conjunto de declaraciones en
+        otro orden, y el mismo documento con este orden se aceptó. Confirmado
+        el 2026-08-30.
+
+        No tocar sin leer `docs/anexo-nomina.md` §9 bis; lo protege
+        `OrdenDeclaracionesNominaTests`.
+
+        `xs` duplica la URI de `xsi` y no lo usa nadie, pero la ejemplificación
+        lo declara y la regla NIE901 exige "todos los Namespace correspondientes
+        a su estructura".
+        """
+        plantilla = (
+            '<{raiz} xmlns="{ns}" xmlns:xs="{xsi}" xmlns:ds="{ds}" xmlns:ext="{ext}"'
+            ' xmlns:xades="{xades}" xmlns:xades141="{xades141}" xmlns:xsi="{xsi}"'
+            ' SchemaLocation="" xsi:schemaLocation="{ns} {raiz}ElectronicaXSD.xsd"/>'
+        ).format(
+            raiz=self.nombre_raiz,
+            ns=self.ns_raiz,
+            xsi=NS["xsi"],
+            ds=NS["ds"],
+            ext=NS["ext"],
+            xades=NS["xades"],
+            xades141=NS["xades141"],
+        )
+        return etree.fromstring(plantilla.encode("utf-8"))
 
     def generar_xml(self) -> bytes:
         return etree.tostring(
@@ -205,7 +235,7 @@ class ConstructorNominaXML:
         self._proveedor(raiz)
         _sub(raiz, "CodigoQR", self._url_qr(cune))
         self._informacion_general(raiz, cune)
-        if self.doc.notas and "contenido" not in self.variantes:
+        if self.doc.notas:
             _sub(raiz, "Notas", self.doc.notas)
         self._empleador(raiz)
         self._trabajador(raiz)
@@ -220,13 +250,14 @@ class ConstructorNominaXML:
         _sub(raiz, "ComprobanteTotal", _valor(self.doc.total_comprobante))
 
     def _novedad(self, raiz):
-        """Cambio contractual: apunta al CUNE donde estaba el dato anterior."""
+        """Cambio contractual: apunta al CUNE donde estaba el dato anterior.
+
+        El XSD la declara opcional y aquí se omite cuando no la hay. Se probó
+        emitirla siempre —en ``false`` y con el atributo vacío, como hace una de
+        las ejemplificaciones— mientras se buscaba el ZE02, y no era eso: el
+        rechazo venía de la firma, no del cuerpo (ver ``firma.py``).
+        """
         if not self.doc.novedad:
-            if "contenido" not in self.variantes:
-                return
-            # El documento aceptado la emite siempre, en false y con el atributo
-            # vacío; el XSD la declara opcional y nosotros la omitimos.
-            _sub(raiz, "Novedad", _booleano(False), CUNENov="")
             return
         _sub(raiz, "Novedad", _booleano(True), CUNENov=self.doc.cune_novedad or None)
 

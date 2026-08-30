@@ -78,7 +78,6 @@ class FirmadorXAdES:
         policy_name: str = "",
         signing_time: datetime | None = None,
         rol: str = "supplier",
-        variantes: frozenset = frozenset(),
     ):
         self.llave = llave_privada
         self.cert = certificado
@@ -88,8 +87,6 @@ class FirmadorXAdES:
         self.policy_name = policy_name
         self.signing_time = signing_time or datetime.now(TZ_COLOMBIA)
         self.rol = rol
-        # TEMPORAL: ver apps/dian/variantes_firma.py.
-        self.variantes = variantes
 
         sid = uuid.uuid4()
         self.id_firma = f"xmldsig-{sid}"
@@ -105,38 +102,17 @@ class FirmadorXAdES:
         raiz = xml if etree.iselement(xml) else etree.fromstring(xml)
 
         contenido = self._segunda_extension(raiz)
-        firma = self._construir_firma(raiz, contenido)
+        self._construir_firma(raiz, contenido)
 
-        if "ns-propios" in self.variantes:
-            # lxml suprime una declaración de namespace que el ancestro ya trae,
-            # así que se inserta sobre los bytes. Es seguro hacerlo después de
-            # firmar: la C14N inclusiva no emite declaraciones redundantes, de
-            # modo que ningún digest cambia (se comprueba con el verificador).
-            cuerpo = etree.tostring(raiz, encoding="UTF-8")
-            cuerpo = cuerpo.replace(
-                b"<ds:Signature ",
-                b'<ds:Signature xmlns:ds="%s" ' % NS["ds"].encode(), 1,
-            )
-            cuerpo = cuerpo.replace(
-                b"<xades:QualifyingProperties ",
-                b'<xades:QualifyingProperties xmlns:xades="%s" xmlns:xades141="%s" '
-                % (NS["xades"].encode(), NS["xades141"].encode()), 1,
-            )
-            comillas = b'"' if "decl-comillas" in self.variantes else b"'"
-            declaracion = (
-                b"<?xml version=%(c)s1.0%(c)s encoding=%(c)sUTF-8%(c)s "
-                b"standalone=%(c)sno%(c)s?>\n" % {b"c": comillas}
-            )
-            return declaracion + cuerpo
-        if "decl-comillas" in self.variantes:
-            # La declaración va fuera de la canonicalización, así que ponerla a
-            # mano después de firmar no toca ningún digest.
-            cuerpo = etree.tostring(raiz, encoding="UTF-8")
-            declaracion = b'<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n'
-            return declaracion + cuerpo
-        return etree.tostring(
-            raiz, xml_declaration=True, encoding="UTF-8", standalone=False
-        )
+        cuerpo = etree.tostring(raiz, encoding="UTF-8")
+        cuerpo = self._declarar_contexto_heredado(cuerpo, contenido.nsmap)
+
+        # La declaración XML queda fuera de la canonicalización, así que
+        # escribirla a mano no toca ningún digest; se hace para emitirla con
+        # comillas dobles y `standalone="no"`, como los documentos que la DIAN
+        # acepta (lxml las emite simples).
+        declaracion = b'<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n'
+        return declaracion + cuerpo
 
     # -- Construcción -------------------------------------------------------
 
@@ -186,28 +162,22 @@ class FirmadorXAdES:
         _sub(ref0, "ds", "DigestMethod", Algorithm=ALG_DIGEST_SHA256)
         _sub(ref0, "ds", "DigestValue")
 
-        # Reference 1: KeyInfo.
-        if "ref1-id" in self.variantes:
-            ref1 = _sub(
-                si, "ds", "Reference",
-                Id=f"{self.id_firma}-ref1", URI=f"#{self.id_keyinfo}",
-            )
-        else:
-            ref1 = _sub(si, "ds", "Reference", URI=f"#{self.id_keyinfo}")
+        # Reference 1: KeyInfo. Lleva `Id` como los documentos que la DIAN
+        # acepta; entra firmado dentro del SignedInfo, así que es coherente.
+        ref1 = _sub(
+            si, "ds", "Reference",
+            Id=f"{self.id_firma}-ref1", URI=f"#{self.id_keyinfo}",
+        )
         _sub(ref1, "ds", "DigestMethod", Algorithm=ALG_DIGEST_SHA256)
         _sub(ref1, "ds", "DigestValue")
 
-        # Reference 2: SignedProperties.
-        if "ref2-orden" in self.variantes:
-            ref2 = _sub(
-                si, "ds", "Reference",
-                Type=TIPO_SIGNED_PROPERTIES, URI=f"#{self.id_signed_props}",
-            )
-        else:
-            ref2 = _sub(
-                si, "ds", "Reference",
-                URI=f"#{self.id_signed_props}", Type=TIPO_SIGNED_PROPERTIES,
-            )
+        # Reference 2: SignedProperties. `Type` antes de `URI`, como en los
+        # documentos aceptados. La C14N ordena los atributos, así que el digest
+        # no depende de esto; solo los bytes transmitidos.
+        ref2 = _sub(
+            si, "ds", "Reference",
+            Type=TIPO_SIGNED_PROPERTIES, URI=f"#{self.id_signed_props}",
+        )
         _sub(ref2, "ds", "DigestMethod", Algorithm=ALG_DIGEST_SHA256)
         _sub(ref2, "ds", "DigestValue")
         return si
@@ -260,6 +230,74 @@ class FirmadorXAdES:
         sph = _sub(spid, "xades", "SigPolicyHash")
         _sub(sph, "ds", "DigestMethod", Algorithm=ALG_DIGEST_SHA256)
         _sub(sph, "ds", "DigestValue", self.policy_hash)
+
+    def _declarar_contexto_heredado(self, cuerpo: bytes, nsmap: dict) -> bytes:
+        """Escribe sobre ``<ds:Signature>`` todos los namespaces que heredaba.
+
+        **Esta es la corrección del rechazo ZE02** ("El valor de la Firma
+        difiere del calculado" / "Valor de la firma inválido") que la DIAN
+        devolvía en nómina con una firma que verificaba correctamente en tres
+        implementaciones independientes.
+
+        El ``ds:SignedInfo`` se canonicaliza con C14N **inclusiva**, que es la
+        que fija el anexo, y la inclusiva emite *todas* las declaraciones de
+        namespace en ámbito. Dentro del documento eso incluye las de la raíz
+        —el namespace por defecto de la nómina, ``ext``, ``xsi``, ``xs``,
+        ``xades``…—, que la firma hereda sin declararlas. Un validador que
+        extraiga el nodo ``ds:Signature``, lo serialice y lo vuelva a parsear
+        por su cuenta pierde esas declaraciones, canonicaliza otro
+        ``SignedInfo`` y concluye que la firma no vale, aunque dentro de su
+        documento sea perfectamente correcta.
+
+        Declarándolas aquí el subárbol se vuelve autónomo. El **conjunto de
+        namespaces en ámbito no cambia** —son las mismas URI con los mismos
+        prefijos, solo que ahora escritas—, así que la C14N dentro del
+        documento sigue dando byte a byte lo mismo y **ningún digest se
+        altera**; lo que cambia es que, extraída, la firma sigue verificando.
+        Lo comprueba ``FirmaAisladaTests`` en ``tests_firma.py``.
+
+        Se hace sobre los bytes y no con ``etree`` porque lxml descarta en
+        silencio una declaración que un ancestro ya trae idéntica: por el árbol
+        es imposible escribirlas. Va después de firmar, y es seguro: estas
+        inserciones quedan fuera de todo lo que se canonicalizó.
+        """
+        cuerpo = self._declarar_en(cuerpo, b"<ds:Signature", nsmap)
+        # `xades:QualifyingProperties` también las declara en los documentos
+        # aceptados, aunque ya las herede de la firma. Mismo razonamiento: un
+        # validador que extraiga las `SignedProperties` para rehacer su digest
+        # las encuentra sin depender del contexto.
+        return self._declarar_en(cuerpo, b"<xades:QualifyingProperties", {
+            "xades": NS["xades"], "xades141": NS["xades141"],
+        })
+
+    def _declarar_en(self, cuerpo: bytes, apertura_tag: bytes, nsmap: dict) -> bytes:
+        """Escribe las declaraciones de `nsmap` en la etiqueta de apertura dada."""
+        apertura = cuerpo.find(apertura_tag)
+        if apertura == -1:
+            return cuerpo
+        fin_tag = cuerpo.find(b">", apertura)
+        if fin_tag == -1:
+            return cuerpo
+
+        tag = cuerpo[apertura:fin_tag]
+        nuevas = b""
+        for prefijo, uri in nsmap.items():
+            # El prefijo `xml` está implícito en todo documento XML y la C14N
+            # nunca lo emite; declararlo sería ruido. `None` es el namespace
+            # por defecto, que se escribe como `xmlns` a secas.
+            if prefijo == "xml":
+                continue
+            nombre = b"xmlns" if prefijo is None else b"xmlns:" + prefijo.encode()
+            # Las que lxml sí llegó a escribir no se duplican.
+            if nombre + b"=" in tag:
+                continue
+            nuevas += b' %s="%s"' % (nombre, uri.encode())
+
+        if not nuevas:
+            return cuerpo
+
+        corte = apertura + len(apertura_tag)
+        return cuerpo[:corte] + nuevas + cuerpo[corte:]
 
     # -- Digests / utilidades ----------------------------------------------
 

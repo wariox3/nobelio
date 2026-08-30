@@ -81,16 +81,10 @@ class NominaViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def emitir(self, request, pk=None):
-        """Genera el XML, calcula el CUNE y firma la nómina.
-
-        Admite ``{"variante": "..."}`` mientras dure la investigación del
-        rechazo ZE02: firma alineando con el documento que la DIAN aceptó el
-        detalle que indique la variante. Ver ``apps.dian.variantes_firma``.
-        """
+        """Genera el XML, calcula el CUNE y firma la nómina."""
         nomina = self.get_object()
-        variante = request.data.get("variante")
         try:
-            servicios.generar_y_firmar_nomina(nomina, variante=variante)
+            servicios.generar_y_firmar_nomina(nomina)
         except ValueError as exc:
             raise ErrorSolicitud(str(exc))
         except servicios.ErrorEmision as exc:
@@ -98,7 +92,6 @@ class NominaViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         return Response({
             "estado": nomina.estado.nombre,
             "cune": nomina.cune,
-            "variante": variante or "(ninguna)",
         })
 
     @action(detail=True, methods=["post"])
