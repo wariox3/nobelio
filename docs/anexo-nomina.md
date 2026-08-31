@@ -156,6 +156,28 @@ otro namespace.
 O sea: el "ajuste" no lleva diferencias sino el documento corregido completo. No
 hay `DiscrepancyResponse` ni conceptos de corrección.
 
+### Cómo se emite aquí
+
+`POST /api/nomina/nomina/{id}/nota-ajuste/` con `{"tipo_nota": "1"|"2"}` **clona**
+la nómina que se ajusta y deja la nota en borrador (`apps/nomina/servicios.py`).
+Se clona por lo de arriba: el reemplazo repite el documento entero, y el único
+sitio donde está completo y tal como se firmó es el predecesor. Lo que haya que
+corregir se edita en el borrador y después van `emitir` y `enviar`, iguales que
+en la nómina: el envío decide solo entre el Set de Pruebas y `SendNominaSync`, y
+el archivo sale con el prefijo `niae`.
+
+La nota hereda el **ambiente** del documento que ajusta y no del emisor: apunta
+a un CUNE que se firmó en uno concreto, y una nota de producción sobre una
+nómina de habilitación señalaría un documento que en ese ambiente no existe.
+
+⚠️ **El CUNE de la eliminación se calcula con los tres totales en cero.** Su XML
+no emite `DevengadosTotal`, `DeduccionesTotal` ni `ComprobanteTotal` —ni el
+`Trabajador` del que sale `DocEmp`—, pero los tres siguen entrando en la
+composición del hash (§3). Cero es lo único que la DIAN puede leer del propio
+documento, así que es lo que se firma; el anexo no lo dice y no hay vector de
+prueba. Si una eliminación se rechaza por CUNE, lo siguiente que hay que probar
+es la composición con los totales del documento eliminado.
+
 ## 7. Listas de valores (§5 del anexo; no hay `.gc`)
 
 **PeriodoNomina**: 1 Semanal · 2 Decenal · 3 Catorcenal · 4 Quincenal ·

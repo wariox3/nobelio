@@ -53,6 +53,15 @@ MENSAJE_TIPO_NOTA_SOLO_EN_AJUSTE = (
 MENSAJE_PREDECESORA_SIN_CUNE = (
     "La nómina que se ajusta todavía no tiene CUNE: emítala antes de ajustarla."
 )
+MENSAJE_SIN_CONCEPTOS = "La nómina debe tener al menos un concepto."
+MENSAJE_ELIMINACION_CON_CONCEPTOS = (
+    "La nota que elimina el documento anterior no lleva conceptos: su XML no "
+    "emite ni `Devengados` ni `Deducciones`."
+)
+MENSAJE_ELIMINACION_CON_TOTALES = (
+    "La nota que elimina el documento anterior lleva los totales en cero: su "
+    "XML no los emite."
+)
 
 
 def mensaje_total_descuadrado(campo, esperado, recibido):
@@ -140,7 +149,10 @@ class NominaCrearSerializer(serializers.ModelSerializer):
     contra la suma de los conceptos y, si no cuadran, se rechaza la creación.
     """
 
-    conceptos = NominaConceptoSerializer(many=True)
+    # Opcional aquí, obligatorio en ``_validar_conceptos``: quien decide si los
+    # lleva es el ``tipo_nota``, y la nota que elimina el documento anterior no
+    # lleva ninguno.
+    conceptos = NominaConceptoSerializer(many=True, required=False)
     emisor = RelacionDelAlcance(queryset=Emisor.objects.all(), campo_emisor="id")
     # Anidado, como el adquiriente de la factura: el ERP manda al trabajador en
     # la misma petición y no tiene que conocer nuestros ids ni dar de alta al
@@ -180,13 +192,6 @@ class NominaCrearSerializer(serializers.ModelSerializer):
             )
         ]
 
-    def validate_conceptos(self, conceptos):
-        if not conceptos:
-            raise serializers.ValidationError(
-                "La nómina debe tener al menos un concepto."
-            )
-        return conceptos
-
     def validate(self, attrs):
         # Firmada, sus datos ya viajaron en el XML y en el CUNE: cambiarlos aquí
         # solo lograría que la base dejara de coincidir con lo firmado.
@@ -197,6 +202,7 @@ class NominaCrearSerializer(serializers.ModelSerializer):
         self._validar_periodo(attrs)
         self._validar_retiro(attrs)
         self._validar_ajuste(attrs)
+        self._validar_conceptos(attrs)
         self._validar_totales(attrs)
         return attrs
 
@@ -313,6 +319,35 @@ class NominaCrearSerializer(serializers.ModelSerializer):
                 {"nomina_predecesora": MENSAJE_PREDECESORA_SIN_CUNE}
             )
 
+    def _es_eliminacion(self, attrs) -> bool:
+        """La nota de ajuste que borra el documento anterior (``TipoNota`` 2)."""
+        return (
+            self._dato(attrs, "tipo_xml") == models.Nomina.TipoXML.AJUSTE
+            and self._dato(attrs, "tipo_nota") == models.Nomina.TipoNota.ELIMINAR
+        )
+
+    def _validar_conceptos(self, attrs):
+        """Toda nómina lleva conceptos; la nota de eliminación, ninguno.
+
+        La comprobación no puede vivir en un ``validate_conceptos``, que se
+        ejecuta campo a campo y sin ver el resto: si lleva o no conceptos lo
+        decide el ``tipo_nota``, que es otro campo.
+
+        Ausente en una edición significa "no los toques"; en una creación, que
+        faltan.
+        """
+        conceptos = attrs.get("conceptos")
+        if self._es_eliminacion(attrs):
+            if conceptos:
+                raise serializers.ValidationError(
+                    {"conceptos": MENSAJE_ELIMINACION_CON_CONCEPTOS}
+                )
+            return
+        if conceptos is None and self.instance is not None:
+            return
+        if not conceptos:
+            raise serializers.ValidationError({"conceptos": MENSAJE_SIN_CONCEPTOS})
+
     def _validar_totales(self, attrs):
         """Los totales informados tienen que cuadrar con los conceptos.
 
@@ -321,6 +356,10 @@ class NominaCrearSerializer(serializers.ModelSerializer):
         DIAN compara. Los conceptos sin pago (licencia no remunerada, huelga)
         traen valor cero y no suman.
         """
+        if self._es_eliminacion(attrs):
+            self._validar_totales_en_cero(attrs)
+            return
+
         conceptos = attrs.get("conceptos")
         if conceptos is None:
             return
@@ -359,9 +398,29 @@ class NominaCrearSerializer(serializers.ModelSerializer):
         if errores:
             raise serializers.ValidationError(errores)
 
+    def _validar_totales_en_cero(self, attrs):
+        """La eliminación no informa importes, pero sí los firma.
+
+        Su XML no emite ``DevengadosTotal`` ni los otros dos, y aun así los tres
+        entran en el CUNE (numeral 8.1.1.1): si aquí quedara un total heredado
+        del documento que se elimina, el hash saldría de unos valores que la
+        DIAN no puede leer en ninguna parte del XML. Se exigen en cero, que es
+        lo que la DIAN tiene para reproducirlo.
+        """
+        errores = {
+            campo: MENSAJE_ELIMINACION_CON_TOTALES
+            for campo in (
+                "total_devengados", "total_deducciones", "redondeo",
+                "total_comprobante",
+            )
+            if (self._dato(attrs, campo) or CERO) != CERO
+        }
+        if errores:
+            raise serializers.ValidationError(errores)
+
     @transaction.atomic
     def create(self, validated_data):
-        conceptos = validated_data.pop("conceptos")
+        conceptos = validated_data.pop("conceptos", [])
         empleado = self._guardar_empleado(
             validated_data["emisor"], validated_data.pop("empleado"),
         )

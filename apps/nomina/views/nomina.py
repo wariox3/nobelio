@@ -10,6 +10,7 @@ from apps.dian import servicios
 from apps.documentos.models import DocumentoEstado
 from apps.nomina import serializers
 from apps.nomina.models import Nomina
+from apps.nomina.servicios import crear_nota_ajuste
 from apps.nucleo.api import ErrorSolicitud, error_pasarela_dian
 from apps.seguridad.alcance import AlcanceEmisorMixin
 
@@ -78,6 +79,40 @@ class NominaViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
                 "ajuste en vez de borrarla."
             )
         return super().destroy(request, *args, **kwargs)
+
+    @action(detail=True, methods=["post"], url_path="nota-ajuste")
+    def nota_ajuste(self, request, pk=None):
+        """Crea la nota de ajuste de esta nómina y la deja en borrador.
+
+        ``POST /api/nomina/nomina/{id}/nota-ajuste/`` con
+        ``{"tipo_nota": "1"}`` para reemplazar el documento anterior o
+        ``{"tipo_nota": "2"}`` para eliminarlo, y opcionalmente ``prefijo``,
+        ``consecutivo`` y ``notas``.
+
+        La nota se **clona** del documento que ajusta porque el reemplazo lo
+        repite entero (numeral 5.5.8): no lleva diferencias sino la nómina
+        corregida completa. Reenviarla campo a campo por ``POST /nomina/`` sigue
+        estando permitido, pero es donde se cuela un dato que ya no coincide con
+        el original.
+
+        Sale idéntica al documento anterior: lo que haya que corregir se edita
+        en el borrador —``PATCH``— y luego van ``emitir`` y ``enviar``.
+        """
+        nomina = self.get_object()
+        try:
+            nota = crear_nota_ajuste(
+                nomina,
+                tipo_nota=str(request.data.get("tipo_nota") or ""),
+                prefijo=request.data.get("prefijo"),
+                consecutivo=request.data.get("consecutivo") or None,
+                notas=request.data.get("notas"),
+            )
+        except ValueError as exc:
+            raise ErrorSolicitud(str(exc))
+        return Response(
+            serializers.NominaSerializer(nota).data,
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=True, methods=["post"])
     def emitir(self, request, pk=None):

@@ -54,11 +54,24 @@ _RE_ERROR = re.compile(
 )
 
 
-def _parsear_error(texto: str) -> dict:
-    """Parsea un error de la DIAN a ``{regla, tipo, mensaje}``."""
+def _parsear_error(texto: str, respaldo: str = "") -> dict:
+    """Parsea un error de la DIAN a ``{regla, tipo, mensaje}``.
+
+    ``respaldo`` es el texto con el que se rellena el mensaje cuando la DIAN
+    manda la regla **sin explicación**: llega un ``Regla: NIAE238, Rechazo:`` a
+    secas y el rechazo se guardaba como una fila en blanco, que en la API y en
+    el ERP se ve igual que no haber recibido ningún error. Lo normal es pasarle
+    el ``StatusDescription`` de la respuesta, que al menos dice de qué iba
+    ("Validación contiene errores en campos mandatorios"). La regla, que es lo
+    único accionable, ya va en su columna.
+    """
     m = _RE_ERROR.match(texto.strip())
     if not m:
-        return {"regla": "", "tipo": DocumentoError.Tipo.OTRO, "mensaje": texto.strip()}
+        return {
+            "regla": "",
+            "tipo": DocumentoError.Tipo.OTRO,
+            "mensaje": texto.strip() or respaldo,
+        }
     etiqueta = m.group("tipo").strip().lower()
     if etiqueta.startswith("rechaz"):
         tipo = DocumentoError.Tipo.RECHAZO
@@ -66,7 +79,11 @@ def _parsear_error(texto: str) -> dict:
         tipo = DocumentoError.Tipo.NOTIFICACION
     else:
         tipo = DocumentoError.Tipo.OTRO
-    return {"regla": m.group("regla").strip(), "tipo": tipo, "mensaje": m.group("mensaje").strip()}
+    return {
+        "regla": m.group("regla").strip(),
+        "tipo": tipo,
+        "mensaje": m.group("mensaje").strip() or respaldo,
+    }
 
 
 def _ya_procesado(respuesta) -> bool:
@@ -149,7 +166,7 @@ def _guardar_respuesta(documento, respuesta):
     documento.errores.all().delete()
     filas = []
     for e in respuesta.errores:
-        datos = _parsear_error(e)
+        datos = _parsear_error(e, respaldo=respuesta.descripcion_estado)
         if datos["tipo"] == DocumentoError.Tipo.NOTIFICACION:
             continue
         filas.append(DocumentoError(documento=documento, **datos))
@@ -637,7 +654,7 @@ def _guardar_respuesta_nomina(nomina, respuesta):
     nomina.errores.all().delete()
     filas = []
     for e in respuesta.errores:
-        datos = _parsear_error(e)
+        datos = _parsear_error(e, respaldo=respuesta.descripcion_estado)
         if datos["tipo"] == NominaError.Tipo.NOTIFICACION:
             continue
         filas.append(NominaError(nomina=nomina, **datos))
