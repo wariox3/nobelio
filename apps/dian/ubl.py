@@ -20,6 +20,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from decimal import Decimal
 
+from django.conf import settings
 from django.utils import timezone
 from lxml import etree
 
@@ -75,6 +76,39 @@ PROFILE_ID_NOTA_AJUSTE = (
     "DIAN 2.1: Nota de ajuste al documento soporte en adquisiciones efectuadas "
     "a sujetos no obligados a expedir factura o documento equivalente"
 )
+
+# Literal exacto del cbc:ProfileID del documento equivalente P.O.S.
+# (regla DEAD03, Res. 000165/2023). Se compara tal cual, como los otros dos.
+PROFILE_ID_DOCUMENTO_EQUIVALENTE_POS = "DIAN 2.1: Documento Equivalente POS"
+
+# Literales exactos del cbc:ProfileID de las notas de ajuste al documento
+# equivalente (reglas NAAD03 y NADBD03). Comprobados carácter a carácter contra
+# las ejemplificaciones `NDAC.xml` y `NDADxml.xml`: **no llevan espacio final**,
+# a diferencia de lo que aparentaba el del documento soporte y que costó un
+# rechazo NSAD03.
+PROFILE_ID_NOTA_AJUSTE_DE_CREDITO = (
+    "DIAN 2.1: Nota de ajuste crédito al documento equivalente"
+)
+PROFILE_ID_NOTA_AJUSTE_DE_DEBITO = (
+    "DIAN 2.1: Nota de ajuste débito al documento equivalente"
+)
+
+# cbc:CustomizationID de las notas del documento equivalente (numeral 16.4.2).
+# Aquí no indica el tipo de operación como en la factura, sino **a qué
+# documento equivalente se refiere la nota**: 20 es el tiquete P.O.S., 25 el de
+# cine, 40 el de peajes… Como solo emitimos el P.O.S., es siempre 20.
+CUSTOMIZATION_NOTA_AJUSTE_DE_POS = "20"
+
+# cbc:DocumentTypeCode del documento referenciado en la nota de crédito: el
+# tipo del documento equivalente que ajusta.
+CODIGO_TIPO_REFERENCIA_POS = "20"
+
+# @name del cbc:InvoiceTypeCode del P.O.S. **Ninguna regla lo valida**: no hay
+# una sola mención a @name en las 318 reglas del numeral 10.2. Se emite porque
+# la ejemplificación oficial lo trae y reproducirla es lo que sacó adelante la
+# nómina tras el ZE02; no porque haga falta. Si alguna vez estorba, quitarlo es
+# gratis.
+NOMBRE_TIPO_DOCUMENTO_EQUIVALENTE_POS = "Factura tipo punto de venta POS"
 
 # cbc:CustomizationID del documento soporte (lista TipoOperacion del anexo DS).
 # Ojo: aquí no indica el tipo de operación como en la factura, sino de dónde es
@@ -171,6 +205,11 @@ class ConstructorUBL:
     profile_id = "DIAN 2.1: Factura Electrónica de Venta"
     nombre_raiz = "Invoice"
     etiqueta_tipo = "InvoiceTypeCode"
+    # @name del elemento de tipo. `None` = no se emite, que es lo que han hecho
+    # siempre la factura, las notas y el documento soporte; solo el P.O.S. lo
+    # pone. Va por atributo y no por sobreescritura de `_cabecera` para que
+    # añadir un tipo no obligue a duplicar la cabecera entera.
+    nombre_tipo = None
     etiqueta_linea = "InvoiceLine"
     etiqueta_cantidad = "InvoicedQuantity"
     etiqueta_total = "LegalMonetaryTotal"
@@ -331,7 +370,8 @@ class ConstructorUBL:
             _sub(raiz, "cbc", "DueDate", self.doc.fecha_vencimiento.isoformat())
         # El UBL DebitNote no tiene elemento de tipo (etiqueta_tipo = None).
         if self.etiqueta_tipo:
-            _sub(raiz, "cbc", self.etiqueta_tipo, self.doc.documento_tipo.codigo_dian)
+            _sub(raiz, "cbc", self.etiqueta_tipo, self.doc.documento_tipo.codigo_dian,
+                 name=self.nombre_tipo)
         _sub(raiz, "cbc", "DocumentCurrencyCode", self.moneda,
              listAgencyID="6",
              listAgencyName="United Nations Economic Commission for Europe",
@@ -708,6 +748,10 @@ class _ConstructorNotaUBL(ConstructorUBL):
     # @schemeName del UUID del documento corregido, que es el suyo y no el de la
     # nota: una nota de factura referencia un CUFE y la de ajuste, un CUDS.
     scheme_name_referencia = ident.SCHEME_NAME_CUFE
+    # cbc:DocumentTypeCode dentro de la referencia. `None` = no se emite, que es
+    # lo que han hecho siempre las notas de factura y de documento soporte;
+    # solo la nota de crédito del documento equivalente lo trae.
+    codigo_tipo_referencia = None
 
     def _discrepancia(self, raiz):
         ref = self.doc.documento_referencia
@@ -727,6 +771,8 @@ class _ConstructorNotaUBL(ConstructorUBL):
         _sub(idr, "cbc", "ID", ref.numero)
         _sub(idr, "cbc", "UUID", ref.cufe_cude, schemeName=self.scheme_name_referencia)
         _sub(idr, "cbc", "IssueDate", ref.fecha_emision.isoformat())
+        if self.codigo_tipo_referencia:
+            _sub(idr, "cbc", "DocumentTypeCode", self.codigo_tipo_referencia)
 
 
 class ConstructorNotaCredito(_ConstructorNotaUBL):
@@ -948,6 +994,14 @@ PERFILES_ADJUNTO = {
         "Documento Soporte Electrónico", "Contenedor de Documento Soporte"),
     _Tipo.Codigo.NOTA_AJUSTE: (
         "Nota de Ajuste Electrónica", "Contenedor de Nota de Ajuste"),
+    _Tipo.Codigo.DOCUMENTO_EQUIVALENTE_POS: (
+        "Documento Equivalente P.O.S.", "Contenedor de Documento Equivalente"),
+    _Tipo.Codigo.NOTA_AJUSTE_DE_CREDITO: (
+        "Nota de Ajuste Crédito al Documento Equivalente",
+        "Contenedor de Nota de Ajuste al Documento Equivalente"),
+    _Tipo.Codigo.NOTA_AJUSTE_DE_DEBITO: (
+        "Nota de Ajuste Débito al Documento Equivalente",
+        "Contenedor de Nota de Ajuste al Documento Equivalente"),
 }
 
 VALIDADOR_DIAN = "Unidad Especial Dirección de Impuestos y Aduanas Nacionales"
@@ -1063,12 +1117,203 @@ class ConstructorAttachedDocument(ConstructorUBL):
             _sub(resultado, "cbc", "ValidationTime", ident.formatear_hora(local.time()))
 
 
+class ConstructorDocumentoEquivalentePOS(ConstructorUBL):
+    """Documento equivalente P.O.S. (Invoice tipo 20, CUDE).
+
+    Tiquete de máquina registradora con sistema P.O.S., numeral 8.2 del Anexo
+    Técnico de documento equivalente electrónico (Res. 000165/2023). Es un
+    ``Invoice`` UBL 2.1 corriente —mismo XSD que la factura de venta, con el que
+    la ejemplificación oficial valida sin un error—, así que lo único que lo
+    distingue de una factura son cuatro señas de identidad:
+
+    - el ``cbc:ProfileID`` propio (DEAD03),
+    - el ``cbc:InvoiceTypeCode`` ``20`` (DEAD12b), que viene del catálogo,
+    - el identificador, que es **CUDE** y no CUFE: se firma con el PIN del
+      software en vez de con la clave técnica de la resolución,
+    - y las tres extensiones propias, obligatorias por DEPD11 y DEPD21.
+
+    Las tres extensiones las añade la fase siguiente; hasta entonces el XML es
+    estructuralmente correcto pero la DIAN lo rechazaría por incompleto.
+
+    El adquiriente no se fuerza aquí: el P.O.S. lo declara como cualquier otro
+    tipo, y quien emite decide si es el comprador identificado o el
+    ``Consumidor Final`` genérico (``222222222222``) de la ejemplificación. Esa
+    elección entra en el CUDE por ``NumAdq``, así que es del documento y no del
+    constructor.
+
+    Referencia: ``docs/anexo-documento-equivalente.md``.
+    """
+
+    profile_id = PROFILE_ID_DOCUMENTO_EQUIVALENTE_POS
+    scheme_name = ident.SCHEME_NAME_CUDE
+    usa_cude = True
+    nombre_tipo = NOMBRE_TIPO_DOCUMENTO_EQUIVALENTE_POS
+
+    def _linea_extra(self, il, linea):
+        """``cbc:FreeOfChargeIndicator``, como en la ejemplificación oficial.
+
+        Repite la línea de ``ConstructorFacturaUBL`` en vez de heredar de él a
+        propósito: el P.O.S. y la factura coinciden hoy, pero son documentos de
+        anexos distintos y encadenarlos haría que un cambio en la factura se
+        colara en el P.O.S. sin que nadie lo pidiera.
+        """
+        _sub(il, "cbc", "FreeOfChargeIndicator", "false")
+
+    # -- Extensiones propias -------------------------------------------------
+
+    def _extensiones(self, raiz, cude):
+        """El ``sts:DianExtensions`` de siempre y las tres del P.O.S.
+
+        Las reglas DEPD11 y DEPD21 —las dos de rechazo— exigen cinco nodos:
+        ``sts:DianExtensions``, ``ds:Signature``,
+        ``InformacionDelFabricanteDelSoftware``,
+        ``InformacionBeneficiosComprador`` e ``InformacionCajaVenta``. No hay
+        condicionales: un tiquete sin el programa de puntos se rechaza igual
+        que uno sin firma.
+
+        La firma la añade después ``apps/dian/firma``, que engancha su
+        ``UBLExtension`` al final, así que el orden acaba siendo el de la
+        ejemplificación oficial.
+        """
+        super()._extensiones(raiz, cude)
+        extensiones = raiz.find(_q("ext", "UBLExtensions"))
+        datos = self._datos_pos()
+
+        self._extension_pares(
+            extensiones, "FabricanteSoftware",
+            "InformacionDelFabricanteDelSoftware",
+            (
+                ("NombreApellido", self._fabricante(
+                    "fabricante_nombre", settings.DIAN_FABRICANTE_NOMBRE)),
+                ("RazonSocial", self._fabricante(
+                    "fabricante_razon_social", settings.DIAN_FABRICANTE_RAZON_SOCIAL)),
+                ("NombreSoftware", self._fabricante(
+                    "fabricante_nombre_software",
+                    settings.DIAN_FABRICANTE_NOMBRE_SOFTWARE)),
+            ),
+        )
+        self._extension_pares(
+            extensiones, "BeneficiosComprador",
+            "InformacionBeneficiosComprador",
+            (
+                ("Codigo", datos.comprador_codigo
+                 or self.doc.adquiriente.numero_identificacion),
+                ("NombresApellidos", datos.comprador_nombres
+                 or self.doc.adquiriente.razon_social),
+                ("Puntos", datos.comprador_puntos),
+            ),
+        )
+        self._extension_pares(
+            extensiones, "PuntoVenta", "InformacionCajaVenta",
+            (
+                ("PlacaCaja", datos.caja_placa),
+                # Con tilde las dos: es el literal que compara la DIAN
+                # (DEPD27 y DEPD33), no una errata.
+                ("UbicaciónCaja", datos.caja_ubicacion),
+                ("Cajero", datos.cajero),
+                ("TipoCaja", datos.caja_tipo),
+                ("CódigoVenta", datos.codigo_venta),
+                ("SubTotal", _valor(
+                    datos.subtotal if datos.subtotal is not None
+                    else self.doc.valor_bruto
+                )),
+            ),
+        )
+
+    def _fabricante(self, campo, por_defecto):
+        """Quién fabricó el software: el ajuste de la plataforma, o el del emisor.
+
+        Lo normal es el de la plataforma: el fabricante es el mismo para todos
+        los emisores, porque describe quién hizo el software y no quién emite.
+        El campo de ``SoftwareDian`` es la excepción, para el obligado que use
+        software propio; vacío —que es lo normal— no pisa nada.
+        """
+        return getattr(self.software, campo, "") or por_defecto
+
+    def _datos_pos(self):
+        """El satélite con la caja y el comprador, que aquí es obligatorio."""
+        datos = getattr(self.doc, "pos", None)
+        if datos is None:
+            raise ValueError(
+                "El documento equivalente P.O.S. no tiene datos de la venta en "
+                "caja (`DocumentoPOS`): sin ellos no se pueden armar las "
+                "extensiones que exigen las reglas DEPD11 y DEPD21."
+            )
+        return datos
+
+    def _extension_pares(self, extensiones, envoltorio, grupo, pares):
+        """Una ``UBLExtension`` con un grupo de pares ``Name``/``Value``.
+
+        Las tres extensiones del P.O.S. tienen la misma forma y —cosa rara— van
+        en el namespace de ``Invoice-2``, el mismo de la raíz, en vez de en uno
+        propio como el ``sts:`` de la DIAN. Se reproduce tal cual la
+        ejemplificación.
+        """
+        ns = NS_RAIZ[self.nombre_raiz]
+        ext = _sub(extensiones, "ext", "UBLExtension")
+        contenido = _sub(ext, "ext", "ExtensionContent")
+        envuelto = etree.SubElement(contenido, etree.QName(ns, envoltorio))
+        info = etree.SubElement(envuelto, etree.QName(ns, grupo))
+        for nombre, valor in pares:
+            etree.SubElement(info, etree.QName(ns, "Name")).text = nombre
+            etree.SubElement(info, etree.QName(ns, "Value")).text = (
+                "" if valor is None else str(valor)
+            )
+
+
+class ConstructorNotaAjusteDECredito(ConstructorNotaCredito):
+    """Nota de ajuste crédito al documento equivalente (CreditNote, tipo 94).
+
+    Numeral 8.12.1. A diferencia de la nota de ajuste de **nómina**, que
+    reemplaza o elimina el documento entero, esta se comporta como una nota
+    crédito de factura: corrige por diferencia, lleva su
+    ``cac:DiscrepancyResponse`` y referencia el documento ajustado.
+
+    Lo que la separa de la nota crédito de factura son tres cosas: el
+    ``ProfileID``, el ``CustomizationID`` —que aquí dice a qué documento
+    equivalente se refiere, no el tipo de operación— y que el UUID
+    referenciado es un **CUDE**, no un CUFE.
+
+    **No lleva las tres extensiones del P.O.S.**: sus ejemplificaciones traen
+    solo ``sts:DianExtensions`` y la firma, y las reglas NAAA02 y NAAB03 no
+    piden más. Por eso hereda de ``ConstructorNotaCredito`` y no del
+    constructor del P.O.S.
+
+    Referencia: ``docs/anexo-documento-equivalente.md``.
+    """
+
+    profile_id = PROFILE_ID_NOTA_AJUSTE_DE_CREDITO
+    customization_id_default = CUSTOMIZATION_NOTA_AJUSTE_DE_POS
+    scheme_name_referencia = ident.SCHEME_NAME_CUDE
+    codigo_tipo_referencia = CODIGO_TIPO_REFERENCIA_POS
+
+
+class ConstructorNotaAjusteDEDebito(ConstructorNotaDebito):
+    """Nota de ajuste débito al documento equivalente (DebitNote, CUDE).
+
+    Numeral 8.12.2. Igual que la de crédito, con la salvedad de siempre del
+    UBL ``DebitNote``: no tiene elemento de tipo, así que su ``codigo_dian`` no
+    se emite en ninguna parte.
+
+    No emite ``DocumentTypeCode`` en la referencia: su ejemplificación
+    (``NDADxml.xml``) no lo trae, al contrario que la de crédito. La asimetría
+    es del anexo, no nuestra, y se reproduce tal cual.
+    """
+
+    profile_id = PROFILE_ID_NOTA_AJUSTE_DE_DEBITO
+    customization_id_default = CUSTOMIZATION_NOTA_AJUSTE_DE_POS
+    scheme_name_referencia = ident.SCHEME_NAME_CUDE
+
+
 CONSTRUCTORES = {
     _Tipo.Codigo.FACTURA_VENTA: ConstructorFacturaUBL,
     _Tipo.Codigo.NOTA_CREDITO: ConstructorNotaCredito,
     _Tipo.Codigo.NOTA_DEBITO: ConstructorNotaDebito,
     _Tipo.Codigo.DOCUMENTO_SOPORTE: ConstructorDocumentoSoporte,
     _Tipo.Codigo.NOTA_AJUSTE: ConstructorNotaAjuste,
+    _Tipo.Codigo.DOCUMENTO_EQUIVALENTE_POS: ConstructorDocumentoEquivalentePOS,
+    _Tipo.Codigo.NOTA_AJUSTE_DE_CREDITO: ConstructorNotaAjusteDECredito,
+    _Tipo.Codigo.NOTA_AJUSTE_DE_DEBITO: ConstructorNotaAjusteDEDebito,
 }
 
 

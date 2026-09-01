@@ -116,6 +116,32 @@ def nombre_archivo_nomina(prefijo: str, *, nit, anio, consecutivo) -> str:
     )
 
 
+def nombre_archivo_documento_equivalente(
+    prefijo: str, *, nit, codigo_pt, anio, consecutivo
+) -> str:
+    """Compone el nombre de un archivo de documento equivalente, sin extensión.
+
+    Tercera convención, distinta de las otras dos: es la de nómina más el
+    ``ppp``, el código de tres dígitos que la DIAN asigna al proveedor
+    tecnológico.
+
+        prefijo + NIT(10) + ppp(3) + aa(2) + consecutivo hexadecimal(8)
+
+    Los prefijos son ``ds`` para el documento equivalente, ``ncs`` para su nota
+    de ajuste, ``ars`` para el ApplicationResponse soporte y ``z`` para el zip.
+    El consecutivo es de **archivos enviados** y se reinicia cada 1 de enero.
+
+    Ejemplo del anexo: ``ds08001972680002000000001.xml``.
+
+    Numeral 8.13.5 del Anexo Técnico de documento equivalente electrónico v1.0;
+    resumen en ``docs/anexo-documento-equivalente.md``.
+    """
+    return (
+        f"{prefijo}{str(nit).zfill(10)}{str(codigo_pt or '').zfill(3)}"
+        f"{str(anio)[-2:]}{format(int(consecutivo), 'X').zfill(8)}"
+    )
+
+
 def _sha384_hex(cadena: str) -> str:
     """SHA-384 en hexadecimal (minúsculas) de una cadena UTF-8."""
     return hashlib.sha384(cadena.encode("utf-8")).hexdigest()

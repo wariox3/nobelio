@@ -56,6 +56,11 @@ VERSION_NOTA_AJUSTE = (
 TIPO_XML_NOMINA = "102"
 TIPO_XML_NOTA_AJUSTE = "103"
 
+# El ``DocEmp`` del CUNE en la nota de ajuste de tipo **Eliminar**. El anexo lo
+# fija como literal en vez de darle un XPath (numeral 8.1.1.1), porque ese
+# bloque no lleva ``Trabajador`` del que leerlo.
+DOC_EMPLEADO_ELIMINACION = "0"
+
 # @Idioma del lugar de generación (ISO 639, numeral 5.3.1).
 IDIOMA_ESPANOL = "es"
 
@@ -670,6 +675,47 @@ class ConstructorNotaAjusteNomina(ConstructorNominaXML):
     ns_raiz = NS_NOMINA_AJUSTE
     version = VERSION_NOTA_AJUSTE
     tipo_xml = TIPO_XML_NOTA_AJUSTE
+
+    def calcular_identificador(self) -> str:
+        """El CUNE del reemplazo es el de siempre; el de la eliminación, no.
+
+        Para la opción **Eliminar**, el numeral 8.1.1.1 no da XPath para cuatro
+        de los campos: los fija como literales, porque el XML de la eliminación
+        no los contiene.
+
+            ValDev: 0.00   ValDed: 0.00   ValTol: 0.00   DocEmp: 0
+
+        El ``DocEmp`` es la trampa: el bloque ``Eliminar`` no lleva
+        ``Trabajador``, así que no hay número de documento que leer y el anexo
+        manda un **cero literal**. Usar el del trabajador —que es lo que hacía
+        este constructor— da un hash que la DIAN no puede reproducir, y lo
+        rechaza con **NIAE238**, cuyo mensaje ("Validación contiene errores en
+        campos mandatorios") no menciona el CUNE por ningún lado.
+
+        Costó tres envíos del Set de Pruebas (NESETP10, NESETP23 y NESETP51)
+        antes de encontrar la tabla del anexo. Ver ``docs/anexo-nomina.md`` §6.
+
+        Los tres importes se pasan en cero aquí y no se leen del modelo: el
+        serializer ya los exige así, pero el hash tiene que salir de lo que dice
+        el anexo aunque alguien cree la nota por otra vía.
+        """
+        from apps.nomina.models import Nomina
+
+        if self.doc.tipo_nota != Nomina.TipoNota.ELIMINAR:
+            return super().calcular_identificador()
+        return ident.calcular_cune(
+            numero_documento=self.doc.numero,
+            fecha=self.doc.fecha_generacion,
+            hora=self.doc.hora_generacion,
+            valor_devengado=CERO,
+            valor_deduccion=CERO,
+            valor_total=CERO,
+            nit_empleador=self.emisor.numero_identificacion,
+            documento_empleado=DOC_EMPLEADO_ELIMINACION,
+            tipo_xml=self.tipo_xml,
+            pin_software=self.pin,
+            tipo_ambiente=self.ambiente,
+        )
 
     def _cuerpo(self, raiz, cune):
         from apps.nomina.models import Nomina

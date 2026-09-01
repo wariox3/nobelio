@@ -18,6 +18,22 @@ class DocumentoTipo(ModeloConFechas):
         DOCUMENTO_SOPORTE = "documento_soporte", "Documento soporte"
         NOTA_AJUSTE = "nota_ajuste", "Nota de ajuste al documento soporte"
         NOMINA = "nomina", "Nómina electrónica"
+        # Documento equivalente electrónico, tiquete de máquina registradora
+        # con sistema P.O.S. (Res. 000165/2023, numeral 8.2). El anexo define
+        # trece documentos equivalentes más; solo se implementa este, así que
+        # el código lo nombra y no dice "documento_equivalente" a secas.
+        DOCUMENTO_EQUIVALENTE_POS = (
+            "documento_equivalente_pos", "Documento equivalente P.O.S."
+        )
+        # Las notas del documento equivalente (numeral 8.12). No son un
+        # reemplazo como las de nómina: son crédito y débito, como las de la
+        # factura, y referencian el CUDE del documento que ajustan.
+        NOTA_AJUSTE_DE_CREDITO = (
+            "nota_ajuste_de_credito", "Nota de ajuste crédito al documento equivalente"
+        )
+        NOTA_AJUSTE_DE_DEBITO = (
+            "nota_ajuste_de_debito", "Nota de ajuste débito al documento equivalente"
+        )
 
     # Los tipos que se numeran con una resolución autorizada por la DIAN: de
     # ella sale el bloque sts:InvoiceControl del XML, y en la factura además la
@@ -29,6 +45,10 @@ class DocumentoTipo(ModeloConFechas):
     CODIGOS_CON_RESOLUCION = frozenset({
         Codigo.FACTURA_VENTA,
         Codigo.DOCUMENTO_SOPORTE,
+        # El POS también se numera con una autorización de la DIAN, y su
+        # `sts:InvoiceControl` lo comprueban dos reglas de rechazo: DEAB05a
+        # (que la autorización exista) y DEAB05b (que sea de este emisor).
+        Codigo.DOCUMENTO_EQUIVALENTE_POS,
     })
 
     # Los tipos que llevan las retenciones aparte: no suman al total a pagar y
@@ -49,6 +69,8 @@ class DocumentoTipo(ModeloConFechas):
         Codigo.NOTA_CREDITO,
         Codigo.NOTA_DEBITO,
         Codigo.NOTA_AJUSTE,
+        Codigo.NOTA_AJUSTE_DE_CREDITO,
+        Codigo.NOTA_AJUSTE_DE_DEBITO,
     })
 
     # Los tipos en los que el `adquiriente` del documento no es el receptor sino
@@ -67,7 +89,7 @@ class DocumentoTipo(ModeloConFechas):
     nombre = models.CharField("nombre", max_length=100)
     codigo_dian = models.CharField(
         "código DIAN (InvoiceTypeCode)", max_length=2, blank=True,
-        help_text="InvoiceTypeCode oficial (01, 02, 91, 92, 05).",
+        help_text="InvoiceTypeCode oficial (01, 02, 91, 92, 05, 20).",
     )
     activo = models.BooleanField("activo", default=True)
 

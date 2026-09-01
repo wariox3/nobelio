@@ -24,7 +24,12 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
 
     queryset = (
         Documento.objects.select_related(
-            "documento_tipo", "estado", "emisor", "adquiriente", "resolucion", "moneda"
+            "documento_tipo", "estado", "emisor", "adquiriente", "resolucion",
+            "moneda",
+            # Solo lo tiene el P.O.S., pero es 1:1: traerlo aquí evita una
+            # consulta por documento al serializarlo y no cuesta nada en los
+            # tipos que no lo llevan.
+            "pos",
         ).prefetch_related("errores", "adquiriente__responsabilidades")
     )
 

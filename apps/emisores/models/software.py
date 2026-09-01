@@ -21,19 +21,23 @@ class SoftwareDian(ModeloConFechas):
     class Tipo(models.TextChoices):
         """Qué operación habilita el software.
 
-        La DIAN habilita facturación y nómina electrónica por separado, cada
-        una con su propio SoftwareID y su PIN, así que un emisor puede tener
-        registrados dos softwares a la vez y hay que saber cuál usar en cada
-        documento.
+        La DIAN habilita facturación, nómina electrónica y documento
+        equivalente por separado, cada una con su propio SoftwareID y su PIN,
+        así que un emisor puede tener registrados tres softwares a la vez y hay
+        que saber cuál usar en cada documento.
         """
 
         FACTURACION = "facturacion", "Facturación electrónica"
         NOMINA = "nomina", "Nómina electrónica"
+        DOCUMENTO_EQUIVALENTE = (
+            "documento_equivalente", "Documento equivalente electrónico"
+        )
 
     # --- Atributos ---
     tipo = models.CharField(
-        "tipo de software", max_length=20, choices=Tipo.choices,
-        help_text="Operación que habilita: facturación o nómina electrónica.",
+        "tipo de software", max_length=25, choices=Tipo.choices,
+        help_text="Operación que habilita: facturación, nómina electrónica o "
+        "documento equivalente.",
     )
     identificador = models.CharField(
         "ID del software", max_length=100,
@@ -50,6 +54,40 @@ class SoftwareDian(ModeloConFechas):
         "SendBillSync (síncrono) en vez de SendTestSetAsync.",
     )
     activo = models.BooleanField("activo", default=True)
+
+    # --- Fabricante del software (solo documento equivalente) ---
+    # El P.O.S. exige una extensión `InformacionDelFabricanteDelSoftware` con
+    # estos tres pares Name/Value, y las reglas DEAB41 a DEAB46 la rechazan si
+    # faltan.
+    #
+    # Lo normal es dejarlos **vacíos**: quien fabricó el software es la
+    # plataforma, igual para todos los emisores, y sus valores están en
+    # `DIAN_FABRICANTE_*` (ver `config/settings/base.py`). Estos campos son la
+    # excepción, para el obligado que emita con software propio en vez de con
+    # el de un proveedor tecnológico; informado, gana sobre el ajuste global.
+    #
+    # No confundir con la razón social del emisor: son cosas distintas y solo
+    # coinciden cuando el fabricante se factura a sí mismo.
+    codigo_proveedor_tecnologico = models.CharField(
+        "código del PT", max_length=3, blank=True,
+        help_text="Los tres dígitos que la DIAN asigna al proveedor "
+        "tecnológico. Van en el nombre de todos los archivos del documento "
+        "equivalente (numeral 8.13.5); con software propio suele ser 000.",
+    )
+    fabricante_nombre = models.CharField(
+        "nombre y apellido del fabricante", max_length=200, blank=True,
+        help_text="Par `NombreApellido`. Vacío usa DIAN_FABRICANTE_NOMBRE.",
+    )
+    fabricante_razon_social = models.CharField(
+        "razón social del fabricante", max_length=200, blank=True,
+        help_text="Par `RazonSocial`. Vacío usa DIAN_FABRICANTE_RAZON_SOCIAL. "
+        "No es la razón social del emisor.",
+    )
+    fabricante_nombre_software = models.CharField(
+        "nombre del software", max_length=200, blank=True,
+        help_text="Par `NombreSoftware`. Vacío usa "
+        "DIAN_FABRICANTE_NOMBRE_SOFTWARE.",
+    )
 
     # --- Relaciones ---
     emisor = models.ForeignKey(

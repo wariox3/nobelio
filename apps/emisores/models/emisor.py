@@ -53,6 +53,13 @@ class Emisor(ModeloConFechas):
         "no la marca el sistema por sí solo. Sin ella, la DIAN rechaza con la "
         "regla 92 ('El Emisor del Documento no se encuentra Habilitado').",
     )
+    habilitado_documento_equivalente = models.BooleanField(
+        "habilitado para documento equivalente", default=False,
+        help_text="El documento equivalente P.O.S. sí tiene Set de Pruebas "
+        "propio (`SendTestSetAsync`), con su TestSetId: la DIAN exige emitir "
+        "los documentos y las notas de ajuste que pida el sistema antes de "
+        "pasar a producción.",
+    )
 
     ambiente_facturacion = models.PositiveSmallIntegerField(
         "ambiente DIAN de facturación", choices=Ambiente.choices,
@@ -68,6 +75,13 @@ class Emisor(ModeloConFechas):
         help_text="Lo mismo para la nómina, que la DIAN habilita aparte: el "
         "mismo emisor puede estar en producción para factura y todavía en "
         "habilitación para nómina.",
+    )
+    ambiente_documento_equivalente = models.PositiveSmallIntegerField(
+        "ambiente DIAN de documento equivalente", choices=Ambiente.choices,
+        default=ambiente_por_defecto,
+        help_text="Y lo mismo para el documento equivalente P.O.S., que tiene "
+        "su propia habilitación (Res. 000165/2023, numeral 4). Son tres "
+        "ambientes independientes, no uno del despliegue.",
     )
 
     # --- Relaciones ---

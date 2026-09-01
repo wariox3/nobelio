@@ -73,6 +73,16 @@ MENSAJE_NOMINA_SIN_HABILITAR = (
 )
 
 
+# Mismo caso que la nómina: sin la habilitación del documento equivalente, la
+# DIAN rechaza en producción y el mensaje manda a buscar el error dentro del
+# tiquete cuando lo que falta es el trámite.
+MENSAJE_DOCUMENTO_EQUIVALENTE_SIN_HABILITAR = (
+    "El emisor no está habilitado para documento equivalente, así que no puede "
+    "emitirlo en producción. La bandera se marca sola cuando la DIAN cierra su "
+    "Set de Pruebas; márquela a mano solo si ya lo cerró y aquí no consta."
+)
+
+
 class EmisorSerializer(serializers.ModelSerializer):
     resoluciones = ResolucionSerializer(many=True, read_only=True)
     # No se exige en el cuerpo: para una integración sale de la credencial; solo
@@ -102,6 +112,17 @@ class EmisorSerializer(serializers.ModelSerializer):
     # se podía por fuera de esta API. Es además la condición para poner
     # `ambiente_nomina` en producción (ver `validate`).
     habilitado_nomina = serializers.BooleanField(required=False)
+    # La del documento equivalente es de escritura, como la de nómina, y por lo
+    # que dice `exigir_habilitacion_de_nomina`: en cuanto una bandera **condiciona
+    # el paso a producción**, dejarla de solo lectura encierra al emisor que se
+    # habilite por fuera del automatismo. Y aquí ese automatismo depende de
+    # reconocer un texto de la DIAN (`_set_pruebas_cerrado`), que puede cambiar
+    # de redacción cualquier día.
+    #
+    # Lo normal sigue siendo que la marque sola `_marcar_habilitacion_superada`
+    # al cerrarse el Set de Pruebas; que se pueda escribir es la salida de
+    # emergencia, no el camino.
+    habilitado_documento_equivalente = serializers.BooleanField(required=False)
     # Los ambientes también son de escritura, y ahí está la diferencia con la
     # bandera de facturación: 'estoy habilitado' es un hecho que constata la
     # DIAN, mientras que 'emite contra producción' es una decisión nuestra
@@ -142,6 +163,16 @@ class EmisorSerializer(serializers.ModelSerializer):
             ambiente_nomina, valor("habilitado_nomina"),
         )
 
+        # Lo mismo para el documento equivalente, y por el mismo motivo: su
+        # habilitación es un trámite aparte y salir a producción sin ella es la
+        # regla 92 otra vez.
+        ambiente_de = valor("ambiente_documento_equivalente")
+        if ambiente_de is None:
+            ambiente_de = ambiente_por_defecto()
+        self.exigir_habilitacion_de_documento_equivalente(
+            ambiente_de, valor("habilitado_documento_equivalente"),
+        )
+
         cuenta = valor("cuenta")
         tipo = valor("tipo_identificacion")
         numero = valor("numero_identificacion")
@@ -171,6 +202,25 @@ class EmisorSerializer(serializers.ModelSerializer):
         if ambiente == Ambiente.PRODUCCION and not habilitado:
             raise serializers.ValidationError(
                 {"ambiente_nomina": MENSAJE_NOMINA_SIN_HABILITAR}
+            )
+
+    def exigir_habilitacion_de_documento_equivalente(self, ambiente, habilitado):
+        """Producción de documento equivalente solo después de su habilitación.
+
+        Gemela de ``exigir_habilitacion_de_nomina``: cada operación se habilita
+        por separado, así que estar en producción para factura no dice nada del
+        tiquete P.O.S.
+
+        Va con la bandera de escritura y no con una de solo lectura, que es lo
+        que distingue este caso del de facturación: en cuanto una bandera cierra
+        el paso a producción, tiene que existir la forma de constatarla a mano
+        —si no, un emisor ya habilitado por la DIAN que aquí no conste se queda
+        sin salida—.
+        """
+        if ambiente == Ambiente.PRODUCCION and not habilitado:
+            raise serializers.ValidationError(
+                {"ambiente_documento_equivalente":
+                    MENSAJE_DOCUMENTO_EQUIVALENTE_SIN_HABILITAR}
             )
 
     def exigir_no_duplicado(self, cuenta, tipo, numero):
@@ -206,7 +256,9 @@ class EmisorSerializer(serializers.ModelSerializer):
             "correo_copia",
             "telefono", "correo", "activo",
             "habilitado_facturacion", "habilitado_nomina",
+            "habilitado_documento_equivalente",
             "ambiente_facturacion", "ambiente_nomina",
+            "ambiente_documento_equivalente",
             "resoluciones",
         ]
         # Vacío a propósito: desactiva el UniqueTogetherValidator automático de

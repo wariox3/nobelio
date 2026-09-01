@@ -1,5 +1,5 @@
 """Serializers de lectura y creación del documento electrónico."""
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.db import transaction
 from django.utils import timezone
@@ -13,6 +13,7 @@ from apps.seguridad.alcance import RelacionDelAlcance
 
 from .adquiriente import AdquirienteSerializer
 from .documento_detalle import DocumentoDetalleSerializer
+from .documento_pos import DocumentoPOSSerializer
 from .documento_error import DocumentoErrorSerializer
 
 # El emisor solo conoce el número que le dio la DIAN, no nuestros ids, así que
@@ -54,6 +55,12 @@ CONCEPTOS_POR_TIPO = {
     # los códigos coinciden en número con los de la nota crédito pero no en
     # redacción, y es la que la DIAN valida en el ResponseCode.
     models.DocumentoTipo.Codigo.NOTA_AJUSTE: models.Documento.ConceptoNotaAjuste,
+    # Y las del documento equivalente, la suya (numeral 16.6): las dos, crédito
+    # y débito, comparten lista.
+    models.DocumentoTipo.Codigo.NOTA_AJUSTE_DE_CREDITO:
+        models.Documento.ConceptoNotaAjusteDocumentoEquivalente,
+    models.DocumentoTipo.Codigo.NOTA_AJUSTE_DE_DEBITO:
+        models.Documento.ConceptoNotaAjusteDocumentoEquivalente,
 }
 
 
@@ -151,12 +158,40 @@ def mensaje_consecutivo_fuera_de_rango(resolucion):
     )
 
 
+# Cuánto se admite de diferencia entre el impuesto informado y el calculado.
+# Un céntimo: es lo máximo que puede separar a dos redondeos legítimos del mismo
+# producto a dos decimales, y por debajo de eso ya no hay error que avisar.
+TOLERANCIA_IMPUESTO = Decimal("0.01")
+CERO = Decimal("0")
+CIEN = Decimal("100")
+
+
+def mensaje_impuesto_descuadrado(linea, tributo, esperado, recibido):
+    """Mensaje del impuesto que no cuadra con su base y su tarifa."""
+    return (
+        f"Línea {linea}, tributo {tributo}: la tarifa aplicada sobre la base da "
+        f"{esperado} y se informó {recibido}."
+    )
+
+
+MENSAJE_POS_SIN_DATOS = (
+    "El documento equivalente P.O.S. necesita el bloque `pos` con la caja y los "
+    "datos de la venta: sin él no se pueden armar las extensiones que la DIAN "
+    "exige (reglas DEPD11 y DEPD21)."
+)
+MENSAJE_POS_SOLO_EN_POS = (
+    "Solo el documento equivalente P.O.S. lleva el bloque `pos`."
+)
+
+
 class DocumentoSerializer(serializers.ModelSerializer):
     """Serializer de lectura del documento, con detalles anidados."""
 
     detalles = DocumentoDetalleSerializer(many=True, read_only=True)
     errores = DocumentoErrorSerializer(many=True, read_only=True)
     adquiriente = AdquirienteSerializer(read_only=True)
+    # Solo lo trae el P.O.S.; en los demás tipos sale nulo.
+    pos = DocumentoPOSSerializer(read_only=True)
     documento_tipo_nombre = serializers.CharField(
         source="documento_tipo.nombre", read_only=True
     )
@@ -182,7 +217,7 @@ class DocumentoSerializer(serializers.ModelSerializer):
             "valor_bruto", "total_impuestos",
             "total_descuentos", "descuentos_motivo", "total_cargos", "cargos_motivo",
             "total_a_pagar", "documento_referencia", "observaciones", "detalles",
-            "creado_en", "actualizado_en",
+            "pos", "creado_en", "actualizado_en",
         ]
         read_only_fields = [
             "estado", "cufe_cude", "track_id", "envio", "ambiente", "fecha_validacion",
@@ -236,6 +271,9 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
     """
 
     detalles = DocumentoDetalleSerializer(many=True)
+    # Solo el P.O.S. lo lleva; lo comprueba `_validar_pos`, que es quien conoce
+    # el tipo de documento.
+    pos = DocumentoPOSSerializer(required=False)
     # Opcional porque solo la factura se numera con resolución: la nota lleva
     # su propia numeración y su XML ni siquiera incluye el InvoiceControl.
     numero_resolucion = serializers.CharField(write_only=True, required=False)
@@ -258,7 +296,7 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
             "concepto_correccion", "fecha_vencimiento",
             "orden_compra", "orden_compra_fecha", "orden_compra_tipo",
             "orden_compra_documento",
-            "observaciones", "detalles",
+            "observaciones", "detalles", "pos",
         ]
         # Mensaje propio para la unicidad (emisor+prefijo+consecutivo+tipo) en vez
         # del genérico "deben formar un conjunto único".
@@ -348,6 +386,9 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
             if errores:
                 raise serializers.ValidationError(errores)
 
+        self._validar_impuestos(attrs)
+        self._validar_pos(attrs, tipo)
+
         # Lo último, para no tapar un error de datos de la propia petición con
         # uno de configuración del emisor: sin certificado activo y vigente el
         # documento nacería muerto —se crearía bien y reventaría al firmarlo—,
@@ -356,6 +397,73 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
         if motivo:
             raise serializers.ValidationError({"emisor": motivo})
         return attrs
+
+    def _validar_impuestos(self, attrs):
+        """El impuesto informado tiene que ser el de su base por su tarifa.
+
+        Se comprueba en vez de recalcularse, por lo mismo que los totales de la
+        nómina: quien liquida es el ERP, y un descuadre es un error suyo que hay
+        que sacar a la luz y no tapar. Aquí además el que lo tapa es el que
+        paga: la DIAN lo rechaza con DEAS07 y DEAX07 —y sus equivalentes en
+        factura y documento soporte—, así que dejarlo pasar solo aplaza el
+        fallo hasta el envío y de paso gasta el consecutivo y, en habilitación,
+        un cupo del Set de Pruebas.
+
+        No es una comprobación teórica: el 2026-09-01 un P.O.S. salió con base
+        y tarifa en cero y el impuesto informado, porque la petición traía los
+        campos con otro nombre y DRF ignora lo que no conoce. Todo cuadraba
+        salvo la aritmética, y eso solo lo dijo la DIAN.
+
+        Se admite un céntimo de diferencia: dos redondeos legítimos a dos
+        decimales pueden separarse eso y no más.
+
+        ⚠️ Vale mientras todos los tributos sean porcentuales, que es lo único
+        que el constructor sabe emitir hoy (``_bloque_impuesto`` siempre pone
+        ``cbc:Percent``). Los impuestos por unidad del documento equivalente
+        —IBUA, ICUI— se calculan por cantidad y no por porcentaje: el día que se
+        implementen hay que dejarlos fuera de esta regla.
+        """
+        detalles = attrs.get("detalles")
+        if not detalles:
+            return
+
+        errores = []
+        for detalle in detalles:
+            linea = detalle.get("numero_linea", "?")
+            for impuesto in detalle.get("impuestos") or []:
+                base = impuesto.get("base_gravable") or CERO
+                tarifa = impuesto.get("tarifa") or CERO
+                valor = impuesto.get("valor") or CERO
+                esperado = (base * tarifa / CIEN).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+                if abs(esperado - valor) > TOLERANCIA_IMPUESTO:
+                    tributo = impuesto.get("tributo")
+                    errores.append(mensaje_impuesto_descuadrado(
+                        linea, getattr(tributo, "codigo", tributo), esperado, valor,
+                    ))
+        if errores:
+            raise serializers.ValidationError({"detalles": errores})
+
+    def _validar_pos(self, attrs, tipo):
+        """El bloque ``pos`` es del P.O.S., y en el P.O.S. es obligatorio.
+
+        Se corta al crear y no al firmar porque el documento ya tiene su
+        consecutivo reservado: descubrirlo al emitir lo gastaría.
+
+        Ausente en una edición significa "no lo toques"; en una creación, que
+        falta.
+        """
+        codigo = tipo.codigo if tipo is not None else None
+        datos = attrs.get("pos")
+        if codigo != models.DocumentoTipo.Codigo.DOCUMENTO_EQUIVALENTE_POS:
+            if datos:
+                raise serializers.ValidationError({"pos": MENSAJE_POS_SOLO_EN_POS})
+            return
+        if datos is None and self.instance is not None:
+            return
+        if not datos:
+            raise serializers.ValidationError({"pos": MENSAJE_POS_SIN_DATOS})
 
     def _validar_concepto(self, attrs, tipo):
         """El concepto de corrección va en las notas, y con su propia lista.
@@ -503,6 +611,7 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         detalles_data = validated_data.pop("detalles")
         adquiriente_data = validated_data.pop("adquiriente")
+        pos_data = validated_data.pop("pos", None)
         descuentos = validated_data.get("total_descuentos", Decimal("0")) or Decimal("0")
         cargos = validated_data.get("total_cargos", Decimal("0")) or Decimal("0")
 
@@ -519,6 +628,9 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
             documento=documento, **adquiriente_data
         )
         adquiriente.responsabilidades.set(responsabilidades)
+
+        if pos_data is not None:
+            models.DocumentoPOS.objects.create(documento=documento, **pos_data)
 
         # En el documento soporte las retenciones no suman al total a pagar: el
         # adquiriente las practica sobre el pago, no se las cobra el vendedor, y
@@ -552,7 +664,12 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
         donde se puede arreglar un dato suyo antes de emitir.
         """
         adquiriente_data = validated_data.pop("adquiriente", None)
+        pos_data = validated_data.pop("pos", None)
         documento = super().update(instance, validated_data)
+        if pos_data is not None:
+            models.DocumentoPOS.objects.update_or_create(
+                documento=documento, defaults=pos_data,
+            )
         if adquiriente_data is not None:
             responsabilidades = adquiriente_data.pop("responsabilidades", None)
             adquiriente = documento.adquiriente

@@ -126,6 +126,15 @@ def _set_pruebas_cerrado(respuesta) -> bool:
     )
 
 
+# La bandera de habilitación que le toca a cada software. Cada operación se
+# habilita por separado: cerrar el Set de Pruebas de nómina no dice nada de la
+# facturación ni al revés.
+CAMPO_HABILITADO_POR_SOFTWARE = {
+    SoftwareDian.Tipo.NOMINA: "habilitado_nomina",
+    SoftwareDian.Tipo.DOCUMENTO_EQUIVALENTE: "habilitado_documento_equivalente",
+}
+
+
 def _marcar_habilitacion_superada(software, emisor):
     """Deja constancia de que la habilitación terminó.
 
@@ -140,14 +149,33 @@ def _marcar_habilitacion_superada(software, emisor):
     if not software.set_pruebas_aceptado:
         software.set_pruebas_aceptado = True
         software.save(update_fields=["set_pruebas_aceptado", "actualizado_en"])
-    campo = (
-        "habilitado_nomina"
-        if software.tipo == SoftwareDian.Tipo.NOMINA
-        else "habilitado_facturacion"
+    campo = CAMPO_HABILITADO_POR_SOFTWARE.get(
+        software.tipo, "habilitado_facturacion"
     )
     if not getattr(emisor, campo):
         setattr(emisor, campo, True)
         emisor.save(update_fields=[campo, "actualizado_en"])
+
+
+def _anotar_si_cerro_el_set(respuesta, software, emisor):
+    """Marca la habilitación si la DIAN dice que el Set de Pruebas ya está cerrado.
+
+    Hace falta en la **consulta** y no solo en el envío porque
+    ``SendTestSetAsync`` no da veredicto: responde un ZipKey a secas, y el
+    "Set de prueba con identificador <uuid> se encuentra Aceptado" solo aparece
+    al preguntar por ese ZipKey con ``GetStatusZip``.
+
+    Sin esto —lo que pasó el 2026-09-01 con el documento equivalente— la
+    habilitación no se marcaba nunca por esta vía: los documentos se quedaban en
+    ``enviado``, cada envío nuevo volvía al Set de Pruebas ya cerrado y la
+    bandera del emisor seguía en falso sin que nada lo dijera.
+
+    No toca el estado del documento a propósito: que el set esté cerrado no dice
+    nada de *este* documento, que sigue sin veredicto. Lo que cambia es el
+    camino del siguiente envío, que ya sale por la operación síncrona.
+    """
+    if _set_pruebas_cerrado(respuesta):
+        _marcar_habilitacion_superada(software, emisor)
 
 
 def _guardar_respuesta(documento, respuesta):
@@ -207,10 +235,28 @@ def _certificado_activo_emisor(emisor):
     return certificado_activo(emisor)
 
 
+# Qué software DIAN usa cada tipo de ``Documento``. Lo que no esté aquí sale con
+# el de facturación, que es lo que han hecho siempre la factura, las notas y el
+# documento soporte.
+SOFTWARE_POR_TIPO = {
+    DocumentoTipo.Codigo.DOCUMENTO_EQUIVALENTE_POS: SoftwareDian.Tipo.DOCUMENTO_EQUIVALENTE,
+    DocumentoTipo.Codigo.NOTA_AJUSTE_DE_CREDITO: SoftwareDian.Tipo.DOCUMENTO_EQUIVALENTE,
+    DocumentoTipo.Codigo.NOTA_AJUSTE_DE_DEBITO: SoftwareDian.Tipo.DOCUMENTO_EQUIVALENTE,
+}
+
+
 def _software_activo(documento):
-    """Todo lo que es ``Documento`` —factura, notas, documento soporte— sale
-    con el software de facturación; la nómina es la única que va aparte."""
-    return _software_activo_emisor(documento.emisor, SoftwareDian.Tipo.FACTURACION)
+    """El software DIAN del tipo de documento.
+
+    La factura, las notas y el documento soporte salen con el de facturación;
+    la nómina va aparte (``_software_activo_nomina``) y el documento
+    equivalente tiene el suyo, porque la DIAN lo habilita por separado y su PIN
+    entra en el CUDE.
+    """
+    tipo = SOFTWARE_POR_TIPO.get(
+        documento.documento_tipo.codigo, SoftwareDian.Tipo.FACTURACION
+    )
+    return _software_activo_emisor(documento.emisor, tipo)
 
 
 def _certificado_activo(documento):
@@ -426,6 +472,49 @@ def consultar_rangos_numeracion(emisor, *, cliente=None, ambiente=None,
     )
 
 
+# Prefijos del nombre de archivo de la familia del documento equivalente
+# (numeral 8.13.5). Comparten el mismo consecutivo anual.
+PREFIJO_ARCHIVO_DOCUMENTO_EQUIVALENTE = "ds"
+PREFIJO_ARCHIVO_NOTA_AJUSTE_DE = "ncs"
+
+PREFIJO_ARCHIVO_POR_TIPO = {
+    DocumentoTipo.Codigo.DOCUMENTO_EQUIVALENTE_POS: PREFIJO_ARCHIVO_DOCUMENTO_EQUIVALENTE,
+    DocumentoTipo.Codigo.NOTA_AJUSTE_DE_CREDITO: PREFIJO_ARCHIVO_NOTA_AJUSTE_DE,
+    DocumentoTipo.Codigo.NOTA_AJUSTE_DE_DEBITO: PREFIJO_ARCHIVO_NOTA_AJUSTE_DE,
+}
+
+
+def _nombre_archivo_envio(documento, software) -> str:
+    """El nombre del XML que viaja a la DIAN.
+
+    La factura, las notas y el documento soporte llevan el número del documento
+    y así los viene aceptando la DIAN desde el principio; no se toca.
+
+    El documento equivalente y sus notas sí usan la nomenclatura del anexo
+    (numeral 8.13.5) —``ds`` y ``ncs``, compartiendo consecutivo—,
+    que además de estar especificada lleva un consecutivo **de archivos
+    enviados** propio. Se reserva aquí, al enviar, y no al firmar: si se
+    reservara antes, cada reintento gastaría uno.
+    """
+    from apps.documentos.models import ConsecutivoArchivoDocumentoEquivalente
+
+    prefijo = PREFIJO_ARCHIVO_POR_TIPO.get(documento.documento_tipo.codigo)
+    if prefijo is None:
+        return f"{documento.numero}.xml"
+
+    anio = timezone.localdate().year
+    consecutivo = ConsecutivoArchivoDocumentoEquivalente.siguiente(
+        documento.emisor, anio
+    )
+    return ident.nombre_archivo_documento_equivalente(
+        prefijo,
+        nit=documento.emisor.numero_identificacion,
+        codigo_pt=software.codigo_proveedor_tecnologico,
+        anio=anio,
+        consecutivo=consecutivo,
+    ) + ".xml"
+
+
 def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):
     """Empaqueta y envía el XML firmado a la DIAN; actualiza el estado.
 
@@ -451,7 +540,7 @@ def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):
         cliente = construir_cliente(documento, ambiente, **cred)
 
     xml = documento.leer_xml()
-    nombre = f"{documento.numero}.xml"
+    nombre = _nombre_archivo_envio(documento, software)
 
     usar_set_pruebas = ambiente == 2 and not software.set_pruebas_aceptado
     if usar_set_pruebas:
@@ -589,6 +678,7 @@ def actualizar_estado(documento, *, cliente=None, ambiente=None, **cred):
         documento, cliente=cliente, ambiente=ambiente, **cred
     )
     _guardar_respuesta(documento, respuesta)
+    _anotar_si_cerro_el_set(respuesta, _software_activo(documento), documento.emisor)
     if respuesta.es_valido or _ya_procesado(respuesta):
         documento.estado = _estado(DocumentoEstado.Nombre.ACEPTADO)
         if not documento.fecha_validacion:
@@ -879,6 +969,7 @@ def actualizar_estado_nomina(nomina, *, cliente=None, ambiente=None, **cred):
         nomina, cliente=cliente, ambiente=ambiente, **cred
     )
     _guardar_respuesta_nomina(nomina, respuesta)
+    _anotar_si_cerro_el_set(respuesta, _software_activo_nomina(nomina), nomina.emisor)
     if respuesta.es_valido or _ya_procesado(respuesta):
         nomina.estado = _estado(DocumentoEstado.Nombre.ACEPTADO)
         if not nomina.fecha_validacion:

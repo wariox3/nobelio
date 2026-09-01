@@ -11,6 +11,13 @@ class SoftwareDianSerializer(serializers.ModelSerializer):
         fields = [
             "id", "emisor", "tipo", "identificador", "pin",
             "test_set_id", "set_pruebas_aceptado", "activo",
+            # Solo los usa el documento equivalente, pero se exponen siempre:
+            # son campos del software y esconderlos según el tipo daría un
+            # contrato que cambia de forma sin que nada lo anuncie. En los
+            # softwares de facturación y nómina se quedan vacíos.
+            "codigo_proveedor_tecnologico",
+            "fabricante_nombre", "fabricante_razon_social",
+            "fabricante_nombre_software",
         ]
         # El PIN se devuelve en el listado y en el detalle a petición de MarioA
         # (2026-08-28). Antes era `write_only`: se aceptaba al crear y no salía

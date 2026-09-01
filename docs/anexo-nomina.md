@@ -170,13 +170,30 @@ La nota hereda el **ambiente** del documento que ajusta y no del emisor: apunta
 a un CUNE que se firmó en uno concreto, y una nota de producción sobre una
 nómina de habilitación señalaría un documento que en ese ambiente no existe.
 
-⚠️ **El CUNE de la eliminación se calcula con los tres totales en cero.** Su XML
-no emite `DevengadosTotal`, `DeduccionesTotal` ni `ComprobanteTotal` —ni el
-`Trabajador` del que sale `DocEmp`—, pero los tres siguen entrando en la
-composición del hash (§3). Cero es lo único que la DIAN puede leer del propio
-documento, así que es lo que se firma; el anexo no lo dice y no hay vector de
-prueba. Si una eliminación se rechaza por CUNE, lo siguiente que hay que probar
-es la composición con los totales del documento eliminado.
+### El CUNE de la eliminación: cuatro literales, no XPaths
+
+El numeral 8.1.1.1 tiene **tres tablas**, no una: la del documento soporte, la
+de la nota *Reemplazar* y la de la nota *Eliminar*. En esta última, cuatro
+campos no tienen XPath porque el bloque `Eliminar` no los contiene — el anexo
+los fija como valores literales:
+
+```
+ValDev: 0.00      ValDed: 0.00      ValTol: 0.00      DocEmp: 0
+```
+
+Los tres importes son cero, que se adivinaba. **El `DocEmp` también, y ese no**:
+el bloque `Eliminar` no lleva `Trabajador`, así que no hay número de documento
+que leer y va un cero. Calcularlo con el documento real del trabajador da un
+hash que la DIAN no reproduce, y lo rechaza con **NIAE238**.
+
+> ⚠️ **NIAE238 es el CUNE**, aunque su mensaje no lo mencione: llega como
+> "Validación contiene errores en campos mandatorios" y con el `Rechazo:` vacío.
+> Su XPath es `/NominaIndividualDeAjuste/Eliminar/InformacionGeneral/@CUNE`.
+>
+> Costó **tres envíos** del Set de Pruebas (NESETP10, NESETP23 y NESETP51) y dos
+> días de descartar hipótesis sobre la estructura, que estaba bien. La tabla que
+> lo resuelve está en el PDF del anexo, en la caja de herramientas de nómina;
+> no estaba en este resumen.
 
 ## 7. Listas de valores (§5 del anexo; no hay `.gc`)
 

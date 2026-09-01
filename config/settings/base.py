@@ -216,6 +216,31 @@ DIAN_POLICY_HASH = env(
     default="dMoMvtcG5aIzgYo0tIsSQeVJBDnUnfSOfBpxXrmor0Y=",
 )
 
+# --- Fabricante del software (documento equivalente) -------------------------
+# La extensión `InformacionDelFabricanteDelSoftware` del tiquete P.O.S. describe
+# a **quien hizo el software**, no a quien emite, así que es de la plataforma y
+# no del emisor: los tiquetes de cualquier cliente dicen lo mismo. Estuvieron
+# como campos de `SoftwareDian` y se movieron aquí el 2026-09-01 al ver que
+# rellenarlos por emisor invitaba a copiar ahí la razón social del emisor —que
+# es lo que hace el XML mentir sobre quién fabricó el software, y solo se nota
+# con el segundo cliente—.
+#
+# `SoftwareDian` conserva los tres campos como **excepción por emisor**: la DIAN
+# admite que un obligado use software propio en vez del de un proveedor
+# tecnológico, y ese sí tiene otro fabricante. Vacíos, mandan estos.
+#
+# Las reglas DEAB41 a DEAB46 son de rechazo: si los tres salen vacíos, la DIAN
+# devuelve el documento.
+DIAN_FABRICANTE_NOMBRE = env(
+    "DIAN_FABRICANTE_NOMBRE", default="Mario A. Estrada",
+)
+DIAN_FABRICANTE_RAZON_SOCIAL = env(
+    "DIAN_FABRICANTE_RAZON_SOCIAL", default="Semantica Digital S.A.S",
+)
+DIAN_FABRICANTE_NOMBRE_SOFTWARE = env(
+    "DIAN_FABRICANTE_NOMBRE_SOFTWARE", default="RedEDoc",
+)
+
 # Carpeta donde se almacenan los XML/PDF generados (relativa a MEDIA_ROOT).
 DIAN_STORAGE_SUBDIR = "dian"
 

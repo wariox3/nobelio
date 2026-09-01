@@ -88,6 +88,23 @@ class Documento(ModeloUUID, ModeloConFechas):
         AJUSTE_PRECIO = "4", "Ajuste de precio"
         OTROS = "5", "Otros"
 
+    class ConceptoNotaAjusteDocumentoEquivalente(models.TextChoices):
+        """Lista del numeral 16.6 del anexo de documento equivalente.
+
+        Vale para las dos notas del documento equivalente, la de crédito y la
+        de débito: el anexo remite las dos a la misma tabla. Coincide en
+        números con las otras listas y no en redacción —aquí el 2 anula un
+        documento equivalente, no una factura ni un documento soporte—, que es
+        justo el motivo de tenerlas separadas.
+        """
+
+        DEVOLUCION = "1", ("Devolución parcial de los bienes y/o no aceptación "
+                           "parcial del servicio")
+        ANULACION = "2", "Anulación del documento equivalente electrónico"
+        REBAJA = "3", "Rebaja o descuento parcial o total"
+        AJUSTE_PRECIO = "4", "Ajuste de precio"
+        OTROS = "5", "Otros"
+
     class ConceptoNotaDebito(models.TextChoices):
         INTERESES = "1", "Intereses"
         GASTOS = "2", "Gastos por cobrar"
@@ -261,6 +278,16 @@ class Documento(ModeloUUID, ModeloConFechas):
         "en lo que no es nota.",
     )
 
+    # De qué campo del emisor sale el ambiente de cada tipo. La DIAN habilita
+    # cada operación por separado, así que el mismo emisor puede estar en
+    # producción para factura y todavía en habilitación para P.O.S. Lo que no
+    # esté aquí usa el de facturación, que es lo que se ha hecho siempre.
+    CAMPO_AMBIENTE_EMISOR = {
+        "documento_equivalente_pos": "ambiente_documento_equivalente",
+        "nota_ajuste_de_credito": "ambiente_documento_equivalente",
+        "nota_ajuste_de_debito": "ambiente_documento_equivalente",
+    }
+
     class Meta:
         db_table = "doc_documento"
         verbose_name = "documento electrónico"
@@ -285,7 +312,12 @@ class Documento(ModeloUUID, ModeloConFechas):
         # identificador y el destino dejarían de corresponderse. Un valor
         # explícito manda (lo usa la factura de prueba).
         if self.ambiente is None:
-            self.ambiente = self.emisor.ambiente_facturacion
+            self.ambiente = getattr(
+                self.emisor, self.CAMPO_AMBIENTE_EMISOR.get(
+                    self.documento_tipo.codigo if self.documento_tipo_id else "",
+                    "ambiente_facturacion",
+                )
+            )
         # Estado inicial por defecto: borrador.
         if not self.estado_id:
             from .documento_estado import DocumentoEstado
