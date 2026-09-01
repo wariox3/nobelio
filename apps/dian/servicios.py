@@ -490,6 +490,13 @@ def _nombre_archivo_envio(documento, software) -> str:
     La factura, las notas y el documento soporte llevan el número del documento
     y así los viene aceptando la DIAN desde el principio; no se toca.
 
+    Que a la factura se lo acepten **no** es razón para hacer lo mismo aquí, y se
+    valoró el 2026-09-01: prueba que la DIAN no mira el nombre en esa operación
+    y hoy, no que su anexo no lo pida. El del documento equivalente lo especifica
+    con detalle —consecutivo de archivos propio y reinicio cada 1 de enero— y
+    este proyecto ya se llevó un ZE02 por dar por hecho que la DIAN no
+    comprobaría algo que su anexo sí definía. Se cumple la nomenclatura.
+
     El documento equivalente y sus notas sí usan la nomenclatura del anexo
     (numeral 8.13.5) —``ds`` y ``ncs``, compartiendo consecutivo—,
     que además de estar especificada lleva un consecutivo **de archivos
