@@ -1,0 +1,64 @@
+# Suite completa en cada push y en cada pull request.
+#
+# Hasta ahora no había CI, así que una prueba rota solo se veía si alguien se
+# acordaba de correrla en local. Es también lo que sostiene el resto del plan de
+# `docs/revision-tecnica.md`: los arreglos de la fase 3 tocan el borde HTTP y el
+# pipeline de emisión, y sin esto se harían a ciegas.
+name: Pruebas
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+
+    services:
+      # La suite necesita PostgreSQL de verdad: el proyecto usa restricciones y
+      # `select_for_update`, que SQLite no reproduce.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: nobelio
+          POSTGRES_USER: nobelio
+          POSTGRES_PASSWORD: nobelio
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings.test
+      DATABASE_URL: postgres://nobelio:nobelio@localhost:5432/nobelio
+      # Obligatoria desde que la clave del .p12 se guarda cifrada: sin ella
+      # Django no arranca. La de la suite la fija `config/settings/test.py`;
+      # esta es solo para que `base.py` pueda leerla al importarse.
+      CERT_ENCRYPTION_KEY: SsHkSDR23bZuoCyxvHOEipYbGrCJJhcThPCanEwLHi4=
+      DJANGO_SECRET_KEY: clave-solo-para-ci
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Comprobaciones de Django
+        run: python manage.py check
+
+      - name: Migraciones sin generar
+        # Un modelo cambiado sin su migración pasa las pruebas y rompe el
+        # despliegue; aquí se ve antes.
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Pruebas
+        run: python manage.py test --noinput

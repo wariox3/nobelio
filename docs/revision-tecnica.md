@@ -4,11 +4,16 @@ Revisión a fondo del proyecto hecha el **2026-09-01** sobre `main` (`7e3bd52`).
 Recoge lo que se encontró leyendo el código, con dónde está cada cosa y por qué
 importa, y termina con un plan por fases.
 
-> **Método.** Es una revisión por lectura: no se ejecutó la suite de pruebas ni
-> se emitió ningún documento contra la DIAN. Lo que se afirma sobre cobertura
-> sale de inventariar los ficheros `tests_*.py`, y lo que se afirma sobre
+> **Método.** La revisión original fue por lectura: no se ejecutó la suite ni se
+> emitió ningún documento contra la DIAN. Lo que se afirmaba sobre cobertura
+> salía de inventariar los ficheros `tests_*.py`, y lo que se afirmaba sobre
 > comportamiento, de seguir el código (incluido el de DRF donde hacía falta).
-> Los puntos marcados «por confirmar» necesitan una ejecución real.
+>
+> **Desde el 2026-09-02 ya no es solo lectura.** Las fases 1 y 2 están
+> aplicadas: cada apartado resuelto lleva su nota al pie con lo que se hizo y
+> por qué, y la suite se ejecuta. Eso corrigió una afirmación de §C1 —el orden
+> de la raíz sí tenía prueba— y destapó un hallazgo nuevo, **B9**. Sigue sin
+> emitirse nada contra la DIAN.
 
 ---
 
@@ -337,11 +342,42 @@ contra un certificado emitido a `8900123456`. Es un falso positivo poco probable
 pero real; comparar contra la lista de identificadores en vez de contra su
 concatenación lo cierra.
 
+### B9 · Los listados salen sin orden, y el comentario dice que sí lo tienen — **media**
+
+`apps/documentos/views/documento.py:36-45,68-74` y
+`apps/nomina/views/nomina.py:55`
+
+Hallado el 2026-09-02 al escribir las pruebas de nómina: DRF avisa con
+`UnorderedObjectListWarning` al paginar. Los dos viewsets anotan el conteo de
+errores en la acción `list`:
+
+```python
+qs = qs.prefetch_related(None).annotate(total_errores=Count("errores"))
+```
+
+y **`annotate` con un agregado descarta el `Meta.ordering` del modelo** —Django
+lo hace a propósito, para no meter los campos de orden en el `GROUP BY`—. Se
+comprueba en una línea: el queryset base da `ordered = True` y el anotado,
+`False`; en el SQL no queda `ORDER BY`.
+
+O sea que el listado paginado sale en el orden que quiera PostgreSQL, que no
+está obligado a ser el mismo entre dos consultas: **una fila puede repetirse en
+dos páginas y otra no aparecer en ninguna**. Es justo lo que rompe un ERP que
+recorre las páginas para sincronizar.
+
+Lo que lo vuelve una trampa es el comentario que hay encima en `documento.py`:
+«Sin el parámetro manda el orden del modelo: lo más reciente primero». Es lo que
+uno esperaría y no es lo que pasa, así que nadie va a ir a mirarlo.
+
+El arreglo es un `order_by` explícito después del `annotate`, o un `ordering` en
+la vista para que `OrderingFilter` lo imponga. Está emparentado con **D4** —el
+índice del orden por defecto—, que daba por hecho que ese orden se aplicaba.
+
 ---
 
 ## C. Cobertura de pruebas
 
-### C1 · Nómina y documento equivalente P.O.S. no tienen ninguna prueba — **alta**
+### C1 · Nómina y documento equivalente P.O.S. no tienen ninguna prueba — **resuelto**
 
 Inventario de `tests_*.py` por app:
 
@@ -373,15 +409,41 @@ Hay además dos cosas concretas que solo una prueba puede sostener:
   propio hash. Lo único que respalda hoy esa función es que la DIAN aceptó una
   nómina el 2026-08-30. Una prueba de regresión que fije la composición contra
   ese documento aceptado convierte un hecho irrepetible en una red de seguridad.
-- **El orden de las declaraciones de la raíz** es lo que costó el ZE02. Hay una
-  prueba de la firma aislada (`FirmaAisladaTests`), pero no una que fije el
-  orden de los namespaces del elemento raíz de la nómina, que es donde estaba la
-  causa real.
+- **El orden de las declaraciones de la raíz** es lo que costó el ZE02.
+  ~~No hay prueba que lo fije.~~ **Corrección (2026-09-02): sí la hay.**
+  `apps.dian.tests_firma.OrdenDeclaracionesNominaTests` lo comprueba contra la
+  ejemplificación oficial con tres casos, y el docstring de `_raiz` la nombra.
+  La revisión miró el inventario por app —`apps/nomina/` no tenía ficheros de
+  prueba— y dio por ausente algo que vivía en `apps/dian/`.
 
 > El README dice hoy «Todo el pipeline está cubierto por pruebas» (línea 12).
 > Con nómina y P.O.S. dentro del pipeline, ya no es cierto.
 
-### C2 · Se perdieron las pruebas de habilitación y no se repusieron — **media**
+> **Arreglado el 2026-09-02.** 43 pruebas nuevas, de 211 a 254, y la suite
+> entera en verde.
+>
+> **Nómina** (`apps/nomina/tests_xml.py`, `tests_api.py`, `tests_utils.py`, 19):
+> la composición del CUNE campo a campo, el XML firmado contra el XSD oficial,
+> y el ciclo de la API —emitir, enviar y consultar— con un cliente SOAP falso,
+> incluido el camino asincrónico: el envío al Set de Pruebas no trae veredicto y
+> es `consultar` quien lo aplica.
+>
+> Sobre el CUNE, el ancla es la que decía este apartado: se comprobó que
+> `calcular_cune` reproduce **exactamente** el CUNE guardado de **NESETP6**, la
+> nómina que la DIAN aceptó el 2026-08-30. Ese caso no se puede commitear —en el
+> CUNE entra el PIN del software, que es un secreto—, así que la prueba fija la
+> composición armándola a mano en el orden del anexo. Es lo que se rompería si
+> alguien reordena los campos o cambia un formato, que es el riesgo real.
+>
+> **P.O.S.** (`apps/documentos/tests_pos.py`, 13): las tres extensiones propias
+> con sus literales acentuados (`UbicaciónCaja`, `CódigoVenta`, que la DIAN
+> compara al pie de la letra), la nomenclatura del numeral 8.13.5 —que sí tiene
+> ejemplo oficial, `ds08001972680002000000001`, y la prueba lo reproduce— y el
+> consecutivo hexadecimal por emisor y año.
+>
+> Escribiéndolas salió **B9**: los dos listados paginan sin orden.
+
+### C2 · Se perdieron las pruebas de habilitación y no se repusieron — **resuelto**
 
 `ff3eb34` borró `apps/dian/tests_set_pruebas.py` y
 `apps/emisores/tests_habilitar.py` al retirar el `HabilitarSerializer`. Fue
@@ -389,12 +451,33 @@ coherente —las pruebas eran de lo que se quitaba—, pero lo que ocupó su lug
 (`crear_habilitacion`, §A6) nació sin ninguna. Es el endpoint que decide con qué
 software y con qué resolución se emite todo lo demás.
 
-### C3 · Sin integración continua — **media**
+> **Arreglado el 2026-09-02.** `apps/emisores/tests_habilitacion.py`, 10 casos.
+> No es una restauración: el fichero borrado probaba una API que ya no existe
+> (`ResolucionFacturacion`, `emitir_set_pruebas`), así que se escribieron contra
+> el endpoint de ahora. Cubren el camino feliz —registra el software y siembra
+> la resolución del Set de Pruebas—, que repetirlo no duplica nada, que jubila
+> el software anterior **del mismo tipo** sin tocar el de la otra operación, y
+> los cortes: sin certificado, con el certificado vencido, sin PIN, y que la
+> resolución no se siembra si el software no valida.
+>
+> De paso quedó a la vista una fragilidad: `crear_habilitacion` hace un
+> `TipoFactura.objects.get(codigo="01")` directo, así que sobre una base sin el
+> catálogo cargado responde 500 en vez de decir qué falta. En un despliegue real
+> el catálogo está; entra en el barrido de **E3**.
+
+### C3 · Sin integración continua — **resuelto**
 
 No hay `.github/`, ni ningún otro runner. Nada garantiza que la suite pase antes
 de un `git pull` en producción, y `actualizar.sh` no la ejecuta: hace `git pull`,
 `migrate` y arranca. Un `workflow` que corra `python manage.py test` con
 `config.settings.test` contra un PostgreSQL de servicio es media hora de trabajo.
+
+> **Arreglado el 2026-09-02.** `.github/workflows/pruebas.yml`, en cada push a
+> `main` y en cada pull request: PostgreSQL 16 de servicio —hace falta de
+> verdad, porque la suite usa restricciones y `select_for_update` que SQLite no
+> reproduce—, `manage.py check`, la suite, y un `makemigrations --check` que
+> detecta el modelo cambiado sin su migración, que es lo que pasa las pruebas y
+> rompe el despliegue.
 
 ---
 
@@ -561,19 +644,22 @@ más se van a tocar.
    `LOGGING` a stdout (journald) y siete líneas —firmado, enviado y estado
    actualizado, por duplicado para documento y nómina, más la notificación.
    **(D1)**
-2. Pruebas de `apps/nomina`: construcción del XML contra el XSD, composición del
-   CUNE fijada contra la nómina que la DIAN aceptó el 2026-08-30, orden de las
-   declaraciones de la raíz, y el ciclo de la API (crear → emitir → enviar con
-   cliente falso → consultar). **(C1)**
-3. Pruebas del documento equivalente P.O.S. y sus dos notas de ajuste: las tres
-   extensiones obligatorias, la nomenclatura de archivo del numeral 8.13.5 y el
-   consecutivo hexadecimal por año. **(C1)**
-4. Pruebas de `crear-habilitacion`, reponiendo lo que se perdió en `ff3eb34`. **(C2)**
-5. Workflow de CI que corra la suite con `config.settings.test`. **(C3)**
+2. ~~Pruebas de `apps/nomina`.~~ **Hecho el 2026-09-02** (19). **(C1)**
+3. ~~Pruebas del documento equivalente P.O.S.~~ **Hecho el 2026-09-02** (13). **(C1)**
+4. ~~Pruebas de `crear-habilitacion`.~~ **Hecho el 2026-09-02** (10). **(C2)**
+5. ~~Workflow de CI.~~ **Hecho el 2026-09-02**:
+   `.github/workflows/pruebas.yml`. **(C3)**
 
-> Con el criterio de trabajo actual —nada de pruebas durante el diseño— esta
-> fase es la que marca el paso de «diseñando» a «consolidando». Conviene
-> arrancarla cuando el P.O.S. cierre su habilitación y el diseño deje de moverse.
+> **Paso previo no planeado: la suite estaba en 32 rojos de 211.** No era código
+> roto sino pruebas que no habían seguido a tres cambios deliberados
+> (`SoftwareDian.tipo` obligatorio, `codigo_postal` obligatorio, el DS pasado a
+> `CUDS-SHA384`), más dos que habían dejado de probar lo que decían. Se
+> repararon antes de escribir ninguna nueva: sobre una suite roja, un fallo
+> nuevo no se distingue del ruido.
+>
+> La regla de no escribir pruebas durante el diseño se retiró el 2026-09-02, que
+> es lo que permitió abordar esta fase sin esperar a que el P.O.S. cerrara
+> habilitación.
 
 ### Fase 3 — Los 500 y las asimetrías
 
