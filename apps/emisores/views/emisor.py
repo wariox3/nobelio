@@ -14,9 +14,11 @@ from apps.emisores.models.emisor import Emisor
 from apps.emisores.models.certificado import Certificado
 from apps.emisores.servicios import crear_factura_prueba, crear_nomina_prueba
 from apps.nucleo.api import ErrorSolicitud
+from apps.nucleo.models import Ambiente
 from apps.seguridad.alcance import (
     MENSAJE_SIN_CUENTA,
     AlcanceEmisorMixin,
+    emisores_permitidos,
     es_staff,
     exigir_alcance,
     exigir_cuenta,
@@ -128,43 +130,103 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         )
 
     def _emisor_del_cuerpo(self, request):
-        """El emisor que indica el cuerpo de la petición.
+        """El emisor que indica el cuerpo de la petición, dentro del alcance.
 
         Distingue los dos motivos por los que antes se respondía siempre "el
         emisor indicado no existe": que no venga —el caso habitual, y que se
         daba también cuando el cuerpo llegaba sin parsear por faltar el
         Content-Type— y que venga uno que de verdad no está.
+
+        La búsqueda va **acotada al alcance del solicitante**, y no es un
+        detalle: mientras se buscaba entre todos los emisores y el alcance se
+        comprobaba después, un id ajeno respondía 403 y uno inexistente 400. Esa
+        diferencia convierte al endpoint en un oráculo con el que una cuenta
+        autenticada puede averiguar qué ids existen en las demás. Ahora las dos
+        respuestas son idénticas, que es el mismo criterio de
+        ``RelacionDelAlcance``.
         """
         identificador = request.data.get("emisor")
         if identificador in (None, ""):
             raise ErrorSolicitud("Indique el emisor en el campo 'emisor'.")
+        alcanzables = emisores_permitidos(request)
+        consulta = Emisor.objects.all() if alcanzables is None else alcanzables
         try:
-            return Emisor.objects.get(pk=identificador)
+            return consulta.get(pk=identificador)
         except (Emisor.DoesNotExist, TypeError, ValueError):
             raise ErrorSolicitud("El emisor indicado no existe.")
 
+    # Los datos del Set de Pruebas de la DIAN. Son suyos y son públicos: la
+    # misma resolución y la misma clave técnica las usa todo el que se habilita.
+    # Van aquí arriba, con nombre, en vez de incrustados en el cuerpo del
+    # endpoint, para que se vea de un vistazo qué se le está escribiendo al
+    # emisor y para que cambiar uno no obligue a leer el flujo entero.
+    RESOLUCION_SET_PRUEBAS = {
+        "prefijo": "SETP",
+        "numero_resolucion": "18760000001",
+        "fecha_resolucion": date(2026, 6, 29),
+        "rango_desde": 990000000,
+        "rango_hasta": 995000000,
+        "clave_tecnica": "fc8eac422eba16e22ffd8c6f94b3f40a6e38162c",
+        "vigente_desde": date(2019, 1, 19),
+        "vigente_hasta": date(2030, 1, 19),
+    }
+
     @action(detail=False, methods=["post"], url_path="crear-habilitacion")
     def crear_habilitacion(self, request):
-        
+        """Deja al emisor listo para el Set de Pruebas, en una sola llamada.
+
+        ``POST /api/emisores/emisor/crear-habilitacion/`` con ``emisor`` y los
+        campos del software (``tipo``, ``identificador``, ``pin``, y el
+        ``test_set_id`` si ya se tiene). Registra el software y le siembra al
+        emisor la resolución de numeración del Set de Pruebas.
+
+        Es idempotente a propósito: durante una habilitación se llama varias
+        veces, así que un software ya registrado no se duplica y la resolución
+        se actualiza en vez de repetirse.
+
+        **Solo sobre un emisor en ambiente de pruebas.** Lo que escribe son
+        datos del sandbox de la DIAN —una resolución que no es del emisor y una
+        clave técnica pública—, y en un emisor que ya está en producción eso
+        significa emitir con una numeración que no le pertenece: la DIAN lo
+        rechaza, y los consecutivos que se gasten por el camino no se recuperan.
+        """
         emisor = self._emisor_del_cuerpo(request)
         exigir_alcance(request, emisor)
 
+        if emisor.ambiente_facturacion != Ambiente.PRUEBAS:
+            raise ErrorSolicitud(
+                f"El emisor {emisor.razon_social} ya está en producción para "
+                "facturación. La habilitación escribe la resolución del Set de "
+                "Pruebas de la DIAN, que no es suya; póngalo en ambiente de "
+                "pruebas si de verdad quiere rehabilitarlo."
+            )
+
         certificado = Certificado.objects.filter(emisor=emisor, activo=True).first()
         if certificado is None:
-            raise ErrorSolicitud("No hay certificado digital activo para el emisor. ")
+            raise ErrorSolicitud(
+                "El emisor no tiene un certificado digital activo. Cárguelo en "
+                "/api/emisores/certificado/cargar/ antes de habilitarlo."
+            )
         hoy = timezone.localdate()
         if certificado.vigente_hasta and certificado.vigente_hasta < hoy:
-            raise ErrorSolicitud("EL certificado esta vencido")
+            raise ErrorSolicitud(
+                f"El certificado digital del emisor venció el "
+                f"{certificado.vigente_hasta}. Cargue uno vigente antes de "
+                "habilitarlo."
+            )
 
         identificador = request.data.get("identificador")
-        existente = models.SoftwareDian.objects.filter(emisor=emisor, identificador=identificador).exists()
+        ya_registrado = models.SoftwareDian.objects.filter(
+            emisor=emisor, identificador=identificador
+        ).exists()
 
-        if not existente:
+        software = None
+        if not ya_registrado:
             software = serializers.SoftwareDianSerializer(data=request.data)
             software.is_valid(raise_exception=True)
 
         with transaction.atomic():
-            if not existente:
+            if software is not None:
                 # Solo se desactivan los del mismo tipo: el emisor puede tener
                 # a la vez el software de facturación y el de nómina activos, y
                 # registrar uno no debe dejar sin software a la otra operación.
@@ -174,23 +236,32 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
                 ).update(activo=False)
                 software.save(activo=True)
 
-            models.Resolucion.objects.update_or_create(
+            resolucion, creada = models.Resolucion.objects.update_or_create(
                 emisor=emisor,
                 tipo_factura=TipoFactura.objects.get(codigo="01"),
-                prefijo="SETP",
-                numero_resolucion="18760000001",
+                prefijo=self.RESOLUCION_SET_PRUEBAS["prefijo"],
+                numero_resolucion=self.RESOLUCION_SET_PRUEBAS["numero_resolucion"],
                 defaults={
-                    "fecha_resolucion": date(2026, 6, 29),
-                    "rango_desde": 990000000,
-                    "rango_hasta": 995000000,
-                    "clave_tecnica": "fc8eac422eba16e22ffd8c6f94b3f40a6e38162c",
-                    "vigente_desde": date(2019, 1, 19),
-                    "vigente_hasta": date(2030, 1, 19),
+                    **{
+                        k: v for k, v in self.RESOLUCION_SET_PRUEBAS.items()
+                        if k not in ("prefijo", "numero_resolucion")
+                    },
                     "activa": True,
                 },
             )
 
-        return Response({}, status=status.HTTP_200_OK)
+        # Antes se devolvía `{}`, que no decía si había pasado algo. Ahora se
+        # dice qué quedó hecho, que es lo que el portal necesita para saber si
+        # falta algún paso.
+        return Response(
+            {
+                "emisor": emisor.id,
+                "software_registrado": software is not None,
+                "resolucion": resolucion.id,
+                "resolucion_creada": creada,
+            },
+            status=status.HTTP_200_OK,
+        )
 
     @action(detail=False, methods=["post"], url_path="crear-factura-prueba")
     def crear_factura_prueba(self, request):

@@ -9,8 +9,12 @@ pipeline completo conforme al Anexo Técnico v1.9 (Resolución DIAN 000165/2023)
 Documento → XML UBL 2.1 → CUFE/CUDE → Firma XAdES-EPES → Envío WS DIAN → PDF+QR
 ```
 
-Todo el pipeline está cubierto por pruebas y validado contra los **XSD oficiales**
-de la DIAN; el CUFE/CUDE se verifica contra los ejemplos oficiales del Anexo.
+El pipeline está cubierto por pruebas y validado contra los **XSD oficiales** de
+la DIAN: factura, notas, documento soporte, documento equivalente P.O.S. y
+nómina. El CUFE, el CUDE y el CUDS se verifican contra los ejemplos oficiales
+del Anexo; el CUNE **no tiene ejemplo oficial** que cuadre —el del anexo no
+reproduce su propio hash—, así que lo que se fija es su composición, anclada a
+la nómina que la DIAN aceptó.
 
 ---
 
@@ -91,7 +95,10 @@ Variables principales (`config/settings/base.py` las lee con `django-environ`):
 | `DATABASE_URL` | Conexión PostgreSQL (obligatorio) | — |
 | `DIAN_ENVIRONMENT` | `2` habilitación / `1` producción | `2` |
 | `DIAN_POLICY_ID` | URL de la política de firma | política v2 DIAN |
-| `DIAN_POLICY_HASH` | SHA-256 (base64) del PDF de la política | *(vacío — configúralo)* |
+| `DIAN_POLICY_HASH` | SHA-256 (base64) del PDF de la política | el de la política v2 |
+| `CERT_ENCRYPTION_KEY` | Clave Fernet que cifra la clave del `.p12` (**obligatoria**) | — |
+| `THROTTLE_USUARIO` | Tope de peticiones por credencial | `300/hour` |
+| `THROTTLE_ANONIMO` | Tope de peticiones sin credencial | `30/hour` |
 
 > Los settings se dividen en `config/settings/{base,dev,prod}.py`.
 > Por defecto se usa `config.settings.dev`.

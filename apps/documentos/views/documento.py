@@ -1,5 +1,6 @@
 """API de documentos electrónicos y acciones del ciclo de vida DIAN."""
 import requests
+from django.db import transaction
 from django.db.models import Count
 from django.http import FileResponse, HttpResponse
 from rest_framework import filters, status, viewsets
@@ -15,7 +16,7 @@ from apps.documentos.servicios import (
     enviar_notificacion,
     nombre_dian,
 )
-from apps.nucleo.api import ErrorPasarela, ErrorSolicitud, error_pasarela_dian
+from apps.nucleo.api import ErrorPasarela, ErrorSolicitud, entero_de_query, error_pasarela_dian
 from apps.seguridad.alcance import AlcanceEmisorMixin
 from apps.utilidades.zinc import ZincNoDisponible
 
@@ -38,6 +39,16 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
     # es explícita para no exponer al ordenamiento columnas sin índice ni rutas
     # que arrastren joins.
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    # `?search=` no hacía nada: el backend estaba puesto pero sin campos, y DRF
+    # devuelve el queryset entero cuando `search_fields` está vacío. Se busca
+    # por lo que un humano tiene delante al preguntar «¿esta factura salió?»:
+    # el número, el identificador que la DIAN devuelve, y el NIT o el nombre
+    # del receptor. La lista es corta y explícita para no arrastrar joins en
+    # cada búsqueda; es el mismo criterio que `ordering_fields`.
+    search_fields = [
+        "numero", "cufe_cude",
+        "adquiriente__numero_identificacion", "adquiriente__razon_social",
+    ]
     ordering_fields = [
         "fecha_emision", "hora_emision", "consecutivo", "numero",
         "total_a_pagar", "fecha_validacion", "creado_en", "actualizado_en",
@@ -71,11 +82,17 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
                 qs.prefetch_related(None)
                 .prefetch_related("adquiriente__responsabilidades")
                 .annotate(total_errores=Count("errores"))
+                # `annotate` con un agregado **descarta** el `Meta.ordering` del
+                # modelo —Django lo hace para no meter esos campos en el GROUP
+                # BY—, así que sin esto el listado paginado sale en el orden que
+                # quiera PostgreSQL: una fila puede repetirse en dos páginas y
+                # otra no aparecer en ninguna. Se repone explícitamente.
+                .order_by(*Documento._meta.ordering)
             )
         else:
             qs = qs.prefetch_related("detalles__impuestos")
         params = self.request.query_params
-        if emisor := params.get("emisor"):
+        if (emisor := entero_de_query(params, "emisor")) is not None:
             qs = qs.filter(emisor=emisor)
         if estado := params.get("estado"):
             qs = qs.filter(estado__nombre=estado)
@@ -114,12 +131,30 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         self.perform_destroy(documento)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    def _bloquear(self, obj):
+        """Relee el objeto con ``FOR UPDATE``. Hay que estar en transacción.
+
+        Sin esto, dos peticiones simultáneas sobre el mismo documento hacen el
+        trabajo dos veces: dos `emitir` gastan dos veces el consecutivo y dejan
+        dos XML firmados con CUFE distinto, y dos `enviar` mandan el mismo
+        documento dos veces a la DIAN, que responde el segundo con "procesado
+        anteriormente" —o algo peor, si el primero aún no había terminado—.
+
+        El bloqueo es de fila, así que solo espera quien toque **ese mismo**
+        documento. Sí mantiene abierta la transacción mientras dura la llamada
+        SOAP, que es el precio de que el envío sea de uno en uno: es justo la
+        garantía que se busca.
+        """
+        return type(obj).objects.select_for_update().get(pk=obj.pk)
+
     @action(detail=True, methods=["post"])
     def emitir(self, request, pk=None):
         """Genera el XML UBL, calcula el CUFE y firma el documento."""
         documento = self.get_object()
         try:
-            servicios.generar_y_firmar(documento)
+            with transaction.atomic():
+                documento = self._bloquear(documento)
+                servicios.generar_y_firmar(documento)
         except servicios.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
         return Response({
@@ -132,7 +167,9 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         """Envía el documento firmado a la DIAN (Set de Pruebas en habilitación)."""
         documento = self.get_object()
         try:
-            respuesta = servicios.enviar_a_dian(documento)
+            with transaction.atomic():
+                documento = self._bloquear(documento)
+                respuesta = servicios.enviar_a_dian(documento)
         except servicios.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
         except requests.RequestException as exc:

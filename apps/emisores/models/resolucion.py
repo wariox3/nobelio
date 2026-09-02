@@ -26,10 +26,6 @@ class Resolucion(ModeloConFechas):
     vigente_desde = models.DateField("vigente desde")
     vigente_hasta = models.DateField("vigente hasta")
 
-    consecutivo_actual = models.PositiveBigIntegerField(
-        "consecutivo actual", default=0,
-        help_text="Último consecutivo emitido; 0 si aún no se ha emitido.",
-    )
     activa = models.BooleanField("activa", default=True)
 
     # --- Relaciones ---
@@ -61,21 +57,15 @@ class Resolucion(ModeloConFechas):
     def __str__(self):
         return f"Res. {self.numero_resolucion} {self.prefijo} ({self.emisor})"
 
-    @property
-    def siguiente_consecutivo(self) -> int:
-        """Calcula el siguiente número a emitir respetando el rango autorizado."""
-        base = max(self.consecutivo_actual, self.rango_desde - 1)
-        return base + 1
-
 
 def resolucion_activa_en_otra_cuenta(emisor, prefijo, numero_resolucion, excluir_pk=None):
     """Devuelve la resolución activa que ya tiene este NIT en otra cuenta, o ``None``.
 
     Un NIT puede estar dado de alta en varias cuentas (una por integración),
     pero la numeración que autoriza la DIAN es una sola: si dos filas emitieran
-    con el mismo prefijo y resolución, cada una llevaría su propio
-    ``consecutivo_actual`` y la DIAN rechazaría los números repetidos —
-    consecutivos que además ya no se recuperan.
+    con el mismo prefijo y resolución, cada una numeraría por su cuenta y la
+    DIAN rechazaría los números repetidos —consecutivos que además ya no se
+    recuperan.
 
     Se mira solo entre las **activas** a propósito: cuando un cliente migra de
     integración se desactiva la resolución en la cuenta que deja, y con eso

@@ -146,6 +146,36 @@ class CertificadoAPITests(APITestCase):
         self.assertIn("no corresponde al emisor", resp.data["detail"])
         self.assertEqual(Certificado.objects.count(), 0)
 
+    def test_rechaza_un_nit_que_solo_contiene_al_del_emisor(self):
+        """El NIT se compara entero, no como subcadena.
+
+        `901192048` está contenido en `89011920480`, y con la comparación por
+        `in` que había antes eso bastaba para dar el certificado por bueno: se
+        podía firmar en nombre de un emisor con el certificado de otro cuyo NIT
+        lo contuviera. Es un falso positivo poco probable pero real.
+        """
+        contenedor = _p12(nit="8" + self.emisor.numero_identificacion + "0")
+        resp = self._cargar(archivo=contenedor)
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("no corresponde al emisor", resp.data["detail"])
+        self.assertEqual(Certificado.objects.count(), 0)
+
+    def test_acepta_el_nit_con_el_digito_de_verificacion_pegado(self):
+        """`NIT-901192048-4`: alguna CA lo emite junto y sigue siendo el mismo.
+
+        El dígito se toma del emisor y no se escribe a mano: el modelo lo
+        calcula al guardar, así que fijarlo aquí solo daría un número que no es
+        el suyo.
+        """
+        self.emisor.refresh_from_db()
+        con_dv = _p12(
+            nit=self.emisor.numero_identificacion + self.emisor.digito_verificacion
+        )
+
+        resp = self._cargar(archivo=con_dv)
+        self.assertEqual(resp.status_code, 201, resp.data)
+
     def test_cargar_desactiva_certificados_previos_del_emisor(self):
         previo = Certificado.objects.create(
             emisor=self.emisor, clave="x", archivo=_p12(), activo=True

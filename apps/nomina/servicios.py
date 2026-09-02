@@ -2,7 +2,6 @@
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Max
 from django.utils import timezone
 
 from apps.nomina.models import Nomina, NominaConcepto
@@ -54,11 +53,26 @@ CAMPOS_HEREDADOS = (
 
 
 def siguiente_consecutivo(emisor, prefijo) -> int:
-    """El siguiente número libre del emisor para ese prefijo."""
-    ultimo = Nomina.objects.filter(emisor=emisor, prefijo=prefijo).aggregate(
-        ultimo=Max("consecutivo"),
-    )["ultimo"]
-    return (ultimo or 0) + 1
+    """El siguiente número libre del emisor para ese prefijo.
+
+    Bloquea las filas del emisor y el prefijo mientras mira el máximo, así que
+    hay que llamarlo dentro de una transacción (``crear_nota_ajuste`` lo es).
+    Sin el bloqueo, dos notas de ajuste pedidas a la vez leían el mismo máximo y
+    salían con el mismo número: una de las dos moría contra la restricción de
+    unicidad —con un 500, porque nadie capturaba el ``IntegrityError``— y, si la
+    restricción no hubiera estado, habrían llegado repetidas a la DIAN.
+
+    Bloquear un ``aggregate`` no se puede (``select_for_update`` no admite
+    agregados), así que se bloquea la última fila y se lee su consecutivo. Es la
+    misma fila que decide el resultado.
+    """
+    ultima = (
+        Nomina.objects.select_for_update()
+        .filter(emisor=emisor, prefijo=prefijo)
+        .order_by("-consecutivo")
+        .first()
+    )
+    return (ultima.consecutivo if ultima else 0) + 1
 
 
 @transaction.atomic

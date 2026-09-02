@@ -12,7 +12,7 @@ from apps.catalogos.models import TipoFactura
 from apps.dian import servicios as dian
 from apps.dian import soap
 from apps.emisores import models, serializers
-from apps.nucleo.api import ErrorPasarela, ErrorSolicitud
+from apps.nucleo.api import ErrorPasarela, ErrorSolicitud, entero_de_query
 from apps.seguridad.alcance import AlcanceEmisorMixin, exigir_alcance
 
 # GetNumberingRange solo devuelve numeración de facturación de venta.
@@ -36,7 +36,7 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         """Permite filtrar por emisor: ``/api/emisores/resolucion/?emisor=<id>``."""
         qs = super().get_queryset()
-        emisor = self.request.query_params.get("emisor")
+        emisor = entero_de_query(self.request.query_params, "emisor")
         return qs.filter(emisor=emisor) if emisor else qs
 
     @action(detail=False, methods=["get"], url_path="consulta-dian")
@@ -49,8 +49,8 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         La clave técnica no se expone (es sensible); se indica únicamente si
         está presente. Para guardarla usa ``importar-dian``.
         """
-        emisor_id = request.query_params.get("emisor")
-        if not emisor_id:
+        emisor_id = entero_de_query(request.query_params, "emisor")
+        if emisor_id is None:
             raise ValidationError({"emisor": "El parámetro 'emisor' es obligatorio."})
         emisor = get_object_or_404(models.Emisor, pk=emisor_id)
         exigir_alcance(request, emisor)

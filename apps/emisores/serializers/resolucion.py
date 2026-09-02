@@ -21,7 +21,7 @@ class ResolucionSerializer(serializers.ModelSerializer):
         fields = [
             "id", "emisor", "tipo_factura", "numero_resolucion", "fecha_resolucion",
             "prefijo", "rango_desde", "rango_hasta", "vigente_desde", "vigente_hasta",
-            "clave_tecnica", "consecutivo_actual", "activa",
+            "clave_tecnica", "activa",
         ]
 
     def validate(self, attrs):

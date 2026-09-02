@@ -29,6 +29,31 @@ class ErrorSolicitud(APIException):
     default_code = "solicitud_invalida"
 
 
+def entero_de_query(params, nombre):
+    """Lee un filtro numérico de la query string, o lanza un 400 con sentido.
+
+    Devuelve ``None`` si el parámetro no viene, que es lo que hace que el filtro
+    no se aplique. Si viene con basura —``?emisor=abc``, ``?emisor=1;2``—
+    responde 400 en vez del 500 que salía antes, cuando el valor llegaba tal
+    cual a un ``filter(emisor=...)`` sobre una clave numérica.
+
+    Se eligió el 400 y no ignorar el valor: un filtro que no se aplica devuelve
+    **más** filas de las pedidas, y quien integra lo descubre tarde y mal. El
+    alcance ya acota el queryset, así que no hay fuga; pero sí una respuesta que
+    miente sobre lo que se preguntó.
+    """
+    valor = params.get(nombre)
+    if valor is None or valor == "":
+        return None
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        raise ErrorSolicitud(
+            f"El filtro '{nombre}' tiene que ser un número entero; "
+            f"se recibió '{valor}'."
+        )
+
+
 class ErrorPasarela(APIException):
     """Error al comunicarse con un servicio externo (p. ej. la DIAN): 502."""
 

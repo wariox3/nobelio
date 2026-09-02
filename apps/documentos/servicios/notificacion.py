@@ -2,7 +2,8 @@
 
 Reúne lo que se le entrega al comprador —el AttachedDocument, la representación
 gráfica y lo que el emisor quiera adjuntar— en un zip listo para enviar por
-correo. El envío en sí todavía no está implementado.
+correo, y lo envía: ver `enviar_notificacion`, al final del módulo, que lo
+publica en la pasarela Zinc y solo entonces marca el documento como notificado.
 
 Siempre es un zip, aunque solo lleve el contenedor: es el formato en el que se
 entrega la factura electrónica, y el receptor (o su software) espera abrir un
@@ -117,9 +118,10 @@ def _sin_repetir(nombre, usados):
 def marcar_notificado(documento):
     """Deja constancia de que el documento ya se le entregó al adquiriente.
 
-    Se llama cuando la notificación sale bien. El día que exista el envío por
-    correo, la llamada se mueve a después de que el correo salga: la marca debe
-    significar "llegó", no "se armó".
+    La llama `enviar_notificacion` **después** de que la pasarela dé el correo
+    por bueno, nunca al armar el paquete: la marca significa "salió", no "se
+    armó". Si Zinc falla, el documento sigue sin notificar y se puede
+    reintentar.
     """
     if documento.notificado:
         return

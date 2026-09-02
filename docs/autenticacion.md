@@ -81,8 +81,8 @@ cuelgan del emisor, así que no se mezclan entre cuentas. Dos casos reales:
 
 Lo que **no** puede duplicarse es una resolución de numeración activa. La DIAN
 autoriza un solo rango por prefijo: si dos filas del mismo NIT numeraran a la
-vez con la misma resolución, cada una llevaría su propio `consecutivo_actual` y
-la DIAN rechazaría los repetidos —consecutivos que además ya no se recuperan.
+vez con la misma resolución, cada una numeraría por su cuenta y la DIAN
+rechazaría los repetidos —consecutivos que además ya no se recuperan.
 
 Lo comprueba `resolucion_activa_en_otra_cuenta`
 (`apps/emisores/models/resolucion.py`), desde el serializer y desde

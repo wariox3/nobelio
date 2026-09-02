@@ -167,7 +167,7 @@ default; si no lo tiene, la conversación es con Zinc.
 > pasarela sirva TLS basta con apuntarla a `https://` sin tocar código. El
 > punto queda abierto y **fuera de este repositorio**: es trabajo en Zinc.
 
-### A5 · `crear-habilitacion` y sus vecinas son un oráculo de ids — **media**
+### A5 · `crear-habilitacion` y sus vecinas son un oráculo de ids — **resuelto**
 
 `apps/emisores/views/emisor.py:138-144`
 
@@ -188,7 +188,7 @@ distinguen por el mensaje de error, y eso convierte al endpoint en un oráculo»
 Aquí basta con buscar dentro de `emisores_permitidos(request)` y responder
 siempre lo mismo.
 
-### A6 · `crear-habilitacion` escribe datos del sandbox en cualquier emisor — **media**
+### A6 · `crear-habilitacion` escribe datos del sandbox en cualquier emisor — **resuelto**
 
 `apps/emisores/views/emisor.py:177-190`
 
@@ -204,7 +204,7 @@ Como mínimo tendría que negarse cuando `emisor.ambiente_facturacion == 1`. Mej
 aún: separarlo del `EmisorViewSet` y dejarlo como comando de gestión, que es lo
 que realmente es.
 
-### A7 · Sin throttling ni auditoría — **media**
+### A7 · Sin throttling ni auditoría — **parcial**
 
 `REST_FRAMEWORK` no define `DEFAULT_THROTTLE_CLASSES`, así que una API Key
 —credencial de larga duración, sin caducidad por defecto— puede llamar sin
@@ -215,7 +215,7 @@ Y no queda constancia de nada: ver §D1.
 
 ## B. Corrección
 
-### B1 · `PUT /api/documentos/documento/{id}/` responde 500 — **alta**
+### B1 · `PUT /api/documentos/documento/{id}/` responde 500 — **resuelto**
 
 `apps/documentos/serializers/documento.py:660`
 
@@ -237,7 +237,7 @@ La decisión de fondo es qué debe hacer un `PUT` con las líneas: reemplazarlas
 enteras (coherente con la semántica de `PUT`) o rechazarlas explícitamente en un
 borrador. Cualquiera de las dos es mejor que el 500.
 
-### B2 · Los filtros de la query string producen 500 con basura — **media**
+### B2 · Los filtros de la query string producen 500 con basura — **resuelto**
 
 - `apps/documentos/views/documento.py:78` → `qs.filter(emisor=emisor)`
 - `apps/nomina/views/nomina.py:59-63` → `emisor` y `empleado`
@@ -252,7 +252,7 @@ razonamiento: `RelacionDelAlcance.to_internal_value` existe precisamente porque
 sale un 500 con traceback». Falta aplicar el mismo criterio a los filtros de
 listado, que es el otro sitio donde entra un id sin validar.
 
-### B3 · `emitir` y `enviar` no bloquean el documento — **media**
+### B3 · `emitir` y `enviar` no bloquean el documento — **resuelto**
 
 `apps/dian/servicios.py:292` y `:525`, llamados desde
 `apps/documentos/views/documento.py:118` y `:131`.
@@ -273,7 +273,7 @@ justifica su `select_for_update` diciendo que «en un punto de venta los envíos
 concurrentes son la norma, no la excepción». El razonamiento vale igual un nivel
 más arriba.
 
-### B4 · La nómina no reconoce el «procesado anteriormente» al enviar — **media**
+### B4 · La nómina no reconoce el «procesado anteriormente» al enviar — **resuelto**
 
 `apps/dian/servicios.py:894` frente a `:577`
 
@@ -288,7 +288,7 @@ Consecuencia: reenviar una nómina que la DIAN ya tiene la deja en `rechazado`
 para no dar por buena una regla 90 que venga acompañada de rechazos reales, no
 hay motivo para no usarla en los dos sitios.
 
-### B5 · `Resolucion.consecutivo_actual` no lo actualiza nadie — **media**
+### B5 · `Resolucion.consecutivo_actual` no lo actualiza nadie — **resuelto**
 
 `apps/emisores/models/resolucion.py:29` y `:65`
 
@@ -306,7 +306,7 @@ números repetidos. O se implementa la reserva (con `select_for_update`, como lo
 consecutivos de archivo) o se marca `read_only` y se documenta que la numeración
 es del ERP.
 
-### B6 · `crear_nota_ajuste` de nómina puede duplicar consecutivo — **baja**
+### B6 · `crear_nota_ajuste` de nómina puede duplicar consecutivo — **resuelto**
 
 `apps/nomina/servicios.py:56-61`
 
@@ -321,7 +321,7 @@ salva la integridad, pero como `apps/nomina/views/nomina.py:110` solo captura
 `ValueError`, el `IntegrityError` sale como 500. Es poco probable —las notas de
 ajuste no se crean en ráfaga— y por eso es baja, pero el arreglo es una línea.
 
-### B7 · `?search=` no hace nada en documentos — **baja**
+### B7 · `?search=` no hace nada en documentos — **resuelto**
 
 `apps/documentos/views/documento.py:40` declara `filters.SearchFilter` y la clase
 no define `search_fields`, así que DRF devuelve el queryset intacto: el parámetro
@@ -329,7 +329,7 @@ se ignora en silencio. `NominaViewSet` (`nomina/views/nomina.py:33`) y `EmisorVi
 Faltan los obvios: `numero`, `cufe_cude`, `adquiriente__razon_social`,
 `adquiriente__numero_identificacion`.
 
-### B8 · La titularidad del certificado se comprueba por subcadena — **baja**
+### B8 · La titularidad del certificado se comprueba por subcadena — **resuelto**
 
 `apps/emisores/servicios/certificado_validacion.py:97`
 
@@ -342,7 +342,7 @@ contra un certificado emitido a `8900123456`. Es un falso positivo poco probable
 pero real; comparar contra la lista de identificadores en vez de contra su
 concatenación lo cierra.
 
-### B9 · Los listados salen sin orden, y el comentario dice que sí lo tienen — **media**
+### B9 · Los listados salen sin orden, y el comentario dice que sí lo tienen — **resuelto**
 
 `apps/documentos/views/documento.py:36-45,68-74` y
 `apps/nomina/views/nomina.py:55`
@@ -588,16 +588,16 @@ API (`emisor` es el filtro que siempre está por el alcance).
   pero cumplió su función (el ZE02 está resuelto) y ahora es un interruptor de
   exfiltración esperando a que alguien lo active por error. Si se conserva, que
   sea con un setting y no con un global reasignable desde cualquier import.
-- **E3 · `crear_habilitacion` desentona.** `apps/emisores/views/emisor.py:146-192`:
+- **E3 · `crear_habilitacion` desentona.** ~~(resuelto el 2026-09-02: reescrito con la guarda de ambiente de §A6 y una respuesta que dice qué hizo)~~ `apps/emisores/views/emisor.py:146-192`:
   docstring vacío, mensajes sin acentos y con mayúsculas erráticas («EL
   certificado esta vencido»), un `Response({}, status=200)` que no dice qué pasó,
   y datos del sandbox incrustados. Rodeado de código que documenta hasta el
   último criterio, se nota. Vale la pena reescribirlo con el estilo del resto.
-- **E4 · Scaffolding vacío.** `apps/dian/views.py`, `apps/dian/models.py` y
+- **E4 · Scaffolding vacío.** ~~(resuelto el 2026-09-02: los cuatro ficheros borrados)~~ `apps/dian/views.py`, `apps/dian/models.py` y
   `apps/nucleo/views.py` son los tres ficheros de `startapp` sin tocar (`from
   django.shortcuts import render` y un comentario). `apps/emisores/tests.py`
   también está vacío.
-- **E5 · Documentación desfasada.** Tres puntos concretos:
+- **E5 · Documentación desfasada.** ~~(resuelto el 2026-09-02: los tres puntos)~~ Tres puntos concretos:
   - `README.md:12` «Todo el pipeline está cubierto por pruebas» (ver §C1).
   - `README.md:94` da `DIAN_POLICY_HASH` como «*(vacío — configúralo)*», pero
     `settings/base.py:214` ya trae el hash real por defecto.
@@ -661,27 +661,42 @@ más se van a tocar.
 > es lo que permitió abordar esta fase sin esperar a que el P.O.S. cerrara
 > habilitación.
 
-### Fase 3 — Los 500 y las asimetrías
+### Fase 3 — Los 500 y las asimetrías · **hecha el 2026-09-02**
 
-Todo son arreglos pequeños y localizados; se pueden hacer en un par de sesiones.
+Los doce puntos, más **B9**, que salió escribiendo las pruebas de la fase 2.
+262 pruebas en verde.
 
-1. `DocumentoCrearSerializer.update`: decidir la semántica de `detalles` en un
-   `PUT` y hacer el `pop`. **(B1)**
-2. Validar los filtros de la query string en los tres viewsets (o ignorar el
-   valor mal formado, como hace `RelacionDelAlcance`). **(B2)**
-3. `select_for_update` sobre el documento y la nómina en `emitir` y `enviar`. **(B3)**
-4. `_ya_procesado` también en `enviar_nomina_a_dian`. **(B4)**
-5. Decidir qué pasa con `Resolucion.consecutivo_actual`: reserva real o
-   `read_only` + nota en el README. **(B5)**
-6. Bloqueo en `nomina.servicios.siguiente_consecutivo` y captura del
-   `IntegrityError` en la vista. **(B6)**
-7. `search_fields` en `DocumentoViewSet`. **(B7)**
-8. Comparación exacta del NIT en `validar_pkcs12`. **(B8)**
-9. Alcance en `_emisor_del_cuerpo` y guarda de ambiente en `crear-habilitacion`,
-   reescrito con el estilo del resto. **(A5, A6, E3)**
-10. Throttling por credencial en `REST_FRAMEWORK`. **(A7)**
-11. Barrido de documentación: los tres puntos de **E5**, y borrar el scaffolding
-    vacío de **E4**.
+1. ~~`DocumentoCrearSerializer.update` con `detalles`.~~ **400 explícito.** Las
+   líneas no se editan: quien corrige un borrador lo borra y lo rehace. Editarlas
+   obligaría a reemplazarlas y recalcular los tres totales, y no compensa. **(B1)**
+2. ~~Filtros de la query string.~~ `apps.nucleo.api.entero_de_query` en los cinco
+   sitios que filtran por id. Se eligió **400 y no ignorar el valor**: un filtro
+   que no se aplica devuelve más filas de las pedidas, y eso se descubre tarde y
+   mal. **(B2)**
+3. ~~`select_for_update` en `emitir` y `enviar`.~~ Un `_bloquear` en cada viewset,
+   dentro de `transaction.atomic`. Mantiene la transacción abierta durante la
+   llamada SOAP, que es el precio de que el envío sea de uno en uno. **(B3)**
+4. ~~`_ya_procesado` en `enviar_nomina_a_dian`.~~ Un reenvío tras un corte de red
+   dejaba la nómina en `rechazado` con un error que no habla de su contenido. **(B4)**
+5. ~~`Resolucion.consecutivo_actual`.~~ **Retirado** (migración `0027`), junto con
+   la propiedad `siguiente_consecutivo`, que tampoco llamaba nadie. La numeración
+   la lleva el ERP; un contador que siempre marca cero invita a fiarse de él. **(B5)**
+6. ~~Consecutivo de la nota de ajuste.~~ Bloqueo de la última fila —`select_for_update`
+   no admite agregados— y captura del `IntegrityError` en la vista. **(B6)**
+7. ~~`search_fields`.~~ Número, CUFE, y NIT y razón social del receptor. **(B7)**
+8. ~~NIT por subcadena.~~ Ahora se comparan las rachas de dígitos enteras, con el
+   dígito de verificación admitido pegado. Con dos pruebas nuevas. **(B8)**
+9. ~~Oráculo de ids y datos del sandbox.~~ `_emisor_del_cuerpo` busca dentro del
+   alcance, así que un id ajeno y uno inexistente responden igual;
+   `crear-habilitacion` rechaza a un emisor que ya está en producción, devuelve
+   qué hizo en vez de `{}`, y quedó reescrito con el estilo del resto. **(A5, A6, E3)**
+10. ~~Throttling.~~ 300/hora por credencial y 30/hora anónimo, ajustables por
+    entorno. Hizo falta un throttle propio: el de DRF construye su clave con
+    `request.user.pk` y el principal de una API Key no es un modelo. **(A7, parcial:
+    la auditoría sigue pendiente)**
+11. ~~Barrido de documentación.~~ Los tres puntos de **E5** y el scaffolding vacío
+    de **E4** (cuatro ficheros de `startapp` sin tocar). **(E4, E5)**
+12. ~~Orden de los listados.~~ `order_by` explícito tras el `annotate`. **(B9)**
 
 ### Fase 4 — Preparar el volumen del P.O.S.
 

@@ -215,6 +215,24 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 10,
+    # Un tope por credencial. No había ninguno: una API Key con un bucle roto
+    # —o alguien probando ids— podía martillear la API sin encontrar resistencia,
+    # y cada petición autenticada por llave cuesta un PBKDF2 y una escritura
+    # (§D2), así que el coste de un abuso no es solo el tráfico.
+    #
+    # `user` cubre lo autenticado (llave o JWT) y `anon` el borde sin
+    # credencial. Son ajustables por entorno para poder subirlos sin desplegar
+    # código el día que un punto de venta con muchas cajas se quede corto.
+    "DEFAULT_THROTTLE_CLASSES": [
+        # El de DRF no vale: construye su clave con `request.user.pk` y el
+        # principal de una API Key no es un modelo. Ver apps/seguridad/limites.py.
+        "apps.seguridad.limites.LimitePorCredencial",
+        "rest_framework.throttling.AnonRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "user": env("THROTTLE_USUARIO", default="300/hour"),
+        "anon": env("THROTTLE_ANONIMO", default="30/hour"),
+    },
 }
 
 # --- JWT (frontend SPA) -----------------------------------------------------

@@ -34,15 +34,42 @@ def _solo_digitos(texto: str) -> str:
     return re.sub(r"\D", "", texto or "")
 
 
-def _identificadores_del_certificado(cert) -> str:
-    """Devuelve, en solo dígitos, los campos del subject donde una CA colombiana
-    coloca el NIT del titular (serialNumber, organizationIdentifier) más el
-    subject completo como respaldo."""
+def _identificadores_del_certificado(cert) -> list[str]:
+    """Los números que aparecen en el subject, cada uno por separado.
+
+    Se miran los campos donde una CA colombiana pone el NIT del titular
+    —``serialNumber`` y ``organizationIdentifier``, que suele traer
+    ``"NIT-901192048-8"``— y, como respaldo, el subject entero.
+
+    Devuelve una **lista de rachas de dígitos** y no una sola cadena. Antes se
+    concatenaba todo y se preguntaba con ``in``, que es una comparación por
+    subcadena: el NIT ``900123`` daba por bueno un certificado emitido a
+    ``8900123456``. Separándolo, cada número se compara entero.
+    """
     partes = []
     for oid in (NameOID.SERIAL_NUMBER, OID_ORG_ID):
         partes += [attr.value for attr in cert.subject.get_attributes_for_oid(oid)]
     partes.append(cert.subject.rfc4514_string())
-    return " ".join(_solo_digitos(parte) for parte in partes)
+    numeros = []
+    for parte in partes:
+        numeros += re.findall(r"\d+", parte or "")
+    return numeros
+
+
+def _corresponde_al_emisor(cert, emisor) -> bool:
+    """¿Alguno de los números del certificado es el NIT del emisor?
+
+    Se acepta el NIT solo y el NIT con su dígito de verificación pegado, que es
+    como lo escribe el perfil ETSI (``NIT-901192048-8`` deja ``901192048`` y
+    ``8`` como rachas separadas, pero alguna CA lo emite junto). Nada más: una
+    coincidencia parcial ya no vale.
+    """
+    nit = _solo_digitos(emisor.numero_identificacion)
+    if not nit:
+        return True  # sin NIT que comparar, no hay nada que comprobar
+    dv = _solo_digitos(emisor.digito_verificacion)
+    aceptados = {nit, nit + dv} if dv else {nit}
+    return any(numero in aceptados for numero in _identificadores_del_certificado(cert))
 
 
 def validar_pkcs12(datos: bytes, clave: str, emisor) -> dict:
@@ -93,8 +120,7 @@ def validar_pkcs12(datos: bytes, clave: str, emisor) -> dict:
         )
 
     # 5. El NIT del certificado debe coincidir con el del emisor.
-    nit_emisor = _solo_digitos(emisor.numero_identificacion)
-    if nit_emisor and nit_emisor not in _identificadores_del_certificado(cert):
+    if not _corresponde_al_emisor(cert, emisor):
         raise CertificadoInvalido(
             "El certificado no corresponde al emisor: no se encontró su NIT "
             f"({emisor.numero_identificacion}) en los datos del certificado."

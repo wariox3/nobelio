@@ -96,7 +96,9 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
 
 - [ ] *(alternativa manual)* `POST /api/emisores/resolucion/` → número y fecha de
       resolución, `prefijo`, `rango_desde`/`rango_hasta`, vigencias y `tipo_factura`.
-      El `consecutivo_actual` avanza con cada emisión.
+      La numeración **no la lleva la resolución**: el consecutivo de cada
+      documento llega en su propio campo `consecutivo` y solo se valida que caiga
+      dentro del rango autorizado.
 
 ## 7. Documento electrónico
 

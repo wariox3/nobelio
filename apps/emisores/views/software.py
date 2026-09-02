@@ -3,6 +3,7 @@ from rest_framework import viewsets
 
 from apps.emisores import models, serializers
 from apps.seguridad.alcance import AlcanceEmisorMixin
+from apps.nucleo.api import entero_de_query
 
 
 class SoftwareDianViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
@@ -12,5 +13,5 @@ class SoftwareDianViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         """Permite filtrar por emisor: ``/api/emisores/software/?emisor=<id>``."""
         qs = super().get_queryset()
-        emisor = self.request.query_params.get("emisor")
+        emisor = entero_de_query(self.request.query_params, "emisor")
         return qs.filter(emisor=emisor) if emisor else qs

@@ -8,7 +8,7 @@ from rest_framework.response import Response
 
 from apps.emisores import models, serializers
 from apps.emisores.servicios import CertificadoInvalido, validar_pkcs12
-from apps.nucleo.api import ErrorSolicitud
+from apps.nucleo.api import ErrorSolicitud, entero_de_query
 from apps.seguridad.alcance import AlcanceEmisorMixin, exigir_alcance
 
 
@@ -42,7 +42,7 @@ class CertificadoViewSet(
     def get_queryset(self):
         """Permite filtrar por emisor: ``/api/emisores/certificado/?emisor=<id>``."""
         qs = super().get_queryset()
-        emisor = self.request.query_params.get("emisor")
+        emisor = entero_de_query(self.request.query_params, "emisor")
         return qs.filter(emisor=emisor) if emisor else qs
 
     def create(self, request, *args, **kwargs):

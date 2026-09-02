@@ -662,7 +662,22 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
 
         El adquiriente no tiene endpoint propio, así que este es el único sitio
         donde se puede arreglar un dato suyo antes de emitir.
+
+        Las **líneas no se editan**. Antes ni siquiera se decía: `detalles` es un
+        campo anidado y escribible, así que un `PUT` que las trajera llegaba a
+        `ModelSerializer.update` con una relación inversa y reventaba con un 500.
+        Ahora se rechaza con un 400 que explica qué hacer. Editarlas de verdad
+        obligaría a reemplazarlas y recalcular los tres totales, y quien corrige
+        una línea de un borrador está a tiempo de borrarlo y rehacerlo: es una
+        operación menos y ningún riesgo de que los totales queden a medias.
         """
+        if "detalles" in validated_data:
+            raise serializers.ValidationError({
+                "detalles": (
+                    "Las líneas de un documento no se editan. Borre el "
+                    "borrador y vuelva a crearlo con las líneas correctas."
+                )
+            })
         adquiriente_data = validated_data.pop("adquiriente", None)
         pos_data = validated_data.pop("pos", None)
         documento = super().update(instance, validated_data)

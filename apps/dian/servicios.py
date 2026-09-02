@@ -955,7 +955,12 @@ def enviar_nomina_a_dian(nomina, *, cliente=None, ambiente=None, **cred):
     _guardar_respuesta_nomina(nomina, respuesta)
     if respuesta.track_id:
         nomina.track_id = respuesta.track_id
-    if respuesta.es_valido:
+    # "Documento procesado anteriormente" (regla 90), igual que en la factura:
+    # la DIAN ya tiene ese CUNE de un envío previo, así que en la práctica está
+    # aceptado y no es un rechazo. Faltaba aquí, de modo que un reenvío —el
+    # caso normal tras un corte de red— dejaba la nómina en `rechazado` con un
+    # error que no habla de su contenido.
+    if respuesta.es_valido or _ya_procesado(respuesta):
         nomina.estado = _estado(DocumentoEstado.Nombre.ACEPTADO)
         if not nomina.fecha_validacion:
             nomina.fecha_validacion = respuesta.fecha_validacion or timezone.now()

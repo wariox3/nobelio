@@ -33,3 +33,14 @@ LOGGING["loggers"]["apps"]["level"] = "CRITICAL"  # noqa: F405
 # pruebas que provocan errores a propósito, así que su traza es ruido que
 # confunde al leer un fallo de verdad.
 LOGGING["loggers"]["django.request"]["level"] = "CRITICAL"  # noqa: F405
+
+# Sin límite de peticiones en la suite: el contador vive en la caché y se
+# acumula entre pruebas del mismo proceso, así que una clase con muchos casos
+# empezaría a recibir 429 por el orden en que se ejecutan, no por lo que prueba.
+# El límite se comprueba en su propia prueba, que fija la tasa a mano.
+# Las tasas se declaran pero en `None`: DRF exige que el scope exista y trata
+# el `None` como "sin límite".
+REST_FRAMEWORK = {  # noqa: F405
+    **REST_FRAMEWORK,  # noqa: F405
+    "DEFAULT_THROTTLE_RATES": {"user": None, "anon": None},
+}

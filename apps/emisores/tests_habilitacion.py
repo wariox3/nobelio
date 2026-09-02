@@ -16,6 +16,7 @@ from apps.catalogos.models import TipoFactura
 from apps.cuentas.models import Cuenta
 from apps.documentos.tests_utils import crear_catalogos_minimos, crear_certificado
 from apps.emisores.models import Certificado, Emisor, Resolucion, SoftwareDian
+from apps.nucleo.models import Ambiente
 from apps.seguridad.models import Usuario
 
 URL = "/api/emisores/emisor/crear-habilitacion/"
@@ -158,6 +159,46 @@ class HabilitacionTests(APITestCase):
 
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("pin", resp.data["errores"])
+
+    def test_un_emisor_en_produccion_no_se_rehabilita_sin_querer(self):
+        """La habilitación escribe la resolución del sandbox, que no es suya.
+
+        Sobre un emisor ya en producción eso significa emitir con una
+        numeración ajena: la DIAN rechaza y los consecutivos gastados no se
+        recuperan.
+        """
+        self.emisor.ambiente_facturacion = Ambiente.PRODUCCION
+        self.emisor.save(update_fields=["ambiente_facturacion"])
+
+        resp = self.client.post(URL, self._payload(), format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("producción", resp.data["detail"])
+        self.assertFalse(Resolucion.objects.filter(emisor=self.emisor).exists())
+
+    def test_un_emisor_de_otra_cuenta_responde_como_uno_inexistente(self):
+        """Sin esto el endpoint es un oráculo de ids.
+
+        Mientras el emisor se buscaba entre todos y el alcance se comprobaba
+        después, uno ajeno daba 403 y uno inexistente 400: la diferencia deja
+        averiguar qué ids existen en otras cuentas. Las dos respuestas tienen
+        que ser la misma.
+        """
+        humano = Usuario.objects.create_user(
+            email="humano@nobelio.co", password="ClaveSegura123"
+        )
+        humano.emisores.add(self.emisor)
+        self.client.force_authenticate(humano)
+
+        ajeno = self.client.post(
+            URL, self._payload(emisor=self.ajeno), format="json"
+        )
+        payload = self._payload()
+        payload["emisor"] = 999999
+        inexistente = self.client.post(URL, payload, format="json")
+
+        self.assertEqual(ajeno.status_code, inexistente.status_code)
+        self.assertEqual(ajeno.data["detail"], inexistente.data["detail"])
 
     def test_nada_se_guarda_si_el_software_no_valida(self):
         """La resolución va dentro de la misma transacción que el software."""

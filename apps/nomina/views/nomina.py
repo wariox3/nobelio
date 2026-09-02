@@ -1,5 +1,6 @@
 """API de nóminas electrónicas y acciones del ciclo de vida DIAN."""
 import requests
+from django.db import IntegrityError, transaction
 from django.db.models import Count
 from django.http import HttpResponse
 from rest_framework import filters, status, viewsets
@@ -11,7 +12,7 @@ from apps.documentos.models import DocumentoEstado
 from apps.nomina import serializers
 from apps.nomina.models import Nomina
 from apps.nomina.servicios import crear_nota_ajuste
-from apps.nucleo.api import ErrorSolicitud, error_pasarela_dian
+from apps.nucleo.api import ErrorSolicitud, entero_de_query, error_pasarela_dian
 from apps.seguridad.alcance import AlcanceEmisorMixin
 
 
@@ -52,13 +53,20 @@ class NominaViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         # Igual que en documentos: en la lista los errores van contados, así que
         # se anotan y no se traen sus filas.
         if self.action == "list":
-            qs = qs.prefetch_related(None).annotate(total_errores=Count("errores"))
+            # El `annotate` descarta el `Meta.ordering` del modelo (Django lo
+            # hace para no meter esos campos en el GROUP BY), y sin orden la
+            # paginación puede repetir una fila y saltarse otra. Se repone.
+            qs = (
+                qs.prefetch_related(None)
+                .annotate(total_errores=Count("errores"))
+                .order_by(*Nomina._meta.ordering)
+            )
         else:
             qs = qs.prefetch_related("conceptos")
         params = self.request.query_params
-        if emisor := params.get("emisor"):
+        if (emisor := entero_de_query(params, "emisor")) is not None:
             qs = qs.filter(emisor=emisor)
-        if empleado := params.get("empleado"):
+        if (empleado := entero_de_query(params, "empleado")) is not None:
             qs = qs.filter(empleado=empleado)
         if estado := params.get("estado"):
             qs = qs.filter(estado__nombre=estado)
@@ -109,17 +117,43 @@ class NominaViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
             )
         except ValueError as exc:
             raise ErrorSolicitud(str(exc))
+        except IntegrityError:
+            # El consecutivo se pide bajo bloqueo, así que esto solo salta si
+            # el cliente manda uno a mano que ya existe. Sin capturarlo era un
+            # 500 con un mensaje de PostgreSQL.
+            raise ErrorSolicitud(
+                "Ya existe una nómina con ese prefijo y consecutivo para el "
+                "emisor. Use otro número o deje que se asigne solo."
+            )
         return Response(
             serializers.NominaSerializer(nota).data,
             status=status.HTTP_201_CREATED,
         )
+
+    def _bloquear(self, obj):
+        """Relee el objeto con ``FOR UPDATE``. Hay que estar en transacción.
+
+        Sin esto, dos peticiones simultáneas sobre el mismo documento hacen el
+        trabajo dos veces: dos `emitir` gastan dos veces el consecutivo y dejan
+        dos XML firmados con CUFE distinto, y dos `enviar` mandan el mismo
+        documento dos veces a la DIAN, que responde el segundo con "procesado
+        anteriormente" —o algo peor, si el primero aún no había terminado—.
+
+        El bloqueo es de fila, así que solo espera quien toque **ese mismo**
+        documento. Sí mantiene abierta la transacción mientras dura la llamada
+        SOAP, que es el precio de que el envío sea de uno en uno: es justo la
+        garantía que se busca.
+        """
+        return type(obj).objects.select_for_update().get(pk=obj.pk)
 
     @action(detail=True, methods=["post"])
     def emitir(self, request, pk=None):
         """Genera el XML, calcula el CUNE y firma la nómina."""
         nomina = self.get_object()
         try:
-            servicios.generar_y_firmar_nomina(nomina)
+            with transaction.atomic():
+                nomina = self._bloquear(nomina)
+                servicios.generar_y_firmar_nomina(nomina)
         except ValueError as exc:
             raise ErrorSolicitud(str(exc))
         except servicios.ErrorEmision as exc:
@@ -139,7 +173,9 @@ class NominaViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         """
         nomina = self.get_object()
         try:
-            respuesta = servicios.enviar_nomina_a_dian(nomina)
+            with transaction.atomic():
+                nomina = self._bloquear(nomina)
+                respuesta = servicios.enviar_nomina_a_dian(nomina)
         except servicios.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
         except requests.RequestException as exc:
