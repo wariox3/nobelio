@@ -25,5 +25,8 @@ qrcode==8.2
 pillow==12.2.0
 pypdf==6.13.3
 
+# Observabilidad (errores en producción; sin SENTRY_DSN no se activa)
+sentry-sdk==2.68.1
+
 # Servidor WSGI (producción)
 gunicorn==23.0.0

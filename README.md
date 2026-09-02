@@ -99,6 +99,8 @@ Variables principales (`config/settings/base.py` las lee con `django-environ`):
 | `CERT_ENCRYPTION_KEY` | Clave Fernet que cifra la clave del `.p12` (**obligatoria**) | — |
 | `THROTTLE_USUARIO` | Tope de peticiones por credencial | `300/hour` |
 | `THROTTLE_ANONIMO` | Tope de peticiones sin credencial | `30/hour` |
+| `SENTRY_DSN` | Errores a Sentry; vacío lo desactiva | *(vacío)* |
+| `SENTRY_ENTORNO` | Entorno con el que se etiquetan los eventos | `desarrollo` |
 
 > Los settings se dividen en `config/settings/{base,dev,prod}.py`.
 > Por defecto se usa `config.settings.dev`.

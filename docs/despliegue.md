@@ -147,6 +147,12 @@ B2_APP_KEY=<applicationKey>
 
 # Para el respaldo cifrado del paso 10.
 RESPALDO_PASSPHRASE=<clave larga>
+
+# Errores en Sentry. Vacío lo desactiva; sin DSN no se inicializa nada.
+SENTRY_DSN=https://<clave>@<organizacion>.ingest.sentry.io/<proyecto>
+SENTRY_ENTORNO=produccion
+SENTRY_TRACES=0.0
+SENTRY_RELEASE=<sha del commit desplegado>
 ```
 
 El archivo lleva la clave de la BD, las de B2, la del respaldo y la de cifrado
@@ -170,6 +176,14 @@ chmod 640 /opt/nobelio/.env
 > - **No la incluyas en el respaldo del paso 10** junto a la base. El sentido de
 >   cifrar la columna es que un volcado por sí solo no sirva; si la clave viaja
 >   en el mismo respaldo, vuelven a estar las dos mitades juntas.
+
+> **Sentry.** `SENTRY_DSN` vacío deja la integración apagada, que es lo normal
+> fuera de producción. Con DSN se envían las excepciones no controladas y lo que
+> se registre a nivel `ERROR`; los rechazos de la DIAN **no** generan alertas,
+> solo contexto dentro del evento. Antes de activarlo en un entorno nuevo, lee
+> `config/observabilidad.py`: los eventos llevan las variables locales del
+> traceback, y lo que impide que salga con ellas la clave del `.p12` es una
+> lista de nombres que hay que mantener al día.
 
 ---
 

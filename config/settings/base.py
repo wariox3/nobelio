@@ -14,6 +14,8 @@ from pathlib import Path
 
 import environ
 
+from config import observabilidad
+
 # BASE_DIR apunta a la raíz del repositorio (donde está manage.py).
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -199,6 +201,22 @@ LOGGING = {
         },
     },
 }
+
+# --- Sentry -----------------------------------------------------------------
+# Solo se activa si hay DSN, así que en dev y en la suite no existe. El detalle
+# de qué se envía y del filtro de nombres sensibles está en config/observabilidad.py,
+# que es donde hay que apuntar cada campo nuevo que lleve un secreto.
+SENTRY_DSN = env("SENTRY_DSN", default="")
+SENTRY_ENTORNO = env("SENTRY_ENTORNO", default="desarrollo")
+SENTRY_TRACES = env.float("SENTRY_TRACES", default=0.0)
+SENTRY_RELEASE = env("SENTRY_RELEASE", default="")
+
+observabilidad.configurar(
+    dsn=SENTRY_DSN,
+    entorno=SENTRY_ENTORNO,
+    traces=SENTRY_TRACES,
+    release=SENTRY_RELEASE,
+)
 
 # --- Django REST Framework --------------------------------------------------
 REST_FRAMEWORK = {
