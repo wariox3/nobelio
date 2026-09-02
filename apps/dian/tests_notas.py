@@ -124,12 +124,16 @@ class DocumentoSoporteTests(NotasTestBase):
         )
         return ubl.constructor_para(ds, software=self.base["software"], ambiente=2).generar_xml()
 
-    def test_tipo_05_y_cude_valida_xsd(self):
+    def test_tipo_05_y_cuds_valida_xsd(self):
         xml = self._xml()
         arbol = etree.fromstring(xml)
         ns = ubl.NS
         self.assertEqual(arbol.findtext(f"{{{ns['cbc']}}}InvoiceTypeCode"), "05")
-        self.assertEqual(arbol.find(f"{{{ns['cbc']}}}UUID").get("schemeName"), "CUDE-SHA384")
+        # CUDS, no CUDE: el documento soporte tiene su propia composición de
+        # hash y su propio schemeName (anexo del DS, numeral 4). La prueba
+        # afirmaba CUDE, de cuando el DS reutilizaba el identificador de la
+        # factura.
+        self.assertEqual(arbol.find(f"{{{ns['cbc']}}}UUID").get("schemeName"), "CUDS-SHA384")
         esquema, arbol = _validar_xsd(xml, "UBL-Invoice-2.1.xsd")
         if not esquema.validate(arbol):
             self.fail("Documento soporte inválido:\n" + str(esquema.error_log))

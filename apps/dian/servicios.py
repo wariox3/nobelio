@@ -10,6 +10,7 @@ pueden inyectar para facilitar las pruebas sin red ni .p12 reales.
 """
 from __future__ import annotations
 
+import logging
 import re
 
 from django.conf import settings
@@ -29,6 +30,42 @@ from apps.emisores.servicios import (
     certificado_activo,
     motivo_no_puede_emitir,
 )
+from apps.nucleo.registro import campos
+
+# La traza del pipeline. Deja una línea por transición de estado —firmado,
+# enviado, respuesta de la DIAN— porque cuando un documento sale mal en
+# producción esto es lo único que queda: el documento guarda en qué estado
+# acabó, pero no cuándo pasó, con qué ambiente ni por qué operación salió.
+logger = logging.getLogger(__name__)
+
+
+def _registrar_veredicto(evento, obj, respuesta, extra="", etiqueta="documento"):
+    """Deja la línea de una respuesta de la DIAN ya aplicada al documento.
+
+    El nivel lo decide el resultado: un rechazo sale como ``WARNING`` para que
+    se pueda pescar sin leer el resto (``journalctl -p warning``), y lo demás
+    como ``INFO``. No es un ``ERROR`` porque no lo es: la DIAN contestó y el
+    documento quedó bien anotado; lo que falla es el contenido, y eso se
+    corrige y se reenvía.
+
+    Del rechazo se guarda el número de errores y **solo el primero**: vienen en
+    tandas de la misma familia, así que el primero identifica el problema y los
+    demás alargan la línea sin añadir nada. El detalle completo queda en la
+    respuesta guardada.
+    """
+    errores = respuesta.errores or []
+    estado = obj.estado.nombre if obj.estado_id else ""
+    linea = campos(**{etiqueta: obj.pk, "emisor": obj.emisor_id})
+    if extra:
+        linea = f"{linea} {extra}"
+    linea = "{} {}".format(linea, campos(
+        estado=estado,
+        track_id=respuesta.track_id,
+        errores=len(errores),
+        primero=errores[0] if errores else "",
+    ))
+    nivel = logging.WARNING if estado == DocumentoEstado.Nombre.RECHAZADO else logging.INFO
+    logger.log(nivel, "%s %s", evento, linea)
 
 
 def _estado(nombre: str) -> DocumentoEstado:
@@ -388,6 +425,14 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
         "cufe_cude", "hora_emision", "xml_archivo", "ambiente", "estado",
         "actualizado_en",
     ])
+    logger.info("documento.firmado %s", campos(
+        documento=documento.pk,
+        emisor=documento.emisor_id,
+        tipo=codigo_tipo,
+        numero=documento.numero,
+        ambiente=ambiente,
+        cufe=documento.cufe_cude,
+    ))
     return xml_firmado
 
 
@@ -586,6 +631,13 @@ def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):
         *_CAMPOS_RESPUESTA, "track_id", "envio", "estado", "fecha_validacion",
         "actualizado_en",
     ])
+    _registrar_veredicto("documento.enviado", documento, respuesta, campos(
+        tipo=documento.documento_tipo.codigo,
+        numero=documento.numero,
+        ambiente=ambiente,
+        envio=documento.envio,
+        archivo=nombre,
+    ))
     return respuesta
 
 
@@ -695,6 +747,11 @@ def actualizar_estado(documento, *, cliente=None, ambiente=None, **cred):
     documento.save(update_fields=[
         *_CAMPOS_RESPUESTA, "estado", "fecha_validacion", "actualizado_en",
     ])
+    _registrar_veredicto("documento.estado_actualizado", documento, respuesta, campos(
+        numero=documento.numero,
+        desde=codigo_actual,
+        envio=documento.envio,
+    ))
     return respuesta
 
 
@@ -824,6 +881,13 @@ def generar_y_firmar_nomina(nomina, *, firmador=None, ambiente=None, **cred):
         "cune", "fecha_generacion", "hora_generacion", "xml_archivo", "ambiente",
         "estado", "actualizado_en",
     ])
+    logger.info("nomina.firmada %s", campos(
+        nomina=nomina.pk,
+        emisor=nomina.emisor_id,
+        numero=nomina.numero,
+        ambiente=ambiente,
+        cune=nomina.cune,
+    ))
     return xml_firmado
 
 
@@ -903,6 +967,12 @@ def enviar_nomina_a_dian(nomina, *, cliente=None, ambiente=None, **cred):
         "respuesta_archivo", "track_id", "envio", "estado", "fecha_validacion",
         "actualizado_en",
     ])
+    _registrar_veredicto("nomina.enviada", nomina, respuesta, campos(
+        numero=nomina.numero,
+        ambiente=ambiente,
+        envio=nomina.envio,
+        archivo=nombre_xml,
+    ), etiqueta="nomina")
     return respuesta
 
 
@@ -986,4 +1056,9 @@ def actualizar_estado_nomina(nomina, *, cliente=None, ambiente=None, **cred):
     nomina.save(update_fields=[
         "respuesta_archivo", "estado", "fecha_validacion", "actualizado_en",
     ])
+    _registrar_veredicto("nomina.estado_actualizado", nomina, respuesta, campos(
+        numero=nomina.numero,
+        desde=codigo_actual,
+        envio=nomina.envio,
+    ), etiqueta="nomina")
     return respuesta

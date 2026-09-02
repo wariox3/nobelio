@@ -116,7 +116,8 @@ def crear_documento_factura(catalogos=None):
         direccion="Calle 1 # 2-3", telefono="6041234567", correo="demo@empresa.co",
     )
     software = SoftwareDian.objects.create(
-        emisor=emisor, identificador="56f2ae4e-9812-4fad-9255-08fcfcd5ccb0",
+        emisor=emisor, tipo=SoftwareDian.Tipo.FACTURACION,
+        identificador="56f2ae4e-9812-4fad-9255-08fcfcd5ccb0",
         pin="12345",
     )
     tipo_factura, _ = TipoFactura.objects.get_or_create(

@@ -13,6 +13,7 @@ entrega del anexo técnico, y dentro lleva el documento firmado junto al acuse
 con el que la DIAN acredita que lo validó.
 """
 import base64
+import logging
 import zipfile
 from io import BytesIO
 from pathlib import PurePath
@@ -23,6 +24,7 @@ from django.conf import settings
 
 from apps.dian.identificadores import nombre_archivo_dian
 from apps.documentos.models import DocumentoEstado
+from apps.nucleo.registro import campos
 from apps.utilidades.zinc import Zinc
 
 # Tope del material adjunto que acepta la notificación. No cuenta el XML, que
@@ -272,6 +274,9 @@ def payload_zinc(documento, paquete, *, asunto=None, html=None):
     return datos
 
 
+logger = logging.getLogger(__name__)
+
+
 def _destinatarios(paquete):
     """Los correos a los que va el paquete, ya limpios."""
     return [c.strip() for c in paquete.destinatario.split(";") if c.strip()]
@@ -291,8 +296,27 @@ def enviar_notificacion(documento, *, pdf=None, adjuntos=(), zinc=None):
     cliente = zinc or Zinc()
     respuesta = cliente.correo_html(payload_zinc(documento, paquete))
     if respuesta.get("error"):
+        # WARNING y no ERROR: el documento sigue sin notificar y se puede
+        # reintentar, que es justo lo que hace falta saber al leerlo.
+        logger.warning("documento.notificacion_fallida %s", campos(
+            documento=documento.pk,
+            emisor=documento.emisor_id,
+            numero=documento.numero,
+            motivo=respuesta.get("errorMensaje") or "sin motivo",
+        ))
         raise ErrorEnvioCorreo(
             respuesta.get("errorMensaje") or "Zinc rechazó el envío sin dar motivo."
         )
     marcar_notificado(documento)
+    # Cuántos destinatarios, no cuáles: la dirección del adquiriente es un dato
+    # de un tercero y el log se lee con menos cuidado que la base. Para saber a
+    # quién se envió está el paquete; aquí basta con que salió y con el
+    # `codigoEnvio`, que es con lo que se rastrea el correo en la pasarela.
+    logger.info("documento.notificado %s", campos(
+        documento=documento.pk,
+        emisor=documento.emisor_id,
+        numero=documento.numero,
+        destinatarios=len(_destinatarios(paquete)),
+        codigo_envio=respuesta.get("codigoEnvio"),
+    ))
     return paquete, respuesta

@@ -12,7 +12,6 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from apps.catalogos.models import TipoFactura
 from apps.dian.tests_firma import _generar_certificado
 from apps.documentos.models import (
     Adquiriente, Documento, DocumentoEstado, DocumentoTipo,
@@ -133,6 +132,9 @@ class DocumentoAPITests(APITestCase):
                 "departamento": c["antioquia"].id,
                 "municipio": c["medellin"].id,
                 "direccion": "Cra 4 # 5-6",
+                # Obligatorio desde que el anexo lo exige en el AddressLine del
+                # adquiriente; el serializer lo pide y sin él la creación es 400.
+                "codigo_postal": "050001",
             },
             "prefijo": "SETP",
             "consecutivo": 990000130,
@@ -320,11 +322,13 @@ class DocumentoAPITests(APITestCase):
 
     def test_numero_repetido_se_desempata_con_el_prefijo(self):
         original = self.documento.resolucion
-        otro_tipo, _ = TipoFactura.objects.get_or_create(
-            codigo="91", defaults={"nombre": "Nota Crédito"}
-        )
+        # La gemela es del **mismo tipo** que la original y solo cambia el
+        # prefijo. Tiene que serlo para que el caso siga probando lo que dice
+        # su nombre: el desempate mira primero el tipo del documento, así que
+        # con una resolución de otro tipo (una nota crédito) el tipo ya
+        # resolvería y el prefijo no llegaría a usarse nunca.
         gemela = Resolucion.objects.create(
-            emisor=self.emisor, tipo_factura=otro_tipo,
+            emisor=self.emisor, tipo_factura=original.tipo_factura,
             numero_resolucion=original.numero_resolucion,
             fecha_resolucion=original.fecha_resolucion, prefijo="NC",
             rango_desde=1, rango_hasta=100,

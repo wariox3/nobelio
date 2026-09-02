@@ -144,6 +144,56 @@ B2_HABILITADO = bool(B2_BUCKET and B2_ENDPOINT_URL and B2_KEY_ID and B2_APP_KEY)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# --- Registro (logging) -----------------------------------------------------
+# Todo sale por stdout y lo recoge journald a través de la unidad de systemd
+# (ver docs/despliegue.md): la aplicación no abre ficheros, no rota nada y no
+# hay que darle permisos sobre /var/log. Se lee con:
+#
+#     journalctl -u nobelio -f
+#     journalctl -u nobelio --since today | grep estado=RECHAZADO
+#
+# El logger que importa es `apps`: de él cuelgan las trazas de emisión que deja
+# `apps.dian.servicios` (firmado, enviado, respuesta de la DIAN, notificado).
+# Se configura el padre y no cada módulo para poder subir o bajar el nivel de
+# todo el proyecto en un sitio.
+LOGGING = {
+    "version": 1,
+    # Los loggers de terceros que ya existan siguen funcionando; esta
+    # configuración añade, no sustituye.
+    "disable_existing_loggers": False,
+    "formatters": {
+        "nobelio": {
+            # Fecha, nivel, módulo y la línea de `clave=valor` que arma
+            # `apps.nucleo.registro.campos`. Pensado para grep, no para leerlo
+            # con una herramienta.
+            "format": "%(asctime)s %(levelname)s %(name)s %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
+        },
+    },
+    "handlers": {
+        "consola": {
+            "class": "logging.StreamHandler",
+            "formatter": "nobelio",
+        },
+    },
+    "loggers": {
+        "apps": {
+            "handlers": ["consola"],
+            "level": env("LOG_LEVEL", default="INFO"),
+            # Sin propagar: si no, la misma línea saldría dos veces en cuanto
+            # el root tenga handler.
+            "propagate": False,
+        },
+        # Los 500 del borde HTTP. Django los registra aquí, y hasta ahora se
+        # perdían: es la otra mitad de poder investigar un fallo después.
+        "django.request": {
+            "handlers": ["consola"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+    },
+}
+
 # --- Django REST Framework --------------------------------------------------
 REST_FRAMEWORK = {
     # Errores con cuerpo homogéneo: {"detail": ..., "errores": {...}}.

@@ -33,17 +33,31 @@ class SoftwareDianAPITests(APITestCase):
     def _payload(self):
         return {
             "emisor": self.emisor.id,
+            "tipo": SoftwareDian.Tipo.FACTURACION,
             "identificador": "abc123-software-id",
             "pin": "12345",
             "test_set_id": "set-pruebas-xyz",
         }
 
-    def test_crea_software_y_no_devuelve_pin(self):
+    def test_crea_software_y_devuelve_el_pin(self):
+        # El PIN se devuelve a propósito (decisión del 2026-08-28, reafirmada el
+        # 2026-09-02): quien puede leer el software ya está dentro del alcance
+        # del emisor, y tenerlo a la vista ahorra fricción en la habilitación.
+        # Esta prueba existía afirmando lo contrario, de cuando era write_only.
         resp = self.client.post(self.url, self._payload(), format="json")
         self.assertEqual(resp.status_code, 201, resp.data)
-        self.assertNotIn("pin", resp.data)  # write-only: nunca se expone
+        self.assertEqual(resp.data["pin"], "12345")
         creado = SoftwareDian.objects.get(pk=resp.data["id"])
-        self.assertEqual(creado.pin, "12345")  # sí se guardó
+        self.assertEqual(creado.pin, "12345")
+
+    def test_el_tipo_es_obligatorio(self):
+        # Sin tipo no se sabe qué operación habilita el software, y el pipeline
+        # busca el activo *de su tipo*: uno sin tipo no lo encontraría nunca.
+        payload = self._payload()
+        del payload["tipo"]
+        resp = self.client.post(self.url, payload, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("tipo", resp.data["errores"])
 
     def test_pin_es_obligatorio(self):
         payload = self._payload()
@@ -54,11 +68,13 @@ class SoftwareDianAPITests(APITestCase):
 
     def test_filtra_por_emisor(self):
         SoftwareDian.objects.create(
-            emisor=self.emisor, identificador="s1", pin="1"
+            emisor=self.emisor, tipo=SoftwareDian.Tipo.FACTURACION,
+            identificador="s1", pin="1"
         )
         otro = _crear_emisor(self.cat, nit="800197268")
         SoftwareDian.objects.create(
-            emisor=otro, identificador="s2", pin="2"
+            emisor=otro, tipo=SoftwareDian.Tipo.FACTURACION,
+            identificador="s2", pin="2"
         )
         resp = self.client.get(self.url, {"emisor": self.emisor.id})
         self.assertEqual(resp.status_code, 200)

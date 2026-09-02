@@ -147,6 +147,7 @@ class AlcanceLlaveDeCuentaTests(AlcanceBase):
         crear_certificado(self.emisor_ajeno)
         payload = {
             "emisor": self.emisor_ajeno.id,
+            "tipo": "facturacion",
             "identificador": "abc123-software-id",
             "pin": "12345",
             "test_set_id": "set-xyz",

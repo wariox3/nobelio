@@ -400,7 +400,7 @@ de un `git pull` en producción, y `actualizar.sh` no la ejecuta: hace `git pull
 
 ## D. Operación y rendimiento
 
-### D1 · No hay registro de nada — **alta**
+### D1 · No hay registro de nada — **resuelto**
 
 En las ~16.500 líneas de `apps/` hay **una sola** llamada a un logger
 (`apps/nucleo/api.py:79`, para los fallos de B2), y `settings` no define
@@ -416,6 +416,26 @@ Para un servicio que emite documentos con efectos fiscales, esto es lo que más
 va a doler el primer día que un cliente pregunte «¿esta factura salió?». Un
 `LOGGING` con formato estructurado y una línea por transición de estado del
 documento cubre el 90 % del valor.
+
+> **Arreglado el 2026-09-02.** `LOGGING` en `base.py` manda todo a stdout, que
+> recoge journald a través de la unidad de systemd: la aplicación no abre
+> ficheros, no rota nada y no necesita permisos sobre `/var/log`. El formato es
+> `clave=valor` (`apps/nucleo/registro.campos`), pensado para `grep` y no para
+> un agregador, y omite los campos vacíos para que un `grep estado=RECHAZADO`
+> no dependa de la suerte.
+>
+> Siete líneas, una por transición: `documento.firmado`, `documento.enviado` y
+> `documento.estado_actualizado`, sus tres gemelas de nómina, y
+> `documento.notificado`. El nivel lo decide el resultado —un rechazo de la
+> DIAN sale como `WARNING`, no como `ERROR`: la DIAN contestó y el documento
+> quedó bien anotado, lo que falla es el contenido—. Del rechazo se registran
+> el número de errores y solo el primero; el detalle sigue en la respuesta
+> guardada. En la notificación se registra **cuántos** destinatarios, no
+> cuáles: la dirección del adquiriente es dato de un tercero y el log se lee
+> con menos cuidado que la base.
+>
+> Se añadió también `django.request`, que es donde Django deja los 500 de §B1
+> y §B2 y que hasta ahora se perdían.
 
 ### D2 · Cada petición con API Key cuesta un PBKDF2 y una escritura — **media**
 
@@ -537,9 +557,10 @@ Es lo primero porque es lo único que, si se materializa, no se puede deshacer.
 Sin esto, cualquier arreglo posterior se hace a ciegas sobre los dos módulos que
 más se van a tocar.
 
-1. `LOGGING` en `settings` y una línea por transición de estado del documento y
-   de la nómina (emitido, enviado, respuesta DIAN, notificado), con el id del
-   documento, el emisor y el resultado. **(D1)**
+1. ~~`LOGGING` y una línea por transición de estado.~~ **Hecho el 2026-09-02**:
+   `LOGGING` a stdout (journald) y siete líneas —firmado, enviado y estado
+   actualizado, por duplicado para documento y nómina, más la notificación.
+   **(D1)**
 2. Pruebas de `apps/nomina`: construcción del XML contra el XSD, composición del
    CUNE fijada contra la nómina que la DIAN aceptó el 2026-08-30, orden de las
    declaraciones de la raíz, y el ciclo de la API (crear → emitir → enviar con
