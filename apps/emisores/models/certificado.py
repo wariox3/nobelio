@@ -3,6 +3,7 @@ from django.db import models
 
 from apps.nucleo.models import ModeloConFechas
 from apps.utilidades.almacenamiento import almacenamiento_backblaze
+from apps.utilidades.cifrado import ClaveCifradaField
 
 from .emisor import Emisor
 
@@ -19,8 +20,10 @@ def ruta_certificado(instance, filename):
 class Certificado(ModeloConFechas):
     """Certificado digital (.p12/.pfx) del emisor para la firma XAdES.
 
-    El archivo y la clave son sensibles: el .p12 está fuera del control de
-    versiones (ver .gitignore) y la clave debería cifrarse en producción.
+    El archivo y la clave son sensibles y se guardan separados: el .p12 vive en
+    Backblaze B2 (nunca en el repositorio ni en el disco de la aplicación) y la
+    clave va cifrada en la base con ``CERT_ENCRYPTION_KEY``, que está en el
+    entorno. Ninguna de las dos mitades sirve sin la otra.
     """
 
     # --- Atributos ---
@@ -30,7 +33,9 @@ class Certificado(ModeloConFechas):
         upload_to=ruta_certificado,
         storage=almacenamiento_backblaze,
     )
-    clave = models.CharField("clave del certificado", max_length=255)
+    # Se guarda cifrada; en Python se lee y se escribe en claro. El 512 es para
+    # el token Fernet, que abulta bastante más que la clave que envuelve.
+    clave = ClaveCifradaField("clave del certificado", max_length=512)
     vigente_desde = models.DateField("vigente desde", null=True, blank=True)
     vigente_hasta = models.DateField("vigente hasta", null=True, blank=True)
     activo = models.BooleanField("activo", default=True)

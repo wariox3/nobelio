@@ -1,7 +1,7 @@
 """API del certificado digital del emisor."""
 from django.conf import settings
 from django.db import transaction
-from rest_framework import status, viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import MethodNotAllowed
 from rest_framework.response import Response
@@ -12,7 +12,30 @@ from apps.nucleo.api import ErrorSolicitud
 from apps.seguridad.alcance import AlcanceEmisorMixin, exigir_alcance
 
 
-class CertificadoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
+class CertificadoViewSet(
+    AlcanceEmisorMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Consulta y baja de certificados; la escritura entra solo por ``cargar``.
+
+    No es un ``ModelViewSet`` a propósito. La única forma de que un ``.p12``
+    llegue a la base es ``cargar``, que valida el archivo (``validar_pkcs12``:
+    integridad, clave, vigencia, llave RSA y NIT del emisor) y exige que
+    Backblaze B2 esté configurado para no dejar material criptográfico en disco
+    local. Mientras esto fue un ``ModelViewSet``, ``PUT`` y ``PATCH`` seguían
+    publicados y rodeaban las dos comprobaciones: bastaba un ``PATCH`` con un
+    ``archivo`` nuevo para guardarlo sin validar, o un ``PATCH`` de ``emisor``
+    para mover el certificado a otro emisor del alcance o resucitar con
+    ``activo=True`` uno ya jubilado.
+
+    Por eso quedan solo ``list``, ``retrieve``, ``destroy`` y ``cargar``. No hay
+    edición: el ``alias`` se fija al subir, y ``activo`` lo gobierna ``cargar``,
+    que jubila los anteriores del emisor al llegar uno nuevo.
+    """
+
     serializer_class = serializers.CertificadoSerializer
     queryset = models.Certificado.objects.select_related("emisor")
 
@@ -23,8 +46,9 @@ class CertificadoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         return qs.filter(emisor=emisor) if emisor else qs
 
     def create(self, request, *args, **kwargs):
-        # La subida del .p12 se hace siempre por 'cargar', que valida que
-        # Backblaze B2 esté configurado antes de persistir.
+        # Sin CreateModelMixin el router ya no publicaría POST, pero se conserva
+        # este método para que la respuesta siga siendo un 405 que dice a dónde
+        # ir en vez de uno seco.
         raise MethodNotAllowed(
             "POST",
             detail="Usa /api/emisores/certificado/cargar/ "

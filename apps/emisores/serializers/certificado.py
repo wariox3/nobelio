@@ -11,6 +11,13 @@ class CertificadoSerializer(serializers.ModelSerializer):
     # sin exponer un enlace de descarga al certificado (es sensible).
     nombre_archivo = serializers.SerializerMethodField()
 
+    # Sensible: se acepta al subir pero nunca se devuelve. Se declara aquí en
+    # vez de en `extra_kwargs` por el `max_length`, que no puede heredarse del
+    # modelo: la columna es de 512 para que quepa el token cifrado, no para
+    # admitir claves de 512 caracteres —una de ese tamaño, cifrada, ya no
+    # cabría—. El límite de entrada sigue siendo el de siempre.
+    clave = serializers.CharField(write_only=True, max_length=255)
+
     class Meta:
         model = Certificado
         fields = [
@@ -18,9 +25,8 @@ class CertificadoSerializer(serializers.ModelSerializer):
             "vigente_desde", "vigente_hasta", "activo",
         ]
         extra_kwargs = {
-            # Sensibles: se aceptan al subir/editar pero nunca se devuelven.
+            # Sensible: se acepta al subir pero nunca se devuelve.
             "archivo": {"write_only": True},
-            "clave": {"write_only": True},
         }
 
     def get_nombre_archivo(self, obj) -> str:

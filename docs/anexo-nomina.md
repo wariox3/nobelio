@@ -333,7 +333,7 @@ Quince rechazos y tres aceptaciones, con el contenido controlado:
 | Documento | Contenido | Generado por | Orden de la raíz | Resultado |
 |---|---|---|---|---|
 | NE1000–NE1012 | variado | nobelio | propio | ZE02 ×13 |
-| NESETP1, NESETP2 | mínimo | Platino (PHP) | el del anexo | **aceptado** |
+| NESETP1, NESETP2 | mínimo | impl. externa (PHP) | el del anexo | **aceptado** |
 | NESETP3 | rico (transporte, hora extra) | nobelio | propio | ZE02 |
 | NESETP4 | mínimo, empleado real | nobelio | propio | ZE02 |
 | NESETP5 | **idéntico a NESETP2** | nobelio | propio | ZE02 |

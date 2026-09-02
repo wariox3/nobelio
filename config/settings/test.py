@@ -17,3 +17,8 @@ B2_HABILITADO = False
 
 # Archivos de prueba en un temporal aislado (no en el repo).
 MEDIA_ROOT = tempfile.mkdtemp(prefix="nobelio-test-media-")
+
+# Clave de cifrado fija para la suite: la de verdad es obligatoria y sale del
+# .env, y las pruebas no deben depender de que exista ni tocar el material real.
+# Es fija y no generada para que un fallo se reproduzca igual en cada ejecución.
+CERT_ENCRYPTION_KEY = "SsHkSDR23bZuoCyxvHOEipYbGrCJJhcThPCanEwLHi4="

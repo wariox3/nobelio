@@ -109,9 +109,20 @@ los JWT:
 python3 -c "import secrets; print(secrets.token_urlsafe(64))"
 ```
 
+Y una segunda clave, la que cifra en la base la clave de los `.p12`. Va aparte
+de la anterior a propósito: la `SECRET_KEY` se rota el día que haya que
+invalidar los JWT, y eso no puede dejar ilegibles los certificados de todos los
+emisores.
+
+```bash
+python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
 ```ini
 # /opt/nobelio/.env
 DJANGO_SECRET_KEY=<la clave generada>
+# Sin esta el proyecto no arranca; ver el aviso al final del apartado.
+CERT_ENCRYPTION_KEY=<la clave Fernet generada>
 DEBUG=False
 ALLOWED_HOSTS=api.nobelio.co
 CORS_ALLOWED_ORIGINS=https://app.nobelio.co
@@ -138,13 +149,27 @@ B2_APP_KEY=<applicationKey>
 RESPALDO_PASSPHRASE=<clave larga>
 ```
 
-El archivo lleva la clave de la BD, las de B2 y la del respaldo. Lo lee root
-para los comandos de gestión y `nobelio` para correr el servicio; nadie más:
+El archivo lleva la clave de la BD, las de B2, la del respaldo y la de cifrado
+de los certificados. Lo lee root para los comandos de gestión y `nobelio` para
+correr el servicio; nadie más:
 
 ```bash
 chown root:nobelio /opt/nobelio/.env
 chmod 640 /opt/nobelio/.env
 ```
+
+> **`CERT_ENCRYPTION_KEY` no tiene valor por defecto: si falta, Django no
+> arranca.** Es deliberado —un default silencioso significaría seguir guardando
+> las claves de los `.p12` en claro sin que nadie se entere—, pero tiene dos
+> consecuencias que conviene tener presentes al desplegar:
+>
+> - **Guárdala fuera del servidor**, en el mismo sitio donde estén las
+>   credenciales de B2. Perderla es perder las claves de todos los certificados:
+>   no hay forma de recuperarlas y hay que volver a cargar cada `.p12` con su
+>   clave.
+> - **No la incluyas en el respaldo del paso 10** junto a la base. El sentido de
+>   cifrar la columna es que un volcado por sí solo no sirva; si la clave viaja
+>   en el mismo respaldo, vuelven a estar las dos mitades juntas.
 
 ---
 

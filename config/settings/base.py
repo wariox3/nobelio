@@ -27,6 +27,21 @@ SECRET_KEY = env("DJANGO_SECRET_KEY", default="dev-insecure-change-me")
 DEBUG = env("DEBUG", default=False)
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[])
 
+# Clave Fernet con la que se cifra la clave del .p12 en la base
+# (`Certificado.clave`; ver apps/utilidades/cifrado.py). Se genera con:
+#
+#     python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+#
+# Va aparte de DJANGO_SECRET_KEY a propósito: la SECRET_KEY se rota cuando se
+# quiere invalidar los JWT, y hacerlo no puede dejar ilegibles las claves de los
+# certificados de todos los emisores.
+#
+# No tiene `default`: si falta, `env()` lanza ImproperlyConfigured y el proyecto
+# no arranca. Es deliberado. Un default silencioso significaría que un
+# despliegue con la variable mal escrita seguiría funcionando y guardando las
+# claves en claro, que es justamente lo que esto viene a evitar.
+CERT_ENCRYPTION_KEY = env("CERT_ENCRYPTION_KEY")
+
 # --- Aplicaciones -----------------------------------------------------------
 DJANGO_APPS = [
     "django.contrib.auth",

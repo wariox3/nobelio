@@ -52,7 +52,7 @@ compromete lo que pasa el día que algo falle en producción.
 
 ## A. Seguridad
 
-### A1 · La clave del `.p12` se guarda en claro — **alta**
+### A1 · La clave del `.p12` se guarda en claro — **resuelto**
 
 `apps/emisores/models/certificado.py:33`
 
@@ -65,8 +65,7 @@ producción»), así que esto es una deuda conocida, no un descubrimiento. Lo qu
 cambia la severidad es el conjunto: un volcado de `bdnobelio` da la clave, y el
 `.env` del mismo servidor da las credenciales B2 con las que bajar el `.p12`.
 Con las dos mitades juntas se firma cualquier documento en nombre de cualquier
-emisor de la plataforma. Y la base está **compartida con Platino** (ver
-`platino-migracion-php`), así que la superficie es mayor que este repositorio.
+emisor de la plataforma.
 
 Lo mínimo es cifrar la columna con una clave que no viva en la misma base:
 `DJANGO_SECRET_KEY` no sirve (rota, y con ella se firman los JWT), hace falta
@@ -74,7 +73,21 @@ una `CERT_ENCRYPTION_KEY` propia. Fernet de `cryptography` —que ya es
 dependencia— basta; el cambio es un descriptor en el modelo más una migración
 de datos.
 
-### A2 · El PIN del software se devuelve por la API — **alta**
+> **Arreglado el 2026-09-02.** `apps/utilidades/cifrado.py` añade un
+> `ClaveCifradaField`: cifra al escribir y descifra al leer, así que los dos
+> sitios que abren el `.p12` (`apps/dian/servicios.py:283` y `:439`) siguen
+> haciendo `cert_modelo.clave` sin enterarse. Fernet con una
+> `CERT_ENCRYPTION_KEY` propia, **sin `default`**: si falta, el proyecto no
+> arranca, para que ningún despliegue con la variable mal escrita siga
+> guardando en claro. La lectura tolera texto sin cifrar, de modo que una fila
+> sin migrar no deja a un emisor sin poder firmar. La columna pasa a 512 —el
+> token abulta más que la clave— y el serializer declara su `max_length=255`
+> aparte, para que el contrato de entrada de la API no cambie.
+>
+> Se descartó `MultiFernet`: una sola clave, y el día que haya que rotarla se
+> hace con un comando y las dos a mano.
+
+### A2 · El PIN del software se devuelve por la API — **riesgo aceptado**
 
 `apps/emisores/serializers/software.py:12`
 
@@ -91,7 +104,20 @@ Compárese con el criterio que sí se aplicó a sus vecinos: `Certificado.clave`
 con un comentario explicando que es sensible. El PIN es de la misma familia y
 quedó fuera.
 
-### A3 · `CertificadoViewSet` cierra la puerta de entrada y deja la ventana abierta — **alta**
+> **Decisión (2026-09-02): se deja como está.** MarioA reafirma la decisión del
+> 2026-08-28 y el punto se cierra como riesgo aceptado, no como pendiente. El
+> razonamiento que ya estaba escrito en el serializer sigue siendo el que
+> manda: la contención del PIN es el alcance —`AlcanceEmisorMixin` limita el
+> queryset a los emisores que alcanza quien pregunta, así que una cuenta nunca
+> ve los softwares de otra— y tenerlo a la vista en el listado ahorra fricción
+> durante la habilitación, que es cuando más se consulta. Lo que queda dicho, y
+> es la razón de conservar el apartado, es el alcance del riesgo si esa
+> contención falla: con el PIN se fabrican `SoftwareSecurityCode` y CUDE/CUDS/
+> CUNE válidos de ese emisor. Si algún día se amplía quién puede leer
+> `/api/emisores/software/` —una cuenta de solo lectura, un panel para el
+> cliente final, un token de integración— hay que volver aquí antes.
+
+### A3 · `CertificadoViewSet` cierra la puerta de entrada y deja la ventana abierta — **resuelto**
 
 `apps/emisores/views/certificado.py:26-33`
 
@@ -107,7 +133,16 @@ si B2 no está—, y un `PATCH` de `emisor` mueve el certificado a otro emisor d
 alcance, o reactiva con `activo=true` uno que se jubiló. Todo el trabajo de
 `cargar/` se rodea con una petición.
 
-### A4 · La notificación al adquiriente viaja por HTTP plano — **media**
+> **Arreglado el 2026-09-02.** La clase deja de ser un `ModelViewSet` y se
+> compone con los mixins justos: `List`, `Retrieve`, `Destroy` y `GenericViewSet`,
+> más la acción `cargar`. Sin `update` ni `partial_update` declarados, el router
+> no publica `PUT` ni `PATCH`. Se conservó el `create` que lanza
+> `MethodNotAllowed` —aunque el router ya no lo enrutaría por sí solo— para que
+> un `POST` siga respondiendo un 405 que dice a dónde ir. No hay edición de
+> certificados: el `alias` se fija al subir y `activo` lo gobierna `cargar`, que
+> jubila los anteriores del emisor.
+
+### A4 · La notificación al adquiriente viaja por HTTP plano — **bloqueado fuera**
 
 `config/settings/base.py:116` y `apps/utilidades/zinc.py:23`
 
@@ -120,6 +155,12 @@ AttachedDocument firmado, el PDF, los adjuntos del emisor y la dirección de
 correo del adquiriente (`payload_zinc`, `servicios/notificacion.py`). Son datos
 fiscales de terceros. Si Zinc tiene `https`, es un cambio de una línea en el
 default; si no lo tiene, la conversación es con Zinc.
+
+> **Comprobado el 2026-09-02: no lo tiene.** `zinc.semantica.com.co` responde
+> 200 por el puerto 80 y no acepta conexión en el 443. No hay nada que cambiar
+> aquí: `ZINC_URL_BASE` ya es una variable de entorno, así que el día que la
+> pasarela sirva TLS basta con apuntarla a `https://` sin tocar código. El
+> punto queda abierto y **fuera de este repositorio**: es trabajo en Zinc.
 
 ### A5 · `crear-habilitacion` y sus vecinas son un oráculo de ids — **media**
 
@@ -479,16 +520,17 @@ arreglos acotados; la cuarta es el único cambio estructural.
 
 Es lo primero porque es lo único que, si se materializa, no se puede deshacer.
 
-1. `SoftwareDian.pin` a `write_only`, con el mismo comentario que llevan
-   `clave_tecnica` y `Certificado.clave`. Si el frontend lo necesita para la
-   habilitación, exponer un endpoint aparte que lo devuelva una vez. **(A2)**
-2. Recortar `CertificadoViewSet` a lo que debe publicar: `list`, `retrieve`,
-   `destroy` y la acción `cargar`. `update`/`partial_update` fuera, o
-   restringidos a `alias` y `activo`. **(A3)**
-3. Cifrar `Certificado.clave` con una `CERT_ENCRYPTION_KEY` propia, distinta de
-   `DJANGO_SECRET_KEY`. Descriptor en el modelo + migración de datos + entrada en
+1. ~~`SoftwareDian.pin` a `write_only`.~~ **Descartado el 2026-09-02**: el PIN
+   se queda visible y **A2** se cierra como riesgo aceptado; el porqué y la
+   condición que obligaría a revisarlo están en el apartado. **(A2)**
+2. ~~Recortar `CertificadoViewSet`.~~ **Hecho el 2026-09-02**: `list`,
+   `retrieve`, `destroy` y `cargar`; `update`/`partial_update` fuera. **(A3)**
+3. ~~Cifrar `Certificado.clave`.~~ **Hecho el 2026-09-02**: `ClaveCifradaField`
+   con `CERT_ENCRYPTION_KEY` propia, migración `0026` y entradas en
    `.env.example` y en `docs/despliegue.md`. **(A1)**
-4. Pasar Zinc a `https` si la pasarela lo soporta. **(A4)**
+4. ~~Pasar Zinc a `https`.~~ **No se puede desde aquí**: la pasarela no escucha
+   en 443 (comprobado el 2026-09-02). Queda como trabajo en Zinc; cuando sirva
+   TLS es solo cambiar `ZINC_URL_BASE`. **(A4)**
 
 ### Fase 2 — Poner red bajo lo que ya funciona
 
