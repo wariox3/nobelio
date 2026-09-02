@@ -10,12 +10,14 @@ Usa reportlab (PDF) y qrcode (código bidimensional).
 from __future__ import annotations
 
 import io
+from decimal import Decimal
 
 import qrcode
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
+from reportlab.lib.utils import ImageReader
 from reportlab.platypus import (
     Image,
     Paragraph,
@@ -71,7 +73,10 @@ class GeneradorPDF:
             buffer, pagesize=letter,
             leftMargin=1.5 * cm, rightMargin=1.5 * cm,
             topMargin=1.5 * cm, bottomMargin=1.5 * cm,
-            title=f"Factura {self.doc.numero}",
+            # El nombre del tipo, no "Factura": el mismo generador arma notas
+            # crédito, documentos soporte y tiquetes P.O.S., y el título es lo
+            # que ve el receptor en la pestaña del visor.
+            title=f"{self.doc.documento_tipo.nombre} {self.doc.numero}",
         )
         elementos = []
         elementos += self._encabezado()
@@ -83,7 +88,11 @@ class GeneradorPDF:
         elementos += self._totales()
         elementos.append(Spacer(1, 0.4 * cm))
         elementos += self._pie_qr()
-        pdf.build(elementos)
+        # El QR va en **todas** las páginas (anexo técnico, sección 11.7), no
+        # solo en la última. Como flowable solo saldría al final, así que
+        # además se pinta en el margen inferior de cada página.
+        pdf.build(elementos, onFirstPage=self._marca_pagina,
+                  onLaterPages=self._marca_pagina)
         return buffer.getvalue()
 
     # -- Secciones ----------------------------------------------------------
@@ -180,8 +189,19 @@ class GeneradorPDF:
             ["Valor bruto:", _moneda(self.doc.valor_bruto, m)],
             ["Descuentos:", _moneda(self.doc.total_descuentos, m)],
             ["Total impuestos:", _moneda(self.doc.total_impuestos, m)],
-            ["TOTAL A PAGAR:", _moneda(self.doc.total_a_pagar, m)],
         ]
+        # En el documento soporte y su nota, las retenciones no suman al total a
+        # pagar —las practica el adquiriente sobre el pago— y por eso quedan
+        # fuera de `total_impuestos`. Faltaban también en el PDF, así que el
+        # papel no cuadraba con lo que el proveedor iba a cobrar de verdad.
+        retenido = self._total_retenciones()
+        if retenido:
+            filas.append(["Retenciones practicadas:", _moneda(retenido, m)])
+        filas.append(["TOTAL A PAGAR:", _moneda(self.doc.total_a_pagar, m)])
+        if retenido:
+            filas.append([
+                "Neto a girar:", _moneda(self.doc.total_a_pagar - retenido, m),
+            ])
         tabla = Table(filas, colWidths=[4 * cm, 4 * cm], hAlign="RIGHT")
         tabla.setStyle(TableStyle([
             ("FONTSIZE", (0, 0), (-1, -1), 8),
@@ -193,6 +213,61 @@ class GeneradorPDF:
         ]))
         return [tabla]
 
+    def _etiqueta_identificador(self) -> str:
+        """Cómo se llama el identificador de este tipo de documento.
+
+        No todos llevan CUFE: el documento soporte lleva CUDS y el resto CUDE.
+        Se lee del propio constructor UBL, que es quien decide la composición
+        del hash, para que el papel no pueda contradecir al XML.
+        """
+        from apps.dian import ubl
+
+        constructor = ubl.CONSTRUCTORES.get(self.doc.documento_tipo.codigo)
+        nombre = getattr(constructor, "scheme_name", "") or ""
+        # "CUDS-SHA384" -> "CUDS"
+        return nombre.split("-")[0] or "CUFE/CUDE"
+
+    def _total_retenciones(self):
+        """Lo retenido en este documento, o ``0`` si su tipo no lleva retenciones."""
+        from apps.documentos.models import DocumentoTipo
+
+        if self.doc.documento_tipo.codigo not in DocumentoTipo.CODIGOS_CON_RETENCIONES:
+            return Decimal("0")
+        total = Decimal("0")
+        for detalle in self.doc.detalles.all():
+            for impuesto in detalle.impuestos.all():
+                if impuesto.tributo.es_retencion:
+                    total += impuesto.valor
+        return total
+
+    def _marca_pagina(self, canvas, documento_pdf):
+        """El QR y el identificador al pie de **cada** página.
+
+        El anexo los pide en todas (sección 11.7) y como flowable solo saldrían
+        en la última. Se dibujan pequeños, en el margen inferior, para no
+        competir con el bloque grande del final.
+        """
+        cufe = self.doc.cufe_cude
+        if not cufe:
+            return
+        canvas.saveState()
+        qr_png = generar_qr_png(url_consulta_dian(cufe, self.ambiente), tamano_cm=2.0)
+        canvas.drawImage(
+            ImageReader(io.BytesIO(qr_png)),
+            1.5 * cm, 0.4 * cm, width=2 * cm, height=2 * cm,
+        )
+        canvas.setFont("Helvetica", 5)
+        canvas.drawString(
+            3.8 * cm, 1.1 * cm,
+            f"{self._etiqueta_identificador()}: {cufe}",
+        )
+        canvas.drawString(
+            3.8 * cm, 0.7 * cm,
+            f"{self.doc.documento_tipo.nombre} {self.doc.numero}"
+            f"  ·  página {documento_pdf.page}",
+        )
+        canvas.restoreState()
+
     def _pie_qr(self):
         cufe = self.doc.cufe_cude
         url = url_consulta_dian(cufe, self.ambiente)
@@ -200,8 +275,9 @@ class GeneradorPDF:
         imagen = Image(io.BytesIO(qr_png), width=4 * cm, height=4 * cm)
 
         info = Paragraph(
-            f"<b>CUFE/CUDE:</b><br/><font size=6>{cufe}</font><br/><br/>"
-            "Representación gráfica de la factura electrónica de venta.<br/>"
+            f"<b>{self._etiqueta_identificador()}:</b><br/>"
+            f"<font size=6>{cufe}</font><br/><br/>"
+            f"Representación gráfica de {self.doc.documento_tipo.nombre.lower()}.<br/>"
             "Documento generado conforme a la Resolución DIAN 000165 de 2023.<br/>"
             f"Validar en: <font size=6>{url}</font>",
             self.estilos["Mini"],

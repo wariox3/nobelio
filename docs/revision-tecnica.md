@@ -53,6 +53,13 @@ Las incidencias no están ahí. Están en tres sitios:
 Nada de esto compromete la corrección de lo que ya emite y la DIAN acepta. Todo
 compromete lo que pasa el día que algo falle en producción.
 
+> **Al 2026-09-02 las cuatro fases están aplicadas**, con tres excepciones
+> deliberadas, cada una anotada en su apartado: **A2** (el PIN se queda visible,
+> riesgo aceptado), **A4** (Zinc no sirve TLS, es trabajo fuera de este
+> repositorio) y **D3** (el envío síncrono, a la espera de datos que medir). La
+> nómina sigue sin representación gráfica (**E1**) y la auditoría de **A7**
+> sigue pendiente. De 211 pruebas con 32 en rojo se pasó a **274 en verde**.
+
 ---
 
 ## A. Seguridad
@@ -520,7 +527,7 @@ documento cubre el 90 % del valor.
 > Se añadió también `django.request`, que es donde Django deja los 500 de §B1
 > y §B2 y que hasta ahora se perdían.
 
-### D2 · Cada petición con API Key cuesta un PBKDF2 y una escritura — **media**
+### D2 · Cada petición con API Key cuesta un PBKDF2 y una escritura — **resuelto**
 
 `apps/seguridad/autenticacion.py:74-82`
 
@@ -545,7 +552,7 @@ HMAC con `SECRET_KEY`) y comparar con `secrets.compare_digest`. Es compatible co
 el diseño actual —el secreto ya no se puede recuperar— y no obliga a rotar las
 llaves si se hace con migración perezosa.
 
-### D3 · El envío a la DIAN ocurre dentro de la petición HTTP — **media**
+### D3 · El envío a la DIAN ocurre dentro de la petición HTTP — **abierto, a la espera de datos**
 
 `POST /enviar/` llama a `enviar_a_dian`, que hace el `requests.post` con
 `timeout=60` (`soap.py:531`). Con `--workers 3 --threads 4`, el techo son 12
@@ -560,7 +567,7 @@ estado), reutilizando `actualizar_estado`, que ya está escrito para eso. Es la
 única incidencia de este informe que es un cambio de arquitectura y no un
 arreglo, y por eso va en la última fase.
 
-### D4 · El orden por defecto del listado no tiene índice — **baja**
+### D4 · El orden por defecto del listado no tiene índice — **resuelto**
 
 `Documento.Meta.ordering = ["-fecha_emision", "-consecutivo"]`, y no hay
 `indexes`. Con la tabla pequeña da igual; con un año de tiquetes P.O.S. cada
@@ -572,7 +579,7 @@ API (`emisor` es el filtro que siempre está por el alcance).
 
 ## E. Deuda y consistencia
 
-- **E1 · Representación gráfica.** `apps/dian/representacion.py` está escrita para
+- **E1 · Representación gráfica.** ~~(resuelto el 2026-09-02 salvo la nómina, que sigue sin PDF)~~ `apps/dian/representacion.py` está escrita para
   la factura y se usa para todo: el título del PDF dice `Factura {numero}`
   (línea 74) y el pie dice «Representación gráfica de la factura electrónica de
   venta» (línea 204) incluso en una nota crédito, un documento soporte o un
@@ -581,7 +588,7 @@ API (`emisor` es el filtro que siempre está por el alcance).
   **la nómina no tiene representación gráfica en absoluto**, aunque es el
   documento que hay que entregarle al trabajador. El README ya reconoce los dos
   primeros puntos; los otros dos no.
-- **E2 · Código de diagnóstico en producción.** `soap.DIRECTORIO_CAPTURA`
+- **E2 · Código de diagnóstico en producción.** ~~(resuelto el 2026-09-02: pasa a `settings`)~~ `soap.DIRECTORIO_CAPTURA`
   (`soap.py:127-146`) está marcado «**TEMPORAL**» y vuelca a disco los sobres
   SOAP transmitidos, que llevan el documento firmado y el certificado. Está
   desactivado por defecto y `.gitignore` cubre sus salidas, así que es seguro;
@@ -604,7 +611,7 @@ API (`emisor` es el filtro que siempre está por el alcance).
   - `servicios/notificacion.py:5` y `:118` dicen que «el envío por correo todavía
     no está implementado» y hablan de «el día que exista»; está implementado
     desde entonces, en el mismo fichero (`enviar_notificacion`).
-- **E6 · Dos módulos grandes.** `apps/dian/ubl.py` (1.340 líneas, once
+- **E6 · Dos módulos grandes.** ~~(resuelto el 2026-09-02: `ubl` es un paquete por familia y la nómina salió de `servicios.py`)~~ `apps/dian/ubl.py` (1.340 líneas, once
   constructores) y `apps/dian/servicios.py` (989, con la mitad de nómina pegada
   al final tras un separador de comentarios). Ninguno está mal escrito —la
   jerarquía de constructores es correcta y los comentarios sostienen la lectura—,
@@ -698,20 +705,39 @@ Los doce puntos, más **B9**, que salió escribiendo las pruebas de la fase 2.
     de **E4** (cuatro ficheros de `startapp` sin tocar). **(E4, E5)**
 12. ~~Orden de los listados.~~ `order_by` explícito tras el `annotate`. **(B9)**
 
-### Fase 4 — Preparar el volumen del P.O.S.
+### Fase 4 — Preparar el volumen del P.O.S. · **hecha el 2026-09-02, salvo D3**
 
-Solo tiene sentido con la habilitación del documento equivalente cerrada y algo
-de tráfico real que medir.
+Se abordó sin esperar a la habilitación ni al tráfico, por decisión de MarioA.
+Eso deja **D3 fuera**: es el único punto cuya decisión depende de datos que aún
+no existen. 274 pruebas en verde.
 
-1. Sustituir PBKDF2 por HMAC-SHA256 en `LlaveApi`, con migración perezosa, y
-   espaciar `registrar_uso()`. Es lo que más throughput devuelve por línea
-   cambiada. **(D2)**
-2. Índice compuesto para el orden del listado de documentos. **(D4)**
-3. Sacar el envío a la DIAN de la petición HTTP: `enviar/` encola y responde 202,
-   un worker envía y aplica el estado con `actualizar_estado`, que ya existe.
-   Decidir antes si la cola vale la pena frente a subir hilos de gunicorn. **(D3)**
-4. Representación gráfica por tipo de documento (rótulos, retenciones, QR en
-   todas las páginas) y la de nómina, que hoy no existe. **(E1)**
-5. Partir `ubl.py` por familia de documento y separar la mitad de nómina de
-   `servicios.py`. **(E6)**
-6. Retirar o encapsular `DIRECTORIO_CAPTURA`. **(E2)**
+1. ~~PBKDF2 en `LlaveApi`.~~ **SHA-256**, no HMAC: el secreto lo genera el
+   servidor con ~238 bits, así que encarecer cada intento no protege de nada y lo
+   paga el ERP legítimo en cada petición. Migración perezosa —el hash viejo se
+   verifica y se reescribe al primer uso—, así que ninguna integración rota su
+   llave. `registrar_uso()` pasa a escribir como mucho cada 5 minutos. **(D2)**
+2. ~~Índice del listado.~~ `(emisor, -fecha, -consecutivo)` en documentos y en
+   nóminas. Con 20 filas no mide nada; se crea ahora precisamente porque hacerlo
+   sobre una tabla con volumen bloquea las escrituras. **(D4)**
+3. **D3 sigue abierto**, y es el único. Antes de elegir entre la cola y subir
+   hilos de gunicorn hay que medir, y ya se puede: el logging de D1 deja una
+   línea por envío. Lo que hace falta saber es **cuánto tarda un envío real**
+   (percentil 95) y **cuántos concurrentes** hay en hora punta. Con eso, si la
+   cola no aporta, sobra con gunicorn y no se mete una pieza de infraestructura
+   nueva ni se cambia el contrato del ERP. **(D3)**
+4. ~~Representación gráfica.~~ El título del PDF y el pie llevan el nombre del
+   tipo —decían «Factura» en una nota crédito—, el identificador se rotula según
+   su tipo (CUFE, CUDE o **CUDS**, leído del constructor UBL para que el papel no
+   pueda contradecir al XML), el QR va en **todas** las páginas y las retenciones
+   del documento soporte aparecen en los totales, con su neto a girar. **La
+   nómina sigue sin representación gráfica**, por decisión de alcance: es un
+   diseño nuevo, no un arreglo. **(E1, parcial)**
+5. ~~Partir los dos módulos grandes.~~ `ubl.py` (1.340 líneas) es ahora un
+   paquete por familia —`base`, `factura`, `soporte`, `adjunto`, `equivalente`—
+   y la mitad de nómina de `servicios.py` vive en `servicios_nomina.py` (1.069 →
+   772 + 355). **La superficie pública no cambió**: ambos reexportan todo, así
+   que `from apps.dian import ubl` y `servicios.generar_y_firmar_nomina` valen
+   igual. **(E6)**
+6. ~~`DIRECTORIO_CAPTURA`.~~ Deja de ser un global reasignable desde cualquier
+   import —lo que volcaba es el documento firmado y el certificado— y pasa a
+   `settings.DIAN_DIRECTORIO_CAPTURA`, que sale del entorno. **(E2)**

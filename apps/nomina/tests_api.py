@@ -18,6 +18,9 @@ from apps.nomina.models import Nomina
 from apps.nomina.tests_utils import crear_emisor_de_nomina, crear_nomina
 
 
+# El parcheo apunta a `servicios_nomina` y no a `servicios`: el pipeline de
+# nómina vive en su propio módulo desde que se partió el de 1.069 líneas, y
+# `mock.patch` sustituye el nombre **donde se busca**, no donde se define.
 class ClienteNominaFalso:
     """El cliente SOAP de nómina, sin red. Registra con qué se le llamó."""
 
@@ -113,7 +116,7 @@ class NominaCicloTests(NominaAPIBase):
 
         self._emitir()
         cliente = ClienteNominaFalso(_respuesta())
-        with patch("apps.dian.servicios.construir_cliente_emisor", return_value=cliente):
+        with patch("apps.dian.servicios_nomina.construir_cliente_emisor", return_value=cliente):
             resp = self.client.post(self._url("enviar/"))
 
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
@@ -132,7 +135,7 @@ class NominaCicloTests(NominaAPIBase):
 
         self._emitir()
         cliente = ClienteNominaFalso(_respuesta())
-        with patch("apps.dian.servicios.construir_cliente_emisor", return_value=cliente):
+        with patch("apps.dian.servicios_nomina.construir_cliente_emisor", return_value=cliente):
             self.client.post(self._url("enviar/"))
 
         self.assertEqual(cliente.llamadas[0][0], "set_pruebas")
@@ -147,7 +150,7 @@ class NominaCicloTests(NominaAPIBase):
         self.base["software"].save(update_fields=["set_pruebas_aceptado"])
         self._emitir()
         cliente = ClienteNominaFalso(_respuesta())
-        with patch("apps.dian.servicios.construir_cliente_emisor", return_value=cliente):
+        with patch("apps.dian.servicios_nomina.construir_cliente_emisor", return_value=cliente):
             self.client.post(self._url("enviar/"))
 
         self.assertEqual(cliente.llamadas[0][0], "sincrono")
@@ -162,7 +165,7 @@ class NominaCicloTests(NominaAPIBase):
             es_valido=False,
             errores=["Regla: NIE001, Rechazo: El CUNE no corresponde."],
         ))
-        with patch("apps.dian.servicios.construir_cliente_emisor", return_value=cliente):
+        with patch("apps.dian.servicios_nomina.construir_cliente_emisor", return_value=cliente):
             resp = self.client.post(self._url("enviar/"))
 
         self.assertFalse(resp.data["es_valido"])
@@ -183,14 +186,14 @@ class NominaCicloTests(NominaAPIBase):
         # Envío al Set de Pruebas: sin veredicto (ni válido ni con errores).
         sin_veredicto = _respuesta(es_valido=False, errores=[])
         cliente = ClienteNominaFalso(sin_veredicto)
-        with patch("apps.dian.servicios.construir_cliente_emisor", return_value=cliente):
+        with patch("apps.dian.servicios_nomina.construir_cliente_emisor", return_value=cliente):
             self.client.post(self._url("enviar/"))
         self.nomina.refresh_from_db()
         self.assertEqual(self.nomina.estado.nombre, DocumentoEstado.Nombre.ENVIADO)
 
         # Y al consultar, la DIAN ya tiene el resultado.
         cliente = ClienteNominaFalso(_respuesta())
-        with patch("apps.dian.servicios.construir_cliente_emisor", return_value=cliente):
+        with patch("apps.dian.servicios_nomina.construir_cliente_emisor", return_value=cliente):
             resp = self.client.get(self._url("consultar/"))
 
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)

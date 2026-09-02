@@ -293,6 +293,21 @@ class Documento(ModeloUUID, ModeloConFechas):
         verbose_name = "documento electrónico"
         verbose_name_plural = "documentos electrónicos"
         ordering = ["-fecha_emision", "-consecutivo"]
+        indexes = [
+            # El listado siempre es "los documentos de un emisor, los más
+            # recientes primero": el alcance acota por emisor y el orden lo pone
+            # el `ordering` de aquí. Sin este índice PostgreSQL ordena la tabla
+            # entera en cada página.
+            #
+            # Se crea ahora, con la tabla pequeña, y no cuando duela: crear un
+            # índice sobre una tabla con volumen bloquea las escrituras, y el
+            # documento equivalente P.O.S. es justo el que va a traer ese
+            # volumen.
+            models.Index(
+                fields=["emisor", "-fecha_emision", "-consecutivo"],
+                name="doc_emisor_recientes",
+            ),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=["emisor", "prefijo", "consecutivo", "documento_tipo"],

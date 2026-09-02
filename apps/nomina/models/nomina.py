@@ -267,6 +267,14 @@ class Nomina(ModeloUUID, ModeloConFechas):
         verbose_name = "nómina electrónica"
         verbose_name_plural = "nóminas electrónicas"
         ordering = ["-fecha_generacion", "-consecutivo"]
+        indexes = [
+            # El mismo caso que en `Documento`: el listado va acotado al emisor
+            # y ordenado por lo más reciente.
+            models.Index(
+                fields=["emisor", "-fecha_generacion", "-consecutivo"],
+                name="nom_emisor_recientes",
+            ),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=["emisor", "prefijo", "consecutivo"],

@@ -15,7 +15,11 @@ La cuenta es el único alcance posible: un emisor nunca se conecta por su lado.
 Quien vaya a emitir directamente se da de alta como su propia cuenta, con su
 emisor y su llave.
 """
-from django.contrib.auth.hashers import check_password, make_password
+import hashlib
+from datetime import timedelta
+from hmac import compare_digest
+
+from django.contrib.auth.hashers import check_password
 from django.db import models
 from django.utils import timezone
 from django.utils.crypto import get_random_string
@@ -24,6 +28,27 @@ from apps.nucleo.models import ModeloConFechas
 
 LONGITUD_PREFIJO = 8
 LONGITUD_SECRETO = 40
+
+# El secreto se guarda como SHA-256 y no con el hasher de contraseñas de Django.
+#
+# El PBKDF2 que había antes existe para proteger **contraseñas humanas**: son
+# cortas, se repiten entre sitios y se adivinan, así que se encarece cada intento
+# para que probarlas en masa no salga a cuenta. Aquí no hay nada de eso: el
+# secreto lo genera el servidor con 40 caracteres de un alfabeto de 62, unos 238
+# bits. No se puede adivinar por fuerza bruta a ningún coste por intento, así que
+# las ~600.000 iteraciones solo las paga el ERP legítimo, en **cada petición**.
+#
+# Lo que sí importa es comparar en tiempo constante, y de eso se encarga
+# `compare_digest`.
+PREFIJO_HASH = "sha256$"
+
+# Cada cuánto se refresca `ultimo_uso_en`. Es un dato para saber si una
+# integración sigue viva, no una auditoría: al minuto sobra.
+INTERVALO_REGISTRO_USO = timedelta(minutes=5)
+
+
+def _hash_secreto(secreto: str) -> str:
+    return PREFIJO_HASH + hashlib.sha256(secreto.encode("utf-8")).hexdigest()
 
 
 class LlaveApi(ModeloConFechas):
@@ -80,7 +105,7 @@ class LlaveApi(ModeloConFechas):
             cuenta=cuenta,
             nombre=nombre,
             prefijo=prefijo,
-            clave_hash=make_password(secreto),
+            clave_hash=_hash_secreto(secreto),
             activa=activa,
             expira_en=expira_en,
         )
@@ -95,10 +120,36 @@ class LlaveApi(ModeloConFechas):
         return True
 
     def verificar_secreto(self, secreto):
-        """Comprueba el secreto contra el hash almacenado."""
-        return check_password(secreto, self.clave_hash)
+        """Comprueba el secreto contra el hash almacenado.
+
+        Migración perezosa: una llave creada antes del cambio sigue guardando un
+        hash de Django (``pbkdf2_...``). Se verifica con el verificador de
+        siempre y, si es correcto, se reescribe en el formato nuevo. Así ninguna
+        integración tiene que rotar su llave y el coste viejo se paga una última
+        vez por llave, no en cada petición.
+        """
+        if not self.clave_hash.startswith(PREFIJO_HASH):
+            if not check_password(secreto, self.clave_hash):
+                return False
+            self.clave_hash = _hash_secreto(secreto)
+            self.save(update_fields=["clave_hash", "actualizado_en"])
+            return True
+        return compare_digest(self.clave_hash, _hash_secreto(secreto))
 
     def registrar_uso(self):
-        """Marca el instante del último uso (sin tocar el resto de campos)."""
-        self.ultimo_uso_en = timezone.now()
+        """Marca el instante del último uso, como mucho una vez cada intervalo.
+
+        El campo es informativo —sirve para ver qué integraciones siguen vivas—,
+        así que no hace falta al segundo. Antes se escribía en **cada** petición
+        autenticada: un `UPDATE` por llamada, sobre la misma fila, que en un
+        punto de venta con varias cajas es contención pura a cambio de una
+        precisión que nadie usa.
+        """
+        ahora = timezone.now()
+        if (
+            self.ultimo_uso_en
+            and (ahora - self.ultimo_uso_en) < INTERVALO_REGISTRO_USO
+        ):
+            return
+        self.ultimo_uso_en = ahora
         self.save(update_fields=["ultimo_uso_en"])

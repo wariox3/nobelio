@@ -2,6 +2,7 @@
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.test import TestCase
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.exceptions import AuthenticationFailed
@@ -111,6 +112,97 @@ class LlaveApiAuthenticationTests(APITestCase):
         # Un Bearer (JWT) no es asunto de esta clase: devuelve None.
         request = self.factory.get("/api/", HTTP_AUTHORIZATION="Bearer xyz")
         self.assertIsNone(self.auth.authenticate(request))
+
+
+class HashDeLaLlaveTests(TestCase):
+    """El cambio de PBKDF2 a SHA-256 y su migración perezosa."""
+
+    def setUp(self):
+        self.cuenta = Cuenta.objects.create(nombre="RedDoc ERP")
+
+    def test_la_llave_nueva_se_guarda_como_sha256(self):
+        llave, clave = LlaveApi.generar(cuenta=self.cuenta, nombre="ERP")
+        self.assertTrue(llave.clave_hash.startswith("sha256$"))
+        self.assertTrue(llave.verificar_secreto(clave.split(".", 1)[1]))
+
+    def test_una_llave_con_hash_viejo_sigue_funcionando(self):
+        """Ninguna integración tiene que rotar su llave por este cambio."""
+        from django.contrib.auth.hashers import make_password
+
+        llave, clave = LlaveApi.generar(cuenta=self.cuenta, nombre="ERP")
+        secreto = clave.split(".", 1)[1]
+        # Se le devuelve el hash de antes, como lo tendría una llave existente.
+        LlaveApi.objects.filter(pk=llave.pk).update(
+            clave_hash=make_password(secreto)
+        )
+        llave.refresh_from_db()
+        self.assertTrue(llave.clave_hash.startswith("pbkdf2_"))
+
+        self.assertTrue(llave.verificar_secreto(secreto))
+
+    def test_el_hash_viejo_se_reescribe_al_primer_uso(self):
+        from django.contrib.auth.hashers import make_password
+
+        llave, clave = LlaveApi.generar(cuenta=self.cuenta, nombre="ERP")
+        secreto = clave.split(".", 1)[1]
+        LlaveApi.objects.filter(pk=llave.pk).update(
+            clave_hash=make_password(secreto)
+        )
+        llave.refresh_from_db()
+
+        llave.verificar_secreto(secreto)
+
+        llave.refresh_from_db()
+        self.assertTrue(llave.clave_hash.startswith("sha256$"))
+
+    def test_un_secreto_incorrecto_no_pasa_con_ninguno_de_los_dos_formatos(self):
+        from django.contrib.auth.hashers import make_password
+
+        llave, clave = LlaveApi.generar(cuenta=self.cuenta, nombre="ERP")
+        self.assertFalse(llave.verificar_secreto("no-es-el-secreto"))
+
+        LlaveApi.objects.filter(pk=llave.pk).update(
+            clave_hash=make_password(clave.split(".", 1)[1])
+        )
+        llave.refresh_from_db()
+        self.assertFalse(llave.verificar_secreto("no-es-el-secreto"))
+        # Y un fallo no reescribe nada.
+        llave.refresh_from_db()
+        self.assertTrue(llave.clave_hash.startswith("pbkdf2_"))
+
+
+class RegistroDeUsoTests(TestCase):
+    """`registrar_uso` deja de escribir en cada petición."""
+
+    def setUp(self):
+        self.cuenta = Cuenta.objects.create(nombre="RedDoc ERP")
+        self.llave, _ = LlaveApi.generar(cuenta=self.cuenta, nombre="ERP")
+
+    def test_la_primera_vez_si_escribe(self):
+        self.llave.registrar_uso()
+        self.llave.refresh_from_db()
+        self.assertIsNotNone(self.llave.ultimo_uso_en)
+
+    def test_dentro_del_intervalo_no_vuelve_a_escribir(self):
+        self.llave.registrar_uso()
+        self.llave.refresh_from_db()
+        primero = self.llave.ultimo_uso_en
+
+        self.llave.registrar_uso()
+        self.llave.refresh_from_db()
+        self.assertEqual(self.llave.ultimo_uso_en, primero)
+
+    def test_pasado_el_intervalo_se_refresca(self):
+        from apps.seguridad.models.llave_api import INTERVALO_REGISTRO_USO
+
+        antiguo = timezone.now() - INTERVALO_REGISTRO_USO - timedelta(seconds=1)
+        LlaveApi.objects.filter(pk=self.llave.pk).update(ultimo_uso_en=antiguo)
+        self.llave.refresh_from_db()
+
+        self.llave.registrar_uso()
+
+        self.llave.refresh_from_db()
+        self.assertGreater(self.llave.ultimo_uso_en, antiguo)
 
 
 class LlaveApiEndToEndTests(APITestCase):

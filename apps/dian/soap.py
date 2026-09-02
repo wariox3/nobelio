@@ -124,22 +124,38 @@ def empaquetar_base64(nombre_xml: str, contenido_xml: bytes) -> str:
 # ===========================================================================
 # Captura de tráfico (diagnóstico)
 # ===========================================================================
-# **TEMPORAL.** Con un directorio aquí, cada invocación deja en disco el sobre
-# SOAP que se transmite y la respuesta cruda. Existe para poder verificar la
-# firma sobre los bytes que la DIAN recibe de verdad, y no sobre los que
-# creemos que le mandamos: es el único tramo del camino que no se puede
-# comprobar desde el modelo. Vacío = no captura nada, que es el estado normal.
-DIRECTORIO_CAPTURA = ""
+# Con un directorio configurado, cada invocación deja en disco el sobre SOAP que
+# se transmite y la respuesta cruda. Se escribió para el ZE02 de nómina: había
+# que verificar la firma sobre los bytes que la DIAN recibe de verdad, y no
+# sobre los que creemos que le mandamos, que es el único tramo del camino que no
+# se puede comprobar desde el modelo. Cumplió: el ZE02 se resolvió el 2026-08-30.
+#
+# Se conserva porque el mismo problema puede volver, pero ya no como una
+# variable de módulo. Antes era un global reasignable desde cualquier import
+# —`soap.DIRECTORIO_CAPTURA = "/tmp/x"` en una línea— y lo que vuelca es el
+# documento firmado y el certificado: un interruptor de exfiltración al alcance
+# de cualquier código que se ejecute en el proceso. Ahora sale de `settings`, que
+# se lee del entorno y no se reasigna en caliente.
+#
+# Vacío es el estado normal, y `.gitignore` cubre `/capturas/`.
+
+
+def _directorio_captura() -> str:
+    """El directorio de captura configurado, o cadena vacía si no hay."""
+    from django.conf import settings
+
+    return getattr(settings, "DIAN_DIRECTORIO_CAPTURA", "") or ""
 
 
 def _capturar(operacion: str, sobre: bytes, respuesta: bytes) -> None:
     """Deja en disco el sobre enviado y la respuesta, si hay captura activa."""
-    if not DIRECTORIO_CAPTURA:
+    directorio = _directorio_captura()
+    if not directorio:
         return
     import pathlib
     from datetime import datetime
 
-    carpeta = pathlib.Path(DIRECTORIO_CAPTURA)
+    carpeta = pathlib.Path(directorio)
     carpeta.mkdir(parents=True, exist_ok=True)
     sello = datetime.now().strftime("%H%M%S%f")
     (carpeta / f"{sello}-{operacion}-enviado.xml").write_bytes(sobre)

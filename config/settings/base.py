@@ -144,6 +144,12 @@ B2_HABILITADO = bool(B2_BUCKET and B2_ENDPOINT_URL and B2_KEY_ID and B2_APP_KEY)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Captura de diagnóstico del tráfico SOAP con la DIAN (ver apps/dian/soap.py).
+# Vacío —lo normal— no captura nada. Con un directorio, cada invocación deja ahí
+# el sobre enviado y la respuesta cruda: lleva el documento firmado y el
+# certificado, así que se activa para depurar un rechazo y se apaga después.
+DIAN_DIRECTORIO_CAPTURA = env("DIAN_DIRECTORIO_CAPTURA", default="")
+
 # --- Registro (logging) -----------------------------------------------------
 # Todo sale por stdout y lo recoge journald a través de la unidad de systemd
 # (ver docs/despliegue.md): la aplicación no abre ficheros, no rota nada y no
