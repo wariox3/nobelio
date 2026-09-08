@@ -53,6 +53,10 @@ DJANGO_APPS = [
 
 THIRD_PARTY_APPS = [
     "rest_framework",
+    # Guarda los refresh anulados. Hace falta para que la rotación signifique
+    # algo: sin la lista negra, el token viejo seguiría sirviendo después de
+    # rotarlo, y cerrar sesión no cerraría nada.
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
 ]
 
@@ -249,7 +253,9 @@ REST_FRAMEWORK = {
     # docs/autenticacion.md. Ambas son stateless (sin sesión, sin CSRF).
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "apps.seguridad.autenticacion.LlaveApiAuthentication",
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        # La sesión del navegador, solo desde la cookie httpOnly. Ver
+        # apps/seguridad/autenticacion.py.
+        "apps.seguridad.autenticacion.JwtDeCookie",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
@@ -311,6 +317,17 @@ REST_FRAMEWORK = {
         "login": env("THROTTLE_LOGIN", default="20/hour"),
         "login_rafaga": env("THROTTLE_LOGIN_RAFAGA", default="5/min"),
         "login_correo": env("THROTTLE_LOGIN_CORREO", default="10/hour"),
+        # Segundo paso. El freno real a la fuerza bruta sobre seis dígitos no es
+        # este, sino el contador de intentos del desafío, que vive en la base;
+        # esto solo modera el tráfico.
+        "mfa": env("THROTTLE_MFA", default="20/hour"),
+        "mfa_rafaga": env("THROTTLE_MFA_RAFAGA", default="10/min"),
+        # Reenviar manda un correo: más estrecho.
+        "mfa_envio": env("THROTTLE_MFA_ENVIO", default="5/hour"),
+        "mfa_envio_rafaga": env("THROTTLE_MFA_ENVIO_RAFAGA", default="2/min"),
+        # Enrolar y desactivar, sobre la propia cuenta y ya autenticado.
+        "mfa_gestion": env("THROTTLE_MFA_GESTION", default="20/hour"),
+        "refresco": env("THROTTLE_REFRESCO", default="120/hour"),
     },
     # Cuántos proxies hay delante. Sin esto DRF usa la cabecera
     # `X-Forwarded-For` tal cual cuando viene, y como la manda el cliente,
@@ -323,12 +340,45 @@ REST_FRAMEWORK = {
 
 # --- JWT (frontend SPA) -----------------------------------------------------
 SIMPLE_JWT = {
+    # Corto a propósito: con la sesión en cookie y rotación de refresh, el access
+    # es lo único que viaja en cada petición y no se puede revocar antes de que
+    # venza. 15 minutos es el precio de no consultar la lista negra siempre.
     "ACCESS_TOKEN_LIFETIME": timedelta(
-        minutes=env.int("JWT_ACCESS_MINUTOS", default=720)  # 12 horas
+        minutes=env.int("JWT_ACCESS_MINUTOS", default=15)
     ),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=env.int("JWT_REFRESH_DIAS", default=7)),
-    "AUTH_HEADER_TYPES": ("Bearer",),
+    # Vencimiento por *inactividad*: la rotación lo corre hacia adelante en cada
+    # refresco. El tope absoluto lo pone SESION_MAXIMA.
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=env.int("JWT_REFRESH_DIAS", default=1)),
+    # Cada refresco entrega un refresh nuevo y anula el anterior: un token robado
+    # deja de servir en cuanto el dueño legítimo refresca.
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
 }
+
+# Tope absoluto de una sesión, aunque se use sin interrupciones. Sin él, la
+# rotación corre el vencimiento indefinidamente y una sesión no caduca nunca:
+# un refresh robado y rotado a diario viviría para siempre, y el segundo factor
+# solo se verifica al iniciar sesión. Viaja en el claim propio `ses`.
+SESION_MAXIMA = timedelta(days=env.int("SESION_MAXIMA_DIAS", default=30))
+
+# --- Sesión en cookie -------------------------------------------------------
+# El navegador recibe los JWT en cookies httpOnly, que el JavaScript no puede
+# leer: un XSS ya no se lleva la sesión. Los clientes que no son navegador
+# (ERP, curl) siguen usando `Authorization`, sea API Key o Bearer.
+AUTH_COOKIE_DOMAIN = env("AUTH_COOKIE_DOMAIN", default=None) or None
+# Obligatorio en producción; en desarrollo estorba porque no hay HTTPS.
+AUTH_COOKIE_SECURE = env.bool("AUTH_COOKIE_SECURE", default=not DEBUG)
+# `Lax` es lo que frena el CSRF: el navegador no manda la cookie en peticiones
+# de escritura que vengan de otro sitio. Exige que la SPA y la API compartan
+# dominio registrable (app.midominio.com y api.midominio.com).
+AUTH_COOKIE_SAMESITE = env("AUTH_COOKIE_SAMESITE", default="Lax")
+
+# --- Segundo factor ---------------------------------------------------------
+# Clave Fernet que cifra los secretos TOTP y con la que se hashean los códigos.
+# Separada de CERT_ENCRYPTION_KEY y de SECRET_KEY a propósito: son secretos de
+# dominios distintos y rotar uno no puede dejar inservibles los otros.
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+MFA_ENCRYPTION_KEY = env("MFA_ENCRYPTION_KEY", default="")
 
 # --- CORS (la SPA vive en otro dominio) -------------------------------------
 # Orígenes permitidos del frontend, p. ej. https://app.midominio.com

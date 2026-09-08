@@ -153,14 +153,15 @@ class LoginTests(TestCase):
 
     def test_sin_verificar_no_entra(self):
         r = self.cliente.post(self.url, self.credenciales, format="json")
-        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.status_code, 403)
+        self.assertNotIn("access_token", r.cookies)
 
     def test_verificado_entra(self):
         self.usuario.is_verified = True
         self.usuario.save(update_fields=["is_verified"])
         r = self.cliente.post(self.url, self.credenciales, format="json")
         self.assertEqual(r.status_code, 200)
-        self.assertIn("access", r.data)
+        self.assertIn("access_token", r.cookies)
 
 
 class ReenvioTests(TestCase):

@@ -225,13 +225,14 @@ class LlaveApiEndToEndTests(APITestCase):
 
 
 class JWTLoginTests(APITestCase):
-    """El frontend obtiene tokens con email + contraseña y los usa."""
+    """El frontend entra con email + contraseña y la sesión queda en cookies."""
 
     URL_TOKEN = "/api/seguridad/token/"
     URL_REFRESH = "/api/seguridad/token/refresh/"
+    URL_CERRAR = "/api/seguridad/token/cerrar/"
 
     def setUp(self):
-        # Verificado: desde el registro público, el login exige el correo
+        # Verificado: desde el registro público, el ingreso exige el correo
         # confirmado. Que se rechace sin confirmar se prueba en tests_registro.
         self.usuario = Usuario.objects.create_user(
             email="frontend@example.com",
@@ -239,37 +240,63 @@ class JWTLoginTests(APITestCase):
             is_verified=True,
         )
 
-    def test_login_devuelve_access_y_refresh(self):
-        resp = self.client.post(
+    def _entrar(self):
+        return self.client.post(
             self.URL_TOKEN,
             {"email": "frontend@example.com", "password": "ClaveSegura123"},
         )
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertIn("access", resp.data)
-        self.assertIn("refresh", resp.data)
 
-    def test_token_da_acceso_a_la_api(self):
-        token = self.client.post(
-            self.URL_TOKEN,
-            {"email": "frontend@example.com", "password": "ClaveSegura123"},
-        ).data["access"]
+    def test_login_deja_la_sesion_en_cookies(self):
+        resp = self._entrar()
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIn("access_token", resp.cookies)
+        self.assertIn("refresh_token", resp.cookies)
+        self.assertEqual(resp.data["email"], "frontend@example.com")
+
+    def test_el_token_no_viaja_en_el_cuerpo(self):
+        """Con DEBUG apagado la sesión solo existe como cookie httpOnly."""
+        resp = self._entrar()
+        self.assertNotIn("access", resp.data)
+        self.assertNotIn("access_token", resp.data)
+
+    def test_las_cookies_son_httponly(self):
+        resp = self._entrar()
+        for nombre in ("access_token", "refresh_token"):
+            self.assertTrue(resp.cookies[nombre]["httponly"])
+            self.assertEqual(resp.cookies[nombre]["samesite"], "Lax")
+
+    def test_la_cookie_da_acceso_a_la_api(self):
+        self._entrar()  # el cliente de pruebas conserva las cookies
+        resp = self.client.get("/api/emisores/emisor/")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    def test_sin_cookie_no_hay_acceso(self):
+        resp = self.client.get("/api/emisores/emisor/")
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_la_cabecera_bearer_ya_no_autentica(self):
+        """El token en `Authorization` dejó de valer: solo cookie."""
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        token = str(RefreshToken.for_user(self.usuario).access_token)
         resp = self.client.get(
             "/api/emisores/emisor/", HTTP_AUTHORIZATION=f"Bearer {token}"
         )
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-
-    def test_refresh_renueva_el_access(self):
-        refresh = self.client.post(
-            self.URL_TOKEN,
-            {"email": "frontend@example.com", "password": "ClaveSegura123"},
-        ).data["refresh"]
-        resp = self.client.post(self.URL_REFRESH, {"refresh": refresh})
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertIn("access", resp.data)
-
-    def test_credenciales_invalidas_rechazadas(self):
-        resp = self.client.post(
-            self.URL_TOKEN,
-            {"email": "frontend@example.com", "password": "claveerronea"},
-        )
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_refresh_renueva_desde_la_cookie(self):
+        self._entrar()
+        resp = self.client.post(self.URL_REFRESH)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIn("access_token", resp.cookies)
+
+    def test_refresh_sin_sesion_es_401(self):
+        resp = self.client.post(self.URL_REFRESH)
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_cerrar_sesion_borra_las_cookies(self):
+        self._entrar()
+        resp = self.client.post(self.URL_CERRAR)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.cookies["access_token"].value, "")
+        self.assertEqual(resp.cookies["refresh_token"].value, "")

@@ -10,10 +10,17 @@ expone la llave (y con ella su cuenta) para que ``apps.seguridad.alcance``
 delimite sobre qué emisores puede operar.
 """
 from rest_framework import authentication, exceptions
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from apps.seguridad.models import LlaveApi
 
 PALABRA_CLAVE = "Api-Key"
+
+# Nombres de las cookies de sesión. Viven aquí porque los usan tanto quien las
+# lee (esta autenticación) como quien las escribe (las vistas de sesión).
+COOKIE_ACCESO = "access_token"
+COOKIE_REFRESCO = "refresh_token"
+COOKIE_DISPOSITIVO = "mfa_dispositivo"
 
 
 class PrincipalLlaveApi:
@@ -85,3 +92,30 @@ class LlaveApiAuthentication(authentication.BaseAuthentication):
     def authenticate_header(self, request):
         # Provoca un 401 (en vez de 403) cuando falta o falla la credencial.
         return self.palabra_clave
+
+
+class JwtDeCookie(JWTAuthentication):
+    """JWT leído de la cookie ``httpOnly``, nunca de la cabecera.
+
+    La sesión del navegador vive en una cookie que el JavaScript no puede leer:
+    un XSS ya no se lleva la sesión, que es la razón de existir de todo esto.
+    Aceptar además ``Authorization: Bearer`` echaría a perder la garantía, porque
+    el front tendría que guardar el token en algún sitio legible para poder
+    mandarlo.
+
+    Los clientes que no son navegador no se quedan fuera: el ERP se autentica con
+    ``Authorization: Api-Key``, que es otro camino y no pasa por aquí.
+
+    Un token ilegible sube como error en vez de devolver ``None``: así el front
+    distingue "expiró, refresca" de "no hay sesión", en lugar de recibir un 403
+    genérico del control de permisos. Puede hacerse porque las rutas públicas
+    —registro, verificación, reenvío— declaran ``authentication_classes = []``,
+    así que una cookie caducada no impide registrarse.
+    """
+
+    def authenticate(self, request):
+        crudo = request.COOKIES.get(COOKIE_ACCESO)
+        if not crudo:
+            return None
+        validado = self.get_validated_token(crudo)
+        return self.get_user(validado), validado

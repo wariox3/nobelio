@@ -50,5 +50,8 @@ REST_FRAMEWORK = {  # noqa: F405
         "verificacion": None, "verificacion_rafaga": None,
         "reenvio": None, "reenvio_rafaga": None, "reenvio_correo": None,
         "login": None, "login_rafaga": None, "login_correo": None,
+        "mfa": None, "mfa_rafaga": None,
+        "mfa_envio": None, "mfa_envio_rafaga": None,
+        "mfa_gestion": None, "refresco": None,
     },
 }
