@@ -111,7 +111,12 @@ AUTH_USER_MODEL = "seguridad.Usuario"
 # --- Validación de contraseñas ---------------------------------------------
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        # Por encima de los 8 de Django: el alta es pública y la contraseña es
+        # lo único entre un desconocido y los documentos fiscales de su cuenta.
+        "OPTIONS": {"min_length": 10},
+    },
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
@@ -133,6 +138,24 @@ MEDIA_ROOT = BASE_DIR / "media"
 ZINC_URL_BASE = env("ZINC_URL_BASE", default="http://zinc.semantica.com.co")
 # Nombre que ve el destinatario como remitente del correo.
 ZINC_NOMBRE_REMITENTE = env("ZINC_NOMBRE_REMITENTE", default="RedDoc ERP")
+
+# --- Caché ---
+# La usa solo el throttling, y por eso importa más de lo que parece: los
+# contadores de LocMemCache viven en la memoria de cada worker, así que con N
+# workers de Gunicorn un tope de 5/hora se convierte en 5·N/hora, y se reinicia
+# en cada despliegue. En producción tiene que ser un backend compartido.
+# `CACHE_URL` acepta también redis:// el día que haga falta.
+CACHES = {"default": env.cache("CACHE_URL", default="locmemcache://")}
+
+# --- Registro público -------------------------------------------------------
+# Página del sitio a la que apunta el correo de verificación; recibe el token
+# por query string y lo reenvía a `POST /api/seguridad/registro/verificar/`.
+# Vive fuera de la API porque la confirma una persona en el navegador, no un
+# cliente de la API.
+URL_VERIFICACION_CORREO = env(
+    "URL_VERIFICACION_CORREO",
+    default="http://localhost:4321/verificar-correo",
+)
 
 # --- Almacenamiento en Backblaze B2 (S3-compatible) ------------------------
 # Credenciales de una "Application Key" de B2 con acceso al bucket. Si no están
@@ -252,11 +275,50 @@ REST_FRAMEWORK = {
         # principal de una API Key no es un modelo. Ver apps/seguridad/limites.py.
         "apps.seguridad.limites.LimitePorCredencial",
         "rest_framework.throttling.AnonRateThrottle",
+        # Solo actúa donde la vista declara `throttle_scope`; en el resto no
+        # estorba. Lo usan las rutas del registro, que son anónimas y caras:
+        # cada una crea filas o dispara un correo por la pasarela.
+        "rest_framework.throttling.ScopedRateThrottle",
+        # Ráfaga corta por IP y tope por destinatario. Ver limites.py: DRF
+        # aplica todos, así que frena el más estricto de los que apliquen.
+        "apps.seguridad.limites.LimiteRafaga",
+        "apps.seguridad.limites.LimitePorCorreo",
     ],
     "DEFAULT_THROTTLE_RATES": {
         "user": env("THROTTLE_USUARIO", default="300/hour"),
         "anon": env("THROTTLE_ANONIMO", default="30/hour"),
+        # --- Rutas públicas (sin credencial). Cada una lleva un tope
+        # sostenido por IP y otro de ráfaga; las que reciben un correo llevan
+        # además uno por destinatario, que es el que protege a la víctima
+        # cuando el atacante rota de IP.
+        #
+        # Darse de alta tres veces en una hora desde la misma IP ya es raro, y
+        # cada alta manda un correo.
+        "registro": env("THROTTLE_REGISTRO", default="3/hour"),
+        "registro_rafaga": env("THROTTLE_REGISTRO_RAFAGA", default="1/min"),
+        # Confirmar se reintenta algo más (el cliente de correo precarga el
+        # enlace, la persona recarga), pero es una operación de una vez.
+        "verificacion": env("THROTTLE_VERIFICACION", default="10/hour"),
+        "verificacion_rafaga": env("THROTTLE_VERIFICACION_RAFAGA", default="5/min"),
+        # Reenviar manda un correo a una dirección que elige quien pide: sin
+        # tope por destinatario es una máquina de spam contra terceros.
+        "reenvio": env("THROTTLE_REENVIO", default="5/hour"),
+        "reenvio_rafaga": env("THROTTLE_REENVIO_RAFAGA", default="2/min"),
+        "reenvio_correo": env("THROTTLE_REENVIO_CORREO", default="3/hour"),
+        # El login es el endpoint más atacado de cualquier servicio abierto. El
+        # tope por correo es el que importa: sin él, repartir el ataque entre
+        # muchas IP deja la cuenta sin protección ninguna.
+        "login": env("THROTTLE_LOGIN", default="20/hour"),
+        "login_rafaga": env("THROTTLE_LOGIN_RAFAGA", default="5/min"),
+        "login_correo": env("THROTTLE_LOGIN_CORREO", default="10/hour"),
     },
+    # Cuántos proxies hay delante. Sin esto DRF usa la cabecera
+    # `X-Forwarded-For` tal cual cuando viene, y como la manda el cliente,
+    # cualquiera se salta todos los topes por IP mandando una distinta en cada
+    # petición. Con el número exacto se lee la posición correcta de la cadena,
+    # que es la única que el proxy no deja falsificar.
+    #   0 = sin proxy (usa REMOTE_ADDR)   1 = un proxy delante
+    "NUM_PROXIES": env.int("NUM_PROXIES", default=0),
 }
 
 # --- JWT (frontend SPA) -----------------------------------------------------

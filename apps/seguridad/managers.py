@@ -11,6 +11,12 @@ class UsuarioManager(BaseUserManager):
         if not email:
             raise ValueError("El email es obligatorio.")
         email = self.normalize_email(email)
+        # Sin nombre corto se usa lo que va antes de la @. Es lo que la persona
+        # reconoce como suyo, y evita que la interfaz y los correos tengan que
+        # saludar con la dirección entera cuando nadie escribió un nombre.
+        # Solo al crear: si después se vacía a propósito, se respeta.
+        if not extra_fields.get("nombre_corto"):
+            extra_fields["nombre_corto"] = email.partition("@")[0]
         usuario = self.model(email=email, **extra_fields)
         usuario.set_password(password)
         usuario.save(using=self._db)

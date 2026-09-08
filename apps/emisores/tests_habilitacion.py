@@ -14,7 +14,7 @@ from rest_framework.test import APITestCase
 
 from apps.catalogos.models import TipoFactura
 from apps.cuentas.models import Cuenta
-from apps.documentos.tests_utils import crear_catalogos_minimos, crear_certificado
+from apps.documentos.tests_utils import crear_cuenta, crear_catalogos_minimos, crear_certificado
 from apps.emisores.models import Certificado, Emisor, Resolucion, SoftwareDian
 from apps.nucleo.models import Ambiente
 from apps.seguridad.models import Usuario
@@ -26,8 +26,8 @@ class HabilitacionTests(APITestCase):
     @classmethod
     def setUpTestData(cls):
         cls.cat = crear_catalogos_minimos()
-        cls.cuenta = Cuenta.objects.create(nombre="RedDoc ERP")
-        cls.otra_cuenta = Cuenta.objects.create(nombre="ERP ajeno")
+        cls.cuenta = crear_cuenta(nombre="RedDoc ERP")
+        cls.otra_cuenta = crear_cuenta(nombre="ERP ajeno")
         cls.emisor = cls._crear_emisor(cls.cuenta, "901192048")
         cls.ajeno = cls._crear_emisor(cls.otra_cuenta, "900123456")
 

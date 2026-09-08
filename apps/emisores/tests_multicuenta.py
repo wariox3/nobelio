@@ -21,7 +21,7 @@ from rest_framework.test import APITestCase
 
 from apps.catalogos.models import TipoFactura
 from apps.cuentas.models import Cuenta
-from apps.documentos.tests_utils import crear_catalogos_minimos
+from apps.documentos.tests_utils import crear_cuenta, crear_catalogos_minimos
 from apps.emisores.models import Emisor, Resolucion
 from apps.emisores.serializers.emisor import MENSAJE_DUPLICADO
 from apps.nucleo.api import MENSAJE_GENERICO
@@ -37,8 +37,8 @@ class MismoNitEnVariasCuentasTests(APITestCase):
         self.cat = crear_catalogos_minimos()
         self.tipo_factura = TipoFactura.objects.create(codigo="01", nombre="Factura")
 
-        self.erp1 = Cuenta.objects.create(nombre="RedDoc ERP")
-        self.erp2 = Cuenta.objects.create(nombre="ERP XYZ")
+        self.erp1 = crear_cuenta(nombre="RedDoc ERP")
+        self.erp2 = crear_cuenta(nombre="ERP XYZ")
         self.emisor1 = self.crear_emisor(self.erp1, correo="facturacion@empresa.co")
         self.emisor2 = self.crear_emisor(self.erp2, correo="nomina@empresa.co")
 

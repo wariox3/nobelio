@@ -42,5 +42,13 @@ LOGGING["loggers"]["django.request"]["level"] = "CRITICAL"  # noqa: F405
 # el `None` como "sin límite".
 REST_FRAMEWORK = {  # noqa: F405
     **REST_FRAMEWORK,  # noqa: F405
-    "DEFAULT_THROTTLE_RATES": {"user": None, "anon": None},
+    "DEFAULT_THROTTLE_RATES": {
+        # Todos a None: las pruebas no miden topes salvo las que los prueban a
+        # propósito, que los reactivan con `override_settings`.
+        "user": None, "anon": None,
+        "registro": None, "registro_rafaga": None,
+        "verificacion": None, "verificacion_rafaga": None,
+        "reenvio": None, "reenvio_rafaga": None, "reenvio_correo": None,
+        "login": None, "login_rafaga": None, "login_correo": None,
+    },
 }

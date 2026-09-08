@@ -6,20 +6,25 @@ emisores alcanza este solicitante?* Las tres respuestas posibles son:
 
 - **Staff de la plataforma**: todos (``None`` = sin restricción).
 - **Integración (API Key)**: los emisores de la cuenta de la llave.
-- **Usuario humano (JWT)**: los emisores que tenga asignados explícitamente.
+- **Usuario humano (JWT)**: los de las cuentas que posea, más los que le hayan
+  asignado uno a uno.
 
-La cuenta solo aparece en el caso de la llave. Un usuario no pertenece a
-ninguna: su alcance es la lista de emisores que se le asignó, sin más, y sin
-emisores no ve nada (falla cerrado).
+Un usuario sigue sin *pertenecer* a una cuenta, pero puede **poseerla**: quien
+se registra queda como propietario de la que se le crea, y desde ahí alcanza
+todos sus emisores sin que nadie se los asigne. Las dos vías se suman, así que
+un contador puede ser dueño de su cuenta y tener además un emisor suelto de un
+cliente. Sin ninguna de las dos no ve nada (falla cerrado).
 
 Al **crear** un emisor la pregunta es la otra mitad: *¿de qué cuenta puede
 colgarlo?* La responde ``cuenta_permitida``, que es la única definición de esa
 regla en el proyecto (``exigir_cuenta`` es su versión que lanza 403).
 """
 from django.core.exceptions import ValidationError as ErrorValidacionDjango
+from django.db.models import Q
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
+from apps.cuentas.models import Cuenta
 from apps.emisores.models import Emisor
 
 MENSAJE_FUERA_DE_ALCANCE = "No tiene acceso a este emisor."
@@ -27,7 +32,7 @@ MENSAJE_FUERA_DE_CUENTA = (
     "La credencial solo puede operar sobre su propia cuenta."
 )
 MENSAJE_SIN_CUENTA = (
-    "Solo el staff o una integración pueden dar de alta emisores."
+    "Para dar de alta un emisor hay que ser dueño de una cuenta."
 )
 
 
@@ -55,46 +60,84 @@ def emisores_permitidos(request):
     llave = _llave(request)
     if llave is not None:
         return Emisor.objects.filter(cuenta_id=llave.cuenta_id)
-    return request.user.emisores.all()
+    usuario = request.user
+    if not getattr(usuario, "is_authenticated", False):
+        return Emisor.objects.none()
+    # Una persona alcanza por dos vías que se suman: los emisores de las cuentas
+    # que posee —todos, sin asignar nada, que es lo que gana quien se registra— y
+    # los que le hayan asignado uno a uno, que pueden ser de cuentas ajenas. El
+    # `distinct` es por el join del M2M, que si no repite filas.
+    return Emisor.objects.filter(
+        Q(cuenta__usuario=usuario) | Q(usuarios=usuario)
+    ).distinct()
 
 
-def cuenta_de_la_credencial(request):
-    """Cuenta que impone la credencial, o ``None`` si no es una integración.
+def cuentas_propias(request):
+    """Cuentas de las que el solicitante es dueño; vacío si no lo es de ninguna.
 
-    Solo las API Key llevan cuenta. Un usuario humano no pertenece a ninguna,
-    así que para él siempre es ``None``.
+    Solo las personas son dueñas de una cuenta. Una integración se identifica
+    por su llave, y su cuenta sale de ahí, no de la propiedad.
+    """
+    if _llave(request) is not None:
+        return Cuenta.objects.none()
+    usuario = request.user
+    if not getattr(usuario, "is_authenticated", False):
+        return Cuenta.objects.none()
+    return Cuenta.objects.filter(usuario=usuario)
+
+
+def cuenta_propia(request):
+    """Cuenta de la que cuelga lo que dé de alta el solicitante, o ``None``.
+
+    Para una integración es la de su llave. Para una persona, la cuenta que
+    posee —la que se le crea al registrarse—, que es lo que le permite dar de
+    alta emisores sin ser staff.
+
+    Devuelve ``None`` cuando no hay una respuesta única: ni llave ni cuenta
+    propia, o varias cuentas propias. En ese último caso la cuenta se indica en
+    el cuerpo y ``cuenta_permitida`` comprueba que sea suya.
     """
     llave = _llave(request)
-    return llave.cuenta if llave is not None else None
+    if llave is not None:
+        return llave.cuenta
+    propias = list(cuentas_propias(request)[:2])
+    return propias[0] if len(propias) == 1 else None
 
 
 def puede_dar_de_alta(request):
     """¿El solicitante tiene una cuenta de la que colgar un emisor nuevo?
 
-    Solo la integración (que lo cuelga de la suya) y el staff (que indica cuál).
-    Un usuario humano no pertenece a ninguna cuenta, así que no crea emisores:
-    el alta es del staff o del ERP, y después se le asignan los emisores.
+    La tienen la integración (lo cuelga de la de su llave), el staff (indica
+    cuál) y el dueño de una cuenta (la suya). Quien solo tiene emisores
+    asignados no da de alta: opera lo que le dieron, no abre nuevos.
     """
-    return cuenta_de_la_credencial(request) is not None or es_staff(request)
+    return (
+        cuenta_propia(request) is not None
+        or es_staff(request)
+        or cuentas_propias(request).exists()
+    )
 
 
 def cuenta_permitida(request, cuenta):
     """¿El solicitante puede colgar datos de ``cuenta``?
 
     Regla única del alta multi-inquilino: el staff elige la cuenta libremente;
-    una integración solo puede usar la suya; quien no tiene cuenta no crea nada.
+    una integración solo puede usar la de su llave; una persona, solo una que
+    posea; quien no tiene ninguna no crea nada.
     """
-    propia = cuenta_de_la_credencial(request)
-    if propia is None:
-        return es_staff(request)
-    return cuenta is not None and cuenta.pk == propia.pk
+    llave = _llave(request)
+    if llave is not None:
+        return cuenta is not None and cuenta.pk == llave.cuenta_id
+    if es_staff(request):
+        return True
+    return cuenta is not None and cuentas_propias(request).filter(pk=cuenta.pk).exists()
 
 
 def exigir_cuenta(request, cuenta):
     """Lanza 403 si el solicitante no puede colgar datos de ``cuenta``."""
     if not cuenta_permitida(request, cuenta):
         raise PermissionDenied(
-            MENSAJE_FUERA_DE_CUENTA if cuenta_de_la_credencial(request)
+            MENSAJE_FUERA_DE_CUENTA if puede_dar_de_alta(request)
             else MENSAJE_SIN_CUENTA
         )
 

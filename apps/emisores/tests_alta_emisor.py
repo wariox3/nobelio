@@ -12,7 +12,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.cuentas.models import Cuenta
-from apps.documentos.tests_utils import crear_catalogos_minimos
+from apps.documentos.tests_utils import crear_cuenta, crear_catalogos_minimos
 from apps.emisores.models import Emisor
 from apps.seguridad.models import Usuario
 
@@ -23,7 +23,7 @@ _RUES = "apps.utilidades.rues.consultar_nit"
 class AltaSinValidarRuesTests(APITestCase):
     def setUp(self):
         self.cat = crear_catalogos_minimos()
-        self.cuenta = Cuenta.objects.create(nombre="RedDoc ERP")
+        self.cuenta = crear_cuenta(nombre="RedDoc ERP")
         admin = Usuario.objects.create_superuser(
             email="admin@nobelio.co", password="ClaveSegura123"
         )

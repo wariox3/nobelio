@@ -10,7 +10,7 @@ from django.core.cache import cache
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from apps.cuentas.models import Cuenta
+from apps.documentos.tests_utils import crear_cuenta
 from apps.seguridad.limites import LimitePorCredencial
 from apps.seguridad.models import LlaveApi, Usuario
 
@@ -33,7 +33,7 @@ def _tasas(user=None, anon=None):
 class LimitePorCredencialTests(APITestCase):
     def setUp(self):
         cache.clear()
-        self.cuenta = Cuenta.objects.create(nombre="RedDoc ERP")
+        self.cuenta = crear_cuenta(nombre="RedDoc ERP")
         self.usuario = Usuario.objects.create_user(
             email="humano@nobelio.co", password="ClaveSegura123"
         )

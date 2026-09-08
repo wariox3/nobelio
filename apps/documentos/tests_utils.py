@@ -7,6 +7,29 @@ from unittest.mock import patch
 from apps.catalogos import models as cat
 
 
+def crear_cuenta(nombre="Cuenta Demo", usuario=None):
+    """Cuenta de pruebas con su dueño.
+
+    `Cuenta.usuario` es obligatorio —una cuenta sin dueño no la puede reclamar
+    nadie—, así que las pruebas que solo necesitan "una cuenta cualquiera" no
+    tienen que inventarse el usuario cada vez: si no se pasa, se crea uno
+    desechable con un correo único.
+    """
+    from uuid import uuid4
+
+    from django.contrib.auth import get_user_model
+
+    from apps.cuentas.models import Cuenta
+
+    if usuario is None:
+        usuario = get_user_model().objects.create_user(
+            email=f"dueno-{uuid4().hex[:10]}@ejemplo.co",
+            password="ClaveSegura123",
+            is_verified=True,
+        )
+    return Cuenta.objects.create(nombre=nombre, usuario=usuario)
+
+
 @contextmanager
 def hoy_es(fecha, hora=None):
     """Sitúa a ``timezone`` en ``fecha`` (y opcionalmente en ``hora``).
@@ -33,9 +56,7 @@ def crear_catalogos_minimos():
     Incluye una ``cuenta`` (tenant) de conveniencia para crear emisores, aunque
     no sea un catálogo en sentido estricto.
     """
-    from apps.cuentas.models import Cuenta
-
-    cuenta = Cuenta.objects.create(nombre="Cuenta Demo")
+    cuenta = crear_cuenta("Cuenta Demo")
     nit = cat.TipoIdentificacion.objects.create(codigo="31", nombre="NIT")
     juridica = cat.TipoOrganizacion.objects.create(codigo="1", nombre="Persona Jurídica")
     colombia = cat.Pais.objects.create(codigo="CO", nombre="Colombia")

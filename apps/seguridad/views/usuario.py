@@ -12,4 +12,4 @@ class UsuarioViewSet(viewsets.ModelViewSet):
     queryset = get_user_model().objects.all()
     serializer_class = serializers.UsuarioSerializer
     permission_classes = [IsAdminUser]
-    search_fields = ["email", "nombres", "apellidos"]
+    search_fields = ["email", "nombre_corto"]

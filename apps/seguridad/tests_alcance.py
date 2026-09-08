@@ -16,6 +16,7 @@ from apps.documentos.models import DocumentoTipo
 from apps.documentos.serializers import DocumentoCrearSerializer
 from apps.documentos.tests_utils import (
     crear_catalogos_minimos,
+    crear_cuenta,
     crear_certificado,
     crear_documento_factura,
 )
@@ -33,11 +34,11 @@ class AlcanceBase(APITestCase):
 
     def setUp(self):
         self.cat = crear_catalogos_minimos()
-        self.cuenta = Cuenta.objects.create(nombre="RedDoc ERP")
+        self.cuenta = crear_cuenta(nombre="RedDoc ERP")
         self.emisor = self.crear_emisor(self.cuenta, "900000001", "Cliente A")
         self.hermano = self.crear_emisor(self.cuenta, "900000002", "Cliente B")
 
-        self.cuenta_ajena = Cuenta.objects.create(nombre="Otra integración")
+        self.cuenta_ajena = crear_cuenta(nombre="Otra integración")
         self.emisor_ajeno = self.crear_emisor(
             self.cuenta_ajena, "900000003", "Ajena S.A.S."
         )
@@ -78,7 +79,9 @@ class FlujoDeAltaTests(AlcanceBase):
 
         # 1. El staff crea la cuenta de la integración.
         resp = self.client.post(
-            "/api/cuentas/cuenta/", {"nombre": "integracion1"}, format="json"
+            "/api/cuentas/cuenta/",
+            {"nombre": "integracion1", "usuario": admin.pk},
+            format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         cuenta_id = resp.data["id"]

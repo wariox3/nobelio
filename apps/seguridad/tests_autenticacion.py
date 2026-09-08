@@ -15,7 +15,7 @@ from apps.catalogos.models import (
     TipoIdentificacion,
     TipoOrganizacion,
 )
-from apps.cuentas.models import Cuenta
+from apps.documentos.tests_utils import crear_cuenta
 from apps.emisores.models import Emisor
 from apps.seguridad.autenticacion import LlaveApiAuthentication, PrincipalLlaveApi
 from apps.seguridad.models import LlaveApi
@@ -25,7 +25,7 @@ Usuario = get_user_model()
 
 def crear_emisor():
     """Crea un emisor mínimo (con su cuenta y catálogos) para las pruebas."""
-    cuenta = Cuenta.objects.create(nombre="Cuenta de Prueba")
+    cuenta = crear_cuenta(nombre="Cuenta de Prueba")
     tipo_id = TipoIdentificacion.objects.create(codigo="31", nombre="NIT")
     tipo_org = TipoOrganizacion.objects.create(codigo="1", nombre="Jurídica")
     pais = Pais.objects.create(codigo="CO", nombre="Colombia")
@@ -118,7 +118,7 @@ class HashDeLaLlaveTests(TestCase):
     """El cambio de PBKDF2 a SHA-256 y su migración perezosa."""
 
     def setUp(self):
-        self.cuenta = Cuenta.objects.create(nombre="RedDoc ERP")
+        self.cuenta = crear_cuenta(nombre="RedDoc ERP")
 
     def test_la_llave_nueva_se_guarda_como_sha256(self):
         llave, clave = LlaveApi.generar(cuenta=self.cuenta, nombre="ERP")
@@ -175,7 +175,7 @@ class RegistroDeUsoTests(TestCase):
     """`registrar_uso` deja de escribir en cada petición."""
 
     def setUp(self):
-        self.cuenta = Cuenta.objects.create(nombre="RedDoc ERP")
+        self.cuenta = crear_cuenta(nombre="RedDoc ERP")
         self.llave, _ = LlaveApi.generar(cuenta=self.cuenta, nombre="ERP")
 
     def test_la_primera_vez_si_escribe(self):
@@ -231,8 +231,12 @@ class JWTLoginTests(APITestCase):
     URL_REFRESH = "/api/seguridad/token/refresh/"
 
     def setUp(self):
+        # Verificado: desde el registro público, el login exige el correo
+        # confirmado. Que se rechace sin confirmar se prueba en tests_registro.
         self.usuario = Usuario.objects.create_user(
-            email="frontend@example.com", password="ClaveSegura123"
+            email="frontend@example.com",
+            password="ClaveSegura123",
+            is_verified=True,
         )
 
     def test_login_devuelve_access_y_refresh(self):

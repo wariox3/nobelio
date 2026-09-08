@@ -18,7 +18,7 @@ class UsuarioAPITests(APITestCase):
         self.client.force_authenticate(self.admin)
         datos = {
             "email": "nuevo@example.com",
-            "nombres": "Nuevo",
+            "nombre_corto": "Nuevo",
             "password": "OtraClave456",
         }
         resp = self.client.post(self.URL, datos)

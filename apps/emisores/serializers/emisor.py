@@ -10,13 +10,13 @@ from apps.catalogos.models import (
 from apps.cuentas.models import Cuenta
 from apps.emisores.models import Emisor, ambiente_por_defecto
 from apps.nucleo.models import Ambiente
-from apps.seguridad.alcance import MENSAJE_FUERA_DE_CUENTA, cuenta_de_la_credencial
+from apps.seguridad.alcance import MENSAJE_FUERA_DE_CUENTA, cuenta_propia
 
 from .resolucion import ResolucionSerializer
 
 
-class CuentaDeLaCredencial:
-    """Default de ``cuenta``: la de la API Key que hace la petición.
+class CuentaPropia:
+    """Default de ``cuenta``: la de la API Key, o la que posee quien pregunta.
 
     Hace falta como *default* y no solo en la vista porque la unicidad del
     emisor es ``(cuenta, tipo_identificacion, numero_identificacion)``: DRF
@@ -31,9 +31,9 @@ class CuentaDeLaCredencial:
 
 
 def _cuenta_de(contexto):
-    """Cuenta de la credencial, o ``None`` fuera de una petición HTTP."""
+    """Cuenta propia del solicitante, o ``None`` fuera de una petición HTTP."""
     request = contexto.get("request")
-    return cuenta_de_la_credencial(request) if request is not None else None
+    return cuenta_propia(request) if request is not None else None
 
 
 class CodigoDeCatalogo(serializers.SlugRelatedField):
@@ -89,7 +89,7 @@ class EmisorSerializer(serializers.ModelSerializer):
     # el staff de la plataforma la indica explícitamente.
     # Solo cuentas activas: una cuenta desactivada no admite emisores nuevos.
     cuenta = serializers.PrimaryKeyRelatedField(
-        queryset=Cuenta.objects.filter(activa=True), default=CuentaDeLaCredencial()
+        queryset=Cuenta.objects.filter(activa=True), default=CuentaPropia()
     )
     # La ubicación llega por código; el serializer resuelve la fila y guarda su
     # llave, que es lo que la FK necesita.
