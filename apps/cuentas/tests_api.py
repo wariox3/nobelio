@@ -94,6 +94,16 @@ class CuentaAislamientoTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         self.assertEqual(Cuenta.objects.get(nombre="Nueva").usuario, self.ana)
 
+    def test_puede_tener_varias_cuentas_todas_suyas(self):
+        self.client.force_authenticate(self.ana)
+        for nombre in ("Estudio", "Cliente A", "Cliente B"):
+            r = self.client.post(self.URL, {"nombre": nombre}, format="json")
+            self.assertEqual(r.status_code, status.HTTP_201_CREATED, r.data)
+        propias = Cuenta.objects.filter(usuario=self.ana)
+        self.assertEqual(propias.count(), 4)  # las tres nuevas y la del setUp
+        resp = self.client.get(self.URL)
+        self.assertEqual(resp.data["count"], 4)
+
     def test_no_puede_borrar_una_cuenta_con_emisores(self):
         """`Emisor.cuenta` es PROTECT: sin manejarlo esto era un 500."""
         from apps.documentos.tests_utils import crear_catalogos_minimos

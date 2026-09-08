@@ -227,6 +227,15 @@ class AlcanceDelDuenoTests(TestCase):
         self.assertEqual(r.status_code, 201, r.data)
         self.assertEqual(r.data["cuenta"], cuenta.pk)
 
+    def test_con_varias_cuentas_hay_que_decir_en_cual(self):
+        """El mensaje tiene que hablarle al dueño, no al staff."""
+        crear_cuenta("Estudio", usuario=self.usuario)
+        crear_cuenta("Cliente A", usuario=self.usuario)
+        self.cliente.force_authenticate(user=self.usuario)
+        r = self._alta_emisor()
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("varias cuentas", r.data["errores"]["cuenta"])
+
     def test_el_dueno_alcanza_los_emisores_de_su_cuenta(self):
         """Sin asignárselos: los alcanza por ser dueño de la cuenta."""
         crear_cuenta("Empresa de Ana SAS", usuario=self.usuario)

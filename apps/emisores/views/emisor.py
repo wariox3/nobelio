@@ -18,6 +18,7 @@ from apps.nucleo.models import Ambiente
 from apps.seguridad.alcance import (
     MENSAJE_SIN_CUENTA,
     AlcanceEmisorMixin,
+    cuentas_propias,
     emisores_permitidos,
     es_staff,
     exigir_alcance,
@@ -25,6 +26,22 @@ from apps.seguridad.alcance import (
     puede_dar_de_alta,
 )
 from apps.utilidades.rues import RuesNoDisponible, consultar_detalle
+
+
+def _mensaje_cuenta_faltante(request):
+    """Por qué falta la cuenta, según quién pregunta.
+
+    Son dos situaciones distintas y decirlas igual desorienta: el staff no
+    cuelga de ninguna cuenta y tiene que elegirla, mientras que el dueño de
+    varias sí cuelga —de todas— y lo que falta es cuál de ellas.
+    """
+    if es_staff(request):
+        return "Es obligatoria para el staff."
+    return (
+        "Tienes varias cuentas: indica en cuál va el emisor."
+        if cuentas_propias(request).count() > 1
+        else "Es obligatoria."
+    )
 
 
 class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
@@ -60,11 +77,12 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         # Para una integración la cuenta ya la puso el default del serializer y
-        # `validate_cuenta` impidió que apuntara a otra. Al staff, que no tiene
-        # credencial de cuenta, hay que exigírsela.
+        # `validate_cuenta` impidió que apuntara a otra. Falta cuando no hay una
+        # respuesta única: el staff, que no cuelga de ninguna, y quien es dueño
+        # de varias, que tiene que decir en cuál va.
         cuenta = serializer.validated_data.get("cuenta")
         if not cuenta:
-            raise ValidationError({"cuenta": "Es obligatoria para el staff."})
+            raise ValidationError({"cuenta": _mensaje_cuenta_faltante(self.request)})
         # Última puerta antes de escribir: el serializer ya lo comprobó, pero la
         # regla se verifica aquí contra `alcance` para que ningún cambio futuro
         # en el serializer pueda abrir un alta en cuenta ajena en silencio.
