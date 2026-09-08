@@ -329,7 +329,7 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
 
         Traduce el `numero_resolucion` a la fila del emisor, exige que el
         documento referenciado sea de ese emisor —si no, una nota crédito podría
-        colgar de la factura de una cuenta ajena—, que el número quepa en la
+        colgar de la factura de otro—, que el número quepa en la
         resolución y que el emisor esté en condiciones de firmar.
         """
         # Una vez firmado, los datos del documento ya viajaron en el XML y en el
@@ -576,7 +576,7 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
         """Busca la resolución del emisor por su número DIAN.
 
         Se acota al emisor —que el campo `emisor` ya restringió al alcance del
-        solicitante—, así que un número de otra cuenta responde igual que uno
+        solicitante—, así que un número ajeno responde igual que uno
         inexistente. Solo se consideran las activas: numerar con una dada de
         baja es justo lo que la bandera impide.
         """

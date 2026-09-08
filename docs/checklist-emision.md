@@ -21,11 +21,10 @@ puede faltar. Las rutas cuelgan de `/api/`.
 - [ ] **Backblaze B2 configurado** (`B2_*` en `.env`): obligatorio para subir
       certificados; el `.p12` se guarda siempre en B2, nunca en disco.
 - [ ] **Ambiente DIAN** definido (`DIAN_ENVIRONMENT`: `2` habilitación / `1` producción).
-- [ ] **Usuario staff** inicial para poder crear cuentas y usuarios.
+- [ ] **Usuario staff** inicial para poder crear usuarios y llaves.
 
 ## 1. Cuenta (tenant)
 
-- [ ] `POST /api/cuentas/cuenta/` → crea la cuenta que agrupa usuarios y emisores.
 
 ## 2. Usuario y acceso
 

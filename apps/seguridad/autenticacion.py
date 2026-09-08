@@ -6,8 +6,8 @@ El ERP envía la credencial en la cabecera::
 
 A diferencia del frontend (que usa JWT y se autentica como un ``Usuario``), el
 ERP no es una persona: se autentica como un :class:`PrincipalLlaveApi`, que
-expone la llave (y con ella su cuenta) para que ``apps.seguridad.alcance``
-delimite sobre qué emisores puede operar.
+expone la llave (y con ella su usuario) para que ``apps.seguridad.alcance`` le
+dé exactamente el mismo alcance que a esa persona.
 """
 from rest_framework import authentication, exceptions
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -38,10 +38,12 @@ class PrincipalLlaveApi:
 
     def __init__(self, llave):
         self.llave = llave
-        self.cuenta = llave.cuenta
+        # La persona en cuyo nombre actúa. `apps.seguridad.alcance` la usa para
+        # darle exactamente el mismo alcance que a ella.
+        self.usuario = llave.usuario
 
     def __str__(self):
-        return f"ERP[{self.cuenta}]"
+        return f"ERP[{self.usuario}]"
 
 
 class LlaveApiAuthentication(authentication.BaseAuthentication):
@@ -75,17 +77,17 @@ class LlaveApiAuthentication(authentication.BaseAuthentication):
         if not separador or not prefijo or not secreto:
             raise exceptions.AuthenticationFailed("API Key inválida.")
         try:
-            llave = LlaveApi.objects.select_related("cuenta").get(prefijo=prefijo)
+            llave = LlaveApi.objects.select_related("usuario").get(prefijo=prefijo)
         except LlaveApi.DoesNotExist:
             raise exceptions.AuthenticationFailed("API Key inválida.")
         if not llave.verificar_secreto(secreto):
             raise exceptions.AuthenticationFailed("API Key inválida.")
         if not llave.esta_vigente():
             raise exceptions.AuthenticationFailed("API Key inactiva o expirada.")
-        # Desactivar la cuenta corta el acceso de todas sus llaves de golpe, sin
-        # tener que revocarlas una a una.
-        if not llave.cuenta.activa:
-            raise exceptions.AuthenticationFailed("La cuenta está inactiva.")
+        # Desactivar a la persona corta el acceso de todas sus llaves de golpe,
+        # sin tener que revocarlas una a una.
+        if not llave.usuario.is_active:
+            raise exceptions.AuthenticationFailed("El usuario está inactivo.")
         llave.registrar_uso()
         return (PrincipalLlaveApi(llave), llave)
 

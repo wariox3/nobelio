@@ -8,7 +8,7 @@ from apps.emisores.models import Emisor, SoftwareDian
 
 def _crear_emisor(cat, nit="901192048"):
     emisor = Emisor.objects.create(
-        cuenta=cat["cuenta"], razon_social="Semantica Digital S.A.S",
+        usuario=cat["usuario"], razon_social="Semantica Digital S.A.S",
         tipo_identificacion=cat["nit"], numero_identificacion=nit,
         digito_verificacion="8", tipo_organizacion=cat["juridica"],
         pais=cat["colombia"], departamento=cat["antioquia"], municipio=cat["medellin"],

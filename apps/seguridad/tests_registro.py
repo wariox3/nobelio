@@ -6,8 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from apps.cuentas.models import Cuenta
-from apps.documentos.tests_utils import crear_catalogos_minimos, crear_cuenta
+from apps.documentos.tests_utils import crear_catalogos_minimos, crear_usuario
 from apps.seguridad import verificacion
 
 Usuario = get_user_model()
@@ -46,11 +45,6 @@ class RegistroTests(TestCase):
         self._registrar(nombre_corto="Anita")
         usuario = Usuario.objects.get(email="ana@empresa.co")
         self.assertEqual(usuario.nombre_corto, "Anita")
-
-    def test_no_crea_ninguna_cuenta(self):
-        """El alta es solo del usuario; la cuenta se crea después, autenticado."""
-        self._registrar()
-        self.assertEqual(Cuenta.objects.count(), 0)
 
     def test_nace_sin_verificar_y_sin_privilegios(self):
         self._registrar()
@@ -199,47 +193,31 @@ class AlcanceDelDuenoTests(TestCase):
         )
 
     def _alta_emisor(self):
-        return self.cliente.post(
-            reverse("emisor-list"),
-            {
-                "razon_social": "Empresa de Ana SAS",
-                "tipo_identificacion": self.cat["nit"].pk,
-                "numero_identificacion": "900123456",
-                "digito_verificacion": "1",
-                "tipo_organizacion": self.cat["juridica"].pk,
-                "responsabilidades": [],
-                "pais": "CO",
-                "departamento": "05",
-                "municipio": "05001",
-                "direccion": "Calle 1 # 2-3",
-                "correo": "facturacion@empresa.co",
-            },
-            format="json",
-        )
+        cuerpo = {
+            "razon_social": "Empresa de Ana SAS",
+            "tipo_identificacion": self.cat["nit"].pk,
+            "numero_identificacion": "900123456",
+            "digito_verificacion": "1",
+            "tipo_organizacion": self.cat["juridica"].pk,
+            "responsabilidades": [],
+            "pais": "CO",
+            "departamento": "05",
+            "municipio": "05001",
+            "direccion": "Calle 1 # 2-3",
+            "correo": "facturacion@empresa.co",
+        }
+        return self.cliente.post(reverse("emisor-list"), cuerpo, format="json")
 
-    def test_sin_cuenta_propia_no_da_de_alta(self):
-        self.cliente.force_authenticate(user=self.usuario)
-        self.assertEqual(self._alta_emisor().status_code, 403)
-
-    def test_el_dueno_da_de_alta_en_su_cuenta(self):
-        cuenta = crear_cuenta("Empresa de Ana SAS", usuario=self.usuario)
+    def test_da_de_alta_su_emisor_nada_mas_registrarse(self):
+        """Sin pasos intermedios: ya no hay cuenta que crear antes."""
         self.cliente.force_authenticate(user=self.usuario)
         r = self._alta_emisor()
         self.assertEqual(r.status_code, 201, r.data)
-        self.assertEqual(r.data["cuenta"], cuenta.pk)
+        self.assertEqual(r.data["usuario"], self.usuario.pk)
 
-    def test_con_varias_cuentas_hay_que_decir_en_cual(self):
-        """El mensaje tiene que hablarle al dueño, no al staff."""
-        crear_cuenta("Estudio", usuario=self.usuario)
-        crear_cuenta("Cliente A", usuario=self.usuario)
-        self.cliente.force_authenticate(user=self.usuario)
-        r = self._alta_emisor()
-        self.assertEqual(r.status_code, 400)
-        self.assertIn("varias cuentas", r.data["errores"]["cuenta"])
-
-    def test_el_dueno_alcanza_los_emisores_de_su_cuenta(self):
-        """Sin asignárselos: los alcanza por ser dueño de la cuenta."""
-        crear_cuenta("Empresa de Ana SAS", usuario=self.usuario)
+    def test_el_dueno_alcanza_sus_emisores(self):
+        """Sin asignárselos: los alcanza por ser su dueño."""
+        usuario = crear_usuario("Empresa de Ana SAS", usuario=self.usuario)
         self.cliente.force_authenticate(user=self.usuario)
         self._alta_emisor()
         r = self.cliente.get(reverse("emisor-list"))

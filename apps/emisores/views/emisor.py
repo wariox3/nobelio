@@ -16,32 +16,13 @@ from apps.emisores.servicios import crear_factura_prueba, crear_nomina_prueba
 from apps.nucleo.api import ErrorSolicitud
 from apps.nucleo.models import Ambiente
 from apps.seguridad.alcance import (
-    MENSAJE_SIN_CUENTA,
     AlcanceEmisorMixin,
-    cuentas_propias,
     emisores_permitidos,
     es_staff,
     exigir_alcance,
-    exigir_cuenta,
-    puede_dar_de_alta,
+    usuario_del_request,
 )
 from apps.utilidades.rues import RuesNoDisponible, consultar_detalle
-
-
-def _mensaje_cuenta_faltante(request):
-    """Por qué falta la cuenta, según quién pregunta.
-
-    Son dos situaciones distintas y decirlas igual desorienta: el staff no
-    cuelga de ninguna cuenta y tiene que elegirla, mientras que el dueño de
-    varias sí cuelga —de todas— y lo que falta es cuál de ellas.
-    """
-    if es_staff(request):
-        return "Es obligatoria para el staff."
-    return (
-        "Tienes varias cuentas: indica en cuál va el emisor."
-        if cuentas_propias(request).count() > 1
-        else "Es obligatoria."
-    )
 
 
 class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
@@ -68,36 +49,29 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
             ).select_related("municipio")
         return consulta
 
-    def create(self, request, *args, **kwargs):
-        # Se comprueba antes de validar el cuerpo: quien no tiene cuenta de la
-        # que colgar el emisor merece un 403 claro, no un 400 sobre los campos.
-        if not puede_dar_de_alta(request):
-            raise PermissionDenied(MENSAJE_SIN_CUENTA)
-        return super().create(request, *args, **kwargs)
-
     def perform_create(self, serializer):
-        # Para una integración la cuenta ya la puso el default del serializer y
-        # `validate_cuenta` impidió que apuntara a otra. Falta cuando no hay una
-        # respuesta única: el staff, que no cuelga de ninguna, y quien es dueño
-        # de varias, que tiene que decir en cuál va.
-        cuenta = serializer.validated_data.get("cuenta")
-        if not cuenta:
-            raise ValidationError({"cuenta": _mensaje_cuenta_faltante(self.request)})
-        # Última puerta antes de escribir: el serializer ya lo comprobó, pero la
-        # regla se verifica aquí contra `alcance` para que ningún cambio futuro
-        # en el serializer pueda abrir un alta en cuenta ajena en silencio.
-        exigir_cuenta(self.request, cuenta)
-        serializer.save()
+        """El emisor queda a nombre de quien lo da de alta.
+
+        Con una API Key, a nombre de la persona dueña de la llave: la llave
+        actúa por ella, no por sí misma. `usuario` es de solo lectura en el
+        serializer, así que el cuerpo no puede ponerlo a nombre de un tercero.
+        """
+        usuario = usuario_del_request(self.request)
+        if usuario is None:
+            raise PermissionDenied(
+                "Hay que iniciar sesión para dar de alta un emisor."
+            )
+        serializer.save(usuario=usuario)
 
     def perform_update(self, serializer):
-        # El alcance ya limitó el queryset; esto impide además que un emisor se
-        # mueva a otra cuenta desde el cuerpo de la petición. Solo el staff
-        # puede cambiarla; si no la indica (PUT sin 'cuenta', donde el default
-        # de la credencial es None) se conserva la que ya tenía.
-        cuenta = serializer.instance.cuenta
-        if es_staff(self.request):
-            cuenta = serializer.validated_data.get("cuenta") or cuenta
-        serializer.save(cuenta=cuenta)
+        """El dueño no se cambia al editar.
+
+        `usuario` es de solo lectura, así que el cuerpo no lo mueve; esto lo
+        deja explícito y protege de que alguien lo vuelva escribible sin
+        pensarlo. Transferir un emisor a otra persona, si algún día hace falta,
+        merece su propia acción y su propia comprobación.
+        """
+        serializer.save(usuario=serializer.instance.usuario)
 
     @action(detail=False, methods=["get"], url_path="validar-nit")
     def validar_nit(self, request):
@@ -158,7 +132,7 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         La búsqueda va **acotada al alcance del solicitante**, y no es un
         detalle: mientras se buscaba entre todos los emisores y el alcance se
         comprobaba después, un id ajeno respondía 403 y uno inexistente 400. Esa
-        diferencia convierte al endpoint en un oráculo con el que una cuenta
+        diferencia convierte al endpoint en un oráculo con el que alguien
         autenticada puede averiguar qué ids existen en las demás. Ahora las dos
         respuestas son idénticas, que es el mismo criterio de
         ``RelacionDelAlcance``.

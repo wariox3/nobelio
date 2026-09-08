@@ -16,10 +16,14 @@ class LlaveApiSerializer(serializers.ModelSerializer):
     class Meta:
         model = LlaveApi
         fields = [
-            "id", "cuenta", "nombre", "prefijo",
+            "id", "usuario", "nombre", "prefijo",
             "activa", "expira_en", "ultimo_uso_en", "creado_en", "clave",
         ]
-        read_only_fields = ["id", "prefijo", "ultimo_uso_en", "creado_en", "clave"]
+        # El dueño lo pone la vista con quien hace la petición: una llave a
+        # nombre de otro sería una credencial para suplantarlo.
+        read_only_fields = [
+            "id", "usuario", "prefijo", "ultimo_uso_en", "creado_en", "clave",
+        ]
 
     def get_clave(self, obj):
         # Solo está presente justo después de crear la llave (ver create()).
@@ -27,7 +31,7 @@ class LlaveApiSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         llave, clave_completa = LlaveApi.generar(
-            cuenta=validated_data["cuenta"],
+            usuario=validated_data["usuario"],
             nombre=validated_data["nombre"],
             activa=validated_data.get("activa", True),
             expira_en=validated_data.get("expira_en"),

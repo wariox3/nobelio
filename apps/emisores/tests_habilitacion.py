@@ -13,8 +13,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.catalogos.models import TipoFactura
-from apps.cuentas.models import Cuenta
-from apps.documentos.tests_utils import crear_cuenta, crear_catalogos_minimos, crear_certificado
+from apps.documentos.tests_utils import crear_usuario, crear_catalogos_minimos, crear_certificado
 from apps.emisores.models import Certificado, Emisor, Resolucion, SoftwareDian
 from apps.nucleo.models import Ambiente
 from apps.seguridad.models import Usuario
@@ -26,10 +25,10 @@ class HabilitacionTests(APITestCase):
     @classmethod
     def setUpTestData(cls):
         cls.cat = crear_catalogos_minimos()
-        cls.cuenta = crear_cuenta(nombre="RedDoc ERP")
-        cls.otra_cuenta = crear_cuenta(nombre="ERP ajeno")
-        cls.emisor = cls._crear_emisor(cls.cuenta, "901192048")
-        cls.ajeno = cls._crear_emisor(cls.otra_cuenta, "900123456")
+        cls.usuario = crear_usuario(nombre="RedDoc ERP")
+        cls.otro_usuario = crear_usuario(nombre="ERP ajeno")
+        cls.emisor = cls._crear_emisor(cls.usuario, "901192048")
+        cls.ajeno = cls._crear_emisor(cls.otro_usuario, "900123456")
 
         cls.admin = Usuario.objects.create_superuser(
             email="admin@nobelio.co", password="ClaveSegura123"
@@ -43,10 +42,10 @@ class HabilitacionTests(APITestCase):
         )
 
     @classmethod
-    def _crear_emisor(cls, cuenta, nit):
+    def _crear_emisor(cls, usuario, nit):
         c = cls.cat
         emisor = Emisor.objects.create(
-            cuenta=cuenta, razon_social="Semantica Digital S.A.S",
+            usuario=usuario, razon_social="Semantica Digital S.A.S",
             tipo_identificacion=c["nit"], numero_identificacion=nit,
             tipo_organizacion=c["juridica"], pais=c["colombia"],
             departamento=c["antioquia"], municipio=c["medellin"],

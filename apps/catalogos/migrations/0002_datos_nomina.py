@@ -73,9 +73,7 @@ def poblar(apps, schema_editor):
 
 class Migration(migrations.Migration):
 
-    dependencies = [
-        ("catalogos", "0005_periodonomina_subtipotrabajador_tipocontrato_and_more"),
-    ]
+    dependencies = [("catalogos", "0001_initial")]
 
     operations = [
         # Sin reversa, como la siembra de tipos de documento (documentos.0013):

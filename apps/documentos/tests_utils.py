@@ -7,29 +7,6 @@ from unittest.mock import patch
 from apps.catalogos import models as cat
 
 
-def crear_cuenta(nombre="Cuenta Demo", usuario=None):
-    """Cuenta de pruebas con su dueño.
-
-    `Cuenta.usuario` es obligatorio —una cuenta sin dueño no la puede reclamar
-    nadie—, así que las pruebas que solo necesitan "una cuenta cualquiera" no
-    tienen que inventarse el usuario cada vez: si no se pasa, se crea uno
-    desechable con un correo único.
-    """
-    from uuid import uuid4
-
-    from django.contrib.auth import get_user_model
-
-    from apps.cuentas.models import Cuenta
-
-    if usuario is None:
-        usuario = get_user_model().objects.create_user(
-            email=f"dueno-{uuid4().hex[:10]}@ejemplo.co",
-            password="ClaveSegura123",
-            is_verified=True,
-        )
-    return Cuenta.objects.create(nombre=nombre, usuario=usuario)
-
-
 @contextmanager
 def hoy_es(fecha, hora=None):
     """Sitúa a ``timezone`` en ``fecha`` (y opcionalmente en ``hora``).
@@ -50,13 +27,37 @@ def hoy_es(fecha, hora=None):
         yield
 
 
+def crear_usuario(nombre=None, *, usuario=None, email=None, **extra):
+    """Usuario de pruebas: el dueño de los emisores.
+
+    ``usuario`` permite reutilizar uno ya creado, que es lo que quieren las
+    pruebas donde varios emisores son de la misma persona. ``nombre`` es solo
+    una etiqueta legible que va al correo, para que al leer un fallo se sepa de
+    quién se trata.
+    """
+    from uuid import uuid4
+
+    from django.contrib.auth import get_user_model
+
+    if usuario is not None:
+        return usuario
+
+    prefijo = "".join(c for c in (nombre or "dueno").lower() if c.isalnum())[:12]
+    return get_user_model().objects.create_user(
+        email=email or f"{prefijo or 'dueno'}-{uuid4().hex[:8]}@ejemplo.co",
+        password="ClaveSegura123",
+        is_verified=True,
+        **extra,
+    )
+
+
 def crear_catalogos_minimos():
     """Crea los registros de catálogo mínimos para las pruebas y los devuelve.
 
-    Incluye una ``cuenta`` (tenant) de conveniencia para crear emisores, aunque
-    no sea un catálogo en sentido estricto.
+    Incluye un ``usuario`` de conveniencia —el dueño de los emisores— aunque no
+    sea un catálogo en sentido estricto.
     """
-    cuenta = crear_cuenta("Cuenta Demo")
+    usuario = crear_usuario()
     nit = cat.TipoIdentificacion.objects.create(codigo="31", nombre="NIT")
     juridica = cat.TipoOrganizacion.objects.create(codigo="1", nombre="Persona Jurídica")
     colombia = cat.Pais.objects.create(codigo="CO", nombre="Colombia")
@@ -68,7 +69,7 @@ def crear_catalogos_minimos():
     unidad = cat.UnidadMedida.objects.create(codigo="94", nombre="Unidad")
     iva = cat.Tributo.objects.create(codigo="01", nombre="IVA")
     return {
-        "cuenta": cuenta,
+        "usuario": usuario,
         "nit": nit,
         "juridica": juridica,
         "colombia": colombia,
@@ -129,7 +130,7 @@ def crear_documento_factura(catalogos=None):
     c = catalogos or crear_catalogos_minimos()
 
     emisor = Emisor.objects.create(
-        cuenta=c["cuenta"],
+        usuario=c["usuario"],
         razon_social="Empresa Demo SAS", nombre_comercial="Demo",
         tipo_identificacion=c["nit"], numero_identificacion="700085371",
         digito_verificacion="1", tipo_organizacion=c["juridica"],

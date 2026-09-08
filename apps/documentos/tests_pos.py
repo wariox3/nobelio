@@ -91,7 +91,7 @@ class ConsecutivoArchivoTests(TestCase):
         from apps.emisores.models import Emisor
 
         otro = Emisor.objects.create(
-            cuenta=self.base["catalogos"]["cuenta"],
+            usuario=self.base["catalogos"]["usuario"],
             razon_social="Otro SAS", tipo_identificacion=self.base["catalogos"]["nit"],
             numero_identificacion="800199436", digito_verificacion="6",
             tipo_organizacion=self.base["catalogos"]["juridica"],

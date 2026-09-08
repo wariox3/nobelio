@@ -11,10 +11,10 @@ Usuario = get_user_model()
 class RegistroSerializer(serializers.Serializer):
     """Crea el usuario, y solo el usuario.
 
-    La cuenta **no** se crea aquí: se da de alta después, ya autenticado, en
-    ``POST /api/cuentas/cuenta/``, y queda a nombre de quien la pide. Separarlo
-    deja el alta en una sola cosa —demostrar que el correo existe— y no obliga a
-    inventar un nombre de empresa antes de haber entrado.
+    Solo el usuario: no hay nada más que crear. Los emisores se dan de alta
+    después, ya autenticado, y quedan a su nombre. El alta hace una sola cosa
+    —demostrar que el correo existe— y no obliga a inventar un nombre de empresa
+    antes de haber entrado.
 
     Es un ``Serializer`` suelto y no un ``ModelSerializer``, a propósito: al
     declarar los campos uno a uno, un cuerpo con ``is_staff`` o

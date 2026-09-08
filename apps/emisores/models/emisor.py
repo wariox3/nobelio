@@ -85,11 +85,15 @@ class Emisor(ModeloConFechas):
     )
 
     # --- Relaciones ---
-    cuenta = models.ForeignKey(
-        "cuentas.Cuenta",
+    # Dueño del emisor. PROTECT y no CASCADE: de aquí cuelgan documentos
+    # fiscales de terceros, así que borrar a una persona no puede llevarse por
+    # delante ese histórico. Para dar de baja está `is_active`.
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
-        related_name="emisores",
-        verbose_name="cuenta",
+        related_name="emisores_propios",
+        verbose_name="usuario",
+        help_text="Usuario dueño del emisor.",
     )
     tipo_identificacion = models.ForeignKey(
         "catalogos.TipoIdentificacion",
@@ -140,15 +144,13 @@ class Emisor(ModeloConFechas):
         verbose_name_plural = "emisores"
         ordering = ["razon_social"]
         constraints = [
-            # La unicidad es por cuenta, no global: el mismo NIT puede estar dado
-            # de alta en varias integraciones a la vez —una para facturación y
-            # otra para nómina, o las dos a la vez mientras el cliente migra de
-            # proveedor— y cada fila lleva sus propios datos (correo, resolución,
-            # certificado). Lo que no puede repetirse entre esas filas es una
-            # resolución de numeración activa; ver Resolucion.
+            # Unicidad global: un NIT existe una sola vez en la plataforma. Antes
+            # era por cuenta, lo que permitía tener el mismo NIT dado de alta en
+            # dos integraciones a la vez (p. ej. mientras un cliente migra de
+            # proveedor). Eso ya no se puede.
             models.UniqueConstraint(
-                fields=["cuenta", "tipo_identificacion", "numero_identificacion"],
-                name="emisor_identificacion_unica_por_cuenta",
+                fields=["tipo_identificacion", "numero_identificacion"],
+                name="emisor_identificacion_unica",
             )
         ]
 

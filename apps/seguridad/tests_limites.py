@@ -10,7 +10,7 @@ from django.core.cache import cache
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from apps.documentos.tests_utils import crear_cuenta
+from apps.documentos.tests_utils import crear_usuario
 from apps.seguridad.limites import LimitePorCredencial
 from apps.seguridad.models import LlaveApi, Usuario
 
@@ -33,7 +33,7 @@ def _tasas(user=None, anon=None):
 class LimitePorCredencialTests(APITestCase):
     def setUp(self):
         cache.clear()
-        self.cuenta = crear_cuenta(nombre="RedDoc ERP")
+        self.usuario = crear_usuario(nombre="RedDoc ERP")
         self.usuario = Usuario.objects.create_user(
             email="humano@nobelio.co", password="ClaveSegura123"
         )
@@ -48,7 +48,7 @@ class LimitePorCredencialTests(APITestCase):
     def test_la_api_key_se_cuenta_y_acaba_recibiendo_429(self):
         """El throttle de DRF no servía: pedía `request.user.pk` y reventaba."""
         with _tasas(user="2/hour"):
-            cabecera = self._api_key(cuenta=self.cuenta)
+            cabecera = self._api_key(usuario=self.usuario)
             self.assertEqual(self.client.get(URL, **cabecera).status_code, 200)
             self.assertEqual(self.client.get(URL, **cabecera).status_code, 200)
             tercera = self.client.get(URL, **cabecera)
@@ -63,8 +63,8 @@ class LimitePorCredencialTests(APITestCase):
         servicio a las otras.
         """
         with _tasas(user="1/hour"):
-            primera = self._api_key(cuenta=self.cuenta)
-            segunda = self._api_key(cuenta=self.cuenta)
+            primera = self._api_key(usuario=self.usuario)
+            segunda = self._api_key(usuario=self.usuario)
 
             self.assertEqual(self.client.get(URL, **primera).status_code, 200)
             self.assertEqual(

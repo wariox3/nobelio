@@ -44,7 +44,7 @@ def hora_por_defecto():
 def _ruta_artefacto(instance, filename):
     """Ruta en el bucket: ``<emisor_id>/documentos/<aaaa>/<mm>/<archivo>``.
 
-    Aísla por emisor (cada emisor pertenece a una cuenta) y agrupa por
+    Aísla por emisor (cada emisor tiene su dueño) y agrupa por
     año/mes para mantener manejable el número de objetos por carpeta.
     """
     fecha = instance.fecha_emision

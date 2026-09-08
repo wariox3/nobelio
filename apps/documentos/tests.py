@@ -21,7 +21,7 @@ class GrafoDocumentoTests(TestCase):
         cls.cat = c
 
         cls.emisor = Emisor.objects.create(
-            cuenta=c["cuenta"],
+            usuario=c["usuario"],
             razon_social="Empresa Demo SAS",
             tipo_identificacion=c["nit"],
             numero_identificacion="700085371",

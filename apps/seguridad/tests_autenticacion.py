@@ -15,7 +15,7 @@ from apps.catalogos.models import (
     TipoIdentificacion,
     TipoOrganizacion,
 )
-from apps.documentos.tests_utils import crear_cuenta
+from apps.documentos.tests_utils import crear_usuario
 from apps.emisores.models import Emisor
 from apps.seguridad.autenticacion import LlaveApiAuthentication, PrincipalLlaveApi
 from apps.seguridad.models import LlaveApi
@@ -25,7 +25,7 @@ Usuario = get_user_model()
 
 def crear_emisor():
     """Crea un emisor mínimo (con su cuenta y catálogos) para las pruebas."""
-    cuenta = crear_cuenta(nombre="Cuenta de Prueba")
+    usuario = crear_usuario(nombre="Cuenta de Prueba")
     tipo_id = TipoIdentificacion.objects.create(codigo="31", nombre="NIT")
     tipo_org = TipoOrganizacion.objects.create(codigo="1", nombre="Jurídica")
     pais = Pais.objects.create(codigo="CO", nombre="Colombia")
@@ -34,7 +34,7 @@ def crear_emisor():
         codigo="11001", nombre="Bogotá", departamento=depto
     )
     return Emisor.objects.create(
-        cuenta=cuenta,
+        usuario=usuario,
         razon_social="Empresa de Prueba S.A.S.",
         tipo_identificacion=tipo_id,
         numero_identificacion="900123456",
@@ -54,7 +54,7 @@ class LlaveApiAuthenticationTests(APITestCase):
         self.auth = LlaveApiAuthentication()
         self.emisor = crear_emisor()
         self.llave, self.clave = LlaveApi.generar(
-            cuenta=self.emisor.cuenta, nombre="ERP pruebas"
+            usuario=self.emisor.usuario, nombre="ERP pruebas"
         )
 
     def _autenticar(self, credencial):
@@ -67,7 +67,7 @@ class LlaveApiAuthenticationTests(APITestCase):
         usuario, llave = self._autenticar(self.clave)
         self.assertIsInstance(usuario, PrincipalLlaveApi)
         self.assertTrue(usuario.is_authenticated)
-        self.assertEqual(usuario.cuenta, self.emisor.cuenta)
+        self.assertEqual(usuario.usuario, self.emisor.usuario)
         self.assertEqual(llave, self.llave)
 
     def test_uso_registra_ultimo_uso(self):
@@ -94,11 +94,12 @@ class LlaveApiAuthenticationTests(APITestCase):
         with self.assertRaises(AuthenticationFailed):
             self._autenticar(self.clave)
 
-    def test_cuenta_inactiva_falla(self):
-        # Desactivar la cuenta corta el acceso sin tocar sus llaves.
-        cuenta = self.emisor.cuenta
-        cuenta.activa = False
-        cuenta.save(update_fields=["activa"])
+    def test_usuario_inactivo_falla(self):
+        # Desactivar a la persona corta el acceso de todas sus llaves de golpe,
+        # sin tener que revocarlas una a una.
+        usuario = self.emisor.usuario
+        usuario.is_active = False
+        usuario.save(update_fields=["is_active"])
         with self.assertRaises(AuthenticationFailed):
             self._autenticar(self.clave)
 
@@ -118,10 +119,10 @@ class HashDeLaLlaveTests(TestCase):
     """El cambio de PBKDF2 a SHA-256 y su migración perezosa."""
 
     def setUp(self):
-        self.cuenta = crear_cuenta(nombre="RedDoc ERP")
+        self.usuario = crear_usuario(nombre="RedDoc ERP")
 
     def test_la_llave_nueva_se_guarda_como_sha256(self):
-        llave, clave = LlaveApi.generar(cuenta=self.cuenta, nombre="ERP")
+        llave, clave = LlaveApi.generar(usuario=self.usuario, nombre="ERP")
         self.assertTrue(llave.clave_hash.startswith("sha256$"))
         self.assertTrue(llave.verificar_secreto(clave.split(".", 1)[1]))
 
@@ -129,7 +130,7 @@ class HashDeLaLlaveTests(TestCase):
         """Ninguna integración tiene que rotar su llave por este cambio."""
         from django.contrib.auth.hashers import make_password
 
-        llave, clave = LlaveApi.generar(cuenta=self.cuenta, nombre="ERP")
+        llave, clave = LlaveApi.generar(usuario=self.usuario, nombre="ERP")
         secreto = clave.split(".", 1)[1]
         # Se le devuelve el hash de antes, como lo tendría una llave existente.
         LlaveApi.objects.filter(pk=llave.pk).update(
@@ -143,7 +144,7 @@ class HashDeLaLlaveTests(TestCase):
     def test_el_hash_viejo_se_reescribe_al_primer_uso(self):
         from django.contrib.auth.hashers import make_password
 
-        llave, clave = LlaveApi.generar(cuenta=self.cuenta, nombre="ERP")
+        llave, clave = LlaveApi.generar(usuario=self.usuario, nombre="ERP")
         secreto = clave.split(".", 1)[1]
         LlaveApi.objects.filter(pk=llave.pk).update(
             clave_hash=make_password(secreto)
@@ -158,7 +159,7 @@ class HashDeLaLlaveTests(TestCase):
     def test_un_secreto_incorrecto_no_pasa_con_ninguno_de_los_dos_formatos(self):
         from django.contrib.auth.hashers import make_password
 
-        llave, clave = LlaveApi.generar(cuenta=self.cuenta, nombre="ERP")
+        llave, clave = LlaveApi.generar(usuario=self.usuario, nombre="ERP")
         self.assertFalse(llave.verificar_secreto("no-es-el-secreto"))
 
         LlaveApi.objects.filter(pk=llave.pk).update(
@@ -175,8 +176,8 @@ class RegistroDeUsoTests(TestCase):
     """`registrar_uso` deja de escribir en cada petición."""
 
     def setUp(self):
-        self.cuenta = crear_cuenta(nombre="RedDoc ERP")
-        self.llave, _ = LlaveApi.generar(cuenta=self.cuenta, nombre="ERP")
+        self.usuario = crear_usuario(nombre="RedDoc ERP")
+        self.llave, _ = LlaveApi.generar(usuario=self.usuario, nombre="ERP")
 
     def test_la_primera_vez_si_escribe(self):
         self.llave.registrar_uso()
@@ -210,7 +211,7 @@ class LlaveApiEndToEndTests(APITestCase):
 
     def setUp(self):
         self.emisor = crear_emisor()
-        _, self.clave = LlaveApi.generar(cuenta=self.emisor.cuenta, nombre="ERP")
+        _, self.clave = LlaveApi.generar(usuario=self.emisor.usuario, nombre="ERP")
 
     def test_acceso_a_endpoint_autenticado_con_api_key(self):
         # /api/emisores/emisor/ exige autenticación; la API Key debe bastar.

@@ -77,7 +77,7 @@ def resolucion_activa_en_otra_cuenta(emisor, prefijo, numero_resolucion, excluir
         numero_resolucion=numero_resolucion,
         emisor__tipo_identificacion_id=emisor.tipo_identificacion_id,
         emisor__numero_identificacion=emisor.numero_identificacion,
-    ).exclude(emisor_id=emisor.pk).select_related("emisor__cuenta")
+    ).exclude(emisor_id=emisor.pk).select_related("emisor")
     if excluir_pk is not None:
         consulta = consulta.exclude(pk=excluir_pk)
     return consulta.first()
@@ -85,9 +85,12 @@ def resolucion_activa_en_otra_cuenta(emisor, prefijo, numero_resolucion, excluir
 
 def mensaje_resolucion_ocupada(resolucion):
     """Explica el choque de numeración y cómo resolverlo."""
+    # No se nombra al dueño de la otra resolución: sería filtrar quién usa la
+    # plataforma. Desde que el NIT es único, además, el choque solo puede ser
+    # con otro emisor del mismo NIT, que ya no puede existir.
     return (
         f"La resolución {resolucion.numero_resolucion} con prefijo "
-        f"'{resolucion.prefijo}' ya está activa para este NIT en la cuenta "
-        f"'{resolucion.emisor.cuenta}'. Dos cuentas no pueden numerar con la "
-        f"misma resolución a la vez: desactívala allí antes de registrarla aquí."
+        f"'{resolucion.prefijo}' ya está activa para este NIT. No se puede "
+        f"numerar dos veces con la misma resolución a la vez: desactiva la "
+        f"anterior antes de registrar esta."
     )

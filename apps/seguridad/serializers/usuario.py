@@ -34,17 +34,6 @@ class UsuarioSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"password": "Es obligatoria al crear un usuario."}
             )
-        # Un usuario no puede repartirse entre integraciones: sus emisores han
-        # de ser todos de la misma cuenta. Es lo único que queda por comprobar
-        # ahora que el usuario no tiene cuenta propia contra la que contrastar.
-        emisores = attrs.get("emisores")
-        if emisores:
-            cuentas = {e.cuenta_id for e in emisores}
-            if len(cuentas) > 1:
-                raise serializers.ValidationError({
-                    "emisores": "Todos los emisores deben pertenecer a la misma "
-                                "cuenta; se recibieron de varias.",
-                })
         return attrs
 
     def create(self, validated_data):

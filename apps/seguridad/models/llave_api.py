@@ -5,21 +5,22 @@ una sola vez al crearla. En la base de datos solo se guarda el ``prefijo``
 (para localizar la fila) y el hash del secreto; el secreto en claro nunca se
 almacena.
 
-La llave está ligada a una **cuenta**, que es el propietario de los datos: una
-integración (p. ej. un ERP que factura para muchos de sus clientes) opera con
-una sola credencial sobre todos los emisores de su cuenta. Una cuenta puede
-tener varias llaves vivas a la vez: producción y habilitación, o la nueva y la
-vieja mientras dura una rotación.
+La llave está ligada a un **usuario** y actúa en su nombre: alcanza exactamente
+los mismos emisores que él, ni más ni menos. Así el alcance se define una sola
+vez en el proyecto (``apps.seguridad.alcance``) en vez de tener una regla para
+personas y otra para integraciones, que es como acaban divergiendo.
 
-La cuenta es el único alcance posible: un emisor nunca se conecta por su lado.
-Quien vaya a emitir directamente se da de alta como su propia cuenta, con su
-emisor y su llave.
+Un ERP que factura para varios clientes opera con una sola credencial sobre
+todos los emisores de su dueño. Un mismo usuario puede tener varias llaves vivas
+a la vez: producción y habilitación, o la nueva y la vieja mientras dura una
+rotación.
 """
 import hashlib
 from datetime import timedelta
 from hmac import compare_digest
 
 from django.contrib.auth.hashers import check_password
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 from django.utils.crypto import get_random_string
@@ -70,12 +71,15 @@ class LlaveApi(ModeloConFechas):
     ultimo_uso_en = models.DateTimeField("último uso en", null=True, blank=True)
 
     # --- Relaciones ---
-    cuenta = models.ForeignKey(
-        "cuentas.Cuenta",
+    # La llave actúa en nombre de una persona: alcanza exactamente lo que esa
+    # persona alcanza, ni más ni menos. Así hay una sola definición de alcance
+    # en el proyecto en vez de dos que puedan divergir.
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="llaves_api",
-        verbose_name="cuenta",
-        help_text="Alcance de la llave: todos los emisores de esta cuenta.",
+        verbose_name="usuario",
+        help_text="Persona en cuyo nombre actúa la llave.",
     )
 
     class Meta:
@@ -88,21 +92,21 @@ class LlaveApi(ModeloConFechas):
         return f"{self.nombre} ({self.prefijo})"
 
     @classmethod
-    def generar(cls, *, cuenta, nombre, activa=True, expira_en=None):
+    def generar(cls, *, usuario, nombre, activa=True, expira_en=None):
         """Crea una llave y devuelve ``(llave, clave_completa)``.
 
         ``clave_completa`` (``<prefijo>.<secreto>``) es lo único que sirve para
         autenticar y solo se conoce en este momento; guárdala donde el ERP la
         pueda leer, porque después no se puede recuperar.
 
-        La llave alcanza a todos los emisores de ``cuenta``.
+        La llave alcanza exactamente lo mismo que ``usuario``.
         """
         prefijo = get_random_string(LONGITUD_PREFIJO)
         while cls.objects.filter(prefijo=prefijo).exists():
             prefijo = get_random_string(LONGITUD_PREFIJO)
         secreto = get_random_string(LONGITUD_SECRETO)
         llave = cls.objects.create(
-            cuenta=cuenta,
+            usuario=usuario,
             nombre=nombre,
             prefijo=prefijo,
             clave_hash=_hash_secreto(secreto),

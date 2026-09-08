@@ -1,39 +1,28 @@
-"""Alcance multi-inquilino: sobre qué emisores puede operar quien hace la petición.
+"""Alcance: sobre qué emisores puede operar quien hace la petición.
 
 Los datos de la plataforma cuelgan siempre de un emisor, así que aquí se
 concentra la única pregunta que hay que responder en cada petición: *¿qué
-emisores alcanza este solicitante?* Las tres respuestas posibles son:
+emisores alcanza este solicitante?*
 
 - **Staff de la plataforma**: todos (``None`` = sin restricción).
-- **Integración (API Key)**: los emisores de la cuenta de la llave.
-- **Usuario humano (JWT)**: los de las cuentas que posea, más los que le hayan
-  asignado uno a uno.
+- **Cualquier otro**: los que posee, más los que le hayan asignado uno a uno.
 
-Un usuario sigue sin *pertenecer* a una cuenta, pero puede **poseerla**: quien
-se registra queda como propietario de la que se le crea, y desde ahí alcanza
-todos sus emisores sin que nadie se los asigne. Las dos vías se suman, así que
-un contador puede ser dueño de su cuenta y tener además un emisor suelto de un
-cliente. Sin ninguna de las dos no ve nada (falla cerrado).
+Una integración (API Key) no tiene alcance propio: **actúa en nombre de su
+usuario** y alcanza exactamente lo mismo que él. Por eso hay una sola regla y no
+dos que puedan divergir; antes había un concepto intermedio (la cuenta) con su
+propia regla, y desapareció.
 
-Al **crear** un emisor la pregunta es la otra mitad: *¿de qué cuenta puede
-colgarlo?* La responde ``cuenta_permitida``, que es la única definición de esa
-regla en el proyecto (``exigir_cuenta`` es su versión que lanza 403).
+Las dos vías se suman: alguien puede ser dueño de sus emisores y tener además
+uno ajeno compartido. Sin ninguna de las dos no ve nada (falla cerrado).
 """
 from django.core.exceptions import ValidationError as ErrorValidacionDjango
 from django.db.models import Q
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 
-from apps.cuentas.models import Cuenta
 from apps.emisores.models import Emisor
 
 MENSAJE_FUERA_DE_ALCANCE = "No tiene acceso a este emisor."
-MENSAJE_FUERA_DE_CUENTA = (
-    "La credencial solo puede operar sobre su propia cuenta."
-)
-MENSAJE_SIN_CUENTA = (
-    "Para dar de alta un emisor hay que ser dueño de una cuenta."
-)
 
 
 def es_staff(request):
@@ -44,9 +33,20 @@ def es_staff(request):
     )
 
 
-def _llave(request):
-    """La ``LlaveApi`` si la petición viene de una integración; si no, ``None``."""
-    return getattr(request.user, "llave", None)
+def usuario_del_request(request):
+    """La persona en cuyo nombre se actúa, o ``None`` si no hay ninguna.
+
+    Para una petición con cookie es quien inició sesión. Para una con API Key es
+    el dueño de la llave: el principal de la llave no es un modelo, así que hay
+    que sacar de él al usuario de verdad.
+    """
+    solicitante = getattr(request, "user", None)
+    llave = getattr(solicitante, "llave", None)
+    if llave is not None:
+        return llave.usuario
+    if getattr(solicitante, "is_authenticated", False):
+        return solicitante
+    return None
 
 
 def emisores_permitidos(request):
@@ -57,89 +57,14 @@ def emisores_permitidos(request):
     """
     if es_staff(request):
         return None
-    llave = _llave(request)
-    if llave is not None:
-        return Emisor.objects.filter(cuenta_id=llave.cuenta_id)
-    usuario = request.user
-    if not getattr(usuario, "is_authenticated", False):
+    usuario = usuario_del_request(request)
+    if usuario is None:
         return Emisor.objects.none()
-    # Una persona alcanza por dos vías que se suman: los emisores de las cuentas
-    # que posee —todos, sin asignar nada, que es lo que gana quien se registra— y
-    # los que le hayan asignado uno a uno, que pueden ser de cuentas ajenas. El
-    # `distinct` es por el join del M2M, que si no repite filas.
+    # Las dos vías se suman: los propios y los compartidos. El `distinct` es por
+    # el join del M2M, que si no repite filas.
     return Emisor.objects.filter(
-        Q(cuenta__usuario=usuario) | Q(usuarios=usuario)
+        Q(usuario=usuario) | Q(usuarios=usuario)
     ).distinct()
-
-
-def cuentas_propias(request):
-    """Cuentas de las que el solicitante es dueño; vacío si no lo es de ninguna.
-
-    Solo las personas son dueñas de una cuenta. Una integración se identifica
-    por su llave, y su cuenta sale de ahí, no de la propiedad.
-    """
-    if _llave(request) is not None:
-        return Cuenta.objects.none()
-    usuario = request.user
-    if not getattr(usuario, "is_authenticated", False):
-        return Cuenta.objects.none()
-    return Cuenta.objects.filter(usuario=usuario)
-
-
-def cuenta_propia(request):
-    """Cuenta de la que cuelga lo que dé de alta el solicitante, o ``None``.
-
-    Para una integración es la de su llave. Para una persona, la cuenta que
-    posee —la que se le crea al registrarse—, que es lo que le permite dar de
-    alta emisores sin ser staff.
-
-    Devuelve ``None`` cuando no hay una respuesta única: ni llave ni cuenta
-    propia, o varias cuentas propias. En ese último caso la cuenta se indica en
-    el cuerpo y ``cuenta_permitida`` comprueba que sea suya.
-    """
-    llave = _llave(request)
-    if llave is not None:
-        return llave.cuenta
-    propias = list(cuentas_propias(request)[:2])
-    return propias[0] if len(propias) == 1 else None
-
-
-def puede_dar_de_alta(request):
-    """¿El solicitante tiene una cuenta de la que colgar un emisor nuevo?
-
-    La tienen la integración (lo cuelga de la de su llave), el staff (indica
-    cuál) y el dueño de una cuenta (la suya). Quien solo tiene emisores
-    asignados no da de alta: opera lo que le dieron, no abre nuevos.
-    """
-    return (
-        cuenta_propia(request) is not None
-        or es_staff(request)
-        or cuentas_propias(request).exists()
-    )
-
-
-def cuenta_permitida(request, cuenta):
-    """¿El solicitante puede colgar datos de ``cuenta``?
-
-    Regla única del alta multi-inquilino: el staff elige la cuenta libremente;
-    una integración solo puede usar la de su llave; una persona, solo una que
-    posea; quien no tiene ninguna no crea nada.
-    """
-    llave = _llave(request)
-    if llave is not None:
-        return cuenta is not None and cuenta.pk == llave.cuenta_id
-    if es_staff(request):
-        return True
-    return cuenta is not None and cuentas_propias(request).filter(pk=cuenta.pk).exists()
-
-
-def exigir_cuenta(request, cuenta):
-    """Lanza 403 si el solicitante no puede colgar datos de ``cuenta``."""
-    if not cuenta_permitida(request, cuenta):
-        raise PermissionDenied(
-            MENSAJE_FUERA_DE_CUENTA if puede_dar_de_alta(request)
-            else MENSAJE_SIN_CUENTA
-        )
 
 
 def puede_operar(request, emisor):
@@ -164,7 +89,7 @@ class RelacionDelAlcance(serializers.PrimaryKeyRelatedField):
     Sin esto, un id ajeno y un id inexistente se distinguen por el mensaje de
     error ("no pertenece al emisor" frente a "no existe"), y eso convierte al
     endpoint en un oráculo: un cliente autenticado puede averiguar qué ids hay
-    en otras cuentas. Filtrando el queryset las dos respuestas son idénticas.
+    fuera de su alcance. Filtrando el queryset las dos respuestas son idénticas.
 
     ``campo_emisor`` es la ruta ORM del modelo hasta el emisor (``"emisor"`` en
     casi todos; ``"id"`` cuando el propio modelo es el emisor).
@@ -206,7 +131,7 @@ class AlcanceEmisorMixin:
     """Restringe un ``ViewSet`` a los emisores que alcanza el solicitante.
 
     Filtra el queryset en lectura y comprueba el emisor recibido en escritura,
-    de modo que una integración no pueda ni ver ni crear datos de otra cuenta.
+    de modo que nadie pueda ni ver ni crear datos de un emisor ajeno.
 
     ``campo_emisor`` es la ruta ORM del modelo hasta el emisor (``"emisor"`` en
     casi todos; ``"id"`` cuando el propio modelo es el emisor).

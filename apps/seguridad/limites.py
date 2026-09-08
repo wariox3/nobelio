@@ -7,7 +7,7 @@ su clave de caché con `request.user.pk`, y el principal de una API Key
 revienta con un `AttributeError`.
 
 Aquí se resuelve la identidad de las dos: la llave se cuenta por su id de fila,
-que es lo que de verdad identifica a la integración —una cuenta puede tener
+que es lo que de verdad identifica a la integración —una persona puede tener
 varias llaves y conviene poder estrangular una sin tocar las demás—, y el
 usuario humano por su clave primaria.
 """

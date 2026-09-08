@@ -44,7 +44,7 @@ y revocar N secretos) se multiplicaría.
 
 ```
 LlaveApi
-  cuenta       FK -> cuentas.Cuenta      # alcance: sus emisores
+  usuario      FK -> seguridad.Usuario   # actúa en su nombre: su mismo alcance
   nombre       str        # "RedDoc producción", etc.
   prefijo      str(8)     # identificador público, para buscar la fila
   clave_hash   str        # hash del secreto; el secreto NUNCA se guarda en claro
@@ -65,40 +65,20 @@ LlaveApi
 - Revocación = `activa = False` (o borrar la fila). Para suspender a un cliente
   concreto sin tocar credenciales: `Emisor.activo = False`, que corta la emisión.
 - **`Cuenta.activa = False` corta el acceso de todas sus llaves de golpe** (401),
-  sin tener que revocarlas una a una, y sus cuentas dejan de admitir emisores nuevos.
+  sin tener que revocarlas una a una.
 
-### El mismo NIT puede estar en varias cuentas
+### El NIT es único en toda la plataforma
 
-`Emisor` es único por `(cuenta, tipo_identificacion, numero_identificacion)`, no
-globalmente. El mismo NIT convive en varias integraciones a la vez, y cada fila
-lleva **sus propios datos**: correo, software DIAN, certificado y resoluciones
-cuelgan del emisor, así que no se mezclan entre cuentas. Dos casos reales:
+Un emisor existe una sola vez: la unicidad es `(tipo_identificacion,
+numero_identificacion)`, sin nada que la acote. Antes se acotaba por cuenta, lo
+que permitía tener el mismo NIT dado de alta en dos integraciones a la vez —una
+facturando y otra liquidando nómina, o las dos mientras un cliente migraba de
+proveedor—. Al desaparecer la cuenta desapareció esa convivencia.
 
-- **Canales distintos**: facturación por una integración, nómina por otra.
-- **Migración de proveedor**: hoy factura con ERP 1 y mañana con ERP 2. Durante
-  el traslado convive en las dos, y al terminar el histórico de la primera queda
-  intacto en su cuenta.
-
-Lo que **no** puede duplicarse es una resolución de numeración activa. La DIAN
-autoriza un solo rango por prefijo: si dos filas del mismo NIT numeraran a la
-vez con la misma resolución, cada una numeraría por su cuenta y la DIAN
-rechazaría los repetidos —consecutivos que además ya no se recuperan.
-
-Lo comprueba `resolucion_activa_en_otra_cuenta`
-(`apps/emisores/models/resolucion.py`), desde el serializer y desde
-`importar-dian`, que persiste sin pasar por él. No es una constraint de base de
-datos porque necesita mirar filas de *otro* emisor.
-
-Se mira solo entre las **activas**, y eso es lo que hace posible la migración:
-se desactiva la resolución en la cuenta que se deja y queda libre para la nueva.
-Un prefijo distinto en cada canal convive sin problema.
-
-Implementación: modelo + `BaseAuthentication` propios (~80 líneas). Alternativa
-de librería: `djangorestframework-api-key` (aporta hashing y prefijo), pero su
-modelo no liga al emisor de fábrica y trae acoplamiento al admin, así que para
-este proyecto conviene la versión propia.
-
----
+La consecuencia a tener presente: quien dé de alta un NIT ajeno impide que su
+dueño real lo registre. No puede **emitir** —para eso hace falta el `.p12` de
+ese NIT—, pero sí ocupar el sitio. El mensaje de error no dice de quién es, para
+no filtrar quién usa la plataforma.
 
 ## 2. Frontend SPA → JWT (`djangorestframework-simplejwt`)
 
@@ -171,7 +151,7 @@ cuenta, para que una persona no quede repartida entre integraciones.
   igual que uno inexistente.
 - El adquiriente no se referencia: sus datos llegan en cada documento y se
   guardan pegados a él, de modo que no hay cartera de clientes que pueda
-  cruzarse entre cuentas.
+  cruzarse entre emisores.
 
 ## Dependencias
 

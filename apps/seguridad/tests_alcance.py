@@ -11,12 +11,11 @@ from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.test import APIClient, APITestCase
 
-from apps.cuentas.models import Cuenta
 from apps.documentos.models import DocumentoTipo
 from apps.documentos.serializers import DocumentoCrearSerializer
 from apps.documentos.tests_utils import (
     crear_catalogos_minimos,
-    crear_cuenta,
+    crear_usuario,
     crear_certificado,
     crear_documento_factura,
 )
@@ -34,19 +33,19 @@ class AlcanceBase(APITestCase):
 
     def setUp(self):
         self.cat = crear_catalogos_minimos()
-        self.cuenta = crear_cuenta(nombre="RedDoc ERP")
-        self.emisor = self.crear_emisor(self.cuenta, "900000001", "Cliente A")
-        self.hermano = self.crear_emisor(self.cuenta, "900000002", "Cliente B")
+        self.usuario = crear_usuario(nombre="RedDoc ERP")
+        self.emisor = self.crear_emisor(self.usuario, "900000001", "Cliente A")
+        self.hermano = self.crear_emisor(self.usuario, "900000002", "Cliente B")
 
-        self.cuenta_ajena = crear_cuenta(nombre="Otra integración")
+        self.usuario_ajeno = crear_usuario(nombre="Otra integración")
         self.emisor_ajeno = self.crear_emisor(
-            self.cuenta_ajena, "900000003", "Ajena S.A.S."
+            self.usuario_ajeno, "900000003", "Ajena S.A.S."
         )
 
-    def crear_emisor(self, cuenta, nit, razon_social):
+    def crear_emisor(self, usuario, nit, razon_social):
         c = self.cat
         return Emisor.objects.create(
-            cuenta=cuenta,
+            usuario=usuario,
             razon_social=razon_social,
             tipo_identificacion=c["nit"],
             numero_identificacion=nit,
@@ -77,19 +76,11 @@ class FlujoDeAltaTests(AlcanceBase):
         )
         self.client.force_authenticate(admin)
 
-        # 1. El staff crea la cuenta de la integración.
-        resp = self.client.post(
-            "/api/cuentas/cuenta/",
-            {"nombre": "integracion1", "usuario": admin.pk},
-            format="json",
-        )
-        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
-        cuenta_id = resp.data["id"]
-
-        # 2. Y su llave. El secreto solo se ve en esta respuesta.
+        # 1. Se emite una llave a nombre de quien la pide. Ya no hay cuenta que
+        # crear antes: la llave cuelga directamente de la persona.
         resp = self.client.post(
             "/api/seguridad/llave-api/",
-            {"cuenta": cuenta_id, "nombre": "integracion1 producción"},
+            {"nombre": "integracion1 producción"},
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
@@ -101,7 +92,8 @@ class FlujoDeAltaTests(AlcanceBase):
         erp = APIClient()
         cabecera = {"HTTP_AUTHORIZATION": f"Api-Key {clave}"}
 
-        # 3. La integración crea un emisor, que cae en su cuenta sola.
+        # 2. La integración crea un emisor, que queda a nombre del dueño de la
+        # llave sin que nadie lo indique.
         c = self.cat
         resp = erp.post(
             URL_EMISORES,
@@ -119,9 +111,9 @@ class FlujoDeAltaTests(AlcanceBase):
             **cabecera,
         )
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
-        self.assertEqual(resp.data["cuenta"], cuenta_id)
+        self.assertEqual(resp.data["usuario"], admin.pk)
 
-        # 4. Y no ve nada de las demás integraciones.
+        # 3. Y no ve nada de las demás integraciones.
         self.assertEqual(
             erp.get(URL_EMISORES, **cabecera).data["count"], 1
         )
@@ -132,7 +124,7 @@ class AlcanceLlaveDeCuentaTests(AlcanceBase):
 
     def setUp(self):
         super().setUp()
-        self.cabecera = self._api_key(cuenta=self.cuenta)
+        self.cabecera = self._api_key(usuario=self.usuario)
 
     def test_lista_solo_los_emisores_de_su_cuenta(self):
         resp = self.client.get(URL_EMISORES, **self.cabecera)
@@ -179,42 +171,20 @@ class AltaDeEmisoresTests(AlcanceBase):
     def crear(self, payload, cabecera):
         return self.client.post(URL_EMISORES, payload, format="json", **cabecera)
 
-    def test_sin_indicar_cuenta_cae_en_la_de_la_credencial(self):
-        resp = self.crear(self.payload(), self._api_key(cuenta=self.cuenta))
+    def test_el_emisor_queda_a_nombre_de_quien_lo_crea(self):
+        """El dueño no viaja en el cuerpo: lo pone la vista."""
+        resp = self.crear(self.payload(), self._api_key(usuario=self.usuario))
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
-        self.assertEqual(resp.data["cuenta"], self.cuenta.id)
+        self.assertEqual(resp.data["usuario"], self.usuario.id)
 
-    def test_la_integracion_no_puede_colgar_un_emisor_de_otra_cuenta(self):
+    def test_el_cuerpo_no_puede_ponerlo_a_nombre_de_otro(self):
+        """`usuario` es de solo lectura: se descarta en silencio."""
         resp = self.crear(
-            self.payload(cuenta=self.cuenta_ajena.id),
-            self._api_key(cuenta=self.cuenta),
+            {**self.payload(), "usuario": self.usuario_ajeno.id},
+            self._api_key(usuario=self.usuario),
         )
-        # Se rechaza en vez de ignorarse: mejor un error claro que un silencio.
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("cuenta", resp.data["errores"])
-
-    def test_el_staff_debe_indicar_la_cuenta(self):
-        # No tiene credencial de cuenta, así que no hay default que aplicar.
-        self.client.force_authenticate(
-            Usuario.objects.create_user(
-                email="staff@nobelio.co", password="ClaveSegura123", is_staff=True
-            )
-        )
-        resp = self.crear(self.payload(), {})
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("cuenta", resp.data["errores"])
-
-    def test_no_se_puede_dar_de_alta_en_una_cuenta_inactiva(self):
-        self.cuenta_ajena.activa = False
-        self.cuenta_ajena.save(update_fields=["activa"])
-        self.client.force_authenticate(
-            Usuario.objects.create_user(
-                email="staff@nobelio.co", password="ClaveSegura123", is_staff=True
-            )
-        )
-        resp = self.crear(self.payload(cuenta=self.cuenta_ajena.id), {})
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("cuenta", resp.data["errores"])
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["usuario"], self.usuario.id)
 
     def test_el_staff_puede_editar_sin_reenviar_la_cuenta(self):
         # PUT sin 'cuenta': el default de la credencial es None para el staff y
@@ -233,7 +203,7 @@ class AltaDeEmisoresTests(AlcanceBase):
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
         self.emisor.refresh_from_db()
-        self.assertEqual(self.emisor.cuenta, self.cuenta)
+        self.assertEqual(self.emisor.usuario, self.usuario)
         self.assertEqual(self.emisor.razon_social, "Cliente A renombrado")
 
 
@@ -242,10 +212,10 @@ class AlcanceDeDocumentosTests(AlcanceBase):
 
     def test_no_lista_documentos_de_otra_cuenta(self):
         # El helper monta su propio emisor bajo la cuenta de los catálogos,
-        # que no es self.cuenta.
+        # que no es self.usuario.
         crear_documento_factura(catalogos=self.cat)
         resp = self.client.get(
-            "/api/documentos/documento/", **self._api_key(cuenta=self.cuenta)
+            "/api/documentos/documento/", **self._api_key(usuario=self.usuario)
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(resp.data["count"], 0)
@@ -280,7 +250,7 @@ class AlcanceDeDocumentosTests(AlcanceBase):
 
     def test_un_id_ajeno_no_se_distingue_de_uno_inexistente(self):
         """El error no puede servir de oráculo de existencia entre cuentas."""
-        cabecera = self._api_key(cuenta=self.cuenta)
+        cabecera = self._api_key(usuario=self.usuario)
         url = "/api/documentos/documento/"
 
         con_ajeno = self.client.post(
@@ -337,27 +307,14 @@ class AlcanceDeUsuariosTests(AlcanceBase):
         detalle = self.client.get(f"{URL_EMISORES}{self.hermano.id}/")
         self.assertEqual(detalle.status_code, status.HTTP_404_NOT_FOUND)
 
-    def test_un_usuario_no_puede_dar_de_alta_emisores(self):
-        # No tiene cuenta de la que colgarlo: eso es cosa de la integración.
+    def test_un_usuario_da_de_alta_sus_propios_emisores(self):
+        """Ya no hace falta una cuenta de la que colgarlo: el dueño es él."""
         self.client.force_authenticate(
             self.crear_usuario("contable@reddoc.co", self.emisor)
         )
         resp = self.client.post(URL_EMISORES, {}, format="json")
-        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
-
-    def test_no_se_pueden_asignar_emisores_de_varias_cuentas(self):
-        usuario = self.crear_usuario("mixto@reddoc.co")
-        admin = Usuario.objects.create_superuser(
-            email="admin@nobelio.co", password="ClaveSegura123"
-        )
-        self.client.force_authenticate(admin)
-        resp = self.client.patch(
-            f"/api/seguridad/usuario/{usuario.id}/",
-            {"emisores": [self.emisor.id, self.emisor_ajeno.id]},
-            format="json",
-        )
+        # 400 por el cuerpo vacío, no 403: el permiso ya no es el problema.
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("emisores", resp.data["errores"])
 
     def test_el_staff_de_la_plataforma_ve_todo(self):
         admin = Usuario.objects.create_superuser(

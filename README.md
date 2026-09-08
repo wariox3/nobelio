@@ -116,7 +116,7 @@ python manage.py migrate
 # Cargar los catálogos DIAN (tipos, tributos, municipios, monedas, …)
 python manage.py cargar_catalogos
 
-# Crear el usuario staff inicial (da de alta cuentas, usuarios y llaves)
+# Crear el usuario staff inicial (da de alta usuarios y llaves)
 python manage.py createsuperuser
 
 # Levantar el servidor de desarrollo
@@ -146,17 +146,18 @@ python manage.py listas TipoResponsabilidad
 > Autenticación: el frontend usa **JWT** (`POST /api/seguridad/token/` →
 > `Authorization: Bearer <access>`) y el ERP usa **API Key**
 > (`Authorization: Api-Key <prefijo>.<secreto>`). Ver [docs/autenticacion.md](docs/autenticacion.md).
-> Cada credencial solo alcanza los emisores de su cuenta: lo ajeno no aparece en
+> Cada credencial alcanza los emisores que posee más los que le hayan asignado;
+> una API Key alcanza exactamente lo mismo que su dueño. Lo ajeno no aparece en
 > los listados y responde 404. Los catálogos (`/api/catalogos/...`) son de solo
 > lectura.
 
 ### 0. Obtener una credencial
 
-El staff crea la **cuenta** (el tenant) y su **llave de API**; el emisor cuelga
-siempre de una cuenta. Desde la línea de comandos:
+Cada persona emite sus propias llaves; el emisor cuelga siempre de un usuario.
+Desde la línea de comandos:
 
 ```bash
-python manage.py crear_llave_api --cuenta 1 --nombre "ERP producción"
+python manage.py crear_llave_api --usuario ana@empresa.co --nombre "ERP producción"
 # → Authorization: Api-Key <prefijo>.<secreto>   (se muestra una sola vez)
 
 export API_KEY='<prefijo>.<secreto>'
@@ -196,10 +197,12 @@ por id: el id es un serial de cada base y cambia entre ambientes. El servidor
 resuelve el código contra el catálogo y guarda la fila que corresponde; si el
 código no existe, responde 400 en ese campo.
 
-La `cuenta` no se envía: sale de la credencial. El alta no consulta el RUES; lo
-que se rechaza es repetir un emisor ya dado de alta en la misma cuenta. Para
-comprobar un NIT (y autocompletar el formulario) está
-`GET /api/emisores/emisor/validar-nit/?nit=<NIT>`.
+El **dueño no se envía**: el emisor queda a nombre de quien hace la petición
+(con una API Key, a nombre de la persona dueña de la llave). El NIT es **único
+en toda la plataforma**: si ya está dado de alta, responde 400 en
+`numero_identificacion` sin decir de quién es. El alta no consulta el RUES; lo que se rechaza es repetir un emisor ya
+dado de alta. Para comprobar un NIT (y autocompletar el
+formulario) está `GET /api/emisores/emisor/validar-nit/?nit=<NIT>`.
 
 Luego registra para ese emisor (ver
 [docs/checklist-emision.md](docs/checklist-emision.md) para el detalle):
@@ -372,7 +375,7 @@ Pendiente: la representación gráfica todavía usa los rótulos de la factura.
 |---------|-------------|
 | `python manage.py cargar_catalogos` | Carga las listas DIAN `.gc` en la BD (idempotente). |
 | `python manage.py listas [Nombre]` | Inspecciona las listas de valores `.gc`. |
-| `python manage.py crear_llave_api --cuenta <id> --nombre "..."` | Crea la API Key de una integración (muestra el secreto una sola vez). |
+| `python manage.py crear_llave_api --usuario <correo> --nombre "..."` | Crea la API Key de una integración (muestra el secreto una sola vez). |
 | `python manage.py emitir_documento <uuid> [--enviar]` | Firma y (opcional) envía un documento a la DIAN. |
 
 ---
@@ -386,7 +389,6 @@ nobelio/
 │   └── urls.py              Monta cada app bajo /api/<dominio>/
 ├── apps/
 │   ├── nucleo/              Modelos base abstractos + errores de la API
-│   ├── cuentas/             Cuenta (tenant): agrupa emisores y llaves
 │   ├── seguridad/           Usuario (JWT), LlaveApi (ERP) y alcance multi-inquilino
 │   ├── utilidades/          Almacenamiento en B2 y cliente RUES
 │   ├── catalogos/           Catálogos DIAN + parser Genericode (.gc)

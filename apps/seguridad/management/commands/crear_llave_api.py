@@ -1,45 +1,49 @@
-"""Crea una llave de API para una cuenta desde la línea de comandos.
+"""Crea una llave de API para un usuario desde la línea de comandos.
 
 Útil para dar de alta la integración del ERP antes de que exista frontend.
 El secreto se muestra una sola vez; cópialo a la configuración del ERP.
 
 Ejemplo::
 
-    # La llave alcanza todos los emisores de la cuenta.
-    python manage.py crear_llave_api --cuenta 1 --nombre "RedDoc producción"
+    # La llave alcanza exactamente lo mismo que el usuario.
+    python manage.py crear_llave_api --usuario ana@empresa.co --nombre "ERP producción"
 """
+from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.cuentas.models import Cuenta
 from apps.seguridad.models import LlaveApi
+
+Usuario = get_user_model()
 
 
 class Command(BaseCommand):
-    help = "Crea una llave de API ligada a una cuenta y muestra el secreto."
+    help = "Crea una llave de API ligada a un usuario y muestra el secreto."
 
     def add_arguments(self, parser):
         parser.add_argument(
-            "--cuenta", required=True, type=int,
-            help="ID de la cuenta (la integración) a la que se liga la llave.",
+            "--usuario", required=True,
+            help="Correo del usuario en cuyo nombre actúa la llave.",
         )
         parser.add_argument(
             "--nombre", required=True,
-            help="Nombre descriptivo de la integración (p. ej. 'RedDoc producción').",
+            help="Nombre descriptivo de la integración (p. ej. 'ERP producción').",
         )
 
     def handle(self, *args, **opciones):
         try:
-            cuenta = Cuenta.objects.get(pk=opciones["cuenta"])
-        except Cuenta.DoesNotExist:
-            raise CommandError(f"No existe una cuenta con id={opciones['cuenta']}.")
+            usuario = Usuario.objects.get(email__iexact=opciones["usuario"])
+        except Usuario.DoesNotExist:
+            raise CommandError(
+                f"No existe un usuario con correo {opciones['usuario']!r}."
+            )
 
         llave, clave_completa = LlaveApi.generar(
-            cuenta=cuenta, nombre=opciones["nombre"]
+            usuario=usuario, nombre=opciones["nombre"]
         )
 
         self.stdout.write(self.style.SUCCESS("Llave de API creada."))
-        self.stdout.write(f"  Cuenta : {cuenta}")
-        self.stdout.write("  Alcance: todos los emisores de la cuenta")
+        self.stdout.write(f"  Usuario: {usuario}")
+        self.stdout.write("  Alcance: los mismos emisores que ese usuario")
         self.stdout.write(f"  Nombre : {llave.nombre}")
         self.stdout.write(f"  Prefijo: {llave.prefijo}")
         self.stdout.write("")
