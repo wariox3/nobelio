@@ -24,6 +24,37 @@ class CuentaAPITests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertTrue(Cuenta.objects.filter(nombre="Cliente Uno").exists())
 
+    def test_sin_indicar_usuario_queda_a_nombre_de_quien_la_crea(self):
+        """Vale para todos, staff incluido: el dueño por defecto es el que entra."""
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(self.URL, {"nombre": "Cliente Dos"})
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(Cuenta.objects.get(nombre="Cliente Dos").usuario, self.admin)
+
+    def test_el_staff_puede_ponerla_a_nombre_de_otro(self):
+        otro = Usuario.objects.create_user(
+            email="otro@example.com", password="Clave12345"
+        )
+        self.client.force_authenticate(self.admin)
+        resp = self.client.post(
+            self.URL, {"nombre": "Cliente Tres", "usuario": otro.pk}
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(Cuenta.objects.get(nombre="Cliente Tres").usuario, otro)
+
+    def test_una_integracion_no_crea_cuentas(self):
+        """La API Key no es un usuario: sin este corte, era un 500 al guardar."""
+        from apps.documentos.tests_utils import crear_cuenta
+        from apps.seguridad.models import LlaveApi
+
+        cuenta = crear_cuenta("Integración")
+        _, secreto = LlaveApi.generar(cuenta=cuenta, nombre="ERP")
+        resp = self.client.post(
+            self.URL, {"nombre": "Ajena"},
+            HTTP_AUTHORIZATION=f"Api-Key {secreto}",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_no_autenticado_rechazado(self):
         resp = self.client.post(self.URL, {"nombre": "X"})
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)

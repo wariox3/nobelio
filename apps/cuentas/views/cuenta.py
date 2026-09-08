@@ -7,6 +7,7 @@ el endpoint para averiguar qué ids existen.
 """
 from django.db.models import ProtectedError
 from rest_framework import viewsets
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 
 from apps.cuentas.models import Cuenta
@@ -35,18 +36,27 @@ class CuentaViewSet(viewsets.ModelViewSet):
         return cuentas_propias(self.request)
 
     def perform_create(self, serializer):
-        """El dueño es quien la crea. Solo el staff puede ponerla a otro nombre.
+        """El dueño es quien la crea; solo el staff puede ponerla a otro nombre.
 
-        Se impone aquí y no en el serializer para que un ``usuario`` en el
-        cuerpo no pueda abrir una cuenta a nombre de un tercero: el valor que
-        llegue se descarta.
+        Se impone aquí y no en el serializer para que un ``usuario`` en el cuerpo
+        no abra una cuenta a nombre de un tercero: a quien no es staff se le
+        descarta el valor que mande.
         """
+        solicitante = self.request.user
+        if getattr(solicitante, "llave", None) is not None:
+            # Una integración ya cuelga de una cuenta —la de su llave— y no es
+            # un usuario al que se le pueda atribuir la propiedad de otra. Sin
+            # esto, asignarla reventaría con un 500 al guardar.
+            raise PermissionDenied(
+                "Una integración no puede crear cuentas; las crea una persona."
+            )
+
+        dueno = solicitante
         if es_staff(self.request):
-            if serializer.validated_data.get("usuario") is None:
-                raise ErrorSolicitud("El campo 'usuario' es obligatorio para el staff.")
-            serializer.save()
-            return
-        serializer.save(usuario=self.request.user)
+            # El staff da de alta cuentas ajenas, así que puede decir de quién
+            # es. Si no lo dice, es suya.
+            dueno = serializer.validated_data.get("usuario") or solicitante
+        serializer.save(usuario=dueno)
 
     def perform_update(self, serializer):
         """Nadie que no sea staff puede regalar ni robar una cuenta.
