@@ -8,11 +8,12 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.dian import servicios
+from apps.dian.errores import error_pasarela_dian
 from apps.documentos.models import DocumentoEstado
 from apps.nomina import serializers
 from apps.nomina.models import Nomina
 from apps.nomina.servicios import crear_nota_ajuste
-from apps.nucleo.api import ErrorSolicitud, entero_de_query, error_pasarela_dian
+from apps.nucleo.api import ErrorSolicitud, entero_de_query
 from apps.seguridad.alcance import AlcanceEmisorMixin
 
 

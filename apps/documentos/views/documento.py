@@ -8,6 +8,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.dian import representacion, servicios
+from apps.dian.errores import error_pasarela_dian
 from apps.documentos import serializers
 from apps.documentos.models import Documento, DocumentoEstado
 from apps.documentos.servicios import (
@@ -16,7 +17,7 @@ from apps.documentos.servicios import (
     enviar_notificacion,
     nombre_dian,
 )
-from apps.nucleo.api import ErrorPasarela, ErrorSolicitud, entero_de_query, error_pasarela_dian
+from apps.nucleo.api import ErrorPasarela, ErrorSolicitud, entero_de_query
 from apps.seguridad.alcance import AlcanceEmisorMixin
 from apps.utilidades.zinc import ZincNoDisponible
 
