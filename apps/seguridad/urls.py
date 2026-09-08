@@ -24,6 +24,11 @@ urlpatterns = [
          name="token-mfa-reenviar"),
     path("token/refresh/", views.RefrescoView.as_view(), name="token_refresh"),
     path("token/cerrar/", views.CierreSesionView.as_view(), name="token-cerrar"),
+    # Contraseña olvidada. Anónimas por definición: quien la perdió no puede
+    # autenticarse.
+    path("token/recuperar/", views.RecuperarView.as_view(), name="token-recuperar"),
+    path("token/restablecer/", views.RestablecerView.as_view(),
+         name="token-restablecer"),
     path("me/", views.MeView.as_view(), name="me"),
 
     # --- Segundo factor, siempre sobre la propia cuenta.

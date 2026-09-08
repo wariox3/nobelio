@@ -159,6 +159,12 @@ URL_VERIFICACION_CORREO = env(
     "URL_VERIFICACION_CORREO",
     default="http://localhost:4321/verificar-correo",
 )
+# Página que recibe el token de recuperación y lo reenvía junto con la
+# contraseña nueva a `POST /api/seguridad/token/restablecer/`.
+URL_RESTABLECER_CLAVE = env(
+    "URL_RESTABLECER_CLAVE",
+    default="http://localhost:4321/restablecer-clave",
+)
 
 # --- Almacenamiento en Backblaze B2 (S3-compatible) ------------------------
 # Credenciales de una "Application Key" de B2 con acceso al bucket. Si no están
@@ -326,6 +332,15 @@ REST_FRAMEWORK = {
         "mfa_envio_rafaga": env("THROTTLE_MFA_ENVIO_RAFAGA", default="2/min"),
         # Enrolar y desactivar, sobre la propia cuenta y ya autenticado.
         "mfa_gestion": env("THROTTLE_MFA_GESTION", default="20/hour"),
+        # Recuperar manda un correo a la dirección que diga quien pide, así que
+        # el tope por destinatario es el que protege a la víctima del spam.
+        "recuperar": env("THROTTLE_RECUPERAR", default="5/hour"),
+        "recuperar_rafaga": env("THROTTLE_RECUPERAR_RAFAGA", default="2/min"),
+        "recuperar_correo": env("THROTTLE_RECUPERAR_CORREO", default="3/hour"),
+        # Restablecer no manda nada, pero es donde se prueba un token: acotado
+        # para que no se pueda barrer a fuerza bruta.
+        "restablecer": env("THROTTLE_RESTABLECER", default="10/hour"),
+        "restablecer_rafaga": env("THROTTLE_RESTABLECER_RAFAGA", default="5/min"),
         "refresco": env("THROTTLE_REFRESCO", default="120/hour"),
     },
     # Cuántos proxies hay delante. Sin esto DRF usa la cabecera

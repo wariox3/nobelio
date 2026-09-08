@@ -8,6 +8,7 @@ from .mfa import (
     MfaEstadoView,
     MfaMetodosView,
 )
+from .recuperacion import RecuperarView, RestablecerView
 from .registro import ReenviarView, RegistroView, VerificarView
 from .sesion import (
     CierreSesionView,
@@ -37,4 +38,6 @@ __all__ = [
     "MfaConfirmarView",
     "MfaDesactivarView",
     "MfaCodigosRespaldoView",
+    "RecuperarView",
+    "RestablecerView",
 ]

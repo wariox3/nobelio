@@ -7,6 +7,8 @@ from .registro import (
 )
 from .sesion import (
     IngresoSerializer,
+    RecuperacionSerializer,
+    RestablecerSerializer,
     MfaConfirmarSerializer,
     MfaDesactivarSerializer,
     MfaEnrolarSerializer,
@@ -29,4 +31,6 @@ __all__ = [
     "MfaConfirmarSerializer",
     "MfaDesactivarSerializer",
     "UsuarioMeSerializer",
+    "RecuperacionSerializer",
+    "RestablecerSerializer",
 ]

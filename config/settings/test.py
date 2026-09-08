@@ -53,5 +53,7 @@ REST_FRAMEWORK = {  # noqa: F405
         "mfa": None, "mfa_rafaga": None,
         "mfa_envio": None, "mfa_envio_rafaga": None,
         "mfa_gestion": None, "refresco": None,
+        "recuperar": None, "recuperar_rafaga": None, "recuperar_correo": None,
+        "restablecer": None, "restablecer_rafaga": None,
     },
 }

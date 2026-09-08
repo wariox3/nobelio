@@ -62,3 +62,22 @@ class MfaDesactivarSerializer(serializers.Serializer):
     """
 
     password = serializers.CharField(style={"input_type": "password"})
+
+
+class RecuperacionSerializer(serializers.Serializer):
+    """Pide el enlace para restablecer la contraseña."""
+
+    email = serializers.EmailField()
+
+
+class RestablecerSerializer(serializers.Serializer):
+    """Fija la contraseña nueva con el token del enlace."""
+
+    token = serializers.CharField()
+    password = serializers.CharField(style={"input_type": "password"})
+
+    def validate_password(self, value):
+        from django.contrib.auth.password_validation import validate_password
+
+        validate_password(value)
+        return value
