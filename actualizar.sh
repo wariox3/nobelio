@@ -4,6 +4,11 @@
 #   sudo /opt/nobelio/actualizar.sh
 set -euo pipefail
 
+if [[ $EUID -ne 0 ]]; then
+    echo "Hay que ejecutarlo como root: sudo /opt/nobelio/actualizar.sh" >&2
+    exit 1
+fi
+
 cd /opt/nobelio
 export DJANGO_SETTINGS_MODULE=config.settings.prod
 
@@ -26,6 +31,15 @@ git pull
 # Los archivos nuevos los crea root; el servicio los lee por grupo.
 chmod -R g+rX /opt/nobelio
 
+# `media/` está en .gitignore, así que ningún pull lo repone. Y sin él systemd
+# no puede montar el `ReadWritePaths` del unit: el servicio muere con
+# 226/NAMESPACE antes de ejecutar Python, sin dejar traceback.
+mkdir -p /opt/nobelio/media
+chown nobelio:nobelio /opt/nobelio/media
+
+# Limpia el contador de reinicios de un fallo anterior, para que el `status` de
+# más abajo hable de este arranque y no del último bucle.
+systemctl reset-failed nobelio || true
 systemctl start nobelio
 trap - ERR
 
