@@ -5,6 +5,13 @@ prefijo de su dominio.
 """
 from django.http import JsonResponse
 from django.urls import include, path
+from rest_framework.permissions import AllowAny
+
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularRedocView,
+    SpectacularSwaggerView,
+)
 
 
 def estado_servicio(_request):
@@ -14,6 +21,28 @@ def estado_servicio(_request):
 
 urlpatterns = [
     path("estado/", estado_servicio, name="estado-servicio"),
+
+    # --- Documentación de la API ------------------------------------------
+    # Públicas a propósito: el esquema lo consumen el frontend y quien integre
+    # un ERP, y no revela nada que no esté ya en las rutas. Las tres son
+    # `AllowAny` de forma explícita porque el permiso por defecto del proyecto
+    # es `IsAuthenticated`, y sin esto la documentación pediría credenciales.
+    #
+    # El mismo esquema, versionado, vive en `schema.yml` (ver
+    # `config/tests_esquema.py`): es lo que se entrega al integrador para que
+    # genere su cliente sin depender de que el servidor esté arriba.
+    path("api/schema/", SpectacularAPIView.as_view(
+        permission_classes=[AllowAny], authentication_classes=[],
+    ), name="schema"),
+    path("api/docs/", SpectacularSwaggerView.as_view(
+        url_name="schema", permission_classes=[AllowAny],
+        authentication_classes=[],
+    ), name="docs"),
+    path("api/redoc/", SpectacularRedocView.as_view(
+        url_name="schema", permission_classes=[AllowAny],
+        authentication_classes=[],
+    ), name="redoc"),
+
     path("api/seguridad/", include("apps.seguridad.urls")),
     path("api/catalogos/", include("apps.catalogos.urls")),
     path("api/emisores/", include("apps.emisores.urls")),

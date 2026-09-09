@@ -3,7 +3,7 @@ import requests
 from django.db import transaction
 from django.db.models import Count
 from django.http import FileResponse, HttpResponse
-from rest_framework import filters, status, viewsets
+from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -22,7 +22,28 @@ from apps.seguridad.alcance import AlcanceEmisorMixin
 from apps.utilidades.zinc import ZincNoDisponible
 
 
-class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
+class DocumentoViewSet(
+    AlcanceEmisorMixin,
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Un documento no se edita: se crea, se emite y, si estaba mal, se borra.
+
+    **Sin `PUT` ni `PATCH`** sobre el documento. No es una restricción de
+    permisos sino de forma: un documento fiscal es un hecho con fecha, número y
+    firma, y editarlo en sitio abre la puerta a que lo que se emitió y lo que se
+    guarda dejen de coincidir. Mientras es borrador, corregirlo es borrarlo y
+    volver a crearlo —que además libera el consecutivo—; una vez emitido, lo que
+    corrige una factura es una nota, no un `PATCH`.
+
+    Lo que sí cambia el documento son las acciones de más abajo, cada una con su
+    regla: `emitir`, `enviar`, `actualizar-estado`, `notificar`. El estado no es
+    un campo que se escriba, es la consecuencia de una operación.
+    """
+
 
     queryset = (
         Documento.objects.select_related(
@@ -57,7 +78,7 @@ class DocumentoViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
     ]
 
     def get_serializer_class(self):
-        if self.action in ("create", "update", "partial_update"):
+        if self.action == "create":
             return serializers.DocumentoCrearSerializer
         if self.action == "list":
             return serializers.DocumentoListaSerializer

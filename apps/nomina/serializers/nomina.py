@@ -108,7 +108,7 @@ class NominaSerializer(serializers.ModelSerializer):
             "creado_en", "actualizado_en",
         ]
 
-    def get_errores(self, obj):
+    def get_errores(self, obj) -> list[dict]:
         return [
             {"regla": e.regla, "tipo": e.tipo, "mensaje": e.mensaje}
             for e in obj.errores.all()
@@ -136,7 +136,7 @@ class NominaListaSerializer(NominaSerializer):
             "total_errores",
         ]
 
-    def get_total_errores(self, obj):
+    def get_total_errores(self, obj) -> int:
         """Usa la anotación del ViewSet; si no está, cuenta a mano."""
         anotado = getattr(obj, "total_errores", None)
         return anotado if anotado is not None else obj.errores.count()

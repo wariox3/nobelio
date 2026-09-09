@@ -3,6 +3,9 @@ Django==5.1.15
 djangorestframework==3.17.1
 djangorestframework-simplejwt==5.5.1
 django-cors-headers==4.9.0
+# Esquema OpenAPI 3 (documentación de la API). Genera `schema.yml` y sirve
+# Swagger UI; ver config/urls.py y apps/nucleo/esquema.py.
+drf-spectacular==0.30.0
 django-environ==0.14.0
 
 # Base de datos (PostgreSQL)

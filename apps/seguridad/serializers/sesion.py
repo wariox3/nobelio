@@ -22,7 +22,7 @@ class UsuarioMeSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-    def get_mfa_activo(self, usuario):
+    def get_mfa_activo(self, usuario) -> bool:
         mfa = getattr(usuario, "mfa", None)
         return bool(mfa and mfa.activo)
 

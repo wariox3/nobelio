@@ -58,6 +58,8 @@ THIRD_PARTY_APPS = [
     # rotarlo, y cerrar sesión no cerraría nada.
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
+    # Esquema OpenAPI 3. No añade rutas por sí sola: las monta config/urls.py.
+    "drf_spectacular",
 ]
 
 LOCAL_APPS = [
@@ -258,6 +260,8 @@ observabilidad.configurar(
 REST_FRAMEWORK = {
     # Errores con cuerpo homogéneo: {"detail": ..., "errores": {...}}.
     "EXCEPTION_HANDLER": "apps.nucleo.api.exception_handler",
+    # Generador del esquema OpenAPI. Ver SPECTACULAR_SETTINGS más abajo.
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     # Dos vías coexistiendo: API Key (ERP) y JWT (frontend SPA). Ver
     # docs/autenticacion.md. Ambas son stateless (sin sesión, sin CSRF).
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -489,3 +493,83 @@ CATALOGOS_LISTAS_DIR = BASE_DIR / "apps" / "catalogos" / "datos" / "listas"
 
 # Carpeta con los esquemas XSD oficiales DIAN (validación del XML UBL).
 DIAN_XSD_DIR = BASE_DIR / "apps" / "dian" / "datos" / "xsd"
+
+# --- Esquema OpenAPI (documentación de la API) ------------------------------
+# El esquema es público: lo consumen el frontend y quien integre un ERP, y
+# esconderlo no protegería nada que no esté ya en las rutas. Lo que sí importa
+# es que describa la realidad, y por eso hay dos cosas más:
+#
+#   - `apps/nucleo/esquema.py` enseña a spectacular las dos autenticaciones
+#     propias (API Key y JWT en cookie), que si no aparecerían como "sin auth".
+#   - `schema.yml`, versionado en la raíz, es el contrato que se entrega al
+#     integrador. Lo regenera `manage.py spectacular --file schema.yml` y
+#     `config/tests_esquema.py` falla si se queda atrás del código.
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Nobelio — API de facturación electrónica DIAN",
+    "DESCRIPTION": (
+        "Emisión de documentos electrónicos ante la DIAN (Colombia): factura, "
+        "notas, documento soporte, documento equivalente P.O.S. y nómina.\n\n"
+        "**Autenticación.** Una sola credencial, en cabecera:\n\n"
+        "```\n"
+        "Authorization: Api-Key <prefijo>.<secreto>\n"
+        "```\n\n"
+        "La entrega quien administra la plataforma y se muestra **una sola "
+        "vez**. Alcanza los emisores de la persona a cuyo nombre se creó: lo "
+        "ajeno no aparece en los listados y responde 404. No hay `Bearer`.\n\n"
+        "**Errores.** Todos comparten cuerpo: `detail` con el mensaje y `errores` "
+        "con los fallos por campo cuando los hay.\n\n"
+        "**Límites de peticiones.** Hay un tope por credencial, y los catálogos "
+        "—que se leen sin credencial— lo tienen por IP. Al superarlo la "
+        "respuesta es 429 con la cabecera `Retry-After`.\n\n"
+        "**Catálogos.** `/api/catalogos/…` es de solo lectura y no pide "
+        "credencial: son las listas oficiales de la DIAN, y sus códigos son lo "
+        "que el resto de la API espera recibir."
+    ),
+    "VERSION": "1.0.0",
+    # El esquema no lleva las rutas de la propia documentación: describirse a sí
+    # misma no le sirve a nadie y ensucia el listado.
+    "SERVE_INCLUDE_SCHEMA": False,
+    # Sin el prefijo común, cada operación se agrupa por su app y no por "api".
+    "SCHEMA_PATH_PREFIX": "/api",
+    # Swagger UI desde CDN. La alternativa es `drf-spectacular-sidecar`, que
+    # sirve los estáticos desde el propio servidor y obligaría a un
+    # `collectstatic` que hoy el despliegue no hace (ver docs/despliegue.md).
+    "SWAGGER_UI_DIST": "//cdn.jsdelivr.net/npm/swagger-ui-dist@latest",
+    "SWAGGER_UI_FAVICON_HREF": "//cdn.jsdelivr.net/npm/swagger-ui-dist@latest/favicon-32x32.png",
+    "REDOC_DIST": "//cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js",
+    # Nombres de los `enum` compartidos. Sin esto, spectacular ve el mismo
+    # juego de valores en varios campos y o los fusiona bajo el nombre de uno
+    # —`AmbienteFacturacionEnum` para los tres ambientes—, o los desempata con
+    # un sufijo aleatorio (`Envio5a8Enum`) que cambia de una generación a otra y
+    # ensucia el diff de `schema.yml`.
+    "ENUM_NAME_OVERRIDES": {
+        # Los tres ambientes del emisor son la misma lista: habilitación o
+        # producción (apps.nucleo.models.Ambiente).
+        "AmbienteEnum": "apps.nucleo.models.Ambiente.choices",
+        # La operación con la que se envió a la DIAN. Las dos clases se llaman
+        # `Envio` y no valen lo mismo —`bill_sync` frente a `nomina_sync`—, así
+        # que sin nombrarlas spectacular las desempata con un sufijo aleatorio
+        # que cambia entre generaciones.
+        # Sin `.choices` al final: `deep_import_string` solo baja un nivel de
+        # atributo, y `Documento.Envio.choices` son dos.
+        "EnvioDocumentoEnum": "apps.documentos.models.Documento.Envio",
+        "EnvioNominaEnum": "apps.nomina.models.Nomina.Envio",
+    },
+    "COMPONENT_SPLIT_REQUEST": True,
+    # Qué NO se publica. `/api/seguridad/` queda fuera del esquema: su
+    # destinatario, quien integra un ERP, no lo necesita, y publicar el detalle
+    # del ingreso, el registro y el segundo factor solo le ahorra trabajo a
+    # quien los quiera atacar. No los esconde —siguen respondiendo—: decide qué
+    # publicamos. El porqué completo, en `apps/nucleo/esquema.py`.
+    "PREPROCESSING_HOOKS": ["apps.nucleo.esquema.excluir_seguridad"],
+    # El cuerpo de error es el mismo en toda la API porque lo impone el
+    # `exception_handler`, así que se documenta una vez y se cuelga de las
+    # operaciones en vez de repetirlo en cada vista.
+    "POSTPROCESSING_HOOKS": [
+        "drf_spectacular.hooks.postprocess_schema_enums",
+        # La única credencial del contrato publicado es la llave de API. La
+        # sesión en cookies sigue funcionando; simplemente no se anuncia aquí.
+        "apps.nucleo.esquema.solo_llave_api",
+        "apps.nucleo.esquema.documentar_errores",
+    ],
+}

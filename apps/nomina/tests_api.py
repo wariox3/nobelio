@@ -88,6 +88,23 @@ class NominaAPIBase(APITestCase):
 
 
 class NominaCicloTests(NominaAPIBase):
+    def test_la_nomina_no_se_edita(self):
+        """Ni `PUT` ni `PATCH`, igual que en documentos.
+
+        Lo que corrige una nómina ya emitida es su **nota de ajuste**
+        (`tipo_xml` 103), que es el mecanismo que la DIAN tiene previsto; un
+        borrador se corrige borrándolo y volviéndolo a crear.
+
+        Se fija aquí porque el ViewSet era un `ModelViewSet` y nadie lo cubría:
+        el día que alguien lo vuelva a serlo, esta prueba lo dice.
+        """
+        for metodo in (self.client.put, self.client.patch):
+            with self.subTest(metodo=metodo.__name__):
+                resp = metodo(self._url(), {"consecutivo": 99}, format="json")
+                self.assertEqual(
+                    resp.status_code, status.HTTP_405_METHOD_NOT_ALLOWED, resp.data
+                )
+
     def test_emitir_firma_y_calcula_el_cune(self):
         resp = self._emitir()
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)

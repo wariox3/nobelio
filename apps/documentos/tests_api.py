@@ -209,33 +209,30 @@ class DocumentoAPITests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("adquiriente", resp.data["errores"])
 
-    def test_se_puede_corregir_el_receptor_de_un_borrador(self):
-        resp = self.client.patch(
-            self._url(), {"adquiriente": {"correo": "nuevo@cliente.co"}}, format="json"
-        )
-        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+    def test_el_documento_no_se_edita(self):
+        """Ni `PUT` ni `PATCH`, en ningún estado.
+
+        Antes se podía corregir un borrador —el correo del receptor, el
+        consecutivo— y era el propio serializer el que frenaba al llegar a
+        firmado. Ahora no hay nada que frenar: la ruta no existe, así que
+        tampoco hay una regla que se pueda escapar por una rama nueva.
+
+        Corregir un borrador es borrarlo y volver a crearlo, que además libera
+        el consecutivo; corregir uno emitido es una nota.
+        """
+        for metodo in (self.client.put, self.client.patch):
+            with self.subTest(metodo=metodo.__name__):
+                resp = metodo(
+                    self._url(),
+                    {"adquiriente": {"correo": "nuevo@cliente.co"}},
+                    format="json",
+                )
+                self.assertEqual(
+                    resp.status_code, status.HTTP_405_METHOD_NOT_ALLOWED, resp.data
+                )
+
         self.documento.adquiriente.refresh_from_db()
-        self.assertEqual(self.documento.adquiriente.correo, "nuevo@cliente.co")
-
-    def test_no_se_puede_tocar_el_receptor_de_un_documento_firmado(self):
-        """Cambiarlo dejaría el PDF distinto del XML que ya se firmó."""
-        self.documento.estado = DocumentoEstado.objects.get(
-            nombre=DocumentoEstado.Nombre.FIRMADO
-        )
-        self.documento.save(update_fields=["estado"])
-        self.addCleanup(self._volver_a_borrador)
-
-        resp = self.client.patch(
-            self._url(), {"adquiriente": {"correo": "otro@cliente.co"}}, format="json"
-        )
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.documento.adquiriente.refresh_from_db()
-        self.assertNotEqual(self.documento.adquiriente.correo, "otro@cliente.co")
-
-    def _volver_a_borrador(self):
-        Documento.objects.filter(pk=self.documento.pk).update(
-            estado=DocumentoEstado.objects.get(nombre=DocumentoEstado.Nombre.BORRADOR)
-        )
+        self.assertNotEqual(self.documento.adquiriente.correo, "nuevo@cliente.co")
 
     def test_borrar_el_documento_se_lleva_a_su_receptor(self):
         resp = self._crear()
@@ -388,17 +385,6 @@ class DocumentoAPITests(APITestCase):
 
         resp = self.client.post("/api/documentos/documento/", payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
-
-    def test_al_modificar_se_valida_contra_la_resolucion_que_ya_tiene(self):
-        """En un PATCH no se repite el número: la resolución sale del documento."""
-        resp = self.client.patch(
-            self._url(), {"consecutivo": 1}, format="json",
-        )
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            resp.data["errores"]["consecutivo"],
-            [mensaje_consecutivo_fuera_de_rango(self.documento.resolucion)],
-        )
 
     # --- El emisor tiene que estar en condiciones de firmar ----------------
 

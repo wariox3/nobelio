@@ -25,6 +25,7 @@ la nómina que la DIAN aceptó.
 - [Instalación](#instalación)
 - [Configuración (.env)](#configuración-env)
 - [Puesta en marcha](#puesta-en-marcha)
+- [Documentación de la API](#documentación-de-la-api)
 - [Flujo de uso completo (API)](#flujo-de-uso-completo-api)
 - [Comandos de gestión](#comandos-de-gestión)
 - [Estructura del proyecto](#estructura-del-proyecto)
@@ -139,12 +140,47 @@ python manage.py listas TipoResponsabilidad
 
 ---
 
+## Documentación de la API
+
+El esquema **OpenAPI 3** se genera del código con
+[drf-spectacular](https://drf-spectacular.readthedocs.io/) y se sirve en tres
+rutas, las tres públicas:
+
+| Ruta | Qué es |
+|---|---|
+| `/api/docs/` | Swagger UI: se navega y se prueban las peticiones |
+| `/api/redoc/` | Redoc: se lee de corrido, mejor para entregar |
+| `/api/schema/` | El YAML crudo, para generar un cliente |
+
+El mismo esquema está **versionado en `schema.yml`**, en la raíz. Es lo que se
+entrega a quien integra un ERP: genera su cliente sin depender de que el
+servidor esté arriba, y cada cambio del contrato se ve en el diff de la revisión
+igual que el código.
+
+Por eso hay que regenerarlo **en el mismo commit** que el cambio de la API:
+
+```bash
+python manage.py spectacular --file schema.yml
+```
+
+`config/tests_esquema.py` lo comprueba de dos formas y falla si alguna no se
+cumple: que el archivo del repositorio coincide con el código, y que el esquema
+se genera sin avisos —un aviso es un endpoint que quedó sin describir, y en la
+documentación sale como una caja vacía—.
+
+Las piezas propias que el generador no puede deducir viven en
+`apps/nucleo/esquema.py`: las dos autenticaciones (API Key y cookie) y el cuerpo
+de error común. Un endpoint nuevo que no sea un `ModelViewSet` normalmente
+necesita su `@extend_schema`; los de `apps/seguridad/views/` sirven de ejemplo.
+
+---
+
 ## Flujo de uso completo (API)
 
 > **Paso a paso (alta → emisión):** ver [docs/checklist-emision.md](docs/checklist-emision.md).
 
-> Autenticación: el frontend usa **JWT** (`POST /api/seguridad/token/` →
-> `Authorization: Bearer <access>`) y el ERP usa **API Key**
+> Autenticación: el navegador usa la **sesión en cookies** `httpOnly` que emite
+> `POST /api/seguridad/token/` —no hay `Bearer`— y el ERP usa **API Key**
 > (`Authorization: Api-Key <prefijo>.<secreto>`). Ver [docs/autenticacion.md](docs/autenticacion.md).
 > Cada credencial alcanza los emisores que posee más los que le hayan asignado;
 > una API Key alcanza exactamente lo mismo que su dueño. Lo ajeno no aparece en

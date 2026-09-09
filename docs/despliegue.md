@@ -322,7 +322,10 @@ export DJANGO_SETTINGS_MODULE=config.settings.prod
 > ```
 
 No hace falta `collectstatic`: la API solo tiene `JSONRenderer`, sin sitio de
-administración ni browsable API. No hay estáticos que servir.
+administración ni browsable API. La documentación (`/api/docs/`) sirve su propio
+HTML y carga Swagger UI desde un CDN, así que tampoco necesita estáticos
+locales; si algún día se quiere servir sin CDN, es `drf-spectacular-sidecar` más
+un `collectstatic` en el despliegue.
 
 ---
 
@@ -536,6 +539,9 @@ api.rededoc.co {
 ```bash
 curl https://api.rededoc.co/estado/
 # → {"servicio": "nobelio", "estado": "ok"}
+
+# La documentación de la API, pública: Swagger UI, Redoc y el esquema crudo.
+curl -o /dev/null -w '%{http_code}\n' https://api.rededoc.co/api/docs/
 
 journalctl -u nobelio -f
 ```

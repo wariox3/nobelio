@@ -5,11 +5,13 @@ endpoint para tocar el segundo factor de otra persona, ni siquiera para el staff
 El segundo factor es de la cuenta, y poder quitárselo a alguien desde fuera
 convertiría a quien administra en la manera más fácil de entrar.
 """
-from rest_framework import status
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.nucleo.esquema import DetalleSerializer, ErrorSerializer
 from apps.seguridad import mfa as servicio_mfa
 from apps.seguridad.models import METODO_TOTP, METODOS, MfaUsuario
 from apps.seguridad.serializers import (
@@ -19,6 +21,31 @@ from apps.seguridad.serializers import (
 )
 
 
+@extend_schema(
+    tags=["Segundo factor"],
+    summary="Métodos disponibles",
+    description=(
+        "La lista y **el orden** en que se ofrecen. Se sirve desde aquí para "
+        "que el front no los repita por su cuenta."
+    ),
+    responses={
+        200: inline_serializer(
+            name="MfaMetodos",
+            fields={
+                "metodos": serializers.ListField(
+                    child=inline_serializer(
+                        name="MfaMetodo",
+                        fields={
+                            "codigo": serializers.CharField(),
+                            "nombre": serializers.CharField(),
+                        },
+                    ),
+                ),
+            },
+        ),
+        401: ErrorSerializer,
+    },
+)
 class MfaMetodosView(APIView):
     """``GET`` — los métodos disponibles, en el orden en que se ofrecen.
 
@@ -33,6 +60,22 @@ class MfaMetodosView(APIView):
         })
 
 
+@extend_schema(
+    tags=["Segundo factor"],
+    summary="Estado del segundo factor",
+    description="Siempre sobre la propia cuenta: no hay forma de consultar la de otra persona.",
+    responses={
+        200: inline_serializer(
+            name="MfaEstado",
+            fields={
+                "activo": serializers.BooleanField(),
+                "metodo": serializers.CharField(allow_null=True),
+                "codigos_respaldo_restantes": serializers.IntegerField(),
+            },
+        ),
+        401: ErrorSerializer,
+    },
+)
 class MfaEstadoView(APIView):
     """``GET`` — cómo está el segundo factor de quien pregunta."""
 
@@ -49,6 +92,34 @@ class MfaEstadoView(APIView):
         })
 
 
+@extend_schema(
+    tags=["Segundo factor"],
+    summary="Empezar el enrolamiento",
+    description=(
+        "Deja la configuración preparada pero **apagada**: encenderla antes de "
+        "comprobar que la app genera códigos válidos dejaría a la persona fuera "
+        "de su cuenta si su reloj anda mal o escaneó otro QR. Se enciende en "
+        "`mfa/confirmar/`.\n\n"
+        "Con TOTP devuelve `secreto` y `uri` —el `otpauth://` para el QR—, y es "
+        "**la única vez** que el secreto sale legible. Con los métodos que "
+        "mandan el código, devuelve `mfa_token` en su lugar."
+    ),
+    request=MfaEnrolarSerializer,
+    responses={
+        201: inline_serializer(
+            name="MfaEnrolamiento",
+            fields={
+                "metodo": serializers.CharField(),
+                "secreto": serializers.CharField(required=False, help_text="Solo TOTP."),
+                "uri": serializers.CharField(required=False, help_text="Solo TOTP: el otpauth:// del QR."),
+                "mfa_token": serializers.CharField(required=False, help_text="Solo en los métodos que envían el código."),
+            },
+        ),
+        400: ErrorSerializer,
+        401: ErrorSerializer,
+        429: ErrorSerializer,
+    },
+)
 class MfaEnrolarView(APIView):
     """``POST`` — empieza el enrolamiento; todavía no lo enciende.
 
@@ -88,6 +159,31 @@ class MfaEnrolarView(APIView):
         return Response(datos, status=status.HTTP_201_CREATED)
 
 
+@extend_schema(
+    tags=["Segundo factor"],
+    summary="Confirmar y encender el segundo factor",
+    description=(
+        "Comprueba el código del método recién enrolado y lo enciende. "
+        "Devuelve los **códigos de respaldo**: es la única vez que existen "
+        "legibles, así que el front tiene que mostrarlos y ofrecer guardarlos.\n\n"
+        "Encenderlo cierra las demás sesiones y olvida los dispositivos "
+        "recordados: si no, solo protegería los ingresos futuros."
+    ),
+    request=MfaConfirmarSerializer,
+    responses={
+        200: inline_serializer(
+            name="MfaConfirmado",
+            fields={
+                "activo": serializers.BooleanField(),
+                "metodo": serializers.CharField(),
+                "codigos_respaldo": serializers.ListField(child=serializers.CharField()),
+            },
+        ),
+        400: ErrorSerializer,
+        401: ErrorSerializer,
+        429: ErrorSerializer,
+    },
+)
 class MfaConfirmarView(APIView):
     """``POST`` — comprueba el código y enciende el segundo factor.
 
@@ -148,6 +244,22 @@ class MfaConfirmarView(APIView):
         })
 
 
+@extend_schema(
+    tags=["Segundo factor"],
+    summary="Desactivar el segundo factor",
+    description=(
+        "Exige la contraseña actual: quitarse la protección es tan delicado "
+        "como ponérsela. El 403 es contraseña incorrecta."
+    ),
+    request=MfaDesactivarSerializer,
+    responses={
+        200: DetalleSerializer,
+        400: ErrorSerializer,
+        401: ErrorSerializer,
+        403: ErrorSerializer,
+        429: ErrorSerializer,
+    },
+)
 class MfaDesactivarView(APIView):
     """``POST`` — apaga el segundo factor. Exige la contraseña."""
 
@@ -168,6 +280,25 @@ class MfaDesactivarView(APIView):
         return Response({"detail": "Segundo factor desactivado."})
 
 
+@extend_schema(
+    tags=["Segundo factor"],
+    summary="Regenerar los códigos de respaldo",
+    description=(
+        "Los anteriores dejan de servir. Exige la contraseña actual; el 403 es "
+        "que no coincide."
+    ),
+    request=MfaDesactivarSerializer,
+    responses={
+        200: inline_serializer(
+            name="MfaCodigosRespaldo",
+            fields={"codigos_respaldo": serializers.ListField(child=serializers.CharField())},
+        ),
+        400: ErrorSerializer,
+        401: ErrorSerializer,
+        403: ErrorSerializer,
+        429: ErrorSerializer,
+    },
+)
 class MfaCodigosRespaldoView(APIView):
     """``POST`` — regenera los códigos de respaldo. Exige la contraseña."""
 

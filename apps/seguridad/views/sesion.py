@@ -9,13 +9,15 @@ decorativo.
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.utils import timezone
-from rest_framework import status
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import serializers, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from apps.nucleo.esquema import DetalleSerializer, ErrorSerializer
 from apps.seguridad import mfa as servicio_mfa
 from apps.seguridad import sesion as servicio_sesion
 from apps.seguridad.autenticacion import COOKIE_DISPOSITIVO, COOKIE_REFRESCO
@@ -30,6 +32,43 @@ from apps.seguridad.serializers import (
 _SESION_MAXIMA = int(settings.SESION_MAXIMA.total_seconds())
 
 
+@extend_schema(
+    tags=["Sesión"],
+    summary="Iniciar sesión",
+    description=(
+        "Con la contraseña correcta puede terminar en **dos sitios distintos**, "
+        "y el front tiene que mirar `mfa_requerido` antes de nada:\n\n"
+        "- **Sin segundo factor**: emite la sesión. Los tokens NO viajan en el "
+        "cuerpo, sino en cookies `httpOnly` (`access_token`, `refresh_token`); "
+        "el cuerpo trae los datos de la persona. Hay que llamar con "
+        "`credentials: \"include\"`.\n"
+        "- **Con segundo factor**: no emite nada. Responde `mfa_requerido: true` "
+        "y un `mfa_token` que se resuelve en `token/mfa/`.\n\n"
+        "Un 403 significa que falta confirmar el correo."
+    ),
+    request=IngresoSerializer,
+    responses={
+        200: inline_serializer(
+            name="IngresoRespuesta",
+            fields={
+                "mfa_requerido": serializers.BooleanField(
+                    required=False,
+                    help_text="Solo presente —y siempre `true`— cuando falta el segundo paso.",
+                ),
+                "mfa_token": serializers.CharField(
+                    required=False, help_text="Se manda a `token/mfa/`. Solo con `mfa_requerido`.",
+                ),
+                "metodo": serializers.CharField(required=False),
+                "id": serializers.IntegerField(required=False),
+                "email": serializers.EmailField(required=False),
+                "nombre_corto": serializers.CharField(required=False),
+            },
+        ),
+        401: ErrorSerializer,
+        403: ErrorSerializer,
+        429: ErrorSerializer,
+    },
+)
 class SesionView(APIView):
     """``POST /api/seguridad/token/`` — email y contraseña."""
 
@@ -88,6 +127,31 @@ class SesionView(APIView):
         )
 
 
+@extend_schema(
+    tags=["Sesión"],
+    summary="Resolver el segundo factor",
+    description=(
+        "Segundo paso del ingreso. Con el código correcto emite la sesión en "
+        "cookies, igual que `token/`.\n\n"
+        "`recordar_dispositivo` deja una cookie que se salta el segundo paso en "
+        "los próximos ingresos desde ese navegador. `uso_codigo_respaldo` avisa "
+        "de que se gastó uno de los códigos de emergencia."
+    ),
+    request=MfaIngresoSerializer,
+    responses={
+        200: inline_serializer(
+            name="IngresoMfaRespuesta",
+            fields={
+                "id": serializers.IntegerField(),
+                "email": serializers.EmailField(),
+                "nombre_corto": serializers.CharField(),
+                "uso_codigo_respaldo": serializers.BooleanField(),
+            },
+        ),
+        401: ErrorSerializer,
+        429: ErrorSerializer,
+    },
+)
 class SesionMfaView(APIView):
     """``POST /api/seguridad/token/mfa/`` — resuelve el segundo paso."""
 
@@ -120,6 +184,13 @@ class SesionMfaView(APIView):
         )
 
 
+@extend_schema(
+    tags=["Sesión"],
+    summary="Reenviar el código del segundo factor",
+    description="Solo para los métodos que mandan el código; con TOTP no aplica.",
+    request=ReenvioMfaSerializer,
+    responses={200: DetalleSerializer, 400: ErrorSerializer, 429: ErrorSerializer},
+)
 class SesionMfaReenviarView(APIView):
     """``POST /api/seguridad/token/mfa/reenviar/`` — otro código."""
 
@@ -141,6 +212,20 @@ class SesionMfaReenviarView(APIView):
         return Response({"detail": "Código reenviado."})
 
 
+@extend_schema(
+    tags=["Sesión"],
+    summary="Renovar la sesión",
+    description=(
+        "**Sin cuerpo**: el refresh viaja en su cookie `httpOnly` y de ahí se "
+        "lee. Rota el token —el anterior queda anulado— y reemplaza las dos "
+        "cookies.\n\n"
+        "El 401 tiene dos causas que el front trata igual: no hay sesión, o la "
+        "sesión alcanzó su duración máxima absoluta. En ambos casos toca volver "
+        "a iniciar sesión."
+    ),
+    request=None,
+    responses={200: DetalleSerializer, 401: ErrorSerializer, 429: ErrorSerializer},
+)
 class RefrescoView(APIView):
     """``POST /api/seguridad/token/refresh/`` — renueva el acceso."""
 
@@ -195,6 +280,16 @@ class RefrescoView(APIView):
         return respuesta
 
 
+@extend_schema(
+    tags=["Sesión"],
+    summary="Cerrar sesión",
+    description=(
+        "Sin cuerpo. Anula el refresh y borra las cookies. Cerrar sesión con "
+        "una sesión ya rota no es un error: el resultado es el que se pedía."
+    ),
+    request=None,
+    responses={200: DetalleSerializer, 401: ErrorSerializer},
+)
 class CierreSesionView(APIView):
     """``POST /api/seguridad/token/cerrar/`` — cierra la sesión."""
 
@@ -214,6 +309,15 @@ class CierreSesionView(APIView):
         )
 
 
+@extend_schema(
+    tags=["Sesión"],
+    summary="Quién es quien pregunta",
+    description=(
+        "Resuelve la identidad de la credencial que trae la petición, sea la "
+        "cookie de sesión o una llave de API."
+    ),
+    responses={200: UsuarioMeSerializer, 401: ErrorSerializer},
+)
 class MeView(APIView):
     """``GET /api/seguridad/me/`` — quién es quien pregunta."""
 

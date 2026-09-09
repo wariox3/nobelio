@@ -5,11 +5,13 @@ por eso llevan su propio tope (`throttle_scope`), más estrecho que el general d
 anónimos: cada una crea filas o dispara un correo por la pasarela.
 """
 from django.contrib.auth import get_user_model
-from rest_framework import status
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import serializers, status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.nucleo.esquema import DetalleSerializer, ErrorSerializer
 from apps.seguridad import verificacion
 from apps.seguridad.serializers import (
     ReenvioSerializer,
@@ -17,6 +19,31 @@ from apps.seguridad.serializers import (
     VerificacionSerializer,
 )
 
+@extend_schema(
+    tags=["Registro"],
+    summary="Dar de alta una cuenta",
+    description=(
+        "Crea el usuario y le manda el correo de confirmación. Hasta que no "
+        "confirme, el ingreso responde 403.\n\n"
+        "`correo_enviado` en `false` significa que la cuenta sí quedó creada "
+        "pero la pasarela de correo falló: hay que pedir el enlace otra vez en "
+        "`registro/reenviar/`, no repetir el alta."
+    ),
+    request=RegistroSerializer,
+    responses={
+        201: inline_serializer(
+            name="RegistroCreado",
+            fields={
+                "id": serializers.IntegerField(),
+                "email": serializers.EmailField(),
+                "correo_enviado": serializers.BooleanField(),
+                "detail": serializers.CharField(),
+            },
+        ),
+        400: ErrorSerializer,
+        429: ErrorSerializer,
+    },
+)
 class RegistroView(APIView):
     """``POST /api/seguridad/registro/`` — crea la cuenta y su usuario dueño."""
 
@@ -50,6 +77,17 @@ class RegistroView(APIView):
             status=status.HTTP_201_CREATED,
         )
 
+@extend_schema(
+    tags=["Registro"],
+    summary="Confirmar el correo",
+    description=(
+        "Recibe el token que llegó en el enlace del correo. Es idempotente: "
+        "abrirlo dos veces no es un error, porque el segundo clic es lo normal "
+        "—el cliente de correo precarga el enlace y la persona recarga—."
+    ),
+    request=VerificacionSerializer,
+    responses={200: DetalleSerializer, 400: ErrorSerializer, 429: ErrorSerializer},
+)
 class VerificarView(APIView):
     """``POST /api/seguridad/registro/verificar/`` — confirma el correo."""
 
@@ -79,6 +117,17 @@ class VerificarView(APIView):
 
         return Response({"detail": "Correo confirmado. Ya puedes iniciar sesión."})
 
+@extend_schema(
+    tags=["Registro"],
+    summary="Reenviar el enlace de confirmación",
+    description=(
+        "Responde siempre lo mismo, exista o no la cuenta y esté o no ya "
+        "verificada: distinguirlo convertiría esta ruta en un comprobador de "
+        "quién está registrado en la plataforma."
+    ),
+    request=ReenvioSerializer,
+    responses={200: DetalleSerializer, 400: ErrorSerializer, 429: ErrorSerializer},
+)
 class ReenviarView(APIView):
     """``POST /api/seguridad/registro/reenviar/`` — otro enlace de confirmación."""
 

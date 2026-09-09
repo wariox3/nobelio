@@ -254,7 +254,7 @@ class DocumentoListaSerializer(DocumentoSerializer):
             if f not in {"detalles", "estado_descripcion"}
         ]
 
-    def get_total_errores(self, obj):
+    def get_total_errores(self, obj) -> int:
         """Usa la anotación del ViewSet; si no está, cuenta a mano."""
         anotado = getattr(obj, "total_errores", None)
         return anotado if anotado is not None else obj.errores.count()

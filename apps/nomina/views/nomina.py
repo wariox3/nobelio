@@ -3,7 +3,7 @@ import requests
 from django.db import IntegrityError, transaction
 from django.db.models import Count
 from django.http import HttpResponse
-from rest_framework import filters, status, viewsets
+from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -17,12 +17,29 @@ from apps.nucleo.api import ErrorSolicitud, entero_de_query
 from apps.seguridad.alcance import AlcanceEmisorMixin
 
 
-class NominaViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
+class NominaViewSet(
+    AlcanceEmisorMixin,
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
     """Nómina electrónica y su nota de ajuste.
 
     Comparte el ciclo de vida de los documentos electrónicos —borrador, firmado,
     enviado, aceptado o rechazado— pero no su pipeline: la nómina no es UBL y va
     por ``SendNominaSync``.
+
+    **Sin `PUT` ni `PATCH`**, por lo mismo que en `DocumentoViewSet`: un
+    documento fiscal es un hecho con fecha, número y firma, y editarlo en sitio
+    abre la puerta a que lo que se emitió y lo que se guarda dejen de coincidir.
+    Mientras es borrador, corregirlo es borrarlo y volver a crearlo; una vez
+    emitido, lo que corrige una nómina es su **nota de ajuste** (`tipo_xml`
+    103), que la DIAN tiene prevista justamente para esto.
+
+    Lo que cambia el documento son las acciones, cada una con su regla. El
+    estado no es un campo que se escriba.
     """
 
     queryset = Nomina.objects.select_related(
@@ -38,7 +55,7 @@ class NominaViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
     ]
 
     def get_serializer_class(self):
-        if self.action in ("create", "update", "partial_update"):
+        if self.action == "create":
             return serializers.NominaCrearSerializer
         if self.action == "list":
             return serializers.NominaListaSerializer

@@ -6,11 +6,13 @@ quien pide, así que sin tope por destinatario es una máquina de spam contra
 terceros.
 """
 from django.contrib.auth import get_user_model
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.nucleo.esquema import DetalleSerializer, ErrorSerializer
 from apps.seguridad import mfa as servicio_mfa
 from apps.seguridad import recuperacion as servicio
 from apps.seguridad.serializers import (
@@ -19,6 +21,18 @@ from apps.seguridad.serializers import (
 )
 
 
+@extend_schema(
+    tags=["Sesión"],
+    summary="Pedir el enlace para restablecer la contraseña",
+    description=(
+        "Responde siempre 200 con el mismo texto, exista o no la cuenta: si "
+        "cambiara, esta ruta diría quién está registrado.\n\n"
+        "El enlace vive una hora y se quema al usarse. Solo se manda a cuentas "
+        "activas."
+    ),
+    request=RecuperacionSerializer,
+    responses={200: DetalleSerializer, 400: ErrorSerializer, 429: ErrorSerializer},
+)
 class RecuperarView(APIView):
     """``POST /api/seguridad/token/recuperar/`` — manda el enlace."""
 
@@ -46,6 +60,19 @@ class RecuperarView(APIView):
         })
 
 
+@extend_schema(
+    tags=["Sesión"],
+    summary="Fijar la contraseña nueva",
+    description=(
+        "Recibe el token del enlace y la contraseña nueva (mínimo 10 "
+        "caracteres). Cierra todas las sesiones abiertas y olvida los "
+        "dispositivos recordados del segundo factor.\n\n"
+        "No deja sesión iniciada: después hay que pasar por el ingreso, y por "
+        "el segundo factor si la cuenta lo tiene."
+    ),
+    request=RestablecerSerializer,
+    responses={200: DetalleSerializer, 400: ErrorSerializer, 429: ErrorSerializer},
+)
 class RestablecerView(APIView):
     """``POST /api/seguridad/token/restablecer/`` — fija la contraseña nueva."""
 

@@ -25,7 +25,7 @@ class LlaveApiSerializer(serializers.ModelSerializer):
             "id", "usuario", "prefijo", "ultimo_uso_en", "creado_en", "clave",
         ]
 
-    def get_clave(self, obj):
+    def get_clave(self, obj) -> str | None:
         # Solo está presente justo después de crear la llave (ver create()).
         return getattr(obj, "_clave_completa", None)
 
