@@ -309,8 +309,14 @@ REST_FRAMEWORK = {
         #
         # Darse de alta tres veces en una hora desde la misma IP ya es raro, y
         # cada alta manda un correo.
+        #
+        # La ráfaga es 3/min y no 1/min porque una IP no es una persona: en una
+        # oficina detrás de un NAT, o en un mismo computador, dar de alta a dos
+        # personas seguidas es normal y con 1/min la segunda se comía un 429 sin
+        # haber hecho nada raro. Tres seguidas siguen frenando a un guion, que es
+        # de lo que protege este tope.
         "registro": env("THROTTLE_REGISTRO", default="3/hour"),
-        "registro_rafaga": env("THROTTLE_REGISTRO_RAFAGA", default="1/min"),
+        "registro_rafaga": env("THROTTLE_REGISTRO_RAFAGA", default="3/min"),
         # Confirmar se reintenta algo más (el cliente de correo precarga el
         # enlace, la persona recarga), pero es una operación de una vez.
         "verificacion": env("THROTTLE_VERIFICACION", default="10/hour"),
