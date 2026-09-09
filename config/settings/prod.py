@@ -21,5 +21,5 @@ X_FRAME_OPTIONS = "DENY"
 # Obligatoria en producción: con la de por-proceso, los topes de peticiones se
 # multiplican por el número de workers y no protegen de nada (ver base.py). Por
 # defecto va contra PostgreSQL, que ya está, en vez de pedir un servicio nuevo;
-# la tabla la crea la migración `nucleo.0002_tabla_de_cache`.
+# la tabla la crea la migración `nucleo.0001_tabla_de_cache`.
 CACHES = {"default": env.cache("CACHE_URL", default="dbcache://cache_general")}

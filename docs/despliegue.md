@@ -1,11 +1,11 @@
 # Desplegar en producción (manual, sin contenedores)
 
-Guía paso a paso para dejar Nobelio sirviendo en `https://api.nobelio.co` desde
+Guía paso a paso para dejar Nobelio sirviendo en `https://api.rededoc.co` desde
 un VPS Ubuntu 24.04: PostgreSQL nativo, gunicorn bajo systemd y nginx como
 proxy, con certificado de Let's Encrypt vía certbot. La contraparte de
 [entorno-desarrollo.md](entorno-desarrollo.md), que cubre la máquina de trabajo.
 
-Sustituye `api.nobelio.co` por tu dominio en todos los comandos.
+Sustituye `api.rededoc.co` por tu dominio en todos los comandos.
 
 ---
 
@@ -109,12 +109,14 @@ los JWT:
 python3 -c "import secrets; print(secrets.token_urlsafe(64))"
 ```
 
-Y una segunda clave, la que cifra en la base la clave de los `.p12`. Va aparte
-de la anterior a propósito: la `SECRET_KEY` se rota el día que haya que
-invalidar los JWT, y eso no puede dejar ilegibles los certificados de todos los
-emisores.
+Y **dos claves Fernet más**, una para cifrar en la base la clave de los `.p12`
+(`CERT_ENCRYPTION_KEY`) y otra para los secretos TOTP del segundo factor
+(`MFA_ENCRYPTION_KEY`). Las tres van por separado a propósito: la `SECRET_KEY` se
+rota el día que haya que invalidar los JWT, y eso no puede dejar ilegibles ni los
+certificados de todos los emisores ni el segundo factor de todo el mundo.
 
 ```bash
+# Una vez por cada una; no reutilices la misma en las dos.
 python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
@@ -122,20 +124,70 @@ python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().
 # /opt/nobelio/.env
 DJANGO_SECRET_KEY=<la clave generada>
 # Sin esta el proyecto no arranca; ver el aviso al final del apartado.
-CERT_ENCRYPTION_KEY=<la clave Fernet generada>
+CERT_ENCRYPTION_KEY=<la primera clave Fernet>
+# Cifra los secretos TOTP y hashea los códigos de respaldo del segundo factor.
+# Tiene default vacío, así que Django arranca sin ella: lo que falla es el MFA,
+# y no al desplegar sino la primera vez que alguien lo enrola.
+MFA_ENCRYPTION_KEY=<la segunda clave Fernet>
 DEBUG=False
-ALLOWED_HOSTS=api.nobelio.co
-CORS_ALLOWED_ORIGINS=https://app.nobelio.co
+ALLOWED_HOSTS=api.rededoc.co
+
+# --- La SPA, que vive en otro dominio ---
+CORS_ALLOWED_ORIGINS=https://app.rededoc.co
+# Obligatoria: la sesión viaja en cookies httpOnly, y sin credenciales el
+# navegador ni las guarda ni las manda. Ver docs/autenticacion.md.
+CORS_ALLOW_CREDENTIALS=True
+# Dominio registrable compartido por la SPA y la API, para que SameSite=Lax
+# deje pasar la cookie entre app.rededoc.co y api.rededoc.co.
+AUTH_COOKIE_DOMAIN=.rededoc.co
+AUTH_COOKIE_SECURE=True
+AUTH_COOKIE_SAMESITE=Lax
+
+# Vida de la sesión. El access es corto porque no se puede revocar antes de que
+# venza; SESION_MAXIMA_DIAS es el tope absoluto, tras el cual se vuelve a pasar
+# por el login y por el segundo factor aunque se use sin parar.
+JWT_ACCESS_MINUTOS=15
+JWT_REFRESH_DIAS=1
+SESION_MAXIMA_DIAS=30
+
+# --- Páginas del frontend a las que apuntan los correos ---
+# HTTPS obligatorio: los dos enlaces llevan un token que abre la cuenta.
+URL_VERIFICACION_CORREO=https://app.rededoc.co/verificar-correo
+URL_RESTABLECER_CLAVE=https://app.rededoc.co/restablecer-clave
+
+# --- Correo saliente (Zinc) ---
+# Por aquí salen la verificación del registro, la recuperación de contraseña,
+# los códigos del segundo factor y la notificación de documentos al adquiriente.
+ZINC_URL_BASE=https://zinc.semantica.com.co
+ZINC_NOMBRE_REMITENTE=RedEDoc
+
+# --- Caché y topes de peticiones ---
+# CRÍTICA con varios workers: la de por-proceso da a cada uno su propia cuenta y
+# los topes se multiplican por tres. La tabla la crea la migración del paso 5.
+CACHE_URL=dbcache://cache_general
+# Cuántos proxies hay delante. Con nginx (paso 7) es 1; con nginx + Cloudflare,
+# 2. Dejarlo en 0 mete a todo el mundo en el cubo del proxy y los topes por IP
+# dejan de proteger nada.
+NUM_PROXIES=1
 
 # La BD es local; el usuario y la clave son los del paso 2.
 DATABASE_URL=postgres://nobelio:clave-larga-y-aleatoria@localhost:5432/nobelio
 
-# 2 = habilitación / Set de Pruebas · 1 = producción
+# Ambiente con el que NACE un emisor nuevo (2 = habilitación, 1 = producción).
+# No decide contra qué servidor se emite: eso lo dicen los campos del propio
+# emisor. Ver el paso 12.
 DIAN_ENVIRONMENT=2
 DIAN_WSDL_HABILITACION=https://vpfe-hab.dian.gov.co/WcfDianCustomerServices.svc?wsdl
 DIAN_WSDL_PRODUCCION=https://vpfe.dian.gov.co/WcfDianCustomerServices.svc?wsdl
 DIAN_POLICY_ID=https://facturaelectronica.dian.gov.co/politicadefirma/v2/politicadefirmav2.pdf
 DIAN_POLICY_HASH=<lo calcula apps/dian/firma.calcular_hash_politica()>
+
+# Fabricante del software para la extensión del documento equivalente P.O.S.
+# Es quien HIZO el software, igual para todos los emisores de la instalación.
+# Tienen default en settings; defínelas solo si la instalación es de otro.
+DIAN_FABRICANTE_NOMBRE=Mario A. Estrada
+DIAN_FABRICANTE_RAZON_SOCIAL=Semantica Digital S.A.S
+DIAN_FABRICANTE_NOMBRE_SOFTWARE=RedEDoc
 
 # Bucket propio de producción, distinto al de desarrollo: aquí caen los .p12
 # de clientes reales.
@@ -155,19 +207,28 @@ SENTRY_TRACES=0.0
 SENTRY_RELEASE=<sha del commit desplegado>
 ```
 
-El archivo lleva la clave de la BD, las de B2, la del respaldo y la de cifrado
-de los certificados. Lo lee root para los comandos de gestión y `nobelio` para
-correr el servicio; nadie más:
+Los topes de peticiones (`THROTTLE_*`) se quedan con sus valores por defecto;
+están todos listados en `.env.example`, que es la referencia completa de
+variables, y se suben sin desplegar código el día que un punto de venta con
+muchas cajas se quede corto.
+
+El archivo lleva la clave de la BD, las de B2, la del respaldo y las dos de
+cifrado —certificados y segundo factor—. Lo lee root para los comandos de
+gestión y `nobelio` para correr el servicio; nadie más:
 
 ```bash
 chown root:nobelio /opt/nobelio/.env
 chmod 640 /opt/nobelio/.env
 ```
 
-> **`CERT_ENCRYPTION_KEY` no tiene valor por defecto: si falta, Django no
-> arranca.** Es deliberado —un default silencioso significaría seguir guardando
-> las claves de los `.p12` en claro sin que nadie se entere—, pero tiene dos
-> consecuencias que conviene tener presentes al desplegar:
+> **Las dos claves Fernet fallan de forma distinta, y esa es la trampa.**
+> `CERT_ENCRYPTION_KEY` no tiene default: si falta, Django no arranca y te
+> enteras en el acto. `MFA_ENCRYPTION_KEY` sí lo tiene (vacío), así que el
+> despliegue parece correcto y revienta con `ImproperlyConfigured` el día que
+> alguien enrola el segundo factor. Compruébalas las dos antes de dar por bueno
+> el servidor.
+>
+> Lo que sigue vale para ambas, con la `CERT_ENCRYPTION_KEY` como ejemplo:
 >
 > - **Guárdala fuera del servidor**, en el mismo sitio donde estén las
 >   credenciales de B2. Perderla es perder las claves de todos los certificados:
@@ -202,6 +263,23 @@ export DJANGO_SETTINGS_MODULE=config.settings.prod
 .venv/bin/python manage.py createsuperuser
 ```
 
+`migrate` crea también la tabla `cache_general` que pide `CACHE_URL`
+(`apps/nucleo/migrations/0001_tabla_de_cache.py`): no hace falta
+`createcachetable` a mano.
+
+> **El superusuario recién creado no puede iniciar sesión.** `create_superuser`
+> no marca `is_verified`, y `POST /token/` responde **403 "Tienes que confirmar
+> tu correo antes de iniciar sesión."** antes de mirar nada más. Como el correo
+> de verificación solo lo manda el registro público, al primero hay que marcarlo
+> a mano:
+>
+> ```bash
+> .venv/bin/python manage.py shell -c "
+> from django.contrib.auth import get_user_model
+> get_user_model().objects.filter(email='<tu correo>').update(is_verified=True)
+> "
+> ```
+
 No hace falta `collectstatic`: la API solo tiene `JSONRenderer`, sin sitio de
 administración ni browsable API. No hay estáticos que servir.
 
@@ -222,7 +300,7 @@ Group=nobelio
 WorkingDirectory=/opt/nobelio
 Environment=DJANGO_SETTINGS_MODULE=config.settings.prod
 ExecStart=/opt/nobelio/.venv/bin/gunicorn config.wsgi:application \
-    --bind 127.0.0.1:8000 \
+    --bind 127.0.0.1:8005 \
     --worker-class gthread \
     --workers 3 \
     --threads 4 \
@@ -282,13 +360,13 @@ tee /etc/nginx/sites-available/nobelio > /dev/null <<'EOF'
 server {
     listen 80;
     listen [::]:80;
-    server_name api.nobelio.co;
+    server_name api.rededoc.co;
 
     # El .p12 y los PDF son los cuerpos más grandes que pasan por aquí.
     client_max_body_size 10M;
 
     location / {
-        proxy_pass http://127.0.0.1:8000;
+        proxy_pass http://127.0.0.1:8005;
 
         proxy_set_header Host              $host;
         proxy_set_header X-Real-IP         $remote_addr;
@@ -307,7 +385,8 @@ nginx -t && systemctl reload nginx
 ```
 
 `proxy_pass` tiene que apuntar al mismo puerto del `--bind` del paso 6. Si el
-8000 ya está ocupado por otra aplicación del servidor, cambia **los dos** — es
+8005 ya está ocupado por otra aplicación del servidor, cambia **los tres**
+(aquí, el `--bind` del paso 6 y el chequeo final de `actualizar.sh`) — es
 un fallo silencioso: el dominio sirve la app equivocada sin dar ningún error.
 
 `proxy_set_header X-Forwarded-Proto $scheme` no es opcional:
@@ -318,13 +397,13 @@ bucle de redirecciones.
 Comprueba que el 80 ya responde antes de pedir el certificado:
 
 ```bash
-curl -i -H "X-Forwarded-Proto: https" http://api.nobelio.co/estado/
+curl -i -H "X-Forwarded-Proto: https" http://api.rededoc.co/estado/
 ```
 
 ### Certificado
 
 ```bash
-certbot --nginx -d api.nobelio.co
+certbot --nginx -d api.rededoc.co
 ```
 
 Certbot reescribe el archivo del sitio: añade `listen 443 ssl`, las rutas del
@@ -358,10 +437,10 @@ La alternativa, si prefieres no gestionar certificados a mano — Caddy los pide
 los renueva solo:
 
 ```
-api.nobelio.co {
+api.rededoc.co {
 	encode gzip
 	request_body { max_size 10MB }
-	reverse_proxy 127.0.0.1:8000 {
+	reverse_proxy 127.0.0.1:8005 {
 		header_up X-Forwarded-Proto {scheme}
 		transport http { read_timeout 150s }
 	}
@@ -373,7 +452,7 @@ api.nobelio.co {
 ## 8. Verificar
 
 ```bash
-curl https://api.nobelio.co/estado/
+curl https://api.rededoc.co/estado/
 # → {"servicio": "nobelio", "estado": "ok"}
 
 journalctl -u nobelio -f
@@ -383,19 +462,19 @@ Contra `127.0.0.1` hacen falta dos cabeceras, y sin ellas parecen fallos del
 servicio sin serlo:
 
 ```bash
-curl -i -H "Host: api.nobelio.co" -H "X-Forwarded-Proto: https" \
-  http://127.0.0.1:8000/estado/
+curl -i -H "Host: api.rededoc.co" -H "X-Forwarded-Proto: https" \
+  http://127.0.0.1:8005/estado/
 ```
 
 - Sin `Host`: **400**. `localhost` no está en `ALLOWED_HOSTS`, y Django compara
-  la cadena exacta — `api.nobelio.co` no encaja con `nobelio.co`.
+  la cadena exacta — `api.rededoc.co` no encaja con `rededoc.co`.
 - Sin `X-Forwarded-Proto`: **301** a `https://`. `SECURE_SSL_REDIRECT` está en
   `SecurityMiddleware`, lo primero de la cadena; en el tráfico real esa cabecera
   la pone nginx.
 
 Si el 400 persiste con el Host correcto, revisa el `.env` con
 `grep ALLOWED_HOSTS /opt/nobelio/.env | cat -A`: `env.list` no recorta espacios
-ni comillas, así que `ALLOWED_HOSTS="api.nobelio.co"` o `a.co, b.co` parsean con
+ni comillas, así que `ALLOWED_HOSTS="api.rededoc.co"` o `a.co, b.co` parsean con
 la basura dentro y siguen rechazando. Y el `.env` se lee al importar los
 settings: tras editarlo, `systemctl restart nobelio`.
 
@@ -403,27 +482,56 @@ settings: tras editarlo, `systemctl restart nobelio`.
 
 ## 9. Alta del primer cliente
 
-La cuenta (el tenant) se crea por API con el superusuario —
-`CuentaViewSet` exige `IsAdminUser` — porque `crear_llave_api` falla si la
-cuenta todavía no existe:
+No hay tenant que crear: el cliente **es un usuario**, y los emisores que
+alcanza son los que estén a su nombre o asignados a él
+(`apps.seguridad.alcance.emisores_permitidos`). Se da de alta por el registro
+público, que es anónimo:
 
 ```bash
-TOKEN=$(curl -s -X POST https://api.nobelio.co/api/seguridad/token/ \
+curl -X POST https://api.rededoc.co/api/seguridad/registro/ \
   -H "Content-Type: application/json" \
-  -d '{"correo":"<usuario>","password":"<clave>"}' \
-  | python3 -c "import sys,json;print(json.load(sys.stdin)['access'])")
-
-curl -X POST https://api.nobelio.co/api/cuentas/cuenta/ \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"nombre":"Cliente Demo SAS","identificacion":"900123456",
-       "correo_contacto":"contacto@cliente.co","activa":true}'
-
-cd /opt/nobelio && DJANGO_SETTINGS_MODULE=config.settings.prod \
-  .venv/bin/python manage.py crear_llave_api --cuenta <id> --nombre "ERP producción"
+  -d '{"email":"contacto@cliente.co","password":"<clave larga>",
+       "nombre_corto":"Cliente Demo SAS"}'
 ```
 
-El secreto de la llave se muestra **una sola vez**. De ahí en adelante, el alta
-del emisor sigue [checklist-emision.md](checklist-emision.md).
+Eso manda el correo de verificación a `URL_VERIFICACION_CORREO`; el enlace lleva
+el token a `POST /api/seguridad/registro/verificar/`, y hasta que no se confirme,
+el login responde 403. Comprueba de paso que Zinc esté entregando: si el correo
+no sale, el alta queda a medias sin decir nada.
+
+Ya verificado, el cliente entra por la SPA. Para probar el ingreso desde la
+consola hacen falta cookies, porque **la sesión no viaja en el cuerpo**: `token/`
+deja `access_token` y `refresh_token` como cookies `httpOnly` y la respuesta solo
+trae los datos del usuario.
+
+```bash
+curl -s -c galletas.txt -X POST https://api.rededoc.co/api/seguridad/token/ \
+  -H "Content-Type: application/json" \
+  -d '{"email":"contacto@cliente.co","password":"<clave larga>"}'
+
+# Con las cookies guardadas, cualquier ruta autenticada:
+curl -s -b galletas.txt https://api.rededoc.co/api/seguridad/me/
+```
+
+Si la cuenta tiene segundo factor, `token/` no entrega sesión: responde
+`mfa_requerido` y un `mfa_token` que resuelve `POST /api/seguridad/token/mfa/`.
+
+Para el ERP, que no es un navegador, la vía es una llave de API. Va ligada a un
+**usuario** y alcanza exactamente lo mismo que él:
+
+```bash
+cd /opt/nobelio && DJANGO_SETTINGS_MODULE=config.settings.prod \
+  .venv/bin/python manage.py crear_llave_api \
+    --usuario contacto@cliente.co --nombre "ERP producción"
+```
+
+El secreto se muestra **una sola vez**, y se manda como
+`Authorization: Api-Key <prefijo>.<secreto>`. No existe autenticación por
+`Bearer`: las únicas dos clases son la llave de API y el JWT leído de la cookie
+(`REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"]`).
+
+De ahí en adelante, el alta del emisor sigue
+[checklist-emision.md](checklist-emision.md).
 
 ---
 
@@ -492,12 +600,44 @@ systemctl restart nobelio
 
 ## 12. Paso a producción ante la DIAN
 
-Cuando la DIAN acepte el Set de Pruebas:
+**El paso a producción es por emisor, no del despliegue.** Contra qué servidor
+de la DIAN sale cada documento lo deciden `ambiente_facturacion`,
+`ambiente_nomina` y `ambiente_documento_equivalente` **del emisor**, y el
+documento se lleva el valor al crearse y lo sella al firmar. `DIAN_ENVIRONMENT`
+del `.env` solo fija con cuál nace un emisor nuevo: cambiarlo a `1` no mueve a
+nadie que ya esté dado de alta. Son tres habilitaciones independientes, así que
+el mismo emisor puede facturar en producción y seguir en habilitación para
+nómina.
 
-1. `DIAN_ENVIRONMENT=1` en el `.env`.
-2. `systemctl restart nobelio`.
-3. Poner `SoftwareDian.set_pruebas_aceptado` en `True` (hoy no lo marca nada
-   solo): es lo que hace que el envío pase de `SendTestSetAsync` a `SendBillSync`.
+Cuando la DIAN acepte el Set de Pruebas de una operación, el sistema lo detecta
+solo: `_marcar_habilitacion_superada` (`apps/dian/servicios.py`) pone
+`SoftwareDian.set_pruebas_aceptado` —que es lo que hace pasar el envío de
+`SendTestSetAsync` a `SendBillSync`— y marca la bandera `habilitado_*` que
+corresponda. No hay que tocar ninguna de las dos a mano.
+
+Lo que sí es una decisión tuya es mover el ambiente del emisor, y solo se puede
+después de esa habilitación:
+
+```bash
+curl -X PATCH https://api.rededoc.co/api/emisores/emisor/<id>/ \
+  -H "Authorization: Api-Key <prefijo>.<secreto>" \
+  -H "Content-Type: application/json" \
+  -d '{"ambiente_facturacion": 1}'
+```
+
+Las tres banderas `habilitado_*` son de **solo lectura** en la API: constatan un
+hecho que declara la DIAN, no una decisión del cliente, y como además condicionan
+el paso a producción de nómina y documento equivalente, poder escribirlas era
+poder saltarse la habilitación entera. Si la DIAN habilita por fuera del
+automatismo, se marcan por backend:
+
+```bash
+cd /opt/nobelio && DJANGO_SETTINGS_MODULE=config.settings.prod \
+  .venv/bin/python manage.py shell -c "
+from apps.emisores.models import Emisor
+Emisor.objects.filter(numero_identificacion='900123456').update(habilitado_nomina=True)
+"
+```
 
 Repasa también los puntos de
 [Pendientes para producción](../README.md#pendientes-para-producción) del README.
@@ -506,7 +646,7 @@ Repasa también los puntos de
 
 ## Lo que esta guía no cubre
 
-- **Ambiente de habilitación en paralelo** (`pruebas.nobelio.co`): sería repetir
+- **Ambiente de habilitación en paralelo** (`pruebas.rededoc.co`): sería repetir
   los pasos 2 a 7 con otra base de datos, otro directorio, otro service de
   systemd escuchando en el 8001 y un segundo `server` en `sites-available`.
   Mantener los dos ambientes separados por host evita el peor error posible:

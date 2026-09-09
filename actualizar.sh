@@ -15,6 +15,9 @@ systemctl stop nobelio
 trap 'echo "Falló la actualización; levantando el servicio." >&2; systemctl start nobelio' ERR
 
 git pull
+# Antes de migrar: un pull que suba una dependencia deja el venv corto y la
+# migración falla por un import, no por la base.
+.venv/bin/pip install -q -r requirements.txt
 .venv/bin/python manage.py migrate
 # Idempotente (update_or_create por código): recarga las listas .gc por si el
 # pull trajo catálogos nuevos o corregidos.
@@ -32,7 +35,7 @@ trap - ERR
 HOST="$(grep -m1 '^ALLOWED_HOSTS=' .env | cut -d= -f2- | cut -d, -f1 | tr -d " \"'")"
 for _ in {1..10}; do
     if curl -fsS --max-time 5 -H "Host: $HOST" -H "X-Forwarded-Proto: https" \
-        http://127.0.0.1:8050/estado/ >/dev/null; then
+        http://127.0.0.1:8005/estado/ >/dev/null; then
         echo "OK: $(git rev-parse --short HEAD) arriba."
         exit 0
     fi
