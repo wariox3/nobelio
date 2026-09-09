@@ -474,9 +474,6 @@ DIAN_FABRICANTE_NOMBRE_SOFTWARE = env(
     "DIAN_FABRICANTE_NOMBRE_SOFTWARE", default="RedEDoc",
 )
 
-# Carpeta donde se almacenan los XML/PDF generados (relativa a MEDIA_ROOT).
-DIAN_STORAGE_SUBDIR = "dian"
-
 # Carpeta con las listas de valores oficiales DIAN en formato Genericode (.gc).
 CATALOGOS_LISTAS_DIR = BASE_DIR / "apps" / "catalogos" / "datos" / "listas"
 

@@ -376,6 +376,35 @@ Tres decisiones que importan:
   `Restart=always`: si la base no responde al arrancar, el servicio reintenta
   cada 5 segundos en vez de quedarse abajo.
 
+> **`ReadWritePaths` exige que el directorio exista.** `ProtectSystem=strict`
+> monta el sistema de archivos en solo lectura y `ReadWritePaths` abre la única
+> excepción que el servicio necesita. Si `/opt/nobelio/media` no está creado —el
+> `mkdir` del paso 3—, systemd no puede montar esa excepción y el proceso muere
+> **antes de ejecutar Python**, con `status=226/NAMESPACE` y este mensaje:
+>
+> ```
+> Failed to set up mount namespacing: /opt/nobelio/media: No such file or directory
+> ```
+>
+> No es un error de la aplicación y no deja traceback; con `Restart=always` se
+> queda en bucle de reinicios. Se arregla creando el directorio:
+>
+> ```bash
+> mkdir -p /opt/nobelio/media && chown nobelio:nobelio /opt/nobelio/media
+> systemctl reset-failed nobelio && systemctl restart nobelio
+> ```
+
+> **Si activas la captura de diagnóstico, tiene que escribir dentro de esa
+> ruta.** `DIAN_DIRECTORIO_CAPTURA` (`apps/dian/soap.py`) deja en disco el sobre
+> SOAP enviado y la respuesta cruda de cada llamada. Está vacío por defecto y no
+> cuelga de `MEDIA_ROOT`, así que apúntalo a algo bajo `/opt/nobelio/media` o
+> añade su ruta a `ReadWritePaths`: fuera de ahí `ProtectSystem=strict` bloquea
+> la escritura y la captura **falla en silencio**, justo el día que la
+> encendiste para depurar un rechazo.
+>
+> Y apágala después. Esos archivos llevan el documento firmado y el certificado
+> del emisor, y quedan en un disco que no se respalda con las reglas del paso 10.
+
 > **Las conexiones ahora cruzan la red.** Django abre y cierra una conexión por
 > petición (`CONN_MAX_AGE` no está definido, y su default es `0`). Con la base en
 > `localhost` eso no se notaba; contra una base remota son un TCP y un handshake
