@@ -44,8 +44,8 @@ MENSAJE_DUPLICADO = (
 # lo que falta es el trámite. Mejor decirlo aquí, que es donde se decide.
 MENSAJE_NOMINA_SIN_HABILITAR = (
     "El emisor no está habilitado para nómina electrónica, así que no puede "
-    "emitirla en producción. Marque 'habilitado_nomina' cuando la DIAN acepte "
-    "la habilitación en su portal."
+    "emitirla en producción. La bandera se marca sola al cerrarse el Set de "
+    "Pruebas de nómina y no se puede escribir por la API."
 )
 
 
@@ -54,8 +54,8 @@ MENSAJE_NOMINA_SIN_HABILITAR = (
 # tiquete cuando lo que falta es el trámite.
 MENSAJE_DOCUMENTO_EQUIVALENTE_SIN_HABILITAR = (
     "El emisor no está habilitado para documento equivalente, así que no puede "
-    "emitirlo en producción. La bandera se marca sola cuando la DIAN cierra su "
-    "Set de Pruebas; márquela a mano solo si ya lo cerró y aquí no consta."
+    "emitirlo en producción. La bandera se marca sola al cerrarse su Set de "
+    "Pruebas y no se puede escribir por la API."
 )
 
 
@@ -73,31 +73,27 @@ class EmisorSerializer(serializers.ModelSerializer):
     responsabilidades = CodigoDeCatalogo(
         queryset=ResponsabilidadFiscal.objects.all(), many=True, required=False,
     )
-    # Lo marca el envío del Set de Pruebas, no el cuerpo de la petición:
-    # decir 'ya estoy habilitado' no habilita a nadie.
-    habilitado_facturacion = serializers.BooleanField(read_only=True)
-    # La de nómina sí es de escritura, y es la excepción justificada: no la
-    # marca ningún envío porque el trámite se hace en el portal de la DIAN y
-    # nada nos avisa. Alguien tiene que poder constatarlo, y hasta ahora solo
-    # se podía por fuera de esta API. Es además la condición para poner
-    # `ambiente_nomina` en producción (ver `validate`).
-    habilitado_nomina = serializers.BooleanField(required=False)
-    # La del documento equivalente es de escritura, como la de nómina, y por lo
-    # que dice `exigir_habilitacion_de_nomina`: en cuanto una bandera **condiciona
-    # el paso a producción**, dejarla de solo lectura encierra al emisor que se
-    # habilite por fuera del automatismo. Y aquí ese automatismo depende de
-    # reconocer un texto de la DIAN (`_set_pruebas_cerrado`), que puede cambiar
-    # de redacción cualquier día.
+    # Las tres banderas de habilitación son de solo lectura. Ninguna es una
+    # decisión de quien llama: son la constancia de un hecho que declara la
+    # DIAN, y decir 'ya estoy habilitado' en el cuerpo de una petición no
+    # habilita a nadie. Las marca `_marcar_habilitacion_superada`
+    # (`apps/dian/servicios.py`) al cerrarse el Set de Pruebas de cada
+    # operación —hay uno por operación, la nómina incluida—, y cada una se
+    # habilita por separado.
     #
-    # Lo normal sigue siendo que la marque sola `_marcar_habilitacion_superada`
-    # al cerrarse el Set de Pruebas; que se pueda escribir es la salida de
-    # emergencia, no el camino.
-    habilitado_documento_equivalente = serializers.BooleanField(required=False)
-    # Los ambientes también son de escritura, y ahí está la diferencia con la
-    # bandera de facturación: 'estoy habilitado' es un hecho que constata la
-    # DIAN, mientras que 'emite contra producción' es una decisión nuestra
-    # sobre este emisor. Es lo que permite pasar a uno a producción sin mover
-    # a los demás.
+    # Que además condicionen el paso a producción (ver `validate`) es la razón
+    # de peso: de escritura, cualquier cliente se saltaba la habilitación
+    # entera marcando la bandera en el mismo PATCH que pone el ambiente en
+    # producción. Si hay que ponerlas a mano —porque la DIAN habilitó por fuera
+    # del automatismo, o porque cambió el texto que reconoce
+    # `_set_pruebas_cerrado`—, se hace por backend.
+    habilitado_facturacion = serializers.BooleanField(read_only=True)
+    habilitado_nomina = serializers.BooleanField(read_only=True)
+    habilitado_documento_equivalente = serializers.BooleanField(read_only=True)
+    # Los ambientes sí son de escritura, y ahí está la diferencia con las
+    # banderas: 'estoy habilitado' es un hecho que constata la DIAN, mientras
+    # que 'emite contra producción' es una decisión nuestra sobre este emisor.
+    # Es lo que permite pasar a uno a producción sin mover a los demás.
 
     def validate(self, attrs):
         """Comprueba que el emisor no esté ya dado de alta.
@@ -150,11 +146,9 @@ class EmisorSerializer(serializers.ModelSerializer):
         rechaza, así que dejarlo pasar solo aplaza el fallo hasta la primera
         nómina y lo disfraza de error del documento.
 
-        No existe la simétrica para facturación a propósito: allí la bandera la
-        marca la propia DIAN al cerrar el Set de Pruebas
-        (``_marcar_habilitacion_superada``) y sigue siendo de solo lectura, así
-        que exigirla aquí dejaría encerrado a cualquier emisor que se habilitara
-        por fuera de ese automatismo.
+        No existe la simétrica para facturación a propósito: no se ha pedido
+        cerrar ese paso, y hacerlo ahora dejaría en habilitación a los emisores
+        que ya están facturando en producción con la bandera sin marcar.
         """
         if ambiente == Ambiente.PRODUCCION and not habilitado:
             raise serializers.ValidationError(
@@ -167,12 +161,6 @@ class EmisorSerializer(serializers.ModelSerializer):
         Gemela de ``exigir_habilitacion_de_nomina``: cada operación se habilita
         por separado, así que estar en producción para factura no dice nada del
         tiquete P.O.S.
-
-        Va con la bandera de escritura y no con una de solo lectura, que es lo
-        que distingue este caso del de facturación: en cuanto una bandera cierra
-        el paso a producción, tiene que existir la forma de constatarla a mano
-        —si no, un emisor ya habilitado por la DIAN que aquí no conste se queda
-        sin salida—.
         """
         if ambiente == Ambiente.PRODUCCION and not habilitado:
             raise serializers.ValidationError(
