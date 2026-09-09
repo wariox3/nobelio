@@ -1,8 +1,9 @@
 # Desplegar en producción (manual, sin contenedores)
 
 Guía paso a paso para dejar Nobelio sirviendo en `https://api.rededoc.co` desde
-un VPS Ubuntu 24.04: PostgreSQL nativo, gunicorn bajo systemd y nginx como
-proxy, con certificado de Let's Encrypt vía certbot. La contraparte de
+un VPS Ubuntu 24.04: gunicorn bajo systemd y nginx como proxy, con certificado
+de Let's Encrypt vía certbot. La base de datos **no** vive en este servidor: es
+un PostgreSQL gestionado aparte, y la guía solo lo consume (paso 2). La contraparte de
 [entorno-desarrollo.md](entorno-desarrollo.md), que cubre la máquina de trabajo.
 
 Sustituye `api.rededoc.co` por tu dominio en todos los comandos.
@@ -15,7 +16,8 @@ Sustituye `api.rededoc.co` por tu dominio en todos los comandos.
   En 22.04 no existe `python3.12` en los repos y el proyecto pide 3.12+; si ya
   estás en jammy, o reinstalas o tiras del PPA `deadsnakes`. Referencia: 3 vCPU / 4 GB. Conviene una región
   US‑East: el bucket B2 del proyecto está en `us-east-005`, y por ahí pasan los
-  `.p12` y los XML firmados.
+  `.p12` y los XML firmados. La base tampoco está en este servidor (paso 2), así
+  que conviene que esté en esa misma región: cada consulta cruza la red.
 - El registro DNS **A** del dominio apuntando a la IP del VPS, **resolviendo ya**.
   Sin eso Let's Encrypt no emite el certificado y el paso 7 falla.
 - Acceso SSH como root con llave pública. Toda la guía se ejecuta como root:
@@ -53,24 +55,56 @@ systemctl restart ssh
 ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp && ufw enable
 
 apt update && apt install -y python3.12 python3.12-venv python3-pip \
-    postgresql postgresql-contrib git gnupg awscli unattended-upgrades
+    postgresql-client git gnupg awscli unattended-upgrades
 ```
+
+`postgresql-client` y no `postgresql`: la base no vive aquí (paso 2). Lo que
+hace falta en el servidor es el cliente, para `psql` al diagnosticar y para el
+`pg_dump` del paso 10.
 
 ---
 
-## 2. PostgreSQL
+## 2. PostgreSQL (fuera de este servidor)
 
-```bash
-sudo -u postgres psql <<'SQL'
-CREATE USER nobelio WITH PASSWORD 'clave-larga-y-aleatoria';
-CREATE DATABASE nobelio OWNER nobelio;
-ALTER ROLE nobelio SET client_encoding TO 'utf8';
-ALTER ROLE nobelio SET timezone TO 'America/Bogota';
-SQL
-```
+**La base no se gestiona en este VPS.** Vive en un servicio aparte, así que aquí
+no se instala PostgreSQL ni hay nada que administrar: lo único que sale de este
+paso es la cadena de conexión que irá en `DATABASE_URL`.
 
-Por defecto PostgreSQL solo escucha en `localhost`. Déjalo así: la app corre en
-la misma máquina y no hay razón para exponer el puerto 5432.
+Lo que hay que pedirle a quien administre la base:
+
+- Una **base de datos vacía** y un **rol dueño de ella**. La app corre sus
+  propias migraciones, así que ese rol necesita crear tablas, índices y
+  restricciones sobre el esquema; no basta con lectura y escritura sobre tablas
+  ya hechas. También es quien crea la tabla `cache_general` del paso 5.
+- **Alcance del rol**: dueño de esa base y de nada más. Nada de superusuario.
+- El **host, puerto, nombre y credenciales**, y si el servicio exige TLS.
+
+No hace falta pedir `client_encoding` ni `timezone` en el rol, aunque la versión
+anterior de esta guía los ponía: con `USE_TZ = True` Django guarda en UTC y fija
+la zona de la conexión por su cuenta, y el encoding lo negocia el driver.
+
+La conexión ya no es local, y eso trae tres cosas que antes no existían:
+
+- **Red de salida.** `ufw` solo filtra entrada, así que no hay que abrir nada
+  para salir; pero si el proveedor filtra por origen, hay que dar de alta la IP
+  del VPS en su lista. Compruébalo antes de migrar:
+
+  ```bash
+  psql "$DATABASE_URL" -c "select version();"
+  ```
+
+- **TLS.** Si el servicio lo admite —y casi todos los gestionados lo exigen—, va
+  en la propia URL. Sin esto las credenciales y los datos fiscales viajan en
+  claro entre las dos máquinas:
+
+  ```ini
+  DATABASE_URL=postgres://usuario:clave@host-de-la-base:5432/nobelio?sslmode=require
+  ```
+
+- **Latencia.** Con la base en la misma máquina cada consulta costaba
+  microsegundos; ahora cuesta un ida y vuelta por la red. Conviene que la base
+  esté en la misma región que el VPS, y tener presente lo que dice el aviso del
+  paso 6 sobre las conexiones.
 
 ---
 
@@ -164,14 +198,17 @@ ZINC_NOMBRE_REMITENTE=RedEDoc
 # --- Caché y topes de peticiones ---
 # CRÍTICA con varios workers: la de por-proceso da a cada uno su propia cuenta y
 # los topes se multiplican por tres. La tabla la crea la migración del paso 5.
+# Con la base fuera del servidor, cada comprobación de tope es un viaje por la
+# red; si pesa, aquí es donde entra un `redis://host:6379/0`.
 CACHE_URL=dbcache://cache_general
 # Cuántos proxies hay delante. Con nginx (paso 7) es 1; con nginx + Cloudflare,
 # 2. Dejarlo en 0 mete a todo el mundo en el cubo del proxy y los topes por IP
 # dejan de proteger nada.
 NUM_PROXIES=1
 
-# La BD es local; el usuario y la clave son los del paso 2.
-DATABASE_URL=postgres://nobelio:clave-larga-y-aleatoria@localhost:5432/nobelio
+# La BD está fuera de este servidor: host, credenciales y TLS son los que te
+# dieron en el paso 2. `sslmode=require` si el servicio lo admite.
+DATABASE_URL=postgres://usuario:clave@host-de-la-base:5432/nobelio?sslmode=require
 
 # Ambiente con el que NACE un emisor nuevo (2 = habilitación, 1 = producción).
 # No decide contra qué servidor se emite: eso lo dicen los campos del propio
@@ -291,8 +328,8 @@ administración ni browsable API. No hay estáticos que servir.
 tee /etc/systemd/system/nobelio.service > /dev/null <<'EOF'
 [Unit]
 Description=Nobelio — API de facturación electrónica DIAN
-After=network.target postgresql.service
-Requires=postgresql.service
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 User=nobelio
@@ -327,13 +364,25 @@ systemctl enable --now nobelio
 systemctl status nobelio
 ```
 
-Dos decisiones que importan:
+Tres decisiones que importan:
 
 - **`gthread` y no `sync`**: `POST /enviar/` se queda bloqueado esperando a la
   DIAN (`SendBillSync` puede tardar decenas de segundos). Con workers sync, cada
   envío deja un proceso entero inservible mientras tanto.
 - **`--timeout 120`**: por encima de lo que la DIAN llega a tardar. Con el
   timeout por defecto (30 s) gunicorn mataría envíos que iban bien.
+- **Sin dependencia de la base**: sin `postgresql.service` local, systemd no
+  tiene forma de esperar a que la base remota esté lista. Lo cubre
+  `Restart=always`: si la base no responde al arrancar, el servicio reintenta
+  cada 5 segundos en vez de quedarse abajo.
+
+> **Las conexiones ahora cruzan la red.** Django abre y cierra una conexión por
+> petición (`CONN_MAX_AGE` no está definido, y su default es `0`). Con la base en
+> `localhost` eso no se notaba; contra una base remota son un TCP y un handshake
+> TLS por cada petición, sumados a la latencia de todas las consultas. Si el
+> tiempo de respuesta se resiente, lo que hay que mirar es reutilizar conexiones
+> con `CONN_MAX_AGE`, teniendo en cuenta cuántas admite el plan contratado:
+> `--workers 3 × --threads 4` son hasta 12 conexiones vivas por servidor.
 
 `User=nobelio` es la cuenta de sistema del paso 1; systemd no necesita que
 tenga shell para lanzar el proceso. Y como el resto de `/opt/nobelio` queda
@@ -556,6 +605,18 @@ aws s3 cp "$ARCHIVO" "s3://${B2_BUCKET}/respaldos/$(basename "$ARCHIVO")" \
   --endpoint-url "$B2_ENDPOINT_URL"
 
 rm -f "$ARCHIVO"
+```
+
+`pg_dump` sale de `postgresql-client` (paso 1) y ataca la base remota por la
+misma `DATABASE_URL` que usa la app, TLS incluido. Un detalle que muerde: el
+cliente tiene que ser de versión **igual o mayor** que el servidor, o aborta con
+`server version mismatch` y el respaldo no se hace —sin que nadie se entere,
+porque el cron escribe en un log que nadie mira—. Compruébalo el día del
+despliegue y cada vez que el proveedor suba la versión de la base:
+
+```bash
+pg_dump --version
+psql "$DATABASE_URL" -tAc "show server_version;"
 ```
 
 El script lee el `.env` y produce un volcado completo de la base, así que es de
