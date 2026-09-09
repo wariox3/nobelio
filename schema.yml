@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: Nobelio — API de facturación electrónica DIAN
+  title: RedEDoc — API de facturación electrónica DIAN
   version: 1.0.0
   description: |-
     Emisión de documentos electrónicos ante la DIAN (Colombia): factura, notas, documento soporte, documento equivalente P.O.S. y nómina.

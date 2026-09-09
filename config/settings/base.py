@@ -505,7 +505,7 @@ DIAN_XSD_DIR = BASE_DIR / "apps" / "dian" / "datos" / "xsd"
 #     integrador. Lo regenera `manage.py spectacular --file schema.yml` y
 #     `config/tests_esquema.py` falla si se queda atrás del código.
 SPECTACULAR_SETTINGS = {
-    "TITLE": "Nobelio — API de facturación electrónica DIAN",
+    "TITLE": "RedEDoc — API de facturación electrónica DIAN",
     "DESCRIPTION": (
         "Emisión de documentos electrónicos ante la DIAN (Colombia): factura, "
         "notas, documento soporte, documento equivalente P.O.S. y nómina.\n\n"
