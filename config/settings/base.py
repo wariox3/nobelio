@@ -150,21 +150,25 @@ ZINC_NOMBRE_REMITENTE = env("ZINC_NOMBRE_REMITENTE", default="RedDoc ERP")
 # `CACHE_URL` acepta también redis:// el día que haga falta.
 CACHES = {"default": env.cache("CACHE_URL", default="locmemcache://")}
 
-# --- Registro público -------------------------------------------------------
-# Página del sitio a la que apunta el correo de verificación; recibe el token
-# por query string y lo reenvía a `POST /api/seguridad/registro/verificar/`.
-# Vive fuera de la API porque la confirma una persona en el navegador, no un
-# cliente de la API.
-URL_VERIFICACION_CORREO = env(
-    "URL_VERIFICACION_CORREO",
-    default="http://localhost:4321/verificar-correo",
-)
-# Página que recibe el token de recuperación y lo reenvía junto con la
-# contraseña nueva a `POST /api/seguridad/token/restablecer/`.
-URL_RESTABLECER_CLAVE = env(
-    "URL_RESTABLECER_CLAVE",
-    default="http://localhost:4321/restablecer-clave",
-)
+# --- Páginas del frontend ---------------------------------------------------
+# Raíz del sitio que abre la persona en el navegador, no de esta API. De aquí
+# cuelgan las páginas a las que apuntan los correos que mandamos, y por eso está
+# en una sola variable: son varias URLs del mismo sitio, y tenerlas sueltas hacía
+# que mudarse de dominio fuera cambiar unas y olvidarse de otras —el enlace roto
+# no se ve hasta que alguien recibe el correo—.
+BASE_FRONTEND = env("BASE_FRONTEND", default="http://localhost:4321").rstrip("/")
+
+# Las rutas cuelgan de ahí y no se configuran por separado: son páginas del
+# mismo sitio, y las rutas las decide el front, no el despliegue. Si alguna se
+# renombra, se cambia aquí.
+#
+# Recibe el token de verificación por query string y lo reenvía a
+# `POST /api/seguridad/registro/verificar/`. Vive fuera de la API porque la
+# confirma una persona en el navegador, no un cliente de la API.
+URL_VERIFICACION_CORREO = f"{BASE_FRONTEND}/verificar-correo"
+# Recibe el token de recuperación y lo reenvía junto con la contraseña nueva a
+# `POST /api/seguridad/token/restablecer/`.
+URL_RESTABLECER_CLAVE = f"{BASE_FRONTEND}/restablecer-clave"
 
 # --- Almacenamiento en Backblaze B2 (S3-compatible) ------------------------
 # Credenciales de una "Application Key" de B2 con acceso al bucket. Si no están

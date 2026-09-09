@@ -167,12 +167,13 @@ DEBUG=False
 ALLOWED_HOSTS=api.rededoc.co
 
 # --- La SPA, que vive en otro dominio ---
-CORS_ALLOWED_ORIGINS=https://app.rededoc.co
+CORS_ALLOWED_ORIGINS=https://rededoc.co
 # Obligatoria: la sesión viaja en cookies httpOnly, y sin credenciales el
 # navegador ni las guarda ni las manda. Ver docs/autenticacion.md.
 CORS_ALLOW_CREDENTIALS=True
-# Dominio registrable compartido por la SPA y la API, para que SameSite=Lax
-# deje pasar la cookie entre app.rededoc.co y api.rededoc.co.
+# Dominio registrable compartido por el front y la API, para que SameSite=Lax
+# deje pasar la cookie entre rededoc.co y api.rededoc.co. Con el punto delante:
+# cubre el apex y cualquier subdominio.
 AUTH_COOKIE_DOMAIN=.rededoc.co
 AUTH_COOKIE_SECURE=True
 AUTH_COOKIE_SAMESITE=Lax
@@ -184,10 +185,13 @@ JWT_ACCESS_MINUTOS=15
 JWT_REFRESH_DIAS=1
 SESION_MAXIMA_DIAS=30
 
-# --- Páginas del frontend a las que apuntan los correos ---
-# HTTPS obligatorio: los dos enlaces llevan un token que abre la cuenta.
-URL_VERIFICACION_CORREO=https://app.rededoc.co/verificar-correo
-URL_RESTABLECER_CLAVE=https://app.rededoc.co/restablecer-clave
+# --- Frontend ---
+# Raíz del sitio que abren las personas, NO el host de esta API: de aquí cuelgan
+# las páginas a las que apuntan los correos (verificar el alta, restablecer la
+# contraseña). Si te equivocas, el correo sale con un enlace a un dominio que no
+# existe y el fallo no se ve hasta que alguien lo recibe.
+# HTTPS obligatorio: esos enlaces llevan un token que abre la cuenta.
+BASE_FRONTEND=https://rededoc.co
 
 # --- Correo saliente (Zinc) ---
 # Por aquí salen la verificación del registro, la recuperación de contraseña,
@@ -572,7 +576,7 @@ curl -X POST https://api.rededoc.co/api/seguridad/registro/ \
        "nombre_corto":"Cliente Demo SAS"}'
 ```
 
-Eso manda el correo de verificación a `URL_VERIFICACION_CORREO`; el enlace lleva
+Eso manda el correo de verificación a `BASE_FRONTEND/verificar-correo`; el enlace lleva
 el token a `POST /api/seguridad/registro/verificar/`, y hasta que no se confirme,
 el login responde 403. Comprueba de paso que Zinc esté entregando: si el correo
 no sale, el alta queda a medias sin decir nada.
