@@ -6949,6 +6949,12 @@ components:
         nombre:
           type: string
           maxLength: 255
+        codigo_postal:
+          type: string
+          title: Código postal
+          description: El de la cabecera. Respalda el cbc:PostalZone del XML cuando
+            el emisor o el adquiriente no informan el suyo.
+          maxLength: 6
         departamento:
           type: integer
           nullable: true

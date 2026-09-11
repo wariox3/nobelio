@@ -11,4 +11,7 @@ class MunicipioSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Municipio
-        fields = ["id", "codigo", "nombre", "departamento", "departamento_codigo", "activo"]
+        fields = [
+            "id", "codigo", "nombre", "codigo_postal",
+            "departamento", "departamento_codigo", "activo",
+        ]

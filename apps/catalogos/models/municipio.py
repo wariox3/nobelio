@@ -11,6 +11,12 @@ class Municipio(ElementoCatalogo):
     El departamento se deriva de los dos primeros dígitos del código.
     """
 
+    codigo_postal = models.CharField(
+        "código postal", max_length=6, blank=True,
+        help_text="El de la cabecera. Respalda el cbc:PostalZone del XML "
+        "cuando el emisor o el adquiriente no informan el suyo.",
+    )
+
     departamento = models.ForeignKey(
         Departamento,
         on_delete=models.PROTECT,

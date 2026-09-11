@@ -34,6 +34,16 @@ MAPEO = {
     "ConceptoNotaDebito": models.ConceptoNotaDebito,
 }
 
+# Columnas del .gc que van a un campo del modelo, además de `code` y `name`.
+#
+# `codigo_postal` no viene en la lista oficial de municipios: se añadió a mano
+# al archivo con el dato de 4-72, porque la DIAN publica los códigos postales
+# sueltos —sin municipio al que atarlos— y del código DANE no se deduce el
+# postal. El porqué y la reconstrucción, en el README de `datos/listas/`.
+COLUMNAS_EXTRA = {
+    "Municipio": ["codigo_postal"],
+}
+
 # Listas propias del documento soporte, en su subcarpeta (ver el README de
 # `datos/listas/documento-soporte/`). Se cargan aparte y no se mezclan con las
 # de factura: la caja de herramientas del DS es de 2022 y la de factura de 2026,
@@ -81,9 +91,15 @@ class Command(BaseCommand):
                 nombre_valor = (fila.get("name") or "").strip()
                 if not codigo:
                     continue
+                valores = {"nombre": nombre_valor or codigo}
+                for columna in COLUMNAS_EXTRA.get(nombre, []):
+                    extra = (fila.get(columna) or "").strip()
+                    # Una fila sin el dato no borra lo que ya hubiera: la
+                    # columna es opcional y puede faltar en cualquier fila.
+                    if extra:
+                        valores[columna] = extra
                 _, creado = Modelo.objects.update_or_create(
-                    codigo=codigo,
-                    defaults={"nombre": nombre_valor or codigo},
+                    codigo=codigo, defaults=valores,
                 )
                 creados += creado
                 actualizados += not creado
@@ -108,3 +124,4 @@ class Command(BaseCommand):
                 municipio.save(update_fields=["departamento"])
                 enlazados += 1
         self.stdout.write(f"  municipios enlazados a departamento: {enlazados}")
+
