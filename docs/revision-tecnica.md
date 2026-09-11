@@ -148,11 +148,14 @@ alcance, o reactiva con `activo=true` uno que se jubiló. Todo el trabajo de
 > **Arreglado el 2026-09-02.** La clase deja de ser un `ModelViewSet` y se
 > compone con los mixins justos: `List`, `Retrieve`, `Destroy` y `GenericViewSet`,
 > más la acción `cargar`. Sin `update` ni `partial_update` declarados, el router
-> no publica `PUT` ni `PATCH`. Se conservó el `create` que lanza
-> `MethodNotAllowed` —aunque el router ya no lo enrutaría por sí solo— para que
-> un `POST` siga respondiendo un 405 que dice a dónde ir. No hay edición de
-> certificados: el `alias` se fija al subir y `activo` lo gobierna `cargar`, que
-> jubila los anteriores del emisor.
+> no publica `PUT` ni `PATCH`. Tampoco hay `create`: se conservó un tiempo uno
+> que lanzaba `MethodNotAllowed` con la pista de `cargar/`, pero el router decide
+> qué verbos monta mirando si el viewset *tiene* el método, no de qué mixin
+> viene, así que el `POST` seguía publicado y drf-spectacular lo documentaba como
+> una creación normal, con un `201` que nunca ocurría. Retirado el 2026-09-11: el
+> 405 pasa a ser el genérico de DRF. No hay edición de certificados: el `alias`
+> se fija al subir y `activo` lo gobierna `cargar`, que jubila los anteriores del
+> emisor.
 
 ### A4 · La notificación al adquiriente viaja por HTTP plano — **bloqueado fuera**
 

@@ -192,7 +192,7 @@ class EmisorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Emisor
         fields = [
-            "id", "usuario", "razon_social", "nombre_comercial",
+            "id", "usuario", "razon_social",
             "tipo_identificacion", "numero_identificacion", "digito_verificacion",
             "tipo_organizacion", "responsabilidades",
             "pais", "departamento", "municipio", "direccion", "codigo_postal",

@@ -131,7 +131,7 @@ def crear_documento_factura(catalogos=None):
 
     emisor = Emisor.objects.create(
         usuario=c["usuario"],
-        razon_social="Empresa Demo SAS", nombre_comercial="Demo",
+        razon_social="Empresa Demo SAS",
         tipo_identificacion=c["nit"], numero_identificacion="700085371",
         digito_verificacion="1", tipo_organizacion=c["juridica"],
         pais=c["colombia"], departamento=c["antioquia"], municipio=c["medellin"],

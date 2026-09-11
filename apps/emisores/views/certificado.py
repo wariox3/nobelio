@@ -3,7 +3,6 @@ from django.conf import settings
 from django.db import transaction
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import MethodNotAllowed
 from rest_framework.response import Response
 
 from apps.emisores import models, serializers
@@ -34,6 +33,11 @@ class CertificadoViewSet(
     Por eso quedan solo ``list``, ``retrieve``, ``destroy`` y ``cargar``. No hay
     edición: el ``alias`` se fija al subir, y ``activo`` lo gobierna ``cargar``,
     que jubila los anteriores del emisor al llegar uno nuevo.
+
+    Tampoco hay un ``create`` que devuelva un 405 con la pista de ``cargar``:
+    el router decide qué verbos monta mirando si el viewset *tiene* el método,
+    no de qué mixin viene, así que definirlo volvería a publicar ``POST`` en la
+    ruta de lista y drf-spectacular lo documentaría como una creación normal.
     """
 
     serializer_class = serializers.CertificadoSerializer
@@ -44,16 +48,6 @@ class CertificadoViewSet(
         qs = super().get_queryset()
         emisor = entero_de_query(self.request.query_params, "emisor")
         return qs.filter(emisor=emisor) if emisor else qs
-
-    def create(self, request, *args, **kwargs):
-        # Sin CreateModelMixin el router ya no publicaría POST, pero se conserva
-        # este método para que la respuesta siga siendo un 405 que dice a dónde
-        # ir en vez de uno seco.
-        raise MethodNotAllowed(
-            "POST",
-            detail="Usa /api/emisores/certificado/cargar/ "
-            "para subir el certificado.",
-        )
 
     @action(detail=False, methods=["post"], url_path="cargar")
     def cargar(self, request):

@@ -118,8 +118,7 @@ class ConstructorAttachedDocument(ConstructorUBL):
         """
         party = _sub(raiz, "cac", etiqueta)
         nombre = _sub(party, "cac", "PartyName")
-        _sub(nombre, "cbc", "Name",
-             getattr(entidad, "nombre_comercial", "") or entidad.razon_social)
+        _sub(nombre, "cbc", "Name", entidad.razon_social)
         if entidad.municipio:
             self._direccion_fisica(party, entidad)
         self._party_tax_scheme(party, entidad)

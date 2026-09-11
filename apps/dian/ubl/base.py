@@ -406,7 +406,7 @@ class ConstructorUBL:
         _sub(sup, "cbc", "AdditionalAccountID", self._codigo_organizacion(emisor))
         party = _sub(sup, "cac", "Party")
         nombre = _sub(party, "cac", "PartyName")
-        _sub(nombre, "cbc", "Name", emisor.nombre_comercial or emisor.razon_social)
+        _sub(nombre, "cbc", "Name", emisor.razon_social)
         self._direccion_fisica(party, emisor)
         self._party_tax_scheme(party, emisor)
         codigo_sucursal = (

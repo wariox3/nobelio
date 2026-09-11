@@ -117,7 +117,7 @@ class NitUnicoTests(APITestCase):
     def test_editar_un_emisor_sin_cambiar_su_nit_no_choca_consigo_mismo(self):
         resp = self.client.patch(
             f"{URL_EMISORES}{self.emisor.id}/",
-            {"nombre_comercial": "Semántica"},
+            {"telefono": "6041234567"},
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)

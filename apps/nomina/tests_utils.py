@@ -43,7 +43,7 @@ def crear_emisor_de_nomina(catalogos=None, *, nit="901192048"):
     c = catalogos or crear_catalogos_minimos()
     emisor = Emisor.objects.create(
         usuario=c["usuario"],
-        razon_social="Empresa Demo SAS", nombre_comercial="Demo",
+        razon_social="Empresa Demo SAS",
         tipo_identificacion=c["nit"], numero_identificacion=nit,
         digito_verificacion="1", tipo_organizacion=c["juridica"],
         pais=c["colombia"], departamento=c["antioquia"], municipio=c["medellin"],

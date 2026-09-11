@@ -22,7 +22,6 @@ class GeneracionUBLTests(TestCase):
         cls.emisor = Emisor.objects.create(
             usuario=c["usuario"],
             razon_social="Empresa Demo SAS",
-            nombre_comercial="Demo",
             tipo_identificacion=c["nit"],
             numero_identificacion="700085371",
             digito_verificacion="1",

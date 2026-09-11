@@ -2043,6 +2043,11 @@ paths:
         Por eso quedan solo ``list``, ``retrieve``, ``destroy`` y ``cargar``. No hay
         edición: el ``alias`` se fija al subir, y ``activo`` lo gobierna ``cargar``,
         que jubila los anteriores del emisor al llegar uno nuevo.
+
+        Tampoco hay un ``create`` que devuelva un 405 con la pista de ``cargar``:
+        el router decide qué verbos monta mirando si el viewset *tiene* el método,
+        no de qué mixin viene, así que definirlo volvería a publicar ``POST`` en la
+        ruta de lista y drf-spectacular lo documentaría como una creación normal.
       parameters:
       - name: page
         required: false
@@ -2079,65 +2084,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-    post:
-      operationId: emisores_certificado_create
-      description: |-
-        Consulta y baja de certificados; la escritura entra solo por ``cargar``.
-
-        No es un ``ModelViewSet`` a propósito. La única forma de que un ``.p12``
-        llegue a la base es ``cargar``, que valida el archivo (``validar_pkcs12``:
-        integridad, clave, vigencia, llave RSA y NIT del emisor) y exige que
-        Backblaze B2 esté configurado para no dejar material criptográfico en disco
-        local. Mientras esto fue un ``ModelViewSet``, ``PUT`` y ``PATCH`` seguían
-        publicados y rodeaban las dos comprobaciones: bastaba un ``PATCH`` con un
-        ``archivo`` nuevo para guardarlo sin validar, o un ``PATCH`` de ``emisor``
-        para mover el certificado a otro emisor del alcance o resucitar con
-        ``activo=True`` uno ya jubilado.
-
-        Por eso quedan solo ``list``, ``retrieve``, ``destroy`` y ``cargar``. No hay
-        edición: el ``alias`` se fija al subir, y ``activo`` lo gobierna ``cargar``,
-        que jubila los anteriores del emisor al llegar uno nuevo.
-      tags:
-      - emisores
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CertificadoRequest'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/CertificadoRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/CertificadoRequest'
-        required: true
-      security:
-      - LlaveApi: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Certificado'
-          description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '429':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '400':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
   /api/emisores/certificado/{id}/:
     get:
       operationId: emisores_certificado_retrieve
@@ -2157,6 +2103,11 @@ paths:
         Por eso quedan solo ``list``, ``retrieve``, ``destroy`` y ``cargar``. No hay
         edición: el ``alias`` se fija al subir, y ``activo`` lo gobierna ``cargar``,
         que jubila los anteriores del emisor al llegar uno nuevo.
+
+        Tampoco hay un ``create`` que devuelva un 405 con la pista de ``cargar``:
+        el router decide qué verbos monta mirando si el viewset *tiene* el método,
+        no de qué mixin viene, así que definirlo volvería a publicar ``POST`` en la
+        ruta de lista y drf-spectacular lo documentaría como una creación normal.
       parameters:
       - in: path
         name: id
@@ -2211,6 +2162,11 @@ paths:
         Por eso quedan solo ``list``, ``retrieve``, ``destroy`` y ``cargar``. No hay
         edición: el ``alias`` se fija al subir, y ``activo`` lo gobierna ``cargar``,
         que jubila los anteriores del emisor al llegar uno nuevo.
+
+        Tampoco hay un ``create`` que devuelva un 405 con la pista de ``cargar``:
+        el router decide qué verbos monta mirando si el viewset *tiene* el método,
+        no de qué mixin viene, así que definirlo volvería a publicar ``POST`` en la
+        ruta de lista y drf-spectacular lo documentaría como una creación normal.
       parameters:
       - in: path
         name: id
@@ -6108,9 +6064,6 @@ components:
           type: string
           title: Razón social
           maxLength: 450
-        nombre_comercial:
-          type: string
-          maxLength: 450
         tipo_identificacion:
           type: integer
           title: Tipo de identificación
@@ -6251,9 +6204,6 @@ components:
           type: string
           title: Razón social
           maxLength: 450
-        nombre_comercial:
-          type: string
-          maxLength: 450
         tipo_identificacion:
           type: integer
           title: Tipo de identificación
@@ -6375,9 +6325,6 @@ components:
           type: string
           minLength: 1
           title: Razón social
-          maxLength: 450
-        nombre_comercial:
-          type: string
           maxLength: 450
         tipo_identificacion:
           type: integer
@@ -8495,9 +8442,6 @@ components:
           type: string
           minLength: 1
           title: Razón social
-          maxLength: 450
-        nombre_comercial:
-          type: string
           maxLength: 450
         tipo_identificacion:
           type: integer

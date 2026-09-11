@@ -31,7 +31,7 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
 
     queryset = models.Emisor.objects.prefetch_related("resoluciones", "responsabilidades")
     serializer_class = serializers.EmisorSerializer
-    search_fields = ["razon_social", "numero_identificacion", "nombre_comercial"]
+    search_fields = ["razon_social", "numero_identificacion"]
 
     def get_serializer_class(self):
         """El listado va sin resoluciones; el detalle y las escrituras sí las llevan."""
