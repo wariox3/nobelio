@@ -1,9 +1,12 @@
 """API del software DIAN del emisor."""
 from django.db import IntegrityError, transaction
-from rest_framework import viewsets
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
 
 from apps.emisores import models, serializers
 from apps.emisores.servicios import (
+    crear_nomina_de_prueba,
     sembrar_documentos_de_prueba,
     sembrar_resolucion_de_pruebas,
 )
@@ -57,6 +60,61 @@ class SoftwareDianViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
             sembrar_documentos_de_prueba(
                 software.emisor, software.tipo, resolucion,
             )
+
+    @action(detail=True, methods=["post"], url_path="crear-nomina-prueba")
+    def crear_nomina_prueba(self, request, pk=None):
+        """Crea una nómina de prueba en borrador para este software.
+
+        ``POST /api/emisores/software/{id}/crear-nomina-prueba/``, con
+        ``{"consecutivo": <n>}`` opcional.
+
+        Es la misma que siembra el alta, pero de una en una: sirve para
+        completar un Set de Pruebas al que le faltan nóminas. **Solo sobre un
+        software de nómina**; los documentos de prueba de facturación se crean
+        desde su resolución, que es quien los numera.
+
+        Sin ``consecutivo`` toma el siguiente libre del emisor para el prefijo
+        de pruebas. El periodo de liquidación continúa la serie hacia atrás —la
+        regla 90 rechaza dos nóminas del mismo trabajador para el mismo
+        periodo—; si hace falta otro, se ajusta en el borrador con un ``PATCH``.
+
+        Solo la crea: no la firma ni la envía. Para eso están ``emitir`` y
+        ``enviar`` de ``/api/nomina/nomina/{id}/``.
+        """
+        # `get_object` va contra el queryset del mixin, así que un software
+        # fuera del alcance no se encuentra (404) en vez de responder 403 y
+        # delatar que existe.
+        software = self.get_object()
+
+        consecutivo = request.data.get("consecutivo")
+        if consecutivo in (None, ""):
+            consecutivo = None
+        else:
+            try:
+                consecutivo = int(consecutivo)
+            except (TypeError, ValueError):
+                raise ErrorSolicitud("El consecutivo debe ser un número entero.")
+            if consecutivo < 1:
+                raise ErrorSolicitud("El consecutivo debe ser mayor que cero.")
+
+        try:
+            nomina = crear_nomina_de_prueba(software, consecutivo)
+        except ValueError as exc:
+            raise ErrorSolicitud(str(exc))
+
+        return Response(
+            {
+                "id": str(nomina.id),
+                "numero": nomina.numero,
+                "consecutivo": nomina.consecutivo,
+                "estado": nomina.estado.nombre,
+                "periodo": [
+                    str(nomina.fecha_liquidacion_inicio),
+                    str(nomina.fecha_liquidacion_fin),
+                ],
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
     def perform_update(self, serializer):
         self._guardar(super().perform_update, serializer)

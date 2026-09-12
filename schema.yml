@@ -3406,6 +3406,81 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/emisores/software/{id}/crear-nomina-prueba/:
+    post:
+      operationId: emisores_software_crear_nomina_prueba_create
+      description: |-
+        Crea una nómina de prueba en borrador para este software.
+
+        ``POST /api/emisores/software/{id}/crear-nomina-prueba/``, con
+        ``{"consecutivo": <n>}`` opcional.
+
+        Es la misma que siembra el alta, pero de una en una: sirve para
+        completar un Set de Pruebas al que le faltan nóminas. **Solo sobre un
+        software de nómina**; los documentos de prueba de facturación se crean
+        desde su resolución, que es quien los numera.
+
+        Sin ``consecutivo`` toma el siguiente libre del emisor para el prefijo
+        de pruebas. El periodo de liquidación continúa la serie hacia atrás —la
+        regla 90 rechaza dos nóminas del mismo trabajador para el mismo
+        periodo—; si hace falta otro, se ajusta en el borrador con un ``PATCH``.
+
+        Solo la crea: no la firma ni la envía. Para eso están ``emitir`` y
+        ``enviar`` de ``/api/nomina/nomina/{id}/``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este software DIAN.
+        required: true
+      tags:
+      - emisores
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SoftwareDianRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SoftwareDianRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SoftwareDianRequest'
+        required: true
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoftwareDian'
+          description: ''
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/nomina/empleado/:
     get:
       operationId: nomina_empleado_list

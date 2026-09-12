@@ -108,6 +108,13 @@ sin certificado cargado y vigente responde 400.
     tecnológico es el propio emisor, así que sale de su NIT (y el `schemeID`, de
     su dígito de verificación).
 
+- [ ] *(si al Set le faltan nóminas)* `POST
+      /api/emisores/software/{id}/crear-nomina-prueba/`, con
+      `{"consecutivo": <n>}` opcional → una más, igual que las que siembra el
+      alta. **Solo sobre un software de nómina.**
+  - Sin `consecutivo`, el siguiente libre del emisor para el prefijo `NESETP`.
+  - El periodo **continúa la serie hacia atrás**, para no repetir mes (regla
+    90). Si hace falta otro, se ajusta en el borrador con un `PATCH`.
 - [ ] *(si al Set le faltan documentos)* `POST
       /api/emisores/resolucion/{id}/crear-documento-prueba/`, con
       `{"consecutivo": <n>}` opcional → uno más, igual que los que siembra el

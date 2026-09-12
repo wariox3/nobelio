@@ -1,4 +1,5 @@
 """Pruebas de la API de software DIAN (PIN write-only, filtro por emisor)."""
+from datetime import date
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 
@@ -339,6 +340,120 @@ class SoftwareDianAPITests(APITestCase):
 
         self.assertEqual(resp.status_code, 201, resp.data)
         self.assertEqual(self._facturas().count(), 2)
+
+    # --- Una nómina suelta: crear-nomina-prueba -----------------------------
+
+    def _alta_nomina(self):
+        """Registra el software de nómina y devuelve su id."""
+        resp = self.client.post(self.url, self._payload_nomina(), format="json")
+        self.assertEqual(resp.status_code, 201, resp.data)
+        return resp.data["id"]
+
+    def test_crea_una_nomina_mas(self):
+        from apps.nomina.models import Nomina
+
+        software = self._alta_nomina()
+        resp = self.client.post(
+            f"{self.url}{software}/crear-nomina-prueba/", {}, format="json"
+        )
+
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(resp.data["estado"], DocumentoEstado.Nombre.BORRADOR)
+        self.assertEqual(Nomina.objects.filter(emisor=self.emisor).count(), 11)
+
+    def test_sin_consecutivo_sigue_por_el_ultimo(self):
+        software = self._alta_nomina()
+
+        resp = self.client.post(
+            f"{self.url}{software}/crear-nomina-prueba/", {}, format="json"
+        )
+
+        # Las diez del alta gastaron del 1 al 10.
+        self.assertEqual(resp.data["consecutivo"], 11)
+
+    def test_el_periodo_continua_la_serie_hacia_atras(self):
+        """La regla 90 rechaza dos nóminas del mismo trabajador y periodo."""
+        from apps.nomina.models import Nomina
+
+        software = self._alta_nomina()
+        anteriores = set(
+            Nomina.objects.filter(emisor=self.emisor)
+            .values_list("fecha_liquidacion_inicio", flat=True)
+        )
+
+        resp = self.client.post(
+            f"{self.url}{software}/crear-nomina-prueba/", {}, format="json"
+        )
+
+        inicio = date.fromisoformat(resp.data["periodo"][0])
+        self.assertNotIn(inicio, anteriores)
+        self.assertLess(inicio, min(anteriores))
+
+    def test_respeta_el_consecutivo_que_se_le_pasa(self):
+        software = self._alta_nomina()
+
+        resp = self.client.post(
+            f"{self.url}{software}/crear-nomina-prueba/",
+            {"consecutivo": 500}, format="json",
+        )
+
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(resp.data["consecutivo"], 500)
+
+    def test_rechaza_un_consecutivo_ya_usado(self):
+        from apps.nomina.models import Nomina
+
+        software = self._alta_nomina()
+        resp = self.client.post(
+            f"{self.url}{software}/crear-nomina-prueba/",
+            {"consecutivo": 1}, format="json",
+        )
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertEqual(Nomina.objects.filter(emisor=self.emisor).count(), 10)
+
+    def test_solo_sobre_un_software_de_nomina(self):
+        from apps.nomina.models import Nomina
+
+        facturacion = self.client.post(self.url, self._payload(), format="json")
+
+        resp = self.client.post(
+            f"{self.url}{facturacion.data['id']}/crear-nomina-prueba/",
+            {}, format="json",
+        )
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertIn("no de nómina", resp.data["detail"])
+        self.assertFalse(Nomina.objects.filter(emisor=self.emisor).exists())
+
+    def test_rechaza_si_el_emisor_ya_esta_en_produccion(self):
+        from apps.nomina.models import Nomina
+
+        software = self._alta_nomina()
+        self.emisor.ambiente_nomina = Ambiente.PRODUCCION
+        self.emisor.save(update_fields=["ambiente_nomina"])
+
+        resp = self.client.post(
+            f"{self.url}{software}/crear-nomina-prueba/", {}, format="json"
+        )
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertIn("producción", resp.data["detail"])
+        self.assertEqual(Nomina.objects.filter(emisor=self.emisor).count(), 10)
+
+    def test_no_alcanza_el_software_de_otro_emisor(self):
+        from apps.emisores.models import SoftwareDian as SW
+
+        otro = _crear_emisor(self.cat, nit="800197268")
+        ajeno = SW.objects.create(
+            emisor=otro, tipo=SW.Tipo.NOMINA, identificador="x", pin="1",
+        )
+
+        resp = self.client.post(
+            f"{self.url}{ajeno.id}/crear-nomina-prueba/", {}, format="json"
+        )
+
+        self.assertEqual(resp.status_code, 404)
 
     def test_requiere_autenticacion(self):
         from rest_framework.test import APIClient

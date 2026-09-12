@@ -4,7 +4,8 @@ from datetime import date
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Max
+from django.db import IntegrityError
+from django.db.models import Max, Min
 from django.utils import timezone
 
 from apps.catalogos.models import (
@@ -17,6 +18,9 @@ from apps.catalogos.models import (
     TipoTrabajador,
 )
 from apps.nomina.models import Empleado, Nomina, NominaConcepto
+from apps.nucleo.models import Ambiente
+
+from .emision import motivo_no_puede_emitir
 
 PREFIJO_POR_DEFECTO = "NESETP"
 
@@ -200,3 +204,77 @@ def crear_nominas_de_prueba(emisor, cantidad=NOMINAS_DE_PRUEBA):
                 _mes(hoy, atras) for atras in range(cantidad - 1, -1, -1)
             )
         ]
+
+
+def siguiente_periodo(emisor, prefijo=PREFIJO_POR_DEFECTO):
+    """El mes que continúa la serie de prueba, hacia atrás.
+
+    Las diez del alta cubren los diez meses hasta el actual, así que la
+    siguiente suelta va **antes** de la más antigua: hacia adelante caería en el
+    futuro, y un periodo de liquidación que aún no ha pasado es un documento que
+    se contradice.
+
+    No es cosmético. La DIAN rechaza con la regla 90 una segunda nómina del
+    mismo trabajador para el mismo periodo, y el trabajador de todas estas es el
+    mismo, así que repetir mes es repetir rechazo.
+    """
+    mas_antigua = Nomina.objects.filter(
+        emisor=emisor, prefijo=prefijo,
+    ).aggregate(inicio=Min("fecha_liquidacion_inicio"))["inicio"]
+    if mas_antigua is None:
+        return _mes(timezone.localdate(), 0)
+    return _mes(mas_antigua, 1)
+
+
+def crear_nomina_de_prueba(software, consecutivo=None):
+    """Una nómina de prueba en borrador para ese software de nómina.
+
+    La misma que siembra el alta, pero de una en una. Sin ``consecutivo`` toma
+    el siguiente libre del emisor para el prefijo de pruebas, y el periodo
+    continúa la serie (ver ``siguiente_periodo``); si hace falta otro, se ajusta
+    en el borrador con un ``PATCH``.
+
+    Lanza ``ValueError`` con el motivo cuando no se puede: quien llama lo
+    traduce a un 400.
+    """
+    from apps.emisores.models import SoftwareDian
+
+    if software.tipo != SoftwareDian.Tipo.NOMINA:
+        etiqueta = SoftwareDian.Tipo(software.tipo).label.lower()
+        raise ValueError(
+            f"Este software es de {etiqueta}, no de nómina electrónica. Los "
+            f"documentos de prueba de facturación se crean desde su resolución "
+            f"(POST /api/emisores/resolucion/{{id}}/crear-documento-prueba/)."
+        )
+
+    emisor = software.emisor
+    if emisor.ambiente_nomina != Ambiente.PRUEBAS:
+        # La nómina sale sellada como de pruebas —lo fija `crear_nomina_prueba`—
+        # pero gastaría un consecutivo de la numeración real de nómina.
+        raise ValueError(
+            f"El emisor {emisor.razon_social} ya está en producción para "
+            f"nómina. Una nómina de prueba consumiría un consecutivo de su "
+            f"numeración real, que no se recupera."
+        )
+
+    motivo = motivo_no_puede_emitir(emisor)
+    if motivo:
+        # Se dice ya y no al emitir: si no, queda un borrador que nunca se va a
+        # poder mandar y el motivo aparece dos pasos más tarde.
+        raise ValueError(motivo)
+
+    inicio, fin = siguiente_periodo(emisor)
+    try:
+        # El consecutivo lo decide de verdad la restricción de unicidad; el
+        # savepoint deja seguir atendiendo la petición si choca.
+        with transaction.atomic():
+            return crear_nomina_prueba(
+                emisor, consecutivo=consecutivo,
+                periodo_inicio=inicio, periodo_fin=fin,
+            )
+    except IntegrityError:
+        raise ValueError(
+            f"El emisor ya tiene una nómina numerada "
+            f"{PREFIJO_POR_DEFECTO}{consecutivo}. Use otro consecutivo o deje "
+            f"que se asigne solo."
+        )
