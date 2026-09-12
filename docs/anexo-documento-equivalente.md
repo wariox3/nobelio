@@ -222,7 +222,7 @@ pasa a producción en operación.
   reescribe los tiquetes de ayer.
 - `nombre_archivo_documento_equivalente` —reproduce el ejemplo del anexo— y
   `ConsecutivoArchivoDocumentoEquivalente`, su numerador anual.
-- El enganche del envío: `_software_activo` elige el software por tipo de
+- El enganche del envío: `_software_de` elige el software por tipo de
   documento, `Documento.save` toma el ambiente de
   `ambiente_documento_equivalente`, y `_marcar_habilitacion_superada` sabe cuál
   de las tres banderas marcar. El P.O.S. sale por `SendTestSetAsync` mientras

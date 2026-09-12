@@ -1,7 +1,9 @@
-"""Factura y nota crédito de prueba para la habilitación."""
+"""Documentos de prueba de facturación para la habilitación."""
+import logging
 from decimal import Decimal
 
-from django.db import transaction
+from django.core.exceptions import ObjectDoesNotExist
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.catalogos.models import Moneda, Tributo, UnidadMedida
@@ -14,47 +16,48 @@ from apps.documentos.models import (
     DocumentoTipo,
 )
 
-@transaction.atomic
-def crear_factura_prueba(emisor, resolucion, consecutivo=None):
-    """Crea —solo crea— una factura de prueba y su nota crédito, en borrador.
+logger = logging.getLogger(__name__)
 
-    No las firma ni las envía. Es el material del Set de Pruebas: la nota anula
-    la factura entera y la referencia, que es lo que la DIAN espera ver.
+# Importes del documento de prueba: mil pesos más su IVA del 19 %.
+VALOR = Decimal("1000.00")
+IVA = Decimal("190.00")
 
-    Devuelve las dos, en ese orden.
+# Cuántas facturas deja el alta del software de facturación.
+FACTURAS_DE_PRUEBA = 2
+
+
+def _crear_documento(emisor, resolucion, *, codigo_tipo, consecutivo, observaciones,
+                     **extra):
+    """Arma un documento de prueba completo: cabecera, adquiriente y su línea.
+
+    Lo comparten la factura y la nota crédito, que salvo el tipo, la referencia
+    y el texto son el mismo documento. Estaba duplicado entero y las dos copias
+    ya habían empezado a separarse.
+
+    El adquiriente es el propio emisor: el Set de Pruebas no necesita un
+    tercero real, y usar uno inventado mete datos de una persona que no existe
+    en documentos que se envían de verdad.
     """
-    if consecutivo is None:
-        consecutivo = 990000000
-
-    valor = Decimal("1000.00")
-    iva = Decimal("190.00")
-    borrador = DocumentoEstado.objects.get(nombre=DocumentoEstado.Nombre.BORRADOR)
-    moneda = Moneda.objects.get(codigo="COP")
-    unidad = UnidadMedida.objects.get(codigo="94")
-    tributo_iva = Tributo.objects.get(codigo="01")
-
-    # --- Factura ------------------------------------------------------------
-    factura = Documento.objects.create(
-        documento_tipo=DocumentoTipo.objects.get(
-            codigo=DocumentoTipo.Codigo.FACTURA_VENTA
-        ),
-        estado=borrador,
+    documento = Documento.objects.create(
+        documento_tipo=DocumentoTipo.objects.get(codigo=codigo_tipo),
+        estado=DocumentoEstado.objects.get(nombre=DocumentoEstado.Nombre.BORRADOR),
         emisor=emisor,
         ambiente=Documento.Ambiente.PRUEBAS,
         resolucion=resolucion,
-        moneda=moneda,
+        moneda=Moneda.objects.get(codigo="COP"),
         prefijo=resolucion.prefijo,
         consecutivo=consecutivo,
         fecha_emision=timezone.localdate(),
         hora_emision=timezone.localtime().time(),
-        observaciones="Documento del Set de Pruebas (habilitación).",
-        valor_bruto=valor,
-        total_impuestos=iva,
-        total_a_pagar=valor + iva,
+        observaciones=observaciones,
+        valor_bruto=VALOR,
+        total_impuestos=IVA,
+        total_a_pagar=VALOR + IVA,
+        **extra,
     )
 
     adquiriente = Adquiriente.objects.create(
-        documento=factura,
+        documento=documento,
         razon_social=emisor.razon_social,
         tipo_identificacion=emisor.tipo_identificacion,
         numero_identificacion=emisor.numero_identificacion,
@@ -69,78 +72,133 @@ def crear_factura_prueba(emisor, resolucion, consecutivo=None):
     adquiriente.responsabilidades.set(emisor.responsabilidades.all())
 
     detalle = DocumentoDetalle.objects.create(
-        documento=factura,
+        documento=documento,
         numero_linea=1,
         descripcion="Servicio de prueba",
         cantidad=Decimal("1"),
-        unidad_medida=unidad,
-        valor_unitario=valor,
-        valor_total=valor,
+        unidad_medida=UnidadMedida.objects.get(codigo="94"),
+        valor_unitario=VALOR,
+        valor_total=VALOR,
     )
     DocumentoDetalleImpuesto.objects.create(
         detalle=detalle,
-        tributo=tributo_iva,
+        tributo=Tributo.objects.get(codigo="01"),
         tarifa=Decimal("19.00"),
-        base_gravable=valor,
-        valor=iva,
+        base_gravable=VALOR,
+        valor=IVA,
     )
+    return documento
 
-    # --- Nota crédito -------------------------------------------------------
-    # Anula la factura entera (mismos importes) y la referencia por
-    # `documento_referencia`, de donde el UBL saca DiscrepancyResponse y
-    # BillingReference (ver apps.dian.ubl._ConstructorNotaUBL).
-    nota_credito = Documento.objects.create(
-        documento_tipo=DocumentoTipo.objects.get(
-            codigo=DocumentoTipo.Codigo.NOTA_CREDITO
-        ),
-        estado=borrador,
-        emisor=emisor,
-        ambiente=Documento.Ambiente.PRUEBAS,
-        resolucion=resolucion,
-        documento_referencia=factura,
-        # Anula la factura entera, no devuelve parte de ella.
-        concepto_correccion=Documento.ConceptoNotaCredito.ANULACION,
-        moneda=moneda,
-        prefijo=resolucion.prefijo,
+
+@transaction.atomic
+def crear_factura_prueba(emisor, resolucion, consecutivo=None):
+    """Crea —solo crea— una factura de prueba y su nota crédito, en borrador.
+
+    No las firma ni las envía. Es el material del Set de Pruebas: la nota anula
+    la factura entera y la referencia, que es lo que la DIAN espera ver.
+
+    Devuelve las dos, en ese orden.
+
+    **Sin llamantes desde el 2026-09-12**, cuando se retiró el endpoint
+    ``crear-factura-prueba``. El alta del software usa
+    ``crear_facturas_de_prueba`` (solo facturas); esta es la única pieza que
+    sabe armar la nota crédito del Set con su referencia, así que se conserva a
+    la espera de decidir si se vuelve a exponer o se emite como un documento
+    normal por ``POST /api/documentos/documento/``.
+    """
+    if consecutivo is None:
+        consecutivo = 990000000
+
+    factura = _crear_documento(
+        emisor, resolucion,
+        codigo_tipo=DocumentoTipo.Codigo.FACTURA_VENTA,
         consecutivo=consecutivo,
-        fecha_emision=timezone.localdate(),
-        hora_emision=timezone.localtime().time(),
+        observaciones="Documento del Set de Pruebas (habilitación).",
+    )
+    # La nota anula la factura entera (mismos importes) y la referencia por
+    # `documento_referencia`, de donde el UBL saca DiscrepancyResponse y
+    # BillingReference (ver apps.dian.ubl._ConstructorNotaUBL). Comparte
+    # consecutivo con su factura: las notas heredan la numeración del documento
+    # que corrigen, y el índice único incluye el tipo, así que no chocan.
+    nota_credito = _crear_documento(
+        emisor, resolucion,
+        codigo_tipo=DocumentoTipo.Codigo.NOTA_CREDITO,
+        consecutivo=consecutivo,
         observaciones="Nota crédito del Set de Pruebas (habilitación).",
-        valor_bruto=valor,
-        total_impuestos=iva,
-        total_a_pagar=valor + iva,
+        documento_referencia=factura,
+        concepto_correccion=Documento.ConceptoNotaCredito.ANULACION,
     )
-
-    adquiriente_nota = Adquiriente.objects.create(
-        documento=nota_credito,
-        razon_social=emisor.razon_social,
-        tipo_identificacion=emisor.tipo_identificacion,
-        numero_identificacion=emisor.numero_identificacion,
-        tipo_organizacion=emisor.tipo_organizacion,
-        pais=emisor.pais,
-        departamento=emisor.departamento,
-        municipio=emisor.municipio,
-        direccion=emisor.direccion,
-        correo=emisor.correo,
-        telefono=emisor.telefono,
-    )
-    adquiriente_nota.responsabilidades.set(emisor.responsabilidades.all())
-
-    detalle_nota = DocumentoDetalle.objects.create(
-        documento=nota_credito,
-        numero_linea=1,
-        descripcion="Servicio de prueba",
-        cantidad=Decimal("1"),
-        unidad_medida=unidad,
-        valor_unitario=valor,
-        valor_total=valor,
-    )
-    DocumentoDetalleImpuesto.objects.create(
-        detalle=detalle_nota,
-        tributo=tributo_iva,
-        tarifa=Decimal("19.00"),
-        base_gravable=valor,
-        valor=iva,
-    )
-
     return factura, nota_credito
+
+
+def crear_facturas_de_prueba(emisor, resolucion, cantidad=FACTURAS_DE_PRUEBA):
+    """Deja ``cantidad`` facturas de prueba en borrador. Devuelve la lista.
+
+    Es lo que siembra el alta del software de facturación, para que el emisor
+    no se quede con resolución y sin nada que emitir contra ella. Solo facturas:
+    la nota crédito del Set de Pruebas se crea como un documento cualquiera por
+    ``POST /api/documentos/documento/``, referenciando la factura que anula.
+
+    Los consecutivos salen de ``resolucion.rango_desde`` —el primero que la
+    DIAN autoriza— y no de un número fijo, para que valga con cualquier
+    resolución y no solo con la del sandbox.
+
+    **No duplica.** Si el emisor ya tiene facturas contra esa resolución se
+    devuelve la lista vacía: el índice único (emisor, prefijo, consecutivo,
+    tipo) rechazaría las repetidas, y el caso llega solo —dar de baja el
+    software y volver a registrarlo pasa por aquí otra vez—.
+    """
+    ya_tiene = Documento.objects.filter(
+        emisor=emisor,
+        resolucion=resolucion,
+        documento_tipo__codigo=DocumentoTipo.Codigo.FACTURA_VENTA,
+    ).exists()
+    if ya_tiene:
+        return []
+
+    desde = resolucion.rango_desde
+    with transaction.atomic():
+        return [
+            _crear_documento(
+                emisor, resolucion,
+                codigo_tipo=DocumentoTipo.Codigo.FACTURA_VENTA,
+                consecutivo=desde + i,
+                observaciones="Documento del Set de Pruebas (habilitación).",
+            )
+            for i in range(cantidad)
+        ]
+
+
+def sembrar_documentos_de_prueba(emisor, tipo_software, resolucion):
+    """Deja el material del Set de Pruebas que le toca a ese software.
+
+    Lo llama el alta del software (``POST /api/emisores/software/``). Devuelve
+    los documentos creados, que pueden ser ninguno.
+
+    ``resolucion`` a ``None`` es la señal de que aquí no hay nada que hacer:
+    sin numeración no se puede crear un documento, y es lo que devuelve
+    ``sembrar_resolucion_de_pruebas`` cuando el emisor ya está en producción o
+    cuando esa operación no lleva resolución. Así la condición se escribe una
+    vez y no tres.
+
+    Por ahora solo facturación: la nómina no se numera con resolución y el
+    documento equivalente espera a que se conozca la suya.
+
+    Un catálogo sin cargar deja al emisor sin documentos de prueba, no sin
+    software: son dos cosas distintas y solo una la pidió quien llama. Se anota
+    en el log, que si no el hueco no se ve por ninguna parte.
+    """
+    if resolucion is None or str(tipo_software) != "facturacion":
+        return []
+    try:
+        # Savepoint propio: si esto falla, el software y su resolución se
+        # quedan; sin él se vendría abajo la transacción entera.
+        with transaction.atomic():
+            return crear_facturas_de_prueba(emisor, resolucion)
+    except (ObjectDoesNotExist, IntegrityError):
+        logger.warning(
+            "No se crearon las facturas de prueba del emisor %s "
+            "(¿faltan catálogos, o ya existen esos consecutivos?).",
+            emisor.pk, exc_info=True,
+        )
+        return []

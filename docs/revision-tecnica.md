@@ -154,8 +154,16 @@ alcance, o reactiva con `activo=true` uno que se jubiló. Todo el trabajo de
 > viene, así que el `POST` seguía publicado y drf-spectacular lo documentaba como
 > una creación normal, con un `201` que nunca ocurría. Retirado el 2026-09-11: el
 > 405 pasa a ser el genérico de DRF. No hay edición de certificados: el `alias`
-> se fija al subir y `activo` lo gobierna `cargar`, que jubila los anteriores del
-> emisor.
+> se fija al subir.
+>
+> **Actualizado el 2026-09-12.** La segunda mitad de este hallazgo —reactivar
+> con `activo=true` uno jubilado— ya no tiene sujeto: el campo `activo`
+> desapareció y `Certificado.emisor` es `OneToOne`, así que el histórico no
+> existe. Renovar es `DELETE` y volver a cargar, en ese orden, y `cargar/`
+> responde 400 mientras haya uno. El `DELETE` borra además el `.p12` del bucket
+> —`Model.delete()` no toca el `FileField`, y cada baja dejaba material
+> criptográfico huérfano en B2— dentro de la misma transacción, de modo que un
+> fallo del almacenamiento devuelve la fila en vez de dejarla a medias.
 
 ### A4 · La notificación al adquiriente viaja por HTTP plano — **bloqueado fuera**
 
@@ -213,6 +221,20 @@ marcada `activa=True` en su tabla de numeración, que es justo la que
 Como mínimo tendría que negarse cuando `emisor.ambiente_facturacion == 1`. Mejor
 aún: separarlo del `EmisorViewSet` y dejarlo como comando de gestión, que es lo
 que realmente es.
+
+> **Actualizado el 2026-09-12.** El endpoint ya no existe: `crear-habilitacion`,
+> `crear-factura-prueba` y `crear-nomina-prueba` se retiraron del
+> `EmisorViewSet`. Con ellas se van también §A5 —el oráculo de ids vivía en
+> `_emisor_del_cuerpo`, que era suyo y se borró con ellas— y la mitad de §E3.
+>
+> Lo que hacía `crear-habilitacion` lo hace ahora el alta del software
+> (`POST /api/emisores/software/`), y la guarda de ambiente que pedía este
+> apartado cambió de forma: en vez de rechazar la petición, no siembra. Sobre un
+> emisor en producción el software se registra —eso es legítimo— y la resolución
+> del sandbox simplemente no se escribe, que era el daño que había que evitar.
+> La condición vive en `sembrar_resolucion_de_pruebas`, un servicio, no en una
+> vista: no llegó a ser un comando de gestión, pero sí dejó de estar incrustada
+> en un endpoint.
 
 ### A7 · Sin throttling ni auditoría — **parcial**
 
@@ -474,6 +496,20 @@ software y con qué resolución se emite todo lo demás.
 > `TipoFactura.objects.get(codigo="01")` directo, así que sobre una base sin el
 > catálogo cargado responde 500 en vez de decir qué falta. En un despliegue real
 > el catálogo está; entra en el barrido de **E3**.
+>
+> **Actualizado el 2026-09-12.** Dos cosas de esta nota cambiaron:
+>
+> - Ya no se jubila ningún software: hay un índice único `(emisor, tipo)` y
+>   registrar otro del mismo tipo **actualiza** la fila que hay. La prueba pasó
+>   a llamarse `test_registrar_otro_software_actualiza_el_del_mismo_tipo`; la
+>   que comprueba que la otra operación no se toca sigue igual, porque esa regla
+>   no ha cambiado —las tres habilitaciones son independientes—.
+> - La fragilidad del `TipoFactura.objects.get` **está resuelta**, y no por el
+>   barrido de E3 sino por haberse movido: el sembrado vive ahora en
+>   `sembrar_resolucion_de_pruebas`, que ante un catálogo sin cargar deja un
+>   `warning` con el emisor afectado y devuelve `(None, False)` en vez de
+>   reventar. Registrar el software sigue funcionando; lo que falta es la
+>   resolución, que es lo que de verdad faltaba.
 
 ### C3 · Sin integración continua — **resuelto**
 
@@ -700,6 +736,8 @@ Los doce puntos, más **B9**, que salió escribiendo las pruebas de la fase 2.
    alcance, así que un id ajeno y uno inexistente responden igual;
    `crear-habilitacion` rechaza a un emisor que ya está en producción, devuelve
    qué hizo en vez de `{}`, y quedó reescrito con el estilo del resto. **(A5, A6, E3)**
+   *(2026-09-12: las tres acciones se retiraron del `EmisorViewSet`; ver la nota
+   de §A6.)*
 10. ~~Throttling.~~ 300/hora por credencial y 30/hora anónimo, ajustables por
     entorno. Hizo falta un throttle propio: el de DRF construye su clave con
     `request.user.pk` y el principal de una API Key no es un modelo. **(A7, parcial:

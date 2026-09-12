@@ -2,8 +2,12 @@
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 
+from apps.documentos.models import Documento, DocumentoEstado, DocumentoTipo
 from apps.documentos.tests_utils import crear_catalogos_minimos, crear_certificado
-from apps.emisores.models import Emisor, SoftwareDian
+from apps.catalogos.models import TipoFactura
+from apps.emisores.models import Emisor, Resolucion, SoftwareDian
+from apps.emisores.servicios import RESOLUCION_SET_PRUEBAS
+from apps.nucleo.models import Ambiente
 
 
 def _crear_emisor(cat, nit="901192048"):
@@ -29,6 +33,12 @@ class SoftwareDianAPITests(APITestCase):
         self.usuario.emisores.add(self.emisor)
         self.client.force_authenticate(self.usuario)
         self.url = "/api/emisores/software/"
+        # `crear_catalogos_minimos` no trae tipos de factura y el sembrado de
+        # la resolución de pruebas necesita el 01. En el servidor lo carga
+        # `manage.py cargar_catalogos`.
+        TipoFactura.objects.get_or_create(
+            codigo="01", defaults={"nombre": "Factura electrónica de Venta"},
+        )
 
     def _payload(self):
         return {
@@ -140,6 +150,132 @@ class SoftwareDianAPITests(APITestCase):
         resp = self.client.post(self.url, payload, format="json")
 
         self.assertEqual(resp.status_code, 201, resp.data)
+
+    # --- La resolución del Set de Pruebas se siembra sola -------------------
+
+    def test_crear_software_de_facturacion_siembra_la_resolucion_de_pruebas(self):
+        self.assertFalse(Resolucion.objects.filter(emisor=self.emisor).exists())
+
+        resp = self.client.post(self.url, self._payload(), format="json")
+        self.assertEqual(resp.status_code, 201, resp.data)
+
+        resolucion = Resolucion.objects.get(emisor=self.emisor)
+        self.assertEqual(resolucion.prefijo, RESOLUCION_SET_PRUEBAS["prefijo"])
+        self.assertEqual(
+            resolucion.numero_resolucion,
+            RESOLUCION_SET_PRUEBAS["numero_resolucion"],
+        )
+        self.assertEqual(
+            resolucion.clave_tecnica, RESOLUCION_SET_PRUEBAS["clave_tecnica"]
+        )
+        self.assertEqual(resolucion.tipo_factura.codigo, "01")
+        self.assertTrue(resolucion.activa)
+
+    def test_no_la_siembra_si_el_emisor_ya_esta_en_produccion(self):
+        """Es la resolución del sandbox: numerar con ella en producción es
+
+        gastar consecutivos de un rango que no es del emisor. El software sí se
+        registra —eso es normal en producción—; lo que no se hace es sembrar.
+        """
+        self.emisor.ambiente_facturacion = Ambiente.PRODUCCION
+        self.emisor.save(update_fields=["ambiente_facturacion"])
+
+        resp = self.client.post(self.url, self._payload(), format="json")
+
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertFalse(Resolucion.objects.filter(emisor=self.emisor).exists())
+
+    def test_el_software_de_nomina_no_siembra_resolucion(self):
+        """La nómina no se numera con resolución: numera con prefijo y consecutivo."""
+        payload = self._payload()
+        payload["tipo"] = SoftwareDian.Tipo.NOMINA
+        payload["identificador"] = "software-de-nomina"
+
+        resp = self.client.post(self.url, payload, format="json")
+
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertFalse(Resolucion.objects.filter(emisor=self.emisor).exists())
+
+    def test_sembrarla_dos_veces_no_la_duplica(self):
+        """Se identifica por su índice único; repetir actualiza, no añade."""
+        self.client.post(self.url, self._payload(), format="json")
+        otro = _crear_emisor(self.cat, nit="800197268")
+        self.usuario.emisores.add(otro)
+        payload = self._payload()
+        payload["emisor"] = otro.id
+        self.client.post(self.url, payload, format="json")
+
+        # Una por emisor, no una compartida ni dos del mismo.
+        self.assertEqual(Resolucion.objects.filter(emisor=self.emisor).count(), 1)
+        self.assertEqual(Resolucion.objects.filter(emisor=otro).count(), 1)
+
+    # --- Y con la resolución, las facturas de prueba ------------------------
+
+    def _facturas(self, emisor=None):
+        return Documento.objects.filter(
+            emisor=emisor or self.emisor,
+            documento_tipo__codigo=DocumentoTipo.Codigo.FACTURA_VENTA,
+        ).order_by("consecutivo")
+
+    def test_crear_software_de_facturacion_deja_dos_facturas_en_borrador(self):
+        resp = self.client.post(self.url, self._payload(), format="json")
+        self.assertEqual(resp.status_code, 201, resp.data)
+
+        facturas = list(self._facturas())
+        self.assertEqual(len(facturas), 2)
+        resolucion = Resolucion.objects.get(emisor=self.emisor)
+        # Numeradas desde el primer consecutivo que autoriza la resolución.
+        self.assertEqual(
+            [f.consecutivo for f in facturas],
+            [resolucion.rango_desde, resolucion.rango_desde + 1],
+        )
+        for factura in facturas:
+            self.assertEqual(factura.estado.nombre, DocumentoEstado.Nombre.BORRADOR)
+            self.assertEqual(factura.resolucion_id, resolucion.id)
+            self.assertEqual(factura.prefijo, resolucion.prefijo)
+            # Se crean, no se emiten: sin XML y sin CUFE.
+            self.assertFalse(factura.xml_archivo)
+
+    def test_no_crea_notas_credito(self):
+        """Solo facturas; la nota del Set se crea aparte, con su pareja."""
+        self.client.post(self.url, self._payload(), format="json")
+
+        self.assertFalse(
+            Documento.objects.filter(
+                emisor=self.emisor,
+                documento_tipo__codigo=DocumentoTipo.Codigo.NOTA_CREDITO,
+            ).exists()
+        )
+
+    def test_sin_resolucion_no_hay_facturas(self):
+        """En producción no se siembra resolución, así que tampoco facturas."""
+        self.emisor.ambiente_facturacion = Ambiente.PRODUCCION
+        self.emisor.save(update_fields=["ambiente_facturacion"])
+
+        resp = self.client.post(self.url, self._payload(), format="json")
+
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertFalse(self._facturas().exists())
+
+    def test_el_software_de_nomina_no_deja_facturas(self):
+        payload = self._payload()
+        payload["tipo"] = SoftwareDian.Tipo.NOMINA
+        payload["identificador"] = "software-de-nomina"
+
+        resp = self.client.post(self.url, payload, format="json")
+
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertFalse(self._facturas().exists())
+
+    def test_volver_a_registrar_el_software_no_duplica_las_facturas(self):
+        """Dar de baja el software y rehacerlo pasa otra vez por aquí."""
+        primero = self.client.post(self.url, self._payload(), format="json")
+        self.client.delete(f"{self.url}{primero.data['id']}/")
+
+        resp = self.client.post(self.url, self._payload(), format="json")
+
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(self._facturas().count(), 2)
 
     def test_requiere_autenticacion(self):
         from rest_framework.test import APIClient

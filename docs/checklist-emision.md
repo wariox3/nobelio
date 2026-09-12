@@ -4,8 +4,12 @@ Pasos en orden de dependencia para dejar un emisor listo y emitir su primer
 documento electrónico ante la DIAN. Cada paso indica el endpoint y lo que no
 puede faltar. Las rutas cuelgan de `/api/`.
 
-> Autenticación: el **frontend** usa JWT (`Authorization: Bearer <access>`); el
-> **ERP** usa API Key (`Authorization: Api-Key <prefijo>.<secreto>`).
+> Autenticación: el **frontend** usa la sesión en cookie `httpOnly`
+> (`Cookie: access_token=<jwt>`, que escribe el login; con `credentials:
+> "include"` porque va a otro dominio); el **ERP** usa API Key
+> (`Authorization: Api-Key <prefijo>.<secreto>`).
+> **No existe `Authorization: Bearer`**: `JWTAuthentication` de simplejwt no
+> está en la lista y un cliente escrito contra esa suposición recibe 401.
 > Ver [docs/autenticacion.md](autenticacion.md).
 >
 > Errores: todas las respuestas 4xx/5xx tienen el mismo cuerpo
@@ -43,41 +47,73 @@ puede faltar. Las rutas cuelgan de `/api/`.
 
 Va **antes** que el software: es lo que firma la consulta de numeración y los
 documentos, así que sin él los pasos 5 a 7 no arrancan. Registrar un software
-sin certificado activo y vigente responde 400.
+sin certificado cargado y vigente responde 400.
 
 - [ ] `POST /api/emisores/certificado/cargar/` (multipart: `emisor`, `archivo` .p12/.pfx, `clave`).
   - Se **valida** antes de guardar: integridad + clave, llave RSA ≥ 2048, vigencia,
     y que el **NIT del certificado coincida** con el del emisor.
   - `vigente_desde`/`vigente_hasta` se autocompletan del propio certificado.
-  - Se guarda en **B2** (`<id_emisor>/certificados/`); un único certificado **activo** por emisor
-    (cargar uno nuevo jubila el anterior).
+  - Se guarda en **B2** (`<id_emisor>/certificados/`). **Uno por emisor**, y lo
+    impone la base (`Certificado.emisor` es `OneToOne`): ya no hay histórico ni
+    bandera `activo`.
+- [ ] *(para renovar)* `DELETE /api/emisores/certificado/{id}/` y volver a cargar,
+      en ese orden. Con uno ya cargado, `cargar/` responde 400 diciendo cuál
+      borrar: renovar son dos pasos explícitos, no un reemplazo silencioso.
+  - **La baja borra también el `.p12` de B2.** Si el bucket falla, la fila vuelve
+    (502) para poder reintentar. Ten a mano el archivo nuevo antes de borrar:
+    entre el `DELETE` y el `cargar/` el emisor no puede emitir.
+  - El emisor lleva el resumen: `certificado_activo` (si hay `.p12` cargado) y
+    `certificado_vence`. Son de **solo lectura** y los reescribe el propio
+    certificado al cargarse y al borrarse. `certificado_activo` no dice que esté
+    vigente —eso se responde con `certificado_vence`—.
 
 ## 5. Software DIAN
 
-- [ ] `POST /api/emisores/emisor/crear-habilitacion/` con `emisor`, `identificador`
-      y `pin` (más `test_set_id` si se va a correr el Set de Pruebas) → registra el
-      software del emisor y jubila el que tuviera activo.
-  - Antes de registrar nada comprueba que el emisor exista y que tenga un
-    **certificado activo y no vencido** (paso 4). Si no, responde 400.
+- [ ] `POST /api/emisores/software/` con `emisor`, `tipo`, `identificador` y `pin`
+      (más `test_set_id` si se va a correr el Set de Pruebas) → registra el software
+      **y deja montado el resto de la habilitación** (ver abajo).
+  - Antes de registrar nada comprueba que el emisor exista y que tenga su
+    **certificado cargado y no vencido** (paso 4). Si no, responde 400.
   - Los tres datos los entrega la DIAN al aprobar el software. El `test_set_id`
     es opcional en el modelo —un software ya en producción no tiene set de
     pruebas—, pero sin él no se puede emitir el Set de Pruebas después.
-  - Responde **200**. Un solo software activo por emisor: registrar otro deja el
-    anterior en `activo=False`, como histórico.
+  - **Uno por emisor y operación**, y lo impone un índice único
+    `(emisor, tipo)`. Las tres conviven —la DIAN habilita facturación, nómina y
+    documento equivalente por separado, cada una con su SoftwareID y su PIN—;
+    lo que no cabe es un segundo del mismo tipo. Ya no hay campo `activo`.
+  - **Cambiar de software es actualizar el que hay** (`PATCH
+    /api/emisores/software/{id}/`), no registrar otro: un `POST` repetido del
+    mismo tipo responde 400 con la ruta del existente.
+  - **Al registrarlo se siembra el resto**, en la misma transacción, para que el
+    alta no termine a medias:
+    - la **resolución del Set de Pruebas** (`SETP` 18760000001, con su clave
+      técnica) — solo en facturación y solo si el emisor está en ambiente de
+      pruebas para esa operación;
+    - **2 facturas de prueba en borrador**, numeradas desde el `rango_desde` de
+      esa resolución. Solo facturas: la nota crédito del Set se crea como un
+      documento cualquiera (paso 7), referenciando la factura que anula.
+    - Nada de esto ocurre para **nómina** (no se numera con resolución: usa
+      prefijo y consecutivo propios) ni para **documento equivalente** (falta
+      conocer su resolución de pruebas), ni si el emisor ya está en producción.
+    - No duplica: repetirlo no crea más facturas.
   - El `ProviderID` del XML **no se registra**: en software propio el proveedor
     tecnológico es el propio emisor, así que sale de su NIT (y el `schemeID`, de
     su dígito de verificación).
-- [ ] *(equivalente)* `POST /api/emisores/software/` registra el software por su
-      propio endpoint CRUD.
 
-> **El Set de Pruebas no está automatizado.** No hay un endpoint que lo corra de
-> principio a fin: los documentos de habilitación se crean y se envían a mano con
-> los endpoints de documentos (pasos 7 y 8), que es lo que hace falta para
-> habilitarse. Mientras `SoftwareDian.set_pruebas_aceptado` sea `False` y
-> `DIAN_ENVIRONMENT` sea `2`, los envíos van por `SendTestSetAsync` con el
-> `test_set_id` del software; hay que ponerlo a `True` a mano cuando la DIAN
-> acepte el set, para que pase a `SendBillSync`. Lo mismo con
-> `Emisor.habilitado_facturacion`: hoy nada lo marca solo.
+> **El Set de Pruebas no se corre de principio a fin.** El alta del software
+> deja el material creado (resolución y facturas en borrador), pero **firmarlo y
+> enviarlo es manual**, con los endpoints de documentos (pasos 7 y 8).
+>
+> Mientras `SoftwareDian.set_pruebas_aceptado` sea `False` y el emisor esté en
+> ambiente de pruebas para esa operación, los envíos van por `SendTestSetAsync`
+> con el `test_set_id` del software; después, por `SendBillSync`.
+>
+> Las banderas **sí se marcan solas**: cuando la DIAN responde que el set está
+> cerrado, `_marcar_habilitacion_superada` pone `set_pruebas_aceptado` y la
+> `habilitado_*` de esa operación (`apps/dian/servicios.py`). Se comprueba tanto
+> al enviar como al consultar, porque `SendTestSetAsync` no da veredicto: el
+> "Set de prueba … se encuentra Aceptado" solo aparece al preguntar por su
+> ZipKey con `GetStatusZip`.
 
 ## 6. Resolución de facturación
 
@@ -91,7 +127,7 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
 - [ ] `POST /api/emisores/resolucion/importar-dian/` con
       `{"emisor": <id>, "tipo_factura": <id>}` → consulta `GetNumberingRange` y
       crea/actualiza las resoluciones, guardando la `clave_tecnica` en el servidor.
-      Requiere certificado y software DIAN activos del emisor.
+      Requiere que el emisor tenga certificado y software DIAN registrados.
 
 - [ ] *(alternativa manual)* `POST /api/emisores/resolucion/` → número y fecha de
       resolución, `prefijo`, `rango_desde`/`rango_hasta`, vigencias y `tipo_factura`.
@@ -127,14 +163,14 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
   Sin esto el documento se crea, se firma —consumiendo consecutivo— y la DIAN lo
   rechaza al enviarlo. También se comprueba al modificarlo con `PATCH`.
 - Se rechaza (400 en `emisor`) si el emisor **no está en condiciones de firmar**:
-  inactivo, sin certificado activo, o con el certificado vencido o aún sin regir.
+  inactivo, sin certificado, o con el certificado vencido o aún sin regir.
   Es la misma regla que aplica `emitir/` (`emisores.servicios.motivo_no_puede_emitir`),
   comprobada ya al crear para no dejar borradores que nunca se van a poder emitir.
 
 ## 8. Ciclo de vida DIAN
 
 - [ ] `POST /api/documentos/documento/{id}/emitir/` → genera XML UBL 2.1, calcula
-      **CUFE/CUDE** y **firma XAdES-EPES** (requiere certificado activo del emisor).
+      **CUFE/CUDE** y **firma XAdES-EPES** (requiere el certificado del emisor, vigente).
 - [ ] `POST /api/documentos/documento/{id}/enviar/` → envía a la DIAN por WS;
       devuelve `track_id`, `es_valido`, `codigo_estado` y errores.
       Se usa `SendTestSetAsync` (con el `test_set_id`) solo mientras se está en
@@ -156,10 +192,12 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
 ### Resumen de dependencias
 
 ```
-Cuenta → Llave API / Usuario
-      └→ Emisor → Certificado (B2)
-                    └→ crear-habilitacion/ → Software DIAN
-                → Resolución
+Usuario / Llave API
+      └→ Emisor → Certificado (B2, uno por emisor)
+                    └→ Software DIAN (uno por operación)
+                         └→ Resolución SETP  ┐ se siembran solas
+                         └→ 2 facturas       ┘ al registrar el de facturación
+                → Resolución (real, importada de la DIAN)
                 → Documento (lleva dentro al adquiriente)
                        └→ emitir → enviar → xml/pdf
                                       │

@@ -44,7 +44,7 @@ def crear_nomina_prueba(emisor, *, prefijo=None, consecutivo=None,
     """Crea —solo crea— una nómina en borrador para el emisor.
 
     No la firma ni la envía: es material para probar la emisión de nómina
-    electrónica, igual que ``crear_factura_prueba`` lo es para la facturación.
+    electrónica, igual que ``crear_facturas_de_prueba`` lo es para la facturación.
 
     El trabajador se toma del propio emisor, como allí se toma el adquiriente:
     así el documento sale con una identificación real y registrada, sin
