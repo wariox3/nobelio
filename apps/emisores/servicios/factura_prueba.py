@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
+from django.db.models import Max
 from django.utils import timezone
 
 from apps.catalogos.models import Moneda, Tributo, UnidadMedida
@@ -15,6 +16,9 @@ from apps.documentos.models import (
     DocumentoEstado,
     DocumentoTipo,
 )
+from apps.nucleo.models import Ambiente
+
+from .emision import motivo_no_puede_emitir
 
 logger = logging.getLogger(__name__)
 
@@ -175,30 +179,158 @@ def sembrar_documentos_de_prueba(emisor, tipo_software, resolucion):
     Lo llama el alta del software (``POST /api/emisores/software/``). Devuelve
     los documentos creados, que pueden ser ninguno.
 
-    ``resolucion`` a ``None`` es la señal de que aquí no hay nada que hacer:
-    sin numeración no se puede crear un documento, y es lo que devuelve
-    ``sembrar_resolucion_de_pruebas`` cuando el emisor ya está en producción o
-    cuando esa operación no lleva resolución. Así la condición se escribe una
-    vez y no tres.
+    Cada operación se siembra a su manera porque se numera a su manera:
 
-    Por ahora solo facturación: la nómina no se numera con resolución y el
-    documento equivalente espera a que se conozca la suya.
+    - **Facturación**: facturas sobre la resolución. ``resolucion`` a ``None``
+      es la señal de que no hay nada que hacer —sin numeración no hay documento
+      posible—, y es lo que devuelve ``sembrar_resolucion_de_pruebas`` cuando
+      el emisor ya está en producción.
+    - **Nómina**: no se numera con resolución sino con prefijo y consecutivo
+      propios, así que no hay `resolucion` que mirar y el ambiente se comprueba
+      aquí, contra `ambiente_nomina` —cada operación tiene el suyo—.
+    - **Documento equivalente**: espera a que se conozca su resolución de
+      pruebas.
 
     Un catálogo sin cargar deja al emisor sin documentos de prueba, no sin
     software: son dos cosas distintas y solo una la pidió quien llama. Se anota
     en el log, que si no el hueco no se ve por ninguna parte.
     """
-    if resolucion is None or str(tipo_software) != "facturacion":
-        return []
+    from .nomina_prueba import crear_nominas_de_prueba
+
+    tipo = str(tipo_software)
     try:
         # Savepoint propio: si esto falla, el software y su resolución se
         # quedan; sin él se vendría abajo la transacción entera.
         with transaction.atomic():
-            return crear_facturas_de_prueba(emisor, resolucion)
-    except (ObjectDoesNotExist, IntegrityError):
+            if tipo == "facturacion":
+                if resolucion is None:
+                    return []
+                return crear_facturas_de_prueba(emisor, resolucion)
+            if tipo == "nomina":
+                if emisor.ambiente_nomina != Ambiente.PRUEBAS:
+                    return []
+                return crear_nominas_de_prueba(emisor)
+            return []
+    except (ObjectDoesNotExist, IntegrityError, ValueError):
         logger.warning(
-            "No se crearon las facturas de prueba del emisor %s "
-            "(¿faltan catálogos, o ya existen esos consecutivos?).",
-            emisor.pk, exc_info=True,
+            "No se crearon los documentos de prueba del emisor %s para "
+            "'%s' (¿faltan catálogos?).", emisor.pk, tipo, exc_info=True,
         )
         return []
+
+
+# --- Un documento suelto, sobre la resolución que se indique -----------------
+
+def tipo_de_documento_de(resolucion):
+    """El tipo de documento que numera esa resolución.
+
+    La resolución dice para qué numeración es en su ``tipo_factura``, y el
+    código de ese catálogo es el mismo ``codigo_dian`` del tipo de documento
+    —es el emparejamiento que ya usa ``_resolucion_por_numero`` al crear un
+    documento—. Así el tipo no se elige a mano ni se da por supuesto: sale de
+    la resolución.
+
+    Lanza ``ValueError`` si esa numeración no corresponde a ningún documento
+    que se numere con resolución. Es el caso de las notas (heredan el número
+    del documento que corrigen, no llevan ``sts:InvoiceControl``) y el de los
+    tipos de factura que el sistema todavía no emite.
+    """
+    codigo = resolucion.tipo_factura.codigo
+    tipo = DocumentoTipo.objects.filter(codigo_dian=codigo).first()
+    if tipo is None or tipo.codigo not in DocumentoTipo.CODIGOS_CON_RESOLUCION:
+        raise ValueError(
+            f"La resolución {resolucion.numero_resolucion} es de numeración "
+            f"'{resolucion.tipo_factura.nombre}' ({codigo}), que no "
+            f"corresponde a ningún documento que se numere con resolución. "
+            f"Solo se crean documentos de prueba para facturación (01), "
+            f"documento soporte (05) y documento equivalente (20)."
+        )
+    return tipo
+
+
+def siguiente_consecutivo(resolucion, documento_tipo):
+    """El primer número libre de la resolución para ese tipo.
+
+    El siguiente al mayor que ya se usó, o el primero que la DIAN autoriza si
+    aún no hay ninguno. Se mira por tipo porque el índice único lo incluye: una
+    nota comparte el número de la factura que corrige y no gasta uno propio.
+    """
+    usado = Documento.objects.filter(
+        resolucion=resolucion, documento_tipo=documento_tipo,
+    ).aggregate(maximo=Max("consecutivo"))["maximo"]
+    return resolucion.rango_desde if usado is None else usado + 1
+
+
+def crear_documento_de_prueba(resolucion, consecutivo=None):
+    """Un documento de prueba en borrador sobre ``resolucion``.
+
+    El mismo que siembra el alta del software, pero de uno en uno y donde se
+    diga. El tipo lo decide la resolución (``tipo_de_documento_de``) y el
+    número, ``consecutivo``; si no se indica, el siguiente libre.
+
+    Lanza ``ValueError`` con el motivo cuando no se puede: quien llama lo
+    traduce a un 400.
+    """
+    documento_tipo = tipo_de_documento_de(resolucion)
+
+    if documento_tipo.codigo == DocumentoTipo.Codigo.DOCUMENTO_EQUIVALENTE_POS:
+        # El P.O.S. no es un documento más: exige el satélite `DocumentoPOS`
+        # con la caja, el cajero y el código de venta, y sin él la validación
+        # cruzada del serializer lo rechaza. Crearlo a medias sería dejar un
+        # borrador que revienta al emitir.
+        raise ValueError(
+            "El documento equivalente P.O.S. necesita los datos de la caja "
+            "(bloque 'pos'), que este endpoint no compone. Créelo con "
+            "POST /api/documentos/documento/."
+        )
+
+    if not resolucion.activa:
+        # Es justo lo que la bandera impide: numerar con una dada de baja.
+        raise ValueError(
+            f"La resolución {resolucion.numero_resolucion} está inactiva; no "
+            f"numera documentos nuevos."
+        )
+
+    emisor = resolucion.emisor
+    campo = Documento.CAMPO_AMBIENTE_EMISOR.get(
+        documento_tipo.codigo, "ambiente_facturacion"
+    )
+    if getattr(emisor, campo) != Ambiente.PRUEBAS:
+        # El documento sale sellado como de pruebas —lo fija `_crear_documento`—
+        # pero gastaría un consecutivo del rango real, y esos no se recuperan.
+        raise ValueError(
+            f"El emisor {emisor.razon_social} ya está en producción para esta "
+            f"operación. Un documento de prueba consumiría un consecutivo de "
+            f"su numeración real, que no se recupera."
+        )
+
+    motivo = motivo_no_puede_emitir(emisor)
+    if motivo:
+        # Se dice ya y no al emitir: si no, queda un borrador que nunca se va
+        # a poder mandar y el motivo aparece dos pasos más tarde.
+        raise ValueError(motivo)
+
+    if consecutivo is None:
+        consecutivo = siguiente_consecutivo(resolucion, documento_tipo)
+    if not (resolucion.rango_desde <= consecutivo <= resolucion.rango_hasta):
+        raise ValueError(
+            f"El consecutivo {consecutivo} no cabe en lo que autorizó la "
+            f"resolución {resolucion.numero_resolucion} "
+            f"({resolucion.rango_desde} a {resolucion.rango_hasta})."
+        )
+
+    try:
+        # El índice único (emisor, prefijo, consecutivo, tipo) es quien decide
+        # de verdad; el savepoint deja seguir atendiendo la petición si choca.
+        with transaction.atomic():
+            return _crear_documento(
+                emisor, resolucion,
+                codigo_tipo=documento_tipo.codigo,
+                consecutivo=consecutivo,
+                observaciones="Documento del Set de Pruebas (habilitación).",
+            )
+    except IntegrityError:
+        raise ValueError(
+            f"El emisor ya tiene un documento de este tipo numerado "
+            f"{resolucion.prefijo}{consecutivo}."
+        )

@@ -12,6 +12,7 @@ from apps.catalogos.models import TipoFactura
 from apps.dian import servicios as dian
 from apps.dian import soap
 from apps.emisores import models, serializers
+from apps.emisores.servicios import crear_documento_de_prueba
 from apps.nucleo.api import ErrorPasarela, ErrorSolicitud, entero_de_query
 from apps.seguridad.alcance import AlcanceEmisorMixin, exigir_alcance
 
@@ -38,6 +39,61 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         qs = super().get_queryset()
         emisor = entero_de_query(self.request.query_params, "emisor")
         return qs.filter(emisor=emisor) if emisor else qs
+
+    @action(detail=True, methods=["post"], url_path="crear-documento-prueba")
+    def crear_documento_prueba(self, request, pk=None):
+        """Crea un documento de prueba en borrador sobre esta resolución.
+
+        ``POST /api/emisores/resolucion/{id}/crear-documento-prueba/``, con
+        ``{"consecutivo": <n>}`` opcional.
+
+        Es el mismo documento que siembra el alta del software, pero de uno en
+        uno y sobre la resolución que se indique. Sirve para completar un Set
+        de Pruebas al que le faltan documentos sin tener que componerlos a mano.
+
+        **El tipo lo decide la resolución**, no quien llama: su ``tipo_factura``
+        es el mismo código que el ``codigo_dian`` del tipo de documento, así que
+        una resolución de facturación (01) da una factura de venta y una de
+        documento soporte (05), un documento soporte.
+
+        Sin ``consecutivo`` toma el siguiente libre: el posterior al mayor que
+        ya se usó de esa resolución para ese tipo, o el primero del rango si
+        todavía no hay ninguno.
+
+        Solo lo crea: no lo firma ni lo envía. Para eso están ``emitir`` y
+        ``enviar`` de ``/api/documentos/documento/{id}/``.
+        """
+        # `get_object` va contra el queryset del mixin, así que una resolución
+        # fuera del alcance no se encuentra (404) en vez de responder 403 y
+        # delatar que existe.
+        resolucion = self.get_object()
+
+        consecutivo = request.data.get("consecutivo")
+        if consecutivo in (None, ""):
+            consecutivo = None
+        else:
+            try:
+                consecutivo = int(consecutivo)
+            except (TypeError, ValueError):
+                raise ErrorSolicitud("El consecutivo debe ser un número entero.")
+            if consecutivo < 1:
+                raise ErrorSolicitud("El consecutivo debe ser mayor que cero.")
+
+        try:
+            documento = crear_documento_de_prueba(resolucion, consecutivo)
+        except ValueError as exc:
+            raise ErrorSolicitud(str(exc))
+
+        return Response(
+            {
+                "id": str(documento.id),
+                "documento_tipo": documento.documento_tipo.codigo,
+                "numero": documento.numero,
+                "consecutivo": documento.consecutivo,
+                "estado": documento.estado.nombre,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=False, methods=["get"], url_path="consulta-dian")
     def consulta_dian(self, request):

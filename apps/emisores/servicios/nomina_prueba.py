@@ -1,4 +1,6 @@
-"""Nómina de prueba para la habilitación de nómina electrónica."""
+"""Nóminas de prueba para la habilitación de nómina electrónica."""
+import calendar
+from datetime import date
 from decimal import Decimal
 
 from django.db import transaction
@@ -17,6 +19,9 @@ from apps.catalogos.models import (
 from apps.nomina.models import Empleado, Nomina, NominaConcepto
 
 PREFIJO_POR_DEFECTO = "NESETP"
+
+# Cuántas nóminas deja el alta del software de nómina.
+NOMINAS_DE_PRUEBA = 10
 
 # Importes de la nómina de prueba: un básico redondo con la salud y la pensión
 # de ley, para que los totales cuadren a la vista.
@@ -151,3 +156,47 @@ def crear_nomina_prueba(emisor, *, prefijo=None, consecutivo=None,
         ),
     ])
     return nomina
+
+
+def _mes(hoy, atras):
+    """Primer y último día del mes que cae ``atras`` meses antes de ``hoy``."""
+    total = hoy.year * 12 + (hoy.month - 1) - atras
+    anio, indice = divmod(total, 12)
+    mes = indice + 1
+    return date(anio, mes, 1), date(anio, mes, calendar.monthrange(anio, mes)[1])
+
+
+def crear_nominas_de_prueba(emisor, cantidad=NOMINAS_DE_PRUEBA):
+    """Deja ``cantidad`` nóminas de prueba en borrador. Devuelve la lista.
+
+    Es lo que siembra el alta del software de nómina, igual que
+    ``crear_facturas_de_prueba`` en facturación.
+
+    **Una por mes, hacia atrás desde el mes en curso**, y ese detalle es el
+    motivo de que esto exista en vez de llamar diez veces a
+    ``crear_nomina_prueba``: la DIAN rechaza con la regla 90 una segunda nómina
+    del mismo trabajador para el mismo periodo, porque a nadie se le paga dos
+    veces el mismo mes. Diez con el periodo por defecto serían nueve rechazos.
+
+    Salen en orden cronológico, así que el consecutivo más bajo es el mes más
+    antiguo.
+
+    **No duplica.** Si el emisor ya tiene nóminas con este prefijo se devuelve
+    la lista vacía: el caso llega solo, porque dar de baja el software y volver
+    a registrarlo pasa por aquí otra vez.
+    """
+    if Nomina.objects.filter(emisor=emisor, prefijo=PREFIJO_POR_DEFECTO).exists():
+        return []
+
+    hoy = timezone.localdate()
+    with transaction.atomic():
+        return [
+            crear_nomina_prueba(
+                emisor,
+                periodo_inicio=inicio,
+                periodo_fin=fin,
+            )
+            for inicio, fin in (
+                _mes(hoy, atras) for atras in range(cantidad - 1, -1, -1)
+            )
+        ]

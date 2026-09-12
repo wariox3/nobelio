@@ -254,10 +254,11 @@ Luego registra para ese emisor (ver
   su certificado cargado y vigente. **Uno por emisor y operación**
   —facturación, nómina y documento equivalente se habilitan por separado y
   conviven—: para cambiarlo se actualiza el que hay, no se registra otro.
-  Al registrar el de facturación se siembran además la resolución del Set de
-  Pruebas y dos facturas en borrador, para que el alta no termine a medias. El
-  Set de Pruebas no se corre desde aquí: esos documentos se firman y se envían
-  con los endpoints de documentos.
+  Al registrarlo se siembra además el material del Set de Pruebas, para que el
+  alta no termine a medias: el de facturación deja la resolución `SETP` y dos
+  facturas en borrador; el de nómina, diez nóminas, una por mes. El Set de
+  Pruebas no se corre desde aquí: esos documentos se firman y se envían con los
+  endpoints de documentos.
   El `ProviderID` del XML no se guarda: en software propio es el NIT del emisor.
 - **Resolución de facturación** — `POST /api/emisores/resolucion/importar-dian/`
   la trae de la DIAN con su `clave_tecnica` (o `POST /api/emisores/resolucion/`

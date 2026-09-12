@@ -7,6 +7,7 @@ from apps.documentos.tests_utils import crear_catalogos_minimos, crear_certifica
 from apps.catalogos.models import TipoFactura
 from apps.emisores.models import Emisor, Resolucion, SoftwareDian
 from apps.emisores.servicios import RESOLUCION_SET_PRUEBAS
+from apps.nomina.tests_utils import crear_catalogos_de_pago
 from apps.nucleo.models import Ambiente
 
 
@@ -39,6 +40,10 @@ class SoftwareDianAPITests(APITestCase):
         TipoFactura.objects.get_or_create(
             codigo="01", defaults={"nombre": "Factura electrónica de Venta"},
         )
+        # La nómina de prueba necesita forma y medio de pago, que no vienen en
+        # los catálogos mínimos de documentos. En el servidor los carga
+        # `manage.py cargar_catalogos`.
+        crear_catalogos_de_pago()
 
     def _payload(self):
         return {
@@ -258,14 +263,72 @@ class SoftwareDianAPITests(APITestCase):
         self.assertFalse(self._facturas().exists())
 
     def test_el_software_de_nomina_no_deja_facturas(self):
-        payload = self._payload()
-        payload["tipo"] = SoftwareDian.Tipo.NOMINA
-        payload["identificador"] = "software-de-nomina"
-
-        resp = self.client.post(self.url, payload, format="json")
+        resp = self.client.post(self.url, self._payload_nomina(), format="json")
 
         self.assertEqual(resp.status_code, 201, resp.data)
         self.assertFalse(self._facturas().exists())
+
+    # --- Y el de nómina deja diez nóminas -----------------------------------
+
+    def _payload_nomina(self):
+        payload = self._payload()
+        payload["tipo"] = SoftwareDian.Tipo.NOMINA
+        payload["identificador"] = "software-de-nomina"
+        return payload
+
+    def test_crear_software_de_nomina_deja_diez_nominas_en_borrador(self):
+        from apps.nomina.models import Nomina
+
+        resp = self.client.post(self.url, self._payload_nomina(), format="json")
+        self.assertEqual(resp.status_code, 201, resp.data)
+
+        nominas = list(
+            Nomina.objects.filter(emisor=self.emisor).order_by("consecutivo")
+        )
+        self.assertEqual(len(nominas), 10)
+        for nomina in nominas:
+            self.assertEqual(nomina.estado.nombre, DocumentoEstado.Nombre.BORRADOR)
+            self.assertEqual(nomina.tipo_xml, Nomina.TipoXML.NOMINA)
+            self.assertFalse(nomina.cune)  # se crean, no se emiten
+
+    def test_cada_nomina_va_de_un_mes_distinto(self):
+        """La regla 90 rechaza dos nóminas del mismo trabajador y periodo."""
+        from apps.nomina.models import Nomina
+
+        self.client.post(self.url, self._payload_nomina(), format="json")
+
+        periodos = [
+            (n.fecha_liquidacion_inicio, n.fecha_liquidacion_fin)
+            for n in Nomina.objects.filter(emisor=self.emisor)
+        ]
+        self.assertEqual(len(set(periodos)), 10)
+        # Y es el mismo trabajador en las diez, que es lo que hace que importe.
+        self.assertEqual(
+            Nomina.objects.filter(emisor=self.emisor)
+            .values("empleado").distinct().count(),
+            1,
+        )
+
+    def test_no_deja_nominas_si_ya_esta_en_produccion_para_nomina(self):
+        from apps.nomina.models import Nomina
+
+        self.emisor.ambiente_nomina = Ambiente.PRODUCCION
+        self.emisor.save(update_fields=["ambiente_nomina"])
+
+        resp = self.client.post(self.url, self._payload_nomina(), format="json")
+
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertFalse(Nomina.objects.filter(emisor=self.emisor).exists())
+
+    def test_volver_a_registrar_el_software_de_nomina_no_duplica(self):
+        from apps.nomina.models import Nomina
+
+        primero = self.client.post(self.url, self._payload_nomina(), format="json")
+        self.client.delete(f"{self.url}{primero.data['id']}/")
+
+        self.client.post(self.url, self._payload_nomina(), format="json")
+
+        self.assertEqual(Nomina.objects.filter(emisor=self.emisor).count(), 10)
 
     def test_volver_a_registrar_el_software_no_duplica_las_facturas(self):
         """Dar de baja el software y rehacerlo pasa otra vez por aquí."""

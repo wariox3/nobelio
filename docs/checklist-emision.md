@@ -92,13 +92,37 @@ sin certificado cargado y vigente responde 400.
     - **2 facturas de prueba en borrador**, numeradas desde el `rango_desde` de
       esa resolución. Solo facturas: la nota crédito del Set se crea como un
       documento cualquiera (paso 7), referenciando la factura que anula.
-    - Nada de esto ocurre para **nómina** (no se numera con resolución: usa
-      prefijo y consecutivo propios) ni para **documento equivalente** (falta
-      conocer su resolución de pruebas), ni si el emisor ya está en producción.
-    - No duplica: repetirlo no crea más facturas.
+  - El de **nómina** no lleva resolución —numera con prefijo y consecutivo
+    propios— y deja en su lugar **10 nóminas en borrador**, prefijo `NESETP`,
+    **una por mes hacia atrás desde el mes en curso**. Los periodos distintos no
+    son un adorno: la DIAN rechaza con la regla 90 una segunda nómina del mismo
+    trabajador para el mismo periodo, así que diez del mes en curso serían nueve
+    rechazos. Las **notas de ajuste** no se pueden sembrar aquí: una nota lleva
+    el CUNE del documento que ajusta, y el CUNE no existe hasta emitir. Se crean
+    después, con `POST /api/nomina/nomina/{id}/nota-ajuste/`.
+  - El de **documento equivalente** no siembra nada todavía: falta conocer su
+    resolución de pruebas.
+  - Nada se siembra si el emisor ya está en producción para esa operación, y
+    repetirlo no duplica lo que ya exista.
   - El `ProviderID` del XML **no se registra**: en software propio el proveedor
     tecnológico es el propio emisor, así que sale de su NIT (y el `schemeID`, de
     su dígito de verificación).
+
+- [ ] *(si al Set le faltan documentos)* `POST
+      /api/emisores/resolucion/{id}/crear-documento-prueba/`, con
+      `{"consecutivo": <n>}` opcional → uno más, igual que los que siembra el
+      alta, sobre la resolución que se indique.
+  - **El tipo lo decide la resolución**, no el cuerpo: su `tipo_factura` es el
+    mismo código que el `codigo_dian` del tipo de documento, así que una de
+    facturación (01) da una factura de venta y una de documento soporte (05), un
+    documento soporte. Las numeraciones de notas (91, 92, 95) se rechazan: las
+    notas heredan el número del documento que corrigen.
+  - Sin `consecutivo`, toma **el siguiente libre** de esa resolución para ese
+    tipo; con el rango agotado responde 400.
+  - Se niega sobre una resolución inactiva, sobre un emisor que ya esté en
+    producción para esa operación —gastaría un consecutivo real, y no se
+    recuperan— y sobre el documento equivalente P.O.S., que necesita el bloque
+    `pos` con los datos de la caja.
 
 > **El Set de Pruebas no se corre de principio a fin.** El alta del software
 > deja el material creado (resolución y facturas en borrador), pero **firmarlo y

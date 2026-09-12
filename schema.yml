@@ -2924,6 +2924,84 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/emisores/resolucion/{id}/crear-documento-prueba/:
+    post:
+      operationId: emisores_resolucion_crear_documento_prueba_create
+      description: |-
+        Crea un documento de prueba en borrador sobre esta resolución.
+
+        ``POST /api/emisores/resolucion/{id}/crear-documento-prueba/``, con
+        ``{"consecutivo": <n>}`` opcional.
+
+        Es el mismo documento que siembra el alta del software, pero de uno en
+        uno y sobre la resolución que se indique. Sirve para completar un Set
+        de Pruebas al que le faltan documentos sin tener que componerlos a mano.
+
+        **El tipo lo decide la resolución**, no quien llama: su ``tipo_factura``
+        es el mismo código que el ``codigo_dian`` del tipo de documento, así que
+        una resolución de facturación (01) da una factura de venta y una de
+        documento soporte (05), un documento soporte.
+
+        Sin ``consecutivo`` toma el siguiente libre: el posterior al mayor que
+        ya se usó de esa resolución para ese tipo, o el primero del rango si
+        todavía no hay ninguno.
+
+        Solo lo crea: no lo firma ni lo envía. Para eso están ``emitir`` y
+        ``enviar`` de ``/api/documentos/documento/{id}/``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este resolución.
+        required: true
+      tags:
+      - emisores
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolucionRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ResolucionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ResolucionRequest'
+        required: true
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resolucion'
+          description: ''
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/emisores/resolucion/consulta-dian/:
     get:
       operationId: emisores_resolucion_consulta_dian_retrieve
