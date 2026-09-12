@@ -134,8 +134,8 @@ class HabilitacionTests(APITestCase):
         resp = self.client.post(URL, payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_sin_certificado_activo_no_se_habilita(self):
-        Certificado.objects.filter(emisor=self.emisor).update(activo=False)
+    def test_sin_certificado_no_se_habilita(self):
+        Certificado.objects.filter(emisor=self.emisor).delete()
         resp = self.client.post(URL, self._payload(), format="json")
 
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)

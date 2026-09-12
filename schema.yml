@@ -2037,12 +2037,11 @@ paths:
         local. Mientras esto fue un ``ModelViewSet``, ``PUT`` y ``PATCH`` seguían
         publicados y rodeaban las dos comprobaciones: bastaba un ``PATCH`` con un
         ``archivo`` nuevo para guardarlo sin validar, o un ``PATCH`` de ``emisor``
-        para mover el certificado a otro emisor del alcance o resucitar con
-        ``activo=True`` uno ya jubilado.
+        para mover el certificado a otro emisor del alcance.
 
         Por eso quedan solo ``list``, ``retrieve``, ``destroy`` y ``cargar``. No hay
-        edición: el ``alias`` se fija al subir, y ``activo`` lo gobierna ``cargar``,
-        que jubila los anteriores del emisor al llegar uno nuevo.
+        edición: el ``alias`` se fija al subir, y el certificado se reemplaza
+        borrando el que hay y cargando el nuevo.
 
         Tampoco hay un ``create`` que devuelva un 405 con la pista de ``cargar``:
         el router decide qué verbos monta mirando si el viewset *tiene* el método,
@@ -2097,12 +2096,11 @@ paths:
         local. Mientras esto fue un ``ModelViewSet``, ``PUT`` y ``PATCH`` seguían
         publicados y rodeaban las dos comprobaciones: bastaba un ``PATCH`` con un
         ``archivo`` nuevo para guardarlo sin validar, o un ``PATCH`` de ``emisor``
-        para mover el certificado a otro emisor del alcance o resucitar con
-        ``activo=True`` uno ya jubilado.
+        para mover el certificado a otro emisor del alcance.
 
         Por eso quedan solo ``list``, ``retrieve``, ``destroy`` y ``cargar``. No hay
-        edición: el ``alias`` se fija al subir, y ``activo`` lo gobierna ``cargar``,
-        que jubila los anteriores del emisor al llegar uno nuevo.
+        edición: el ``alias`` se fija al subir, y el certificado se reemplaza
+        borrando el que hay y cargando el nuevo.
 
         Tampoco hay un ``create`` que devuelva un 405 con la pista de ``cargar``:
         el router decide qué verbos monta mirando si el viewset *tiene* el método,
@@ -2156,12 +2154,11 @@ paths:
         local. Mientras esto fue un ``ModelViewSet``, ``PUT`` y ``PATCH`` seguían
         publicados y rodeaban las dos comprobaciones: bastaba un ``PATCH`` con un
         ``archivo`` nuevo para guardarlo sin validar, o un ``PATCH`` de ``emisor``
-        para mover el certificado a otro emisor del alcance o resucitar con
-        ``activo=True`` uno ya jubilado.
+        para mover el certificado a otro emisor del alcance.
 
         Por eso quedan solo ``list``, ``retrieve``, ``destroy`` y ``cargar``. No hay
-        edición: el ``alias`` se fija al subir, y ``activo`` lo gobierna ``cargar``,
-        que jubila los anteriores del emisor al llegar uno nuevo.
+        edición: el ``alias`` se fija al subir, y el certificado se reemplaza
+        borrando el que hay y cargando el nuevo.
 
         Tampoco hay un ``create`` que devuelva un 405 con la pista de ``cargar``:
         el router decide qué verbos monta mirando si el viewset *tiene* el método,
@@ -2217,9 +2214,11 @@ paths:
         ``validar_pkcs12``. Las fechas de vigencia se toman del propio
         certificado.
 
-        Cada emisor mantiene un único certificado vigente: al cargar uno nuevo
-        se desactivan (``activo=False``) los anteriores del mismo emisor, que
-        se conservan como histórico.
+        Cada emisor tiene **un** certificado, y lo impone la base (el ``emisor``
+        del certificado es ``OneToOne``). Si ya hay uno, la carga se rechaza
+        con un 400 que dice cuál borrar: renovar es dos pasos explícitos, no un
+        reemplazo silencioso, porque subir un .p12 no debería destruir el que
+        estaba sin que nadie lo pida.
       tags:
       - emisores
       requestBody:
@@ -4561,8 +4560,6 @@ components:
           type: string
           format: date
           nullable: true
-        activo:
-          type: boolean
       required:
       - emisor
       - id
@@ -4593,8 +4590,6 @@ components:
           type: string
           format: date
           nullable: true
-        activo:
-          type: boolean
       required:
       - archivo
       - clave
@@ -6164,12 +6159,30 @@ components:
             * `2` - Habilitación
           minimum: 0
           maximum: 32767
+        certificado_activo:
+          type: boolean
+          readOnly: true
+          title: Tiene certificado digital
+          description: 'Si el emisor tiene un .p12 cargado. No dice que esté vigente:
+            eso lo responde `certificado_vence`, porque una bandera que dependiera
+            de la fecha quedaría mintiendo el día que el certificado venza, sin que
+            nadie haya escrito nada.'
+        certificado_vence:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+          title: El certificado vence el
+          description: Fin de la vigencia del .p12 cargado, tal y como viene dentro
+            del propio certificado. Nulo si no hay certificado.
         resoluciones:
           type: array
           items:
             $ref: '#/components/schemas/Resolucion'
           readOnly: true
       required:
+      - certificado_activo
+      - certificado_vence
       - departamento
       - direccion
       - habilitado_documento_equivalente
@@ -6295,6 +6308,22 @@ components:
             * `2` - Habilitación
           minimum: 0
           maximum: 32767
+        certificado_activo:
+          type: boolean
+          readOnly: true
+          title: Tiene certificado digital
+          description: 'Si el emisor tiene un .p12 cargado. No dice que esté vigente:
+            eso lo responde `certificado_vence`, porque una bandera que dependiera
+            de la fecha quedaría mintiendo el día que el certificado venza, sin que
+            nadie haya escrito nada.'
+        certificado_vence:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+          title: El certificado vence el
+          description: Fin de la vigencia del .p12 cargado, tal y como viene dentro
+            del propio certificado. Nulo si no hay certificado.
         municipio_id:
           type: integer
           readOnly: true
@@ -6305,6 +6334,8 @@ components:
           type: string
           readOnly: true
       required:
+      - certificado_activo
+      - certificado_vence
       - direccion
       - habilitado_documento_equivalente
       - habilitado_facturacion

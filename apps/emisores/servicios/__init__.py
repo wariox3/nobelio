@@ -3,7 +3,7 @@ from .certificado_validacion import CertificadoInvalido, validar_pkcs12
 from .emision import (
     MENSAJE_EMISOR_INACTIVO,
     MENSAJE_SIN_CERTIFICADO,
-    certificado_activo,
+    certificado_del_emisor,
     motivo_no_puede_emitir,
 )
 from .factura_prueba import crear_factura_prueba
@@ -14,7 +14,7 @@ __all__ = [
     "validar_pkcs12",
     "MENSAJE_EMISOR_INACTIVO",
     "MENSAJE_SIN_CERTIFICADO",
-    "certificado_activo",
+    "certificado_del_emisor",
     "motivo_no_puede_emitir",
     "crear_factura_prueba",
     "crear_nomina_prueba",

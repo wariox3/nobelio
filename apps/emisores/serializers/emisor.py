@@ -202,11 +202,17 @@ class EmisorSerializer(serializers.ModelSerializer):
             "habilitado_documento_equivalente",
             "ambiente_facturacion", "ambiente_nomina",
             "ambiente_documento_equivalente",
+            "certificado_activo", "certificado_vence",
             "resoluciones",
         ]
         # El dueño no se manda: lo pone la vista con quien hace la petición.
         # Aceptarlo del cuerpo dejaría dar de alta emisores a nombre de otro.
-        read_only_fields = ["usuario"]
+        #
+        # El resumen del certificado tampoco: lo escribe el propio certificado
+        # al cargarse y al borrarse. De escritura sería una bandera que dice
+        # que hay un .p12 donde no lo hay, y el primer documento que se emita
+        # se estrella al ir a firmar.
+        read_only_fields = ["usuario", "certificado_activo", "certificado_vence"]
         # Vacío a propósito: desactiva el UniqueTogetherValidator automático de
         # DRF para que la unicidad la explique `validate()` con un mensaje útil.
         validators = []

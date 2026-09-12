@@ -3,7 +3,7 @@ import os
 
 from rest_framework import serializers
 
-from apps.emisores.models import Certificado
+from apps.emisores.models import Certificado, Emisor
 
 
 class CertificadoSerializer(serializers.ModelSerializer):
@@ -18,11 +18,20 @@ class CertificadoSerializer(serializers.ModelSerializer):
     # cabría—. El límite de entrada sigue siendo el de siempre.
     clave = serializers.CharField(write_only=True, max_length=255)
 
+    # `validators=[]` desactiva el UniqueValidator que DRF le pone solo por ser
+    # el lado OneToOne. No es que sobre la comprobación —cada emisor tiene un
+    # certificado— sino que se adelanta a la de `cargar` y contesta "certificado
+    # with this emisor already exists", en inglés y sin decir qué hacer. La
+    # misma regla la explica la vista, con el id que hay que borrar.
+    emisor = serializers.PrimaryKeyRelatedField(
+        queryset=Emisor.objects.all(), validators=[],
+    )
+
     class Meta:
         model = Certificado
         fields = [
             "id", "emisor", "alias", "archivo", "nombre_archivo", "clave",
-            "vigente_desde", "vigente_hasta", "activo",
+            "vigente_desde", "vigente_hasta",
         ]
         extra_kwargs = {
             # Sensible: se acepta al subir pero nunca se devuelve.

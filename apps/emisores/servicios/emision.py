@@ -11,16 +11,18 @@ que se promete al crear sea exactamente lo que se exige al emitir.
 from django.utils import timezone
 
 MENSAJE_EMISOR_INACTIVO = "El emisor está inactivo; no puede emitir documentos."
-MENSAJE_SIN_CERTIFICADO = "El emisor no tiene un certificado digital activo."
+MENSAJE_SIN_CERTIFICADO = "El emisor no tiene un certificado digital cargado."
 
 
-def certificado_activo(emisor):
-    """El certificado activo del emisor (el más reciente), o ``None``.
+def certificado_del_emisor(emisor):
+    """El certificado del emisor, o ``None`` si no tiene.
 
-    El orden lo pone ``Certificado.Meta.ordering = ["-creado_en"]``: cargar uno
-    nuevo jubila el anterior, así que el primero es siempre el vigente.
+    Es uno como mucho: la relación es ``OneToOne``. El ``getattr`` con defecto
+    es el idioma de Django para el lado inverso —``RelatedObjectDoesNotExist``
+    hereda de ``AttributeError`` justo para esto—, y así "no tiene" sale como
+    ``None`` en vez de como excepción.
     """
-    return emisor.certificados.filter(activo=True).first()
+    return getattr(emisor, "certificado", None)
 
 
 def motivo_no_puede_emitir(emisor, fecha=None):
@@ -37,7 +39,7 @@ def motivo_no_puede_emitir(emisor, fecha=None):
     if not emisor.activo:
         return MENSAJE_EMISOR_INACTIVO
 
-    certificado = certificado_activo(emisor)
+    certificado = certificado_del_emisor(emisor)
     if certificado is None:
         return MENSAJE_SIN_CERTIFICADO
 

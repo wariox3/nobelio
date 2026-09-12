@@ -82,7 +82,7 @@ def crear_catalogos_minimos():
 
 
 def crear_certificado(emisor, dias=365):
-    """Certificado activo y vigente del emisor, sin .p12 real.
+    """Certificado vigente del emisor, sin .p12 real.
 
     Desde que el certificado va antes que el software en el flujo, registrar un
     software exige que el emisor ya lo tenga (ver ``SoftwareDianSerializer``).
@@ -99,7 +99,6 @@ def crear_certificado(emisor, dias=365):
     return Certificado.objects.create(
         emisor=emisor, archivo="certificado-de-prueba.p12", clave="clave",
         vigente_desde=hoy - timedelta(days=1), vigente_hasta=hoy + timedelta(days=dias),
-        activo=True,
     )
 
 

@@ -27,7 +27,7 @@ from apps.documentos.models import (
 from apps.emisores.models import SoftwareDian
 from apps.emisores.servicios import (
     MENSAJE_EMISOR_INACTIVO,
-    certificado_activo,
+    certificado_del_emisor,
     motivo_no_puede_emitir,
 )
 from apps.nucleo.registro import campos
@@ -260,7 +260,7 @@ def _software_activo_emisor(emisor, tipo=SoftwareDian.Tipo.FACTURACION):
     return software
 
 
-def _certificado_activo_emisor(emisor):
+def _certificado_para_firmar(emisor):
     """El certificado con el que firmar, comprobando que se pueda usar.
 
     Misma regla que al crear el documento (``motivo_no_puede_emitir``): sin ella
@@ -269,7 +269,7 @@ def _certificado_activo_emisor(emisor):
     motivo = motivo_no_puede_emitir(emisor)
     if motivo:
         raise ErrorEmision(motivo)
-    return certificado_activo(emisor)
+    return certificado_del_emisor(emisor)
 
 
 # Qué software DIAN usa cada tipo de ``Documento``. Lo que no esté aquí sale con
@@ -296,8 +296,8 @@ def _software_activo(documento):
     return _software_activo_emisor(documento.emisor, tipo)
 
 
-def _certificado_activo(documento):
-    return _certificado_activo_emisor(documento.emisor)
+def _certificado_de(documento):
+    return _certificado_para_firmar(documento.emisor)
 
 
 def construir_firmador(documento, *, llave=None, certificado=None, cadena=None):
@@ -315,7 +315,7 @@ def construir_firmador_emisor(emisor, *, llave=None, certificado=None, cadena=No
     anexo fija distinto para cada operación; sin él sale el de facturación.
     """
     if llave is None or certificado is None:
-        cert_modelo = _certificado_activo_emisor(emisor)
+        cert_modelo = _certificado_para_firmar(emisor)
         with cert_modelo.archivo.open("rb") as fh:
             llave, certificado, cadena = firma.cargar_pkcs12(fh.read(), cert_modelo.clave)
     return firma.FirmadorXAdES(
@@ -479,7 +479,7 @@ def generar_attached_document(documento, *, firmador=None, ambiente=None,
 def construir_cliente_emisor(emisor, ambiente, *, llave=None, certificado=None):
     """Crea el ClienteDian con la URL del ambiente y el certificado del emisor."""
     if llave is None or certificado is None:
-        cert_modelo = _certificado_activo_emisor(emisor)
+        cert_modelo = _certificado_para_firmar(emisor)
         with cert_modelo.archivo.open("rb") as fh:
             llave, certificado, _ = firma.cargar_pkcs12(fh.read(), cert_modelo.clave)
     url = settings.DIAN_WSDL[ambiente].replace("?wsdl", "")

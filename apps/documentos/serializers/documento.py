@@ -390,7 +390,7 @@ class DocumentoCrearSerializer(serializers.ModelSerializer):
         self._validar_pos(attrs, tipo)
 
         # Lo último, para no tapar un error de datos de la propia petición con
-        # uno de configuración del emisor: sin certificado activo y vigente el
+        # uno de configuración del emisor: sin certificado cargado y vigente el
         # documento nacería muerto —se crearía bien y reventaría al firmarlo—,
         # así que se dice ya y no en `emitir/`.
         motivo = motivo_no_puede_emitir(emisor)

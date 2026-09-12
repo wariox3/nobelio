@@ -60,6 +60,26 @@ class Emisor(ModeloConFechas):
         "pasar a producción.",
     )
 
+    # --- Resumen del certificado digital ---
+    # Copia de lo que hay en `emi_certificado`, para que listar emisores —o
+    # filtrar los que están por vencer— no obligue a cruzar la tabla ni a
+    # traerse el .p12. La fuente de verdad sigue siendo el certificado: estas
+    # dos las reescribe él mismo al guardarse y al borrarse
+    # (`Certificado._sincronizar_resumen`), y nadie más las toca; por la API
+    # son de solo lectura.
+    certificado_activo = models.BooleanField(
+        "tiene certificado digital", default=False,
+        help_text="Si el emisor tiene un .p12 cargado. No dice que esté "
+        "vigente: eso lo responde `certificado_vence`, porque una bandera que "
+        "dependiera de la fecha quedaría mintiendo el día que el certificado "
+        "venza, sin que nadie haya escrito nada.",
+    )
+    certificado_vence = models.DateField(
+        "el certificado vence el", null=True, blank=True,
+        help_text="Fin de la vigencia del .p12 cargado, tal y como viene "
+        "dentro del propio certificado. Nulo si no hay certificado.",
+    )
+
     ambiente_facturacion = models.PositiveSmallIntegerField(
         "ambiente DIAN de facturación", choices=Ambiente.choices,
         default=ambiente_por_defecto,

@@ -176,26 +176,35 @@ class CertificadoAPITests(APITestCase):
         resp = self._cargar(archivo=con_dv)
         self.assertEqual(resp.status_code, 201, resp.data)
 
-    def test_cargar_desactiva_certificados_previos_del_emisor(self):
+    def test_cargar_rechaza_si_el_emisor_ya_tiene_certificado(self):
+        """Uno por emisor: no hay reemplazo silencioso, hay que borrar antes."""
         previo = Certificado.objects.create(
-            emisor=self.emisor, clave="x", archivo=_p12(), activo=True
+            emisor=self.emisor, clave="x", archivo=_p12()
         )
         otro_emisor = _crear_emisor(self.cat, nit="800197268")
         ajeno = Certificado.objects.create(
-            emisor=otro_emisor, clave="y", archivo=_p12(), activo=True
+            emisor=otro_emisor, clave="y", archivo=_p12()
         )
-        resp = self.client.post(
-            self.url_cargar,
-            {"emisor": self.emisor.id, "clave": "secreta", "archivo": _p12()},
-            format="multipart",
-        )
+
+        resp = self._cargar()
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        # El mensaje trae la ruta exacta que hay que llamar para borrarlo.
+        self.assertIn(f"/api/emisores/certificado/{previo.id}/", resp.data["detail"])
+        # No se tocó nada: ni el suyo ni el del otro emisor.
+        self.assertEqual(Certificado.objects.get(emisor=self.emisor).pk, previo.pk)
+        self.assertTrue(Certificado.objects.filter(pk=ajeno.pk).exists())
+
+    def test_renovar_es_eliminar_y_volver_a_cargar(self):
+        self.assertEqual(self._cargar().status_code, 201)
+        viejo = Certificado.objects.get(emisor=self.emisor)
+
+        self.assertEqual(self.client.delete(f"{self.url}{viejo.id}/").status_code, 204)
+        resp = self._cargar()
+
         self.assertEqual(resp.status_code, 201, resp.data)
-        previo.refresh_from_db()
-        ajeno.refresh_from_db()
-        nuevo = Certificado.objects.get(pk=resp.data["id"])
-        self.assertFalse(previo.activo)   # el anterior del emisor se desactivó
-        self.assertTrue(nuevo.activo)     # el recién cargado queda vigente
-        self.assertTrue(ajeno.activo)     # el de otro emisor no se toca
+        self.assertEqual(Certificado.objects.filter(emisor=self.emisor).count(), 1)
+        self.assertNotEqual(resp.data["id"], viejo.id)
 
     def test_clave_y_archivo_obligatorios(self):
         resp = self.client.post(
@@ -240,6 +249,72 @@ class CertificadoAPITests(APITestCase):
             format="multipart",
         )
         self.assertIn(resp.status_code, (401, 403))
+
+    def test_eliminar_borra_el_registro_y_el_p12_del_almacenamiento(self):
+        """El .p12 no puede sobrevivir a la baja: es material criptográfico."""
+        self.assertEqual(self._cargar().status_code, 201)
+        cert = Certificado.objects.get(emisor=self.emisor)
+        storage = Certificado._meta.get_field("archivo").storage
+        nombre = cert.archivo.name
+        self.assertTrue(storage.exists(nombre))
+
+        resp = self.client.delete(f"{self.url}{cert.id}/")
+
+        self.assertEqual(resp.status_code, 204, resp.data)
+        self.assertFalse(Certificado.objects.filter(pk=cert.pk).exists())
+        self.assertFalse(storage.exists(nombre))
+
+    def test_el_resumen_del_emisor_se_actualiza_al_cargar_y_al_eliminar(self):
+        """`certificado_activo` y `certificado_vence` siguen al certificado."""
+        self.emisor.refresh_from_db()
+        self.assertFalse(self.emisor.certificado_activo)
+        self.assertIsNone(self.emisor.certificado_vence)
+
+        self.assertEqual(self._cargar().status_code, 201)
+        cert = Certificado.objects.get(emisor=self.emisor)
+        self.emisor.refresh_from_db()
+        self.assertTrue(self.emisor.certificado_activo)
+        self.assertEqual(self.emisor.certificado_vence, cert.vigente_hasta)
+        self.assertIsNotNone(cert.vigente_hasta)  # salió del propio .p12
+
+        self.assertEqual(self.client.delete(f"{self.url}{cert.id}/").status_code, 204)
+        self.emisor.refresh_from_db()
+        self.assertFalse(self.emisor.certificado_activo)
+        self.assertIsNone(self.emisor.certificado_vence)
+
+    def test_no_elimina_el_certificado_de_otro_emisor(self):
+        otro = _crear_emisor(self.cat, nit="900123456")  # fuera de su alcance
+        ajeno = Certificado.objects.create(emisor=otro, clave="y", archivo=_p12())
+
+        resp = self.client.delete(f"{self.url}{ajeno.id}/")
+
+        self.assertEqual(resp.status_code, 404)
+        self.assertTrue(Certificado.objects.filter(pk=ajeno.pk).exists())
+
+    def test_fallo_de_backblaze_al_eliminar_da_502_y_conserva_el_certificado(self):
+        """Si el bucket no responde, la fila vuelve: nada a medias.
+
+        Lo contrario dejaría un .p12 vivo en B2 sin fila que lo nombre, y sin
+        forma de reintentar la baja desde la API.
+        """
+        self.assertEqual(self._cargar().status_code, 201)
+        cert = Certificado.objects.get(emisor=self.emisor)
+        storage = Certificado._meta.get_field("archivo").storage
+        error = ClientError(
+            {"Error": {"Code": "403", "Message": "Forbidden"},
+             "ResponseMetadata": {"HTTPStatusCode": 403}},
+            "DeleteObject",
+        )
+        with mock.patch.object(storage, "delete", side_effect=error):
+            resp = self.client.delete(f"{self.url}{cert.id}/")
+
+        self.assertEqual(resp.status_code, 502, resp.data)
+        self.assertEqual(resp.data["detail"], almacenamiento.MENSAJE_ALMACENAMIENTO)
+        self.assertTrue(Certificado.objects.filter(pk=cert.pk).exists())
+        # El resumen del emisor va en la misma transacción: si vuelve la fila,
+        # vuelve la bandera. Si no, diría que no hay certificado habiéndolo.
+        self.emisor.refresh_from_db()
+        self.assertTrue(self.emisor.certificado_activo)
 
     def test_fallo_de_backblaze_da_502_y_no_crea_el_certificado(self):
         """Credenciales B2 inválidas: 502 con mensaje, nunca un 500 con traceback.

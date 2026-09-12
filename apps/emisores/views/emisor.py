@@ -193,10 +193,10 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
                 "pruebas si de verdad quiere rehabilitarlo."
             )
 
-        certificado = Certificado.objects.filter(emisor=emisor, activo=True).first()
+        certificado = Certificado.objects.filter(emisor=emisor).first()
         if certificado is None:
             raise ErrorSolicitud(
-                "El emisor no tiene un certificado digital activo. Cárguelo en "
+                "El emisor no tiene un certificado digital. Cárguelo en "
                 "/api/emisores/certificado/cargar/ antes de habilitarlo."
             )
         hoy = timezone.localdate()
