@@ -52,7 +52,7 @@ class SoftwareDianAPITests(APITestCase):
 
     def test_el_tipo_es_obligatorio(self):
         # Sin tipo no se sabe qué operación habilita el software, y el pipeline
-        # busca el activo *de su tipo*: uno sin tipo no lo encontraría nunca.
+        # busca el software *de su tipo*: uno sin tipo no lo encontraría nunca.
         payload = self._payload()
         del payload["tipo"]
         resp = self.client.post(self.url, payload, format="json")
@@ -79,6 +79,67 @@ class SoftwareDianAPITests(APITestCase):
         resp = self.client.get(self.url, {"emisor": self.emisor.id})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["count"], 1)
+
+    # --- Uno por emisor y operación ----------------------------------------
+
+    def test_rechaza_un_segundo_software_del_mismo_tipo(self):
+        primero = self.client.post(self.url, self._payload(), format="json")
+        self.assertEqual(primero.status_code, 201, primero.data)
+
+        payload = self._payload()
+        payload["identificador"] = "otro-software-id"
+        resp = self.client.post(self.url, payload, format="json")
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        # El mensaje trae la ruta del que ya existe, para poder actualizarlo.
+        self.assertIn(
+            f"/api/emisores/software/{primero.data['id']}/",
+            resp.data["errores"]["tipo"][0],
+        )
+        self.assertEqual(SoftwareDian.objects.filter(emisor=self.emisor).count(), 1)
+
+    def test_las_tres_operaciones_conviven(self):
+        """Facturación, nómina y documento equivalente son habilitaciones aparte.
+
+        La DIAN las da por separado, cada una con su SoftwareID y su PIN, y el
+        CUFE y el CUNE llevan el de su operación: el límite es uno *de cada
+        tipo*, no uno por emisor.
+        """
+        for tipo in SoftwareDian.Tipo:
+            payload = self._payload()
+            payload["tipo"] = tipo
+            payload["identificador"] = f"software-{tipo}"
+            resp = self.client.post(self.url, payload, format="json")
+            self.assertEqual(resp.status_code, 201, (tipo, resp.data))
+
+        self.assertEqual(SoftwareDian.objects.filter(emisor=self.emisor).count(), 3)
+
+    def test_cambiar_de_software_es_actualizar_el_que_hay(self):
+        creado = self.client.post(self.url, self._payload(), format="json")
+
+        resp = self.client.patch(
+            f"{self.url}{creado.data['id']}/",
+            {"identificador": "software-nuevo", "pin": "99999"},
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        software = SoftwareDian.objects.get(emisor=self.emisor)
+        self.assertEqual(software.identificador, "software-nuevo")
+        self.assertEqual(software.pin, "99999")
+
+    def test_el_mismo_tipo_no_choca_entre_emisores_distintos(self):
+        self.assertEqual(
+            self.client.post(self.url, self._payload(), format="json").status_code, 201
+        )
+        otro = _crear_emisor(self.cat, nit="800197268")
+        self.usuario.emisores.add(otro)
+
+        payload = self._payload()
+        payload["emisor"] = otro.id
+        resp = self.client.post(self.url, payload, format="json")
+
+        self.assertEqual(resp.status_code, 201, resp.data)
 
     def test_requiere_autenticacion(self):
         from rest_framework.test import APIClient

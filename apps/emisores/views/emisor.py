@@ -174,7 +174,9 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
 
         Es idempotente a propósito: durante una habilitación se llama varias
         veces, así que un software ya registrado no se duplica y la resolución
-        se actualiza en vez de repetirse.
+        se actualiza en vez de repetirse. Llamarlo con otro ``identificador``
+        del mismo tipo **cambia** el software del emisor para esa operación;
+        no añade un segundo, que es lo que el índice único impide.
 
         **Solo sobre un emisor en ambiente de pruebas.** Lo que escribe son
         datos del sandbox de la DIAN —una resolución que no es del emisor y una
@@ -214,19 +216,28 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
 
         software = None
         if not ya_registrado:
-            software = serializers.SoftwareDianSerializer(data=request.data)
+            # Uno por emisor y operación (índice único). Si el emisor ya tiene
+            # software de este tipo, esto es un cambio de software y no un alta:
+            # se le pasa la instancia al serializer para que actualice la fila
+            # que hay. Los de las **otras** operaciones no se tocan, porque
+            # registrar el de facturación no puede dejar al emisor sin poder
+            # emitir nómina.
+            #
+            # Es un reemplazo completo, así que `set_pruebas_aceptado` vuelve a
+            # False al cambiar de identificador. Es lo correcto y es lo que
+            # pasaba antes —la fila nueva nacía sin aceptar—: la DIAN aceptó el
+            # Set de Pruebas del SoftwareID viejo, no el de este.
+            existente = models.SoftwareDian.objects.filter(
+                emisor=emisor, tipo=request.data.get("tipo"),
+            ).first()
+            software = serializers.SoftwareDianSerializer(
+                instance=existente, data=request.data,
+            )
             software.is_valid(raise_exception=True)
 
         with transaction.atomic():
             if software is not None:
-                # Solo se desactivan los del mismo tipo: el emisor puede tener
-                # a la vez el software de facturación y el de nómina activos, y
-                # registrar uno no debe dejar sin software a la otra operación.
-                models.SoftwareDian.objects.filter(
-                    emisor=emisor, activo=True,
-                    tipo=software.validated_data["tipo"],
-                ).update(activo=False)
-                software.save(activo=True)
+                software.save()
 
             resolucion, creada = models.Resolucion.objects.update_or_create(
                 emisor=emisor,

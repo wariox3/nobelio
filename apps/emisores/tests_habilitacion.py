@@ -76,7 +76,6 @@ class HabilitacionTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
 
         software = SoftwareDian.objects.get(emisor=self.emisor)
-        self.assertTrue(software.activo)
         self.assertEqual(software.tipo, SoftwareDian.Tipo.FACTURACION)
 
         # La resolución del Set de Pruebas de la DIAN, con su clave técnica.
@@ -94,15 +93,19 @@ class HabilitacionTests(APITestCase):
         self.assertEqual(SoftwareDian.objects.filter(emisor=self.emisor).count(), 1)
         self.assertEqual(Resolucion.objects.filter(emisor=self.emisor).count(), 1)
 
-    def test_registrar_otro_software_jubila_el_anterior_del_mismo_tipo(self):
+    def test_registrar_otro_software_actualiza_el_del_mismo_tipo(self):
+        """Cambiar de software es cambiar la fila, no añadir una segunda."""
         self.client.post(URL, self._payload(), format="json")
-        self.client.post(
+        resp = self.client.post(
             URL, self._payload(identificador="otro-software-id"), format="json"
         )
 
-        activos = SoftwareDian.objects.filter(emisor=self.emisor, activo=True)
-        self.assertEqual(activos.count(), 1)
-        self.assertEqual(activos.get().identificador, "otro-software-id")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        facturacion = SoftwareDian.objects.filter(
+            emisor=self.emisor, tipo=SoftwareDian.Tipo.FACTURACION
+        )
+        self.assertEqual(facturacion.count(), 1)
+        self.assertEqual(facturacion.get().identificador, "otro-software-id")
 
     def test_el_software_de_nomina_no_estorba_al_de_facturacion(self):
         """Cada operación se habilita por separado y convive con la otra.
@@ -112,12 +115,13 @@ class HabilitacionTests(APITestCase):
         """
         nomina = SoftwareDian.objects.create(
             emisor=self.emisor, tipo=SoftwareDian.Tipo.NOMINA,
-            identificador="software-de-nomina", pin="999", activo=True,
+            identificador="software-de-nomina", pin="999",
         )
         self.client.post(URL, self._payload(), format="json")
 
         nomina.refresh_from_db()
-        self.assertTrue(nomina.activo)
+        self.assertEqual(nomina.identificador, "software-de-nomina")
+        self.assertEqual(SoftwareDian.objects.filter(emisor=self.emisor).count(), 2)
 
     # --- Lo que tiene que cortar -------------------------------------------
 

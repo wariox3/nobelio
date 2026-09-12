@@ -99,7 +99,7 @@ class EnviarADianTests(TestCase):
 
     def test_set_aceptado_usa_sendbillsync(self):
         # Con el Set de Pruebas ya aceptado, aun en habilitación se usa SendBillSync.
-        sw = self.documento.emisor.softwares.filter(activo=True).first()
+        sw = self.documento.emisor.softwares.first()
         sw.set_pruebas_aceptado = True
         sw.save(update_fields=["set_pruebas_aceptado"])
         cliente = FakeCliente(soap.RespuestaDian(es_valido=True, codigo_estado="00"))
@@ -290,8 +290,8 @@ class ConsultarRangosTests(TestCase):
         self.assertEqual(proveedor, "700085371")
         self.assertEqual(software_id, "56f2ae4e-9812-4fad-9255-08fcfcd5ccb0")
 
-    def test_sin_software_activo_falla(self):
-        self.emisor.softwares.update(activo=False)
+    def test_sin_software_registrado_falla(self):
+        self.emisor.softwares.all().delete()
         with self.assertRaises(servicios.ErrorEmision):
             servicios.consultar_rangos_numeracion(
                 self.emisor, cliente=FakeCliente([]), ambiente=2,

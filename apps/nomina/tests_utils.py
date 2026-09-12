@@ -32,7 +32,7 @@ def crear_catalogos_de_pago():
 
 
 def crear_emisor_de_nomina(catalogos=None, *, nit="901192048"):
-    """Emisor con certificado y software de **nómina** activo.
+    """Emisor con certificado y software de **nómina** registrado.
 
     El software es de tipo `NOMINA` y no de facturación: la DIAN habilita cada
     operación por separado, y el pipeline busca el activo *de su tipo*, así que

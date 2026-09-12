@@ -27,7 +27,7 @@ from apps.dian.servicios import (
     _parsear_error,
     _registrar_veredicto,
     _set_pruebas_cerrado,
-    _software_activo_emisor,
+    _software_del_emisor,
     _ESTADOS_ACTUALIZABLES,
     _ya_procesado,
     construir_cliente_emisor,
@@ -49,8 +49,8 @@ PREFIJO_ARCHIVO_NOTA_AJUSTE_NOMINA = "niae"
 PREFIJO_ARCHIVO_ZIP_NOMINA = "z"
 
 
-def _software_activo_nomina(nomina):
-    return _software_activo_emisor(nomina.emisor, SoftwareDian.Tipo.NOMINA)
+def _software_de_nomina(nomina):
+    return _software_del_emisor(nomina.emisor, SoftwareDian.Tipo.NOMINA)
 
 
 def _nombres_archivo_nomina(nomina):
@@ -141,7 +141,7 @@ def generar_y_firmar_nomina(nomina, *, firmador=None, ambiente=None, **cred):
     nomina.fecha_generacion = timezone.localdate()
     nomina.hora_generacion = timezone.localtime().time()
 
-    software = _software_activo_nomina(nomina)
+    software = _software_de_nomina(nomina)
     nomina.cune = ""
     constructor = xml_nomina.constructor_nomina_para(
         nomina, software=software, ambiente=ambiente,
@@ -200,7 +200,7 @@ def enviar_nomina_a_dian(nomina, *, cliente=None, ambiente=None, **cred):
             "La nómina no está firmada; ejecute generar_y_firmar_nomina primero."
         )
 
-    software = _software_activo_nomina(nomina)
+    software = _software_de_nomina(nomina)
     if cliente is None:
         cliente = construir_cliente_emisor(nomina.emisor, ambiente, **cred)
 
@@ -336,7 +336,7 @@ def actualizar_estado_nomina(nomina, *, cliente=None, ambiente=None, **cred):
         nomina, cliente=cliente, ambiente=ambiente, **cred
     )
     _guardar_respuesta_nomina(nomina, respuesta)
-    _anotar_si_cerro_el_set(respuesta, _software_activo_nomina(nomina), nomina.emisor)
+    _anotar_si_cerro_el_set(respuesta, _software_de_nomina(nomina), nomina.emisor)
     if respuesta.es_valido or _ya_procesado(respuesta):
         nomina.estado = _estado(DocumentoEstado.Nombre.ACEPTADO)
         if not nomina.fecha_validacion:

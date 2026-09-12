@@ -2639,7 +2639,9 @@ paths:
 
         Es idempotente a propósito: durante una habilitación se llama varias
         veces, así que un software ya registrado no se duplica y la resolución
-        se actualiza en vez de repetirse.
+        se actualiza en vez de repetirse. Llamarlo con otro ``identificador``
+        del mismo tipo **cambia** el software del emisor para esa operación;
+        no añade un segundo, que es lo que el índice único impide.
 
         **Solo sobre un emisor en ambiente de pruebas.** Lo que escribe son
         datos del sandbox de la DIAN —una resolución que no es del emisor y una
@@ -8747,8 +8749,6 @@ components:
           title: Set de pruebas aceptado
           description: Cuando la DIAN acepta el Set de Pruebas, los envíos pasan a
             SendBillSync (síncrono) en vez de SendTestSetAsync.
-        activo:
-          type: boolean
         codigo_proveedor_tecnologico:
           type: string
           title: Código del PT
@@ -8911,8 +8911,6 @@ components:
           title: Set de pruebas aceptado
           description: Cuando la DIAN acepta el Set de Pruebas, los envíos pasan a
             SendBillSync (síncrono) en vez de SendTestSetAsync.
-        activo:
-          type: boolean
         codigo_proveedor_tecnologico:
           type: string
           title: Código del PT
@@ -8978,8 +8976,6 @@ components:
           title: Set de pruebas aceptado
           description: Cuando la DIAN acepta el Set de Pruebas, los envíos pasan a
             SendBillSync (síncrono) en vez de SendTestSetAsync.
-        activo:
-          type: boolean
         codigo_proveedor_tecnologico:
           type: string
           title: Código del PT

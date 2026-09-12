@@ -242,20 +242,22 @@ def _guardar_respuesta(documento, respuesta):
 _CAMPOS_RESPUESTA = ["respuesta_archivo"]
 
 
-def _software_activo_emisor(emisor, tipo=SoftwareDian.Tipo.FACTURACION):
-    """El software DIAN activo del emisor para esa operación.
+def _software_del_emisor(emisor, tipo=SoftwareDian.Tipo.FACTURACION):
+    """El software DIAN del emisor para esa operación.
 
     Facturación y nómina se habilitan por separado, cada una con su SoftwareID
     y su PIN, y los dos entran en el identificador (CUFE/CUDE de la factura,
     CUNE de la nómina). Firmar con el software de la otra operación daría un
     identificador que la DIAN no puede reproducir, así que se exige el del tipo
     que corresponde en vez de caer al que haya.
+
+    Es uno o ninguno: hay un índice único por (emisor, tipo).
     """
-    software = emisor.softwares.filter(activo=True, tipo=tipo).first()
+    software = emisor.softwares.filter(tipo=tipo).first()
     if software is None:
         etiqueta = SoftwareDian.Tipo(tipo).label.lower()
         raise ErrorEmision(
-            f"El emisor no tiene un software DIAN de {etiqueta} activo."
+            f"El emisor no tiene registrado un software DIAN de {etiqueta}."
         )
     return software
 
@@ -282,18 +284,18 @@ SOFTWARE_POR_TIPO = {
 }
 
 
-def _software_activo(documento):
+def _software_de(documento):
     """El software DIAN del tipo de documento.
 
     La factura, las notas y el documento soporte salen con el de facturación;
-    la nómina va aparte (``_software_activo_nomina``) y el documento
+    la nómina va aparte (``_software_de_nomina``) y el documento
     equivalente tiene el suyo, porque la DIAN lo habilita por separado y su PIN
     entra en el CUDE.
     """
     tipo = SOFTWARE_POR_TIPO.get(
         documento.documento_tipo.codigo, SoftwareDian.Tipo.FACTURACION
     )
-    return _software_activo_emisor(documento.emisor, tipo)
+    return _software_del_emisor(documento.emisor, tipo)
 
 
 def _certificado_de(documento):
@@ -378,7 +380,7 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
     if not documento.emisor.activo:
         raise ErrorEmision(MENSAJE_EMISOR_INACTIVO)
 
-    software = _software_activo(documento)
+    software = _software_de(documento)
 
     codigo_tipo = documento.documento_tipo.codigo
     # La factura y el documento soporte se numeran con resolución: sin ella no
@@ -465,7 +467,7 @@ def generar_attached_document(documento, *, firmador=None, ambiente=None,
 
     constructor = ubl.ConstructorAttachedDocument(
         documento,
-        software=_software_activo(documento),
+        software=_software_de(documento),
         ambiente=ambiente,
         xml_documento=documento.leer_xml(),
         application_response=acuse,
@@ -497,7 +499,7 @@ def consultar_rangos_numeracion(emisor, *, cliente=None, ambiente=None,
                                 software=None, **cred):
     """Consulta los rangos de numeración (resoluciones) del emisor en la DIAN.
 
-    Usa el software DIAN activo del emisor. El WS pide por separado el NIT del
+    Usa el software DIAN del emisor. El WS pide por separado el NIT del
     OFE y el del proveedor tecnológico; en software propio son el mismo, así que
     va el del emisor en los dos. Devuelve un ``soap.RespuestaRangos`` con el
     código/descripción de la DIAN y los rangos (cada uno con su clave técnica).
@@ -507,7 +509,7 @@ def consultar_rangos_numeracion(emisor, *, cliente=None, ambiente=None,
     ambiente = (
         ambiente if ambiente is not None else emisor.ambiente_facturacion
     )
-    software = software or _software_activo_emisor(emisor)
+    software = software or _software_del_emisor(emisor)
     if cliente is None:
         cliente = construir_cliente_emisor(emisor, ambiente, **cred)
     return cliente.consultar_rangos_numeracion(
@@ -587,7 +589,7 @@ def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):
     if not documento.xml_archivo:
         raise ErrorEmision("El documento no está firmado; ejecute generar_y_firmar primero.")
 
-    software = _software_activo(documento)
+    software = _software_de(documento)
     if cliente is None:
         cliente = construir_cliente(documento, ambiente, **cred)
 
@@ -737,7 +739,7 @@ def actualizar_estado(documento, *, cliente=None, ambiente=None, **cred):
         documento, cliente=cliente, ambiente=ambiente, **cred
     )
     _guardar_respuesta(documento, respuesta)
-    _anotar_si_cerro_el_set(respuesta, _software_activo(documento), documento.emisor)
+    _anotar_si_cerro_el_set(respuesta, _software_de(documento), documento.emisor)
     if respuesta.es_valido or _ya_procesado(respuesta):
         documento.estado = _estado(DocumentoEstado.Nombre.ACEPTADO)
         if not documento.fecha_validacion:

@@ -1,5 +1,6 @@
 """Software de facturación registrado ante la DIAN."""
 from django.db import models
+from django.db.models import UniqueConstraint
 
 from apps.nucleo.models import ModeloConFechas
 
@@ -23,8 +24,9 @@ class SoftwareDian(ModeloConFechas):
 
         La DIAN habilita facturación, nómina electrónica y documento
         equivalente por separado, cada una con su propio SoftwareID y su PIN,
-        así que un emisor puede tener registrados tres softwares a la vez y hay
-        que saber cuál usar en cada documento.
+        así que un emisor puede tener registrados tres softwares a la vez —uno
+        de cada tipo, ver ``Meta.constraints``— y hay que saber cuál usar en
+        cada documento.
         """
 
         FACTURACION = "facturacion", "Facturación electrónica"
@@ -53,8 +55,6 @@ class SoftwareDian(ModeloConFechas):
         help_text="Cuando la DIAN acepta el Set de Pruebas, los envíos pasan a "
         "SendBillSync (síncrono) en vez de SendTestSetAsync.",
     )
-    activo = models.BooleanField("activo", default=True)
-
     # --- Fabricante del software (solo documento equivalente) ---
     # El P.O.S. exige una extensión `InformacionDelFabricanteDelSoftware` con
     # estos tres pares Name/Value, y las reglas DEAB41 a DEAB46 la rechazan si
@@ -102,6 +102,18 @@ class SoftwareDian(ModeloConFechas):
         verbose_name = "software DIAN"
         verbose_name_plural = "softwares DIAN"
         ordering = ["-creado_en"]
+        constraints = [
+            # Uno por operación y nada más. Antes esto lo llevaba un campo
+            # `activo`: registrar un software jubilaba (`activo=False`) al
+            # anterior del mismo tipo y lo dejaba en la tabla para siempre.
+            # Nadie leía esas filas —el pipeline siempre pedía el activo *de su
+            # tipo*— y en cambio cada una guardaba un PIN vivo, que es lo que
+            # entra en el SoftwareSecurityCode y en el CUDE/CUNE. Cambiar de
+            # software es ahora actualizar el que hay, no acumular otro.
+            UniqueConstraint(
+                fields=["emisor", "tipo"], name="emi_software_unico_por_tipo",
+            ),
+        ]
 
     def __str__(self):
         return f"Software {self.identificador} ({self.emisor})"
