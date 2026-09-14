@@ -12,7 +12,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.nucleo.esquema import DetalleSerializer, ErrorSerializer
-from apps.seguridad import verificacion
+from apps.seguridad import aviso_usuario_nuevo, verificacion
 from apps.seguridad.serializers import (
     ReenvioSerializer,
     RegistroSerializer,
@@ -61,6 +61,9 @@ class RegistroView(APIView):
         # si el correo se mandara dentro y algo hiciera rollback, saldría un
         # enlace hacia un usuario que no llegó a existir.
         enviado = verificacion.enviar_verificacion(usuario)
+        aviso_usuario_nuevo.avisar_al_confirmar(
+            usuario, origen=aviso_usuario_nuevo.ORIGEN_REGISTRO,
+        )
 
         return Response(
             {

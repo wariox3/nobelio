@@ -143,6 +143,11 @@ MEDIA_ROOT = BASE_DIR / "media"
 ZINC_URL_BASE = env("ZINC_URL_BASE", default="http://zinc.semantica.com.co")
 # Nombre que ve el destinatario como remitente del correo.
 ZINC_NOMBRE_REMITENTE = env("ZINC_NOMBRE_REMITENTE", default="RedDoc ERP")
+# Correo al que llega el aviso de cada usuario nuevo (registro público o API de
+# usuarios); ver apps/seguridad/aviso_usuario_nuevo.py. Vacío lo desactiva.
+CORREO_AVISO_USUARIO_NUEVO = env(
+    "CORREO_AVISO_USUARIO_NUEVO", default="maestradaz3@gmail.com"
+)
 
 # --- Caché ---
 # La usa solo el throttling, y por eso importa más de lo que parece: los
