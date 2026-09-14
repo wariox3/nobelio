@@ -99,9 +99,11 @@ sin certificado cargado y vigente responde 400.
     trabajador para el mismo periodo, así que diez del mes en curso serían nueve
     rechazos. Las **notas de ajuste** no se pueden sembrar aquí: una nota lleva
     el CUNE del documento que ajusta, y el CUNE no existe hasta emitir. Se crean
-    después, con `POST /api/nomina/nomina/{id}/nota-ajuste/`.
-  - El de **documento equivalente** no siembra nada todavía: falta conocer su
-    resolución de pruebas.
+    después, con `POST /api/emisores/software/{id}/crear-nota-ajuste-prueba/`.
+  - El de **documento equivalente** siembra la resolución `EPOS` (número
+    `18760000001`, rango 1 a 1.000.000, tipo `20`, que se crea en el catálogo
+    si falta) y **2 documentos equivalentes P.O.S. en borrador**, numerados
+    desde el 1, con su bloque de caja de prueba.
   - Nada se siembra si el emisor ya está en producción para esa operación, y
     repetirlo no duplica lo que ya exista.
   - El `ProviderID` del XML **no se registra**: en software propio el proveedor
@@ -115,6 +117,13 @@ sin certificado cargado y vigente responde 400.
   - Sin `consecutivo`, el siguiente libre del emisor para el prefijo `NESETP`.
   - El periodo **continúa la serie hacia atrás**, para no repetir mes (regla
     90). Si hace falta otro, se ajusta en el borrador con un `PATCH`.
+- [ ] *(para las notas de ajuste del Set)* `POST
+      /api/emisores/software/{id}/crear-nota-ajuste-prueba/`, sin cuerpo → 11
+      notas de ajuste de reemplazo en borrador. **Solo sobre un software de
+      nómina.**
+  - Van sobre la nómina **aceptada y sin errores** más reciente del emisor; si
+    no hay ninguna, 400 y no se crea nada.
+  - Toman el prefijo de esa nómina y los consecutivos siguientes libres.
 - [ ] *(si al Set le faltan documentos)* `POST
       /api/emisores/resolucion/{id}/crear-documento-prueba/`, con
       `{"consecutivo": <n>}` opcional → uno más, igual que los que siembra el

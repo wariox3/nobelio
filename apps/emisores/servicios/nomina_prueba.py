@@ -18,6 +18,7 @@ from apps.catalogos.models import (
     TipoTrabajador,
 )
 from apps.nomina.models import Empleado, Nomina, NominaConcepto
+from apps.nomina.servicios import crear_nota_ajuste
 from apps.nucleo.models import Ambiente
 
 from .emision import motivo_no_puede_emitir
@@ -26,6 +27,9 @@ PREFIJO_POR_DEFECTO = "NESETP"
 
 # Cuántas nóminas deja el alta del software de nómina.
 NOMINAS_DE_PRUEBA = 10
+
+# Cuántas notas de ajuste crea `crear-nota-ajuste-prueba` de una vez.
+NOTAS_AJUSTE_DE_PRUEBA = 11
 
 # Importes de la nómina de prueba: un básico redondo con la salud y la pensión
 # de ley, para que los totales cuadren a la vista.
@@ -237,6 +241,30 @@ def crear_nomina_de_prueba(software, consecutivo=None):
     Lanza ``ValueError`` con el motivo cuando no se puede: quien llama lo
     traduce a un 400.
     """
+    emisor = _comprobar_software_de_nomina(software)
+
+    inicio, fin = siguiente_periodo(emisor)
+    try:
+        # El consecutivo lo decide de verdad la restricción de unicidad; el
+        # savepoint deja seguir atendiendo la petición si choca.
+        with transaction.atomic():
+            return crear_nomina_prueba(
+                emisor, consecutivo=consecutivo,
+                periodo_inicio=inicio, periodo_fin=fin,
+            )
+    except IntegrityError:
+        raise ValueError(
+            f"El emisor ya tiene una nómina numerada "
+            f"{PREFIJO_POR_DEFECTO}{consecutivo}. Use otro consecutivo o deje "
+            f"que se asigne solo."
+        )
+
+
+def _comprobar_software_de_nomina(software):
+    """Que sobre ese software se puedan crear documentos de prueba de nómina.
+
+    Devuelve el emisor. Lanza ``ValueError`` con el motivo cuando no.
+    """
     from apps.emisores.models import SoftwareDian
 
     if software.tipo != SoftwareDian.Tipo.NOMINA:
@@ -262,19 +290,54 @@ def crear_nomina_de_prueba(software, consecutivo=None):
         # Se dice ya y no al emitir: si no, queda un borrador que nunca se va a
         # poder mandar y el motivo aparece dos pasos más tarde.
         raise ValueError(motivo)
+    return emisor
 
-    inicio, fin = siguiente_periodo(emisor)
-    try:
-        # El consecutivo lo decide de verdad la restricción de unicidad; el
-        # savepoint deja seguir atendiendo la petición si choca.
-        with transaction.atomic():
-            return crear_nomina_prueba(
-                emisor, consecutivo=consecutivo,
-                periodo_inicio=inicio, periodo_fin=fin,
-            )
-    except IntegrityError:
-        raise ValueError(
-            f"El emisor ya tiene una nómina numerada "
-            f"{PREFIJO_POR_DEFECTO}{consecutivo}. Use otro consecutivo o deje "
-            f"que se asigne solo."
+
+def crear_notas_ajuste_de_prueba(software, cantidad=NOTAS_AJUSTE_DE_PRUEBA):
+    """Deja ``cantidad`` notas de ajuste de prueba en borrador.
+
+    Devuelve ``(nomina_ajustada, notas)``.
+
+    Van todas sobre la nómina de prueba **aceptada por la DIAN y sin errores**
+    más reciente del emisor. Tiene que estar aceptada porque la nota señala su
+    CUNE, y sin errores —ni rechazos ni notificaciones— para no arrastrar a
+    las notas un problema que ya se conoce.
+
+    Son de reemplazo (``TipoNota`` 1) y salen idénticas a la ajustada; las crea
+    ``crear_nota_ajuste``, así que toman el prefijo de ella y el siguiente
+    consecutivo libre. Van en una sola transacción: o las once o ninguna.
+
+    Solo las crea: no las firma ni las envía. Lanza ``ValueError`` con el motivo
+    cuando no se puede, incluido que no haya ninguna nómina que ajustar.
+    """
+    from apps.documentos.models import DocumentoEstado
+
+    emisor = _comprobar_software_de_nomina(software)
+
+    nomina = (
+        Nomina.objects.filter(
+            emisor=emisor,
+            tipo_xml=Nomina.TipoXML.NOMINA,
+            ambiente=Ambiente.PRUEBAS,
+            estado__nombre=DocumentoEstado.Nombre.ACEPTADO,
+            errores__isnull=True,
         )
+        .order_by(*Nomina._meta.ordering)
+        .first()
+    )
+    if nomina is None:
+        raise ValueError(
+            f"El emisor {emisor.razon_social} no tiene ninguna nómina aceptada "
+            f"por la DIAN y sin errores sobre la que crear las notas de ajuste."
+        )
+
+    with transaction.atomic():
+        notas = [
+            crear_nota_ajuste(
+                nomina,
+                tipo_nota=Nomina.TipoNota.REEMPLAZAR,
+                notas="Nota de ajuste de prueba (habilitación).",
+            )
+            for _ in range(cantidad)
+        ]
+    return nomina, notas

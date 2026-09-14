@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from apps.emisores import models, serializers
 from apps.emisores.servicios import (
     crear_nomina_de_prueba,
+    crear_notas_ajuste_de_prueba,
     sembrar_documentos_de_prueba,
     sembrar_resolucion_de_pruebas,
 )
@@ -39,12 +40,12 @@ class SoftwareDianViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         de prueba, sin que nada lo diga.
 
         Qué se siembra lo decide el tipo de software, y puede no ser nada: la
-        nómina no se numera con resolución y la del documento equivalente
-        todavía no se conoce. Tampoco se siembra si el emisor ya está en
-        producción para esa operación. Ver `sembrar_resolucion_de_pruebas`.
+        nómina no se numera con resolución. Tampoco se siembra si el emisor ya
+        está en producción para esa operación. Ver
+        `sembrar_resolucion_de_pruebas`.
 
         Con la resolución puesta, el de facturación deja además sus facturas de
-        prueba en borrador. Son el material del Set de Pruebas y se crean aquí
+        prueba en borrador, y el de documento equivalente sus dos P.O.S. Son el material del Set de Pruebas y se crean aquí
         por lo mismo que la resolución: para que el emisor no acabe el alta con
         numeración y sin nada que emitir contra ella.
 
@@ -111,6 +112,48 @@ class SoftwareDianViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
                 "periodo": [
                     str(nomina.fecha_liquidacion_inicio),
                     str(nomina.fecha_liquidacion_fin),
+                ],
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=["post"], url_path="crear-nota-ajuste-prueba")
+    def crear_nota_ajuste_prueba(self, request, pk=None):
+        """Crea 11 notas de ajuste de prueba en borrador para este software.
+
+        ``POST /api/emisores/software/{id}/crear-nota-ajuste-prueba/``, sin
+        cuerpo.
+
+        Recorre las nóminas del emisor y toma la más reciente que esté
+        **aceptada por la DIAN y sin errores**; sobre ella crea las once notas,
+        de reemplazo (``TipoNota`` 1) e idénticas a la original. Si no hay
+        ninguna así, responde 400 y no crea nada. **Solo sobre un software de
+        nómina**, y con el emisor todavía en pruebas.
+
+        Solo las crea: no las firma ni las envía. Para eso están ``emitir`` y
+        ``enviar`` de ``/api/nomina/nomina/{id}/``.
+        """
+        software = self.get_object()
+
+        try:
+            nomina, notas = crear_notas_ajuste_de_prueba(software)
+        except ValueError as exc:
+            raise ErrorSolicitud(str(exc))
+
+        return Response(
+            {
+                "nomina_ajustada": {
+                    "id": str(nomina.id),
+                    "numero": nomina.numero,
+                },
+                "notas": [
+                    {
+                        "id": str(nota.id),
+                        "numero": nota.numero,
+                        "consecutivo": nota.consecutivo,
+                        "estado": nota.estado.nombre,
+                    }
+                    for nota in notas
                 ],
             },
             status=status.HTTP_201_CREATED,

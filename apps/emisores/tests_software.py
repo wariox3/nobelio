@@ -269,6 +269,72 @@ class SoftwareDianAPITests(APITestCase):
         self.assertEqual(resp.status_code, 201, resp.data)
         self.assertFalse(self._facturas().exists())
 
+    # --- Y el de documento equivalente, su resolución y dos P.O.S. ----------
+
+    def _payload_pos(self):
+        payload = self._payload()
+        payload["tipo"] = SoftwareDian.Tipo.DOCUMENTO_EQUIVALENTE
+        payload["identificador"] = "software-pos"
+        return payload
+
+    def _documentos_pos(self):
+        return Documento.objects.filter(
+            emisor=self.emisor,
+            documento_tipo__codigo=DocumentoTipo.Codigo.DOCUMENTO_EQUIVALENTE_POS,
+        )
+
+    def test_crear_software_pos_siembra_la_resolucion_epos(self):
+        resp = self.client.post(self.url, self._payload_pos(), format="json")
+        self.assertEqual(resp.status_code, 201, resp.data)
+
+        resolucion = Resolucion.objects.get(emisor=self.emisor)
+        self.assertEqual(resolucion.prefijo, "EPOS")
+        self.assertEqual(resolucion.numero_resolucion, "18760000001")
+        self.assertEqual(resolucion.rango_desde, 1)
+        self.assertEqual(resolucion.rango_hasta, 1000000)
+        self.assertTrue(resolucion.activa)
+        # El 20 es el `codigo_dian` del P.O.S.: es lo que empareja la
+        # resolución con el documento.
+        self.assertEqual(resolucion.tipo_factura.codigo, "20")
+
+    def test_crear_software_pos_deja_dos_pos_en_borrador(self):
+        self.client.post(self.url, self._payload_pos(), format="json")
+
+        documentos = list(self._documentos_pos().order_by("consecutivo"))
+        self.assertEqual([d.consecutivo for d in documentos], [1, 2])
+        for documento in documentos:
+            self.assertEqual(documento.estado.nombre, DocumentoEstado.Nombre.BORRADOR)
+            self.assertEqual(documento.resolucion.prefijo, "EPOS")
+            # Sin el satélite no hay extensiones de caja y la DIAN lo rechaza.
+            self.assertEqual(documento.pos.codigo_venta, documento.numero)
+
+    def test_no_siembra_pos_si_ya_esta_en_produccion_para_documento_equivalente(self):
+        self.emisor.ambiente_documento_equivalente = Ambiente.PRODUCCION
+        self.emisor.save(update_fields=["ambiente_documento_equivalente"])
+
+        resp = self.client.post(self.url, self._payload_pos(), format="json")
+
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertFalse(Resolucion.objects.filter(emisor=self.emisor).exists())
+        self.assertFalse(self._documentos_pos().exists())
+
+    def test_sembrar_pos_dos_veces_no_duplica(self):
+        from apps.emisores.servicios import (
+            sembrar_documentos_de_prueba,
+            sembrar_resolucion_de_pruebas,
+        )
+
+        for _ in range(2):
+            resolucion, _ = sembrar_resolucion_de_pruebas(
+                self.emisor, SoftwareDian.Tipo.DOCUMENTO_EQUIVALENTE,
+            )
+            sembrar_documentos_de_prueba(
+                self.emisor, SoftwareDian.Tipo.DOCUMENTO_EQUIVALENTE, resolucion,
+            )
+
+        self.assertEqual(Resolucion.objects.filter(emisor=self.emisor).count(), 1)
+        self.assertEqual(self._documentos_pos().count(), 2)
+
     # --- Y el de nómina deja diez nóminas -----------------------------------
 
     def _payload_nomina(self):
@@ -454,6 +520,106 @@ class SoftwareDianAPITests(APITestCase):
         )
 
         self.assertEqual(resp.status_code, 404)
+
+    # --- Notas de ajuste: crear-nota-ajuste-prueba -------------------------
+
+    def _aceptar(self, consecutivo):
+        """Marca como aceptada por la DIAN una de las nóminas del alta."""
+        from apps.nomina.models import Nomina
+
+        nomina = Nomina.objects.get(emisor=self.emisor, consecutivo=consecutivo)
+        nomina.estado, _ = DocumentoEstado.objects.get_or_create(
+            nombre=DocumentoEstado.Nombre.ACEPTADO,
+        )
+        nomina.cune = f"cune-de-prueba-{consecutivo}"
+        nomina.save(update_fields=["estado", "cune"])
+        return nomina
+
+    def test_crea_once_notas_sobre_la_nomina_aceptada(self):
+        from apps.nomina.models import Nomina
+
+        software = self._alta_nomina()
+        aceptada = self._aceptar(3)
+
+        resp = self.client.post(
+            f"{self.url}{software}/crear-nota-ajuste-prueba/", {}, format="json"
+        )
+
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(resp.data["nomina_ajustada"]["id"], str(aceptada.id))
+        self.assertEqual(len(resp.data["notas"]), 11)
+        notas = Nomina.objects.filter(
+            emisor=self.emisor, tipo_xml=Nomina.TipoXML.AJUSTE,
+        )
+        self.assertEqual(notas.count(), 11)
+        for nota in notas:
+            self.assertEqual(nota.nomina_predecesora_id, aceptada.id)
+            self.assertEqual(nota.tipo_nota, Nomina.TipoNota.REEMPLAZAR)
+            self.assertEqual(nota.estado.nombre, DocumentoEstado.Nombre.BORRADOR)
+            self.assertEqual(nota.conceptos.count(), aceptada.conceptos.count())
+        # Las diez del alta gastaron del 1 al 10.
+        self.assertEqual(
+            sorted(notas.values_list("consecutivo", flat=True)),
+            list(range(11, 22)),
+        )
+
+    def test_sin_nomina_aceptada_responde_400(self):
+        from apps.nomina.models import Nomina
+
+        software = self._alta_nomina()
+
+        resp = self.client.post(
+            f"{self.url}{software}/crear-nota-ajuste-prueba/", {}, format="json"
+        )
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertIn("aceptada", resp.data["detail"])
+        self.assertEqual(Nomina.objects.filter(emisor=self.emisor).count(), 10)
+
+    def test_ignora_la_aceptada_con_errores(self):
+        from apps.nomina.models import Nomina, NominaError
+
+        software = self._alta_nomina()
+        aceptada = self._aceptar(3)
+        NominaError.objects.create(
+            nomina=aceptada, regla="NIE021",
+            tipo=NominaError.Tipo.NOTIFICACION, mensaje="Notificación",
+        )
+
+        resp = self.client.post(
+            f"{self.url}{software}/crear-nota-ajuste-prueba/", {}, format="json"
+        )
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertEqual(Nomina.objects.filter(emisor=self.emisor).count(), 10)
+
+    def test_toma_la_aceptada_sin_errores_aunque_haya_otra_con_errores(self):
+        from apps.nomina.models import NominaError
+
+        software = self._alta_nomina()
+        limpia = self._aceptar(2)
+        con_errores = self._aceptar(5)
+        NominaError.objects.create(
+            nomina=con_errores, tipo=NominaError.Tipo.RECHAZO, mensaje="Rechazo",
+        )
+
+        resp = self.client.post(
+            f"{self.url}{software}/crear-nota-ajuste-prueba/", {}, format="json"
+        )
+
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(resp.data["nomina_ajustada"]["id"], str(limpia.id))
+
+    def test_notas_solo_sobre_un_software_de_nomina(self):
+        facturacion = self.client.post(self.url, self._payload(), format="json")
+
+        resp = self.client.post(
+            f"{self.url}{facturacion.data['id']}/crear-nota-ajuste-prueba/",
+            {}, format="json",
+        )
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertIn("no de nómina", resp.data["detail"])
 
     def test_requiere_autenticacion(self):
         from rest_framework.test import APIClient

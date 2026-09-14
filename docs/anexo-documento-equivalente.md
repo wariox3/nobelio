@@ -232,9 +232,13 @@ pasa a producción en operación.
 - La API: el bloque `pos` anidado en `POST /api/documentos/documento/` (con su
   validación cruzada: obligatorio en el P.O.S., prohibido en los demás).
 
+- El alta del software de documento equivalente siembra la resolución del Set
+  de Pruebas (`EPOS`, número `18760000001`, rango 1 a 1.000.000, tipo `20`) y
+  dos P.O.S. en borrador con su `DocumentoPOS` de prueba
+  (`apps/emisores/servicios/resolucion_pruebas.py` y `factura_prueba.py`).
+
 **Falta:**
-- La resolución de numeración propia del P.O.S. y el TestSetId de su
-  habilitación (fase 7), que son datos, no código.
+- El TestSetId de su habilitación (fase 7), que es un dato, no código.
 
 
 El adquiriente **no** se fuerza a "Consumidor Final": el documento lo declara

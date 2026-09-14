@@ -158,13 +158,19 @@ hay `DiscrepancyResponse` ni conceptos de corrección.
 
 ### Cómo se emite aquí
 
-`POST /api/nomina/nomina/{id}/nota-ajuste/` con `{"tipo_nota": "1"|"2"}` **clona**
-la nómina que se ajusta y deja la nota en borrador (`apps/nomina/servicios.py`).
-Se clona por lo de arriba: el reemplazo repite el documento entero, y el único
-sitio donde está completo y tal como se firmó es el predecesor. Lo que haya que
-corregir se edita en el borrador y después van `emitir` y `enviar`, iguales que
-en la nómina: el envío decide solo entre el Set de Pruebas y `SendNominaSync`, y
-el archivo sale con el prefijo `niae`.
+La nota se crea de una de dos formas:
+
+- `POST /api/nomina/nomina/` con `tipo_xml` 103, `tipo_nota` y
+  `nomina_predecesora`, enviando el documento completo.
+- `POST /api/emisores/software/{id}/crear-nota-ajuste-prueba/`, para el Set de
+  Pruebas: **clona** 11 veces la nómina aceptada y sin errores más reciente del
+  emisor (`crear_nota_ajuste`, en `apps/nomina/servicios.py`). Se clona por lo
+  de arriba: el reemplazo repite el documento entero, y el único sitio donde
+  está completo y tal como se firmó es el predecesor.
+
+Después van `emitir` y `enviar`, iguales que en la nómina: el envío decide solo
+entre el Set de Pruebas y `SendNominaSync`, y el archivo sale con el prefijo
+`niae`.
 
 La nota hereda el **ambiente** del documento que ajusta y no del emisor: apunta
 a un CUNE que se firmó en uno concreto, y una nota de producción sobre una

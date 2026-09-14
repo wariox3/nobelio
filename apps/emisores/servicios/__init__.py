@@ -8,20 +8,25 @@ from .emision import (
 )
 from .factura_prueba import (
     FACTURAS_DE_PRUEBA,
+    POS_DE_PRUEBA,
     crear_factura_prueba,
     crear_documento_de_prueba,
+    crear_documentos_pos_de_prueba,
     crear_facturas_de_prueba,
     sembrar_documentos_de_prueba,
     siguiente_consecutivo,
 )
 from .nomina_prueba import (
     NOMINAS_DE_PRUEBA,
+    NOTAS_AJUSTE_DE_PRUEBA,
     crear_nomina_de_prueba,
     crear_nomina_prueba,
     crear_nominas_de_prueba,
+    crear_notas_ajuste_de_prueba,
 )
 from .resolucion_pruebas import (
     RESOLUCION_SET_PRUEBAS,
+    RESOLUCION_SET_PRUEBAS_POS,
     sembrar_resolucion_de_pruebas,
 )
 
@@ -33,8 +38,10 @@ __all__ = [
     "certificado_del_emisor",
     "motivo_no_puede_emitir",
     "FACTURAS_DE_PRUEBA",
+    "POS_DE_PRUEBA",
     "crear_factura_prueba",
     "crear_documento_de_prueba",
+    "crear_documentos_pos_de_prueba",
     "crear_facturas_de_prueba",
     "siguiente_consecutivo",
     "sembrar_documentos_de_prueba",
@@ -42,6 +49,9 @@ __all__ = [
     "crear_nomina_de_prueba",
     "crear_nomina_prueba",
     "crear_nominas_de_prueba",
+    "NOTAS_AJUSTE_DE_PRUEBA",
+    "crear_notas_ajuste_de_prueba",
     "RESOLUCION_SET_PRUEBAS",
+    "RESOLUCION_SET_PRUEBAS_POS",
     "sembrar_resolucion_de_pruebas",
 ]

@@ -30,32 +30,49 @@ RESOLUCION_SET_PRUEBAS = {
     "vigente_hasta": date(2030, 1, 19),
 }
 
+# La del Set de Pruebas del documento equivalente P.O.S. Mismo número y
+# vigencia que la de facturación, pero su propio prefijo y un rango que empieza
+# en 1. Son los datos de la resolución EPOS con la que se hizo la habilitación a
+# mano.
+RESOLUCION_SET_PRUEBAS_POS = {
+    "prefijo": "EPOS",
+    "numero_resolucion": "18760000001",
+    "fecha_resolucion": date(2026, 6, 29),
+    "rango_desde": 1,
+    "rango_hasta": 1000000,
+    "clave_tecnica": "123",
+    "vigente_desde": date(2019, 1, 19),
+    "vigente_hasta": date(2030, 1, 19),
+}
+
 # Qué resolución de pruebas le toca a cada tipo de software, y contra qué
 # ambiente del emisor se decide (cada operación tiene el suyo y pueden no
 # coincidir: se puede estar en producción para factura y en pruebas para POS).
 #
-# Las tres operaciones no están en el mismo punto, y es a propósito:
-#
-# - `facturacion`: la de arriba, sobre el tipo de factura 01.
+# - `facturacion`: la del Set de Pruebas, sobre el tipo de factura 01.
 #
 # - `nomina`: **no lleva resolución de numeración**. La nómina no está en
 #   `DocumentoTipo.CODIGOS_CON_RESOLUCION` y el modelo `Nomina` numera con su
 #   propio prefijo y consecutivo, sin `sts:InvoiceControl`. No es que falte el
 #   dato: es que no existe, así que sembrar algo aquí sería inventarlo.
 #
-# - `documento_equivalente`: falta el dato. La DIAN da al P.O.S. una
-#   numeración propia (reglas DEAB05a y DEAB05b comprueban su
-#   `sts:InvoiceControl`), pero no tenemos todavía la resolución de su Set de
-#   Pruebas —ver `docs/anexo-documento-equivalente.md`, "Falta"—, y el catálogo
-#   TipoFactura tampoco trae aún el código con el que registrarla. Inventar un
-#   número aquí es lo peor que se puede hacer: sería numerar con una
-#   autorización que no es del emisor. Cuando llegue el dato, se añade una
-#   entrada a este diccionario y no hay que tocar nada más.
+# - `documento_equivalente`: la EPOS, sobre el tipo 20. Tiene que ser el 20 y
+#   no otro: es el `codigo_dian` del P.O.S., y como el número de resolución es
+#   el mismo que el de facturación, al crear un documento es el tipo lo que
+#   desempata entre las dos. El catálogo de la DIAN del que carga
+#   `cargar_catalogos` no trae ese código, así que se crea al sembrar
+#   (`nombre_tipo_factura`) en vez de dejar al emisor sin resolución.
 RESOLUCION_POR_TIPO_DE_SOFTWARE = {
     "facturacion": {
         "codigo_tipo_factura": "01",
         "campo_ambiente": "ambiente_facturacion",
         "datos": RESOLUCION_SET_PRUEBAS,
+    },
+    "documento_equivalente": {
+        "codigo_tipo_factura": "20",
+        "nombre_tipo_factura": "Documento equivalente P.O.S.",
+        "campo_ambiente": "ambiente_documento_equivalente",
+        "datos": RESOLUCION_SET_PRUEBAS_POS,
     },
 }
 
@@ -64,9 +81,8 @@ def sembrar_resolucion_de_pruebas(emisor, tipo_software):
     """Siembra la resolución del Set de Pruebas que le toca a ese software.
 
     Devuelve ``(resolucion, creada)``, o ``(None, False)`` cuando no hay nada
-    que sembrar: porque esa operación no se numera con resolución (nómina),
-    porque todavía no se conoce la suya (documento equivalente) o porque el
-    emisor ya está en producción para ella.
+    que sembrar: porque esa operación no se numera con resolución (nómina) o
+    porque el emisor ya está en producción para ella.
 
     **Solo en ambiente de pruebas.** Lo que escribe son datos del sandbox de la
     DIAN: una resolución que no es del emisor y una clave técnica pública. En
@@ -90,7 +106,16 @@ def sembrar_resolucion_de_pruebas(emisor, tipo_software):
         return None, False
 
     try:
-        tipo_factura = TipoFactura.objects.get(codigo=receta["codigo_tipo_factura"])
+        if receta.get("nombre_tipo_factura"):
+            # Un código que el catálogo de la DIAN no trae: se crea aquí.
+            tipo_factura, _ = TipoFactura.objects.get_or_create(
+                codigo=receta["codigo_tipo_factura"],
+                defaults={"nombre": receta["nombre_tipo_factura"]},
+            )
+        else:
+            tipo_factura = TipoFactura.objects.get(
+                codigo=receta["codigo_tipo_factura"]
+            )
     except TipoFactura.DoesNotExist:
         # El catálogo no está cargado (`manage.py cargar_catalogos`). Registrar
         # el software sí tiene sentido sin él, así que no se revienta el alta;

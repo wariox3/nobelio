@@ -3481,6 +3481,77 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/emisores/software/{id}/crear-nota-ajuste-prueba/:
+    post:
+      operationId: emisores_software_crear_nota_ajuste_prueba_create
+      description: |-
+        Crea 11 notas de ajuste de prueba en borrador para este software.
+
+        ``POST /api/emisores/software/{id}/crear-nota-ajuste-prueba/``, sin
+        cuerpo.
+
+        Recorre las nóminas del emisor y toma la más reciente que esté
+        **aceptada por la DIAN y sin errores**; sobre ella crea las once notas,
+        de reemplazo (``TipoNota`` 1) e idénticas a la original. Si no hay
+        ninguna así, responde 400 y no crea nada. **Solo sobre un software de
+        nómina**, y con el emisor todavía en pruebas.
+
+        Solo las crea: no las firma ni las envía. Para eso están ``emitir`` y
+        ``enviar`` de ``/api/nomina/nomina/{id}/``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este software DIAN.
+        required: true
+      tags:
+      - emisores
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SoftwareDianRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SoftwareDianRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SoftwareDianRequest'
+        required: true
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoftwareDian'
+          description: ''
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/nomina/empleado/:
     get:
       operationId: nomina_empleado_list
@@ -4178,80 +4249,6 @@ paths:
         Va al Set de Pruebas (``SendTestSetAsync``) mientras el emisor esté en
         habilitación de nómina, y por ``SendNominaSync`` después; lo decide el
         servicio, no el llamador.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-          format: uuid
-        description: Un Cadena UUID que identifique este nómina electrónica.
-        required: true
-      tags:
-      - nomina
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NominaRequest'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/NominaRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/NominaRequest'
-        required: true
-      security:
-      - LlaveApi: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Nomina'
-          description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '429':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '400':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '404':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-  /api/nomina/nomina/{id}/nota-ajuste/:
-    post:
-      operationId: nomina_nomina_nota_ajuste_create
-      description: |-
-        Crea la nota de ajuste de esta nómina y la deja en borrador.
-
-        ``POST /api/nomina/nomina/{id}/nota-ajuste/`` con
-        ``{"tipo_nota": "1"}`` para reemplazar el documento anterior o
-        ``{"tipo_nota": "2"}`` para eliminarlo, y opcionalmente ``prefijo``,
-        ``consecutivo`` y ``notas``.
-
-        La nota se **clona** del documento que ajusta porque el reemplazo lo
-        repite entero (numeral 5.5.8): no lleva diferencias sino la nómina
-        corregida completa. Reenviarla campo a campo por ``POST /nomina/`` sigue
-        estando permitido, pero es donde se cuela un dato que ya no coincide con
-        el original.
-
-        Sale idéntica al documento anterior: lo que haya que corregir se edita
-        en el borrador —``PATCH``— y luego van ``emitir`` y ``enviar``.
       parameters:
       - in: path
         name: id

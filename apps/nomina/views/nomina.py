@@ -1,9 +1,9 @@
 """API de nóminas electrónicas y acciones del ciclo de vida DIAN."""
 import requests
-from django.db import IntegrityError, transaction
+from django.db import transaction
 from django.db.models import Count
 from django.http import HttpResponse
-from rest_framework import filters, mixins, status, viewsets
+from rest_framework import filters, mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -12,7 +12,6 @@ from apps.dian.errores import error_pasarela_dian
 from apps.documentos.models import DocumentoEstado
 from apps.nomina import serializers
 from apps.nomina.models import Nomina
-from apps.nomina.servicios import crear_nota_ajuste
 from apps.nucleo.api import ErrorSolicitud, entero_de_query
 from apps.seguridad.alcance import AlcanceEmisorMixin
 
@@ -105,48 +104,6 @@ class NominaViewSet(
                 "ajuste en vez de borrarla."
             )
         return super().destroy(request, *args, **kwargs)
-
-    @action(detail=True, methods=["post"], url_path="nota-ajuste")
-    def nota_ajuste(self, request, pk=None):
-        """Crea la nota de ajuste de esta nómina y la deja en borrador.
-
-        ``POST /api/nomina/nomina/{id}/nota-ajuste/`` con
-        ``{"tipo_nota": "1"}`` para reemplazar el documento anterior o
-        ``{"tipo_nota": "2"}`` para eliminarlo, y opcionalmente ``prefijo``,
-        ``consecutivo`` y ``notas``.
-
-        La nota se **clona** del documento que ajusta porque el reemplazo lo
-        repite entero (numeral 5.5.8): no lleva diferencias sino la nómina
-        corregida completa. Reenviarla campo a campo por ``POST /nomina/`` sigue
-        estando permitido, pero es donde se cuela un dato que ya no coincide con
-        el original.
-
-        Sale idéntica al documento anterior: lo que haya que corregir se edita
-        en el borrador —``PATCH``— y luego van ``emitir`` y ``enviar``.
-        """
-        nomina = self.get_object()
-        try:
-            nota = crear_nota_ajuste(
-                nomina,
-                tipo_nota=str(request.data.get("tipo_nota") or ""),
-                prefijo=request.data.get("prefijo"),
-                consecutivo=request.data.get("consecutivo") or None,
-                notas=request.data.get("notas"),
-            )
-        except ValueError as exc:
-            raise ErrorSolicitud(str(exc))
-        except IntegrityError:
-            # El consecutivo se pide bajo bloqueo, así que esto solo salta si
-            # el cliente manda uno a mano que ya existe. Sin capturarlo era un
-            # 500 con un mensaje de PostgreSQL.
-            raise ErrorSolicitud(
-                "Ya existe una nómina con ese prefijo y consecutivo para el "
-                "emisor. Use otro número o deje que se asigne solo."
-            )
-        return Response(
-            serializers.NominaSerializer(nota).data,
-            status=status.HTTP_201_CREATED,
-        )
 
     def _bloquear(self, obj):
         """Relee el objeto con ``FOR UPDATE``. Hay que estar en transacción.

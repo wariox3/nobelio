@@ -14,6 +14,7 @@ from apps.documentos.models import (
     DocumentoDetalle,
     DocumentoDetalleImpuesto,
     DocumentoEstado,
+    DocumentoPOS,
     DocumentoTipo,
 )
 from apps.nucleo.models import Ambiente
@@ -28,6 +29,9 @@ IVA = Decimal("190.00")
 
 # Cuántas facturas deja el alta del software de facturación.
 FACTURAS_DE_PRUEBA = 2
+
+# Cuántos documentos equivalentes P.O.S. deja el alta de su software.
+POS_DE_PRUEBA = 2
 
 
 def _crear_documento(emisor, resolucion, *, codigo_tipo, consecutivo, observaciones,
@@ -173,6 +177,50 @@ def crear_facturas_de_prueba(emisor, resolucion, cantidad=FACTURAS_DE_PRUEBA):
         ]
 
 
+def crear_documentos_pos_de_prueba(emisor, resolucion, cantidad=POS_DE_PRUEBA):
+    """Deja ``cantidad`` documentos equivalentes P.O.S. de prueba en borrador.
+
+    Lo que ``crear_facturas_de_prueba`` hace en facturación, con el satélite
+    ``DocumentoPOS`` además: sin él el constructor no tiene de dónde sacar las
+    extensiones de la caja y el comprador, que son obligatorias (DEPD11 y
+    DEPD21). La caja y el cajero son de prueba y el código de venta es el
+    número del documento; los datos del comprador se dejan vacíos para que la
+    extensión los tome del adquiriente, que es el propio emisor.
+
+    Numerados desde ``resolucion.rango_desde`` y sin duplicar: si el emisor ya
+    tiene P.O.S. contra esa resolución, se devuelve la lista vacía.
+    """
+    ya_tiene = Documento.objects.filter(
+        emisor=emisor,
+        resolucion=resolucion,
+        documento_tipo__codigo=DocumentoTipo.Codigo.DOCUMENTO_EQUIVALENTE_POS,
+    ).exists()
+    if ya_tiene:
+        return []
+
+    documentos = []
+    with transaction.atomic():
+        for i in range(cantidad):
+            consecutivo = resolucion.rango_desde + i
+            documento = _crear_documento(
+                emisor, resolucion,
+                codigo_tipo=DocumentoTipo.Codigo.DOCUMENTO_EQUIVALENTE_POS,
+                consecutivo=consecutivo,
+                observaciones="Documento equivalente P.O.S. del Set de Pruebas "
+                "(habilitación).",
+            )
+            DocumentoPOS.objects.create(
+                documento=documento,
+                caja_placa="CAJA-PRUEBA",
+                caja_ubicacion="Punto de venta de prueba",
+                caja_tipo="Caja de prueba",
+                cajero="Cajero De Prueba",
+                codigo_venta=f"{resolucion.prefijo}{consecutivo}",
+            )
+            documentos.append(documento)
+    return documentos
+
+
 def sembrar_documentos_de_prueba(emisor, tipo_software, resolucion):
     """Deja el material del Set de Pruebas que le toca a ese software.
 
@@ -188,8 +236,8 @@ def sembrar_documentos_de_prueba(emisor, tipo_software, resolucion):
     - **Nómina**: no se numera con resolución sino con prefijo y consecutivo
       propios, así que no hay `resolucion` que mirar y el ambiente se comprueba
       aquí, contra `ambiente_nomina` —cada operación tiene el suyo—.
-    - **Documento equivalente**: espera a que se conozca su resolución de
-      pruebas.
+    - **Documento equivalente**: P.O.S. sobre su resolución, con la misma
+      señal que en facturación: sin ``resolucion`` no hay nada que hacer.
 
     Un catálogo sin cargar deja al emisor sin documentos de prueba, no sin
     software: son dos cosas distintas y solo una la pidió quien llama. Se anota
@@ -210,6 +258,10 @@ def sembrar_documentos_de_prueba(emisor, tipo_software, resolucion):
                 if emisor.ambiente_nomina != Ambiente.PRUEBAS:
                     return []
                 return crear_nominas_de_prueba(emisor)
+            if tipo == "documento_equivalente":
+                if resolucion is None:
+                    return []
+                return crear_documentos_pos_de_prueba(emisor, resolucion)
             return []
     except (ObjectDoesNotExist, IntegrityError, ValueError):
         logger.warning(
