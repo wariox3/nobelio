@@ -293,7 +293,6 @@ curl -X POST http://localhost:8000/api/documentos/documento/ \
       "razon_social": "Cliente Demo",
       "tipo_identificacion": 1,
       "numero_identificacion": "800199436",
-      "digito_verificacion": "6",
       "tipo_organizacion": 1, "pais": 1
     },
     "prefijo": "SETP", "consecutivo": 990000001, "numero": "SETP990000001",

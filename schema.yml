@@ -4377,8 +4377,8 @@ components:
           maxLength: 20
         digito_verificacion:
           type: string
+          readOnly: true
           title: Dígito de verificación
-          maxLength: 1
         tipo_organizacion:
           type: integer
           title: Tipo de organización
@@ -4420,6 +4420,7 @@ components:
             maxLength: 0
       required:
       - codigo_postal
+      - digito_verificacion
       - numero_identificacion
       - pais
       - razon_social
@@ -4455,10 +4456,6 @@ components:
           title: Número de identificación
           description: Sin puntos, sin guiones y sin dígito de verificación.
           maxLength: 20
-        digito_verificacion:
-          type: string
-          title: Dígito de verificación
-          maxLength: 1
         tipo_organizacion:
           type: integer
           title: Tipo de organización

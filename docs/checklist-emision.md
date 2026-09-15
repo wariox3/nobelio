@@ -201,7 +201,9 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
   `forma_pago` y `medio_pago` son obligatorias y no admiten null. `fecha_vencimiento`
   es obligatoria como clave y admite null: a crédito tiene que traer fecha (no
   anterior a la emisión); en contado, si viene, se descarta y se guarda en null;
-  en las notas tiene que ir en null, o responde 400. Antes se descartaba y el documento se creaba sin ese dato.
+  en las notas tiene que ir en null, o responde 400.
+  El `digito_verificacion` del `adquiriente` no se envía: lo calcula el sistema
+  a partir del NIT, y mandarlo responde 400 con `campo_solo_lectura`. Antes se descartaba y el documento se creaba sin ese dato.
   Se comprueba **antes que ningún dato**, junto con los obligatorios que falten:
   si la estructura está mal, la respuesta solo trae eso, y los errores de datos
   salen en el intento siguiente.

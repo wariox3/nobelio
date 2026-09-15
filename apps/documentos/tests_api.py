@@ -147,7 +147,6 @@ class DocumentoAPITests(APITestCase):
                 "razon_social": "Cliente Demo",
                 "tipo_identificacion": c["nit"].id,
                 "numero_identificacion": "800199436",
-                "digito_verificacion": "6",
                 "tipo_organizacion": c["juridica"].id,
                 "pais": c["colombia"].id,
                 "departamento": c["antioquia"].id,
@@ -510,6 +509,29 @@ class DocumentoAPITests(APITestCase):
             {"detalles[0].impuestos[0].tributo_codigo": [MENSAJE_CAMPO_SOLO_LECTURA]},
         )
         self.assertEqual(codigos(resp), [CODIGO_CAMPO_SOLO_LECTURA])
+
+    def test_el_digito_de_verificacion_no_se_envia(self):
+        """Lo calcula el sistema: el del ERP se sobrescribía sin avisar."""
+        payload = self._payload_documento()
+        payload["adquiriente"]["digito_verificacion"] = "1"
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            errores_por_campo(resp),
+            {"adquiriente.digito_verificacion": [MENSAJE_CAMPO_SOLO_LECTURA]},
+        )
+        self.assertEqual(codigos(resp), [CODIGO_CAMPO_SOLO_LECTURA])
+
+    def test_el_digito_de_verificacion_sale_calculado(self):
+        """El de 800199436 es 4. Este payload lo mandaba como 6, igual que el
+        ejemplo del README: el caso exacto que el cálculo evita."""
+        resp = self._crear()
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["adquiriente"]["digito_verificacion"], "4")
+
+    def _crear_con(self, payload):
+        return self.client.post("/api/documentos/documento/", payload, format="json")
 
     def test_el_documento_no_se_edita(self):
         """Ni `PUT` ni `PATCH`, en ningún estado.

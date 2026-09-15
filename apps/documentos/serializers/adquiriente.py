@@ -22,6 +22,12 @@ class AdquirienteSerializer(EstructuraEstricta, serializers.ModelSerializer):
         # es el `cbc:PostalZone` del XML y no hay forma de completarlo después
         # —un documento firmado ya no se edita—, así que se pide al crear y no
         # cuando la DIAN lo rechace con el consecutivo ya gastado.
+        #
+        # El dígito de verificación es de solo lectura: lo calcula
+        # `Adquiriente.save` a partir del NIT, y el que mandara el ERP se
+        # sobrescribía sin avisar. Mandarlo responde 400; en la lectura sale el
+        # calculado.
         extra_kwargs = {
             "codigo_postal": {"required": True, "allow_blank": False},
+            "digito_verificacion": {"read_only": True},
         }

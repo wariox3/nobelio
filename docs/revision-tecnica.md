@@ -818,12 +818,14 @@ va en la firma y el envío (**D3**), y puede leer la propia tabla de documentos.
    anterior a la emisión; en contado, la que venga se descarta y se guarda en
    `null` (decisión de MarioA: antes salía con `DueDate` contradiciendo su forma
    de pago); en las notas, `null` o 400, porque la emitían a medias en
-   `PaymentDueDate`. Ninguna de estas
+   `PaymentDueDate`. El `digito_verificacion` del adquiriente pasa a ser de
+   solo lectura: `Adquiriente.save` lo calcula del NIT y el que mandara el ERP
+   se sobrescribía sin avisar. Ninguna de estas
    reglas tenía pruebas. Tiene que hacerlo la raíz porque DRF valida cada anidado en medio de
    los campos del padre. El mixin no lleva docstring porque
    drf-spectacular publica en `schema.yml` la primera que encuentra en la MRO.
    Una prueba cambió de expectativa: mandar `resolucion` por id responde ahora
-   por ese campo y no por el `numero_resolucion` que falta. **430 en verde.**
+   por ese campo y no por el `numero_resolucion` que falta. **432 en verde.**
 2. **Duplicado → 409 con el id del existente**, siempre: la clave es emisor +
    número, y el emisor ya está dentro del alcance.
 3. **El `IntegrityError` de dos creaciones simultáneas** → el mismo 409, no un
