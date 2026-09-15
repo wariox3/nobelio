@@ -19,12 +19,15 @@ class SoftwareDianSerializer(serializers.ModelSerializer):
             "fabricante_nombre", "fabricante_razon_social",
             "fabricante_nombre_software",
         ]
-        # El PIN se devuelve en el listado y en el detalle a petición de MarioA
-        # (2026-08-28). Antes era `write_only`: se aceptaba al crear y no salía
-        # nunca. Es un dato sensible —entra en el SoftwareSecurityCode y en el
-        # CUDE/CUNE—, así que lo que lo contiene es el alcance: `AlcanceEmisorMixin`
-        # limita el queryset a los emisores que alcanza quien pregunta, de modo
-        # que una cuenta no ve los softwares de otra.
+        # El PIN es `write_only`: se acepta al crear y al actualizar, y no sale
+        # nunca. Entra en el SoftwareSecurityCode y en el CUDE/CUDS/CUNE, así que
+        # quien lo lee puede fabricar identificadores válidos de ese emisor.
+        #
+        # Estuvo visible del 2026-08-28 al 2026-09-15, a petición de MarioA, con
+        # el alcance (`AlcanceEmisorMixin`) como única contención. Volvió a
+        # `write_only` por decisión suya, a raíz de un escáner que lo marcó como
+        # campo sensible expuesto (ver §A2 de docs/revision-tecnica.md).
+        extra_kwargs = {"pin": {"write_only": True}}
         #
         # Vacío a propósito: desactiva el UniqueTogetherValidator que DRF saca
         # solo del `UniqueConstraint(emisor, tipo)`. La regla es la misma, pero

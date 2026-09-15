@@ -8806,6 +8806,7 @@ components:
           maxLength: 100
         pin:
           type: string
+          writeOnly: true
           minLength: 1
           title: PIN del software
           maxLength: 100
@@ -8967,10 +8968,6 @@ components:
           title: ID del software
           description: SoftwareID asignado por la DIAN.
           maxLength: 100
-        pin:
-          type: string
-          title: PIN del software
-          maxLength: 100
         test_set_id:
           type: string
           title: ID del set de pruebas
@@ -9008,7 +9005,6 @@ components:
       - emisor
       - id
       - identificador
-      - pin
       - tipo
     SoftwareDianRequest:
       type: object
@@ -9033,6 +9029,7 @@ components:
           maxLength: 100
         pin:
           type: string
+          writeOnly: true
           minLength: 1
           title: PIN del software
           maxLength: 100

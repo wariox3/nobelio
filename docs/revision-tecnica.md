@@ -99,7 +99,7 @@ de datos.
 > Se descartó `MultiFernet`: una sola clave, y el día que haya que rotarla se
 > hace con un comando y las dos a mano.
 
-### A2 · El PIN del software se devuelve por la API — **riesgo aceptado**
+### A2 · El PIN del software se devuelve por la API — **resuelto**
 
 `apps/emisores/serializers/software.py:12`
 
@@ -128,6 +128,12 @@ quedó fuera.
 > CUNE válidos de ese emisor. Si algún día se amplía quién puede leer
 > `/api/emisores/software/` —una cuenta de solo lectura, un panel para el
 > cliente final, un token de integración— hay que volver aquí antes.
+>
+> **Revertido el 2026-09-15.** Un escáner marcó el campo como sensible
+> expuesto (`pin`, longitud 5) y MarioA decidió dejarlo `write_only`: se
+> acepta al crear y al actualizar, y no sale ni al crear, ni en el detalle, ni
+> en el listado. La contención deja de depender solo del alcance. Si el
+> frontend lo mostraba durante la habilitación, ya no lo recibe.
 
 ### A3 · `CertificadoViewSet` cierra la puerta de entrada y deja la ventana abierta — **resuelto**
 

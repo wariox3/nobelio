@@ -56,16 +56,26 @@ class SoftwareDianAPITests(APITestCase):
             "test_set_id": "set-pruebas-xyz",
         }
 
-    def test_crea_software_y_devuelve_el_pin(self):
-        # El PIN se devuelve a propósito (decisión del 2026-08-28, reafirmada el
-        # 2026-09-02): quien puede leer el software ya está dentro del alcance
-        # del emisor, y tenerlo a la vista ahorra fricción en la habilitación.
-        # Esta prueba existía afirmando lo contrario, de cuando era write_only.
+    def test_crea_software_y_no_devuelve_el_pin(self):
+        """El PIN se guarda pero no sale nunca: ni al crear, ni en el detalle,
+        ni en el listado.
+
+        Estuvo visible del 2026-08-28 al 2026-09-15; volvió a `write_only` por
+        decisión de MarioA tras marcarlo un escáner como campo sensible.
+        """
         resp = self.client.post(self.url, self._payload(), format="json")
         self.assertEqual(resp.status_code, 201, resp.data)
-        self.assertEqual(resp.data["pin"], "12345")
+        self.assertNotIn("pin", resp.data)
         creado = SoftwareDian.objects.get(pk=resp.data["id"])
         self.assertEqual(creado.pin, "12345")
+
+        detalle = self.client.get(f"{self.url}{creado.id}/")
+        self.assertNotIn("pin", detalle.data)
+        listado = self.client.get(self.url)
+        filas = listado.data.get("results", listado.data)
+        self.assertTrue(filas)
+        for fila in filas:
+            self.assertNotIn("pin", fila)
 
     def test_el_tipo_es_obligatorio(self):
         # Sin tipo no se sabe qué operación habilita el software, y el pipeline
