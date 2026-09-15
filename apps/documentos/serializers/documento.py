@@ -43,6 +43,14 @@ def mensaje_sin_resolucion(tipo):
     )
 
 
+def mensaje_lineas_repetidas(repetidos):
+    """Mensaje para un documento con números de línea repetidos."""
+    return (
+        "Los números de línea no pueden repetirse dentro del documento: "
+        f"{', '.join(str(numero) for numero in repetidos)}."
+    )
+
+
 def mensaje_resolucion_no_aplica(tipo):
     """Mensaje para un documento que no se numera con resolución y trae una."""
     return (
@@ -318,6 +326,10 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
         # venga se descarta (`_validar_vencimiento`).
         extra_kwargs = {
             "prefijo": {"required": True, "allow_blank": True},
+            # Los descuentos y cargos globales pueden ser cero, no negativos: un
+            # descuento negativo es un cargo con otro nombre, y al revés.
+            "total_descuentos": {"min_value": Decimal("0")},
+            "total_cargos": {"min_value": Decimal("0")},
             "fecha_emision": {"required": True},
             "forma_pago": {"required": True, "allow_null": False},
             "medio_pago": {"required": True, "allow_null": False},
@@ -347,6 +359,12 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
     def validate_detalles(self, detalles):
         if not detalles:
             raise serializers.ValidationError("El documento debe tener al menos un detalle.")
+        # La base exige el número de línea único dentro del documento, pero
+        # descubrirlo al insertar era un `IntegrityError` sin capturar: un 500.
+        numeros = [detalle["numero_linea"] for detalle in detalles]
+        repetidos = sorted({numero for numero in numeros if numeros.count(numero) > 1})
+        if repetidos:
+            raise serializers.ValidationError(mensaje_lineas_repetidas(repetidos))
         return detalles
 
     def validate(self, attrs):

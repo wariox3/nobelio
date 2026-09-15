@@ -1,4 +1,6 @@
 """Serializer de los datos de la venta en caja (documento equivalente P.O.S.)."""
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from apps.documentos import models
@@ -29,3 +31,5 @@ class DocumentoPOSSerializer(EstructuraEstricta, serializers.ModelSerializer):
             "cajero", "codigo_venta", "subtotal",
             "comprador_codigo", "comprador_nombres", "comprador_puntos",
         ]
+        # Opcional, pero si viene no puede ser negativo.
+        extra_kwargs = {"subtotal": {"min_value": Decimal("0")}}

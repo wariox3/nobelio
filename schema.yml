@@ -5297,7 +5297,9 @@ components:
           maxLength: 20
       required:
       - cantidad
+      - codigo_producto
       - descripcion
+      - descuento
       - id
       - impuestos
       - numero_linea
@@ -5375,6 +5377,7 @@ components:
           maxLength: 500
         codigo_producto:
           type: string
+          minLength: 1
           title: Código del producto
           maxLength: 100
         cantidad:
@@ -5452,7 +5455,9 @@ components:
           maxLength: 20
       required:
       - cantidad
+      - codigo_producto
       - descripcion
+      - descuento
       - impuestos
       - numero_linea
       - unidad_medida

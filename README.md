@@ -303,9 +303,9 @@ curl -X POST http://localhost:8000/api/documentos/documento/ \
     "moneda": 1,
     "detalles": [
       {
-        "numero_linea": 1, "descripcion": "Producto demo",
+        "numero_linea": 1, "descripcion": "Producto demo", "codigo_producto": "PRD-1",
         "cantidad": "1", "unidad_medida": 1,
-        "valor_unitario": "1000000", "valor_total": "1000000.00",
+        "valor_unitario": "1000000", "valor_total": "1000000.00", "descuento": "0.00",
         "impuestos": [
           {"tributo": 1, "base_gravable": "1000000.00", "tarifa": "19.00", "valor": "190000.00"}
         ]

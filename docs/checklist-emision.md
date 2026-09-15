@@ -214,7 +214,17 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
   tipos: es a donde se notifica. Si el `pais` es Colombia, `departamento`,
   `municipio` y `direccion` son obligatorios, y el municipio tiene que ser de ese
   departamento; en otro país, departamento y
-  municipio se descartan. El `telefono` es opcional. Antes se descartaba y el documento se creaba sin ese dato.
+  municipio se descartan. El `telefono` es opcional.
+  En cada línea, `codigo_producto` es obligatorio y no admite vacío, y los
+  `numero_linea` no pueden repetirse dentro del documento.
+  Si una línea trae `periodo_desde` y `periodo_hasta`, el inicio tiene que ser
+  anterior al fin (iguales no valen).
+  `descuento` es obligatorio en cada línea (0 si no hay), y `valor_total` tiene que
+  ser cantidad × valor unitario − descuento, con un céntimo de tolerancia.
+  Cantidad, valor unitario, total de la línea y base gravable tienen que ser
+  mayores que cero (código `mayor_que_cero`); tarifa y valor del impuesto,
+  descuento de la línea, descuentos y cargos del documento y subtotal del
+  P.O.S. pueden ser cero, pero no negativos (`min_value`). Antes se descartaba y el documento se creaba sin ese dato.
   Se comprueba **antes que ningún dato**, junto con los obligatorios que falten:
   si la estructura está mal, la respuesta solo trae eso, y los errores de datos
   salen en el intento siguiente.

@@ -1,6 +1,7 @@
 """Pruebas de la API REST de documentos (flujo end-to-end)."""
 import tempfile
 from datetime import date, timedelta
+from decimal import Decimal
 
 from cryptography.hazmat.primitives.serialization import (
     BestAvailableEncryption, pkcs12,
@@ -20,6 +21,11 @@ from apps.dian.tests_firma import _generar_certificado
 from apps.documentos.models import (
     Adquiriente, Documento, DocumentoEstado, DocumentoTipo,
 )
+from apps.documentos.serializers.documento_detalle import (
+    CODIGO_MAYOR_QUE_CERO,
+    MENSAJE_PERIODO_AL_REVES,
+    mensaje_total_linea_descuadrado,
+)
 from apps.documentos.serializers.adquiriente import (
     CODIGO_PERSONA_NATURAL,
     mensaje_falta_en_colombia,
@@ -31,6 +37,7 @@ from apps.documentos.serializers.documento import (
     MENSAJE_CREDITO_SIN_VENCIMIENTO,
     MENSAJE_VENCIMIENTO_ANTERIOR_A_EMISION,
     mensaje_vencimiento_en_nota,
+    mensaje_lineas_repetidas,
     MENSAJE_RESOLUCION_AMBIGUA,
     MENSAJE_RESOLUCION_NO_ENCONTRADA,
     mensaje_consecutivo_fuera_de_rango,
@@ -179,8 +186,10 @@ class DocumentoAPITests(APITestCase):
             "detalles": [
                 {
                     "numero_linea": 1, "descripcion": "Servicio",
+                    "codigo_producto": "SRV-1",
                     "cantidad": "2", "unidad_medida": c["unidad"].id,
                     "valor_unitario": "1000", "valor_total": "2000.00",
+                    "descuento": "0.00",
                     "impuestos": [
                         {"tributo": c["iva"].id, "base_gravable": "2000.00",
                          "tarifa": "19.00", "valor": "380.00"}
@@ -330,10 +339,145 @@ class DocumentoAPITests(APITestCase):
             "detalles[0].impuestos[0].valor": [obligatorio],
         })
 
-    def test_el_descuento_de_la_linea_sigue_siendo_opcional(self):
+    def test_el_descuento_de_la_linea_es_obligatorio(self):
+        """Entra en el total de la línea: sin descuento se manda 0."""
         payload = self._payload_documento()
-        self.assertNotIn("descuento", payload["detalles"][0])
+        del payload["detalles"][0]["descuento"]
 
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            errores_por_campo(resp),
+            {"detalles[0].descuento": [str(Field.default_error_messages["required"])]},
+        )
+
+    def test_el_total_de_la_linea_tiene_que_cuadrar(self):
+        """cantidad × valor unitario − descuento. Antes se firmaba descuadrada."""
+        payload = self._payload_documento()
+        payload["detalles"][0]["valor_total"] = "1999.00"
+
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(errores_por_campo(resp), {
+            "detalles[0].valor_total": [
+                mensaje_total_linea_descuadrado(Decimal("2000.00"), Decimal("1999.00"))
+            ],
+        })
+
+    def test_el_total_de_la_linea_descuenta_el_descuento(self):
+        payload = self._payload_documento()
+        payload["detalles"][0].update({"descuento": "100.00", "valor_total": "1900.00"})
+
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["valor_bruto"], "1900.00")
+
+    def test_el_total_de_la_linea_admite_un_centimo_de_redondeo(self):
+        payload = self._payload_documento()
+        payload["detalles"][0]["valor_total"] = "2000.01"
+
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+    def test_importes_negativos_o_en_cero(self):
+        """Mayores que cero: cantidad, precio, total y base. El resto, no negativos."""
+        casos = [
+            (("detalles", 0, "cantidad"), "0", "detalles[0].cantidad", CODIGO_MAYOR_QUE_CERO),
+            (("detalles", 0, "cantidad"), "-1", "detalles[0].cantidad", CODIGO_MAYOR_QUE_CERO),
+            (("detalles", 0, "valor_unitario"), "0", "detalles[0].valor_unitario",
+             CODIGO_MAYOR_QUE_CERO),
+            (("detalles", 0, "valor_total"), "0", "detalles[0].valor_total",
+             CODIGO_MAYOR_QUE_CERO),
+            (("detalles", 0, "descuento"), "-1", "detalles[0].descuento", "min_value"),
+            (("detalles", 0, "impuestos", 0, "base_gravable"), "0",
+             "detalles[0].impuestos[0].base_gravable", CODIGO_MAYOR_QUE_CERO),
+            (("detalles", 0, "impuestos", 0, "tarifa"), "-1",
+             "detalles[0].impuestos[0].tarifa", "min_value"),
+            (("detalles", 0, "impuestos", 0, "valor"), "-1",
+             "detalles[0].impuestos[0].valor", "min_value"),
+            (("total_descuentos",), "-1", "total_descuentos", "min_value"),
+            (("total_cargos",), "-1", "total_cargos", "min_value"),
+        ]
+        for ruta, valor, campo, codigo in casos:
+            with self.subTest(campo=campo, valor=valor):
+                payload = self._payload_documento()
+                destino = payload
+                for paso in ruta[:-1]:
+                    destino = destino[paso]
+                destino[ruta[-1]] = valor
+
+                resp = self.client.post("/api/documentos/documento/", payload, format="json")
+                self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+                self.assertEqual(set(errores_por_campo(resp)), {campo})
+                self.assertEqual(codigos(resp), [codigo])
+
+    def test_la_tarifa_y_el_valor_del_impuesto_admiten_cero(self):
+        """El IVA exento va al 0 %."""
+        payload = self._payload_documento()
+        payload["detalles"][0]["impuestos"][0].update({"tarifa": "0.00", "valor": "0.00"})
+
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+    def test_el_subtotal_del_pos_no_puede_ser_negativo(self):
+        from apps.documentos.serializers import DocumentoPOSSerializer
+
+        serializer = DocumentoPOSSerializer(data={
+            "caja_placa": "CAJA-1", "caja_ubicacion": "Local", "caja_tipo": "POS",
+            "cajero": "Ana", "codigo_venta": "V-1", "subtotal": "-1",
+        })
+        self.assertFalse(serializer.is_valid())
+        self.assertEqual(serializer.errors["subtotal"][0].code, "min_value")
+
+    def test_el_codigo_de_producto_es_obligatorio(self):
+        """Sin él el XML identificaba el ítem con el número de línea."""
+        payload = self._payload_documento()
+        del payload["detalles"][0]["codigo_producto"]
+
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            errores_por_campo(resp),
+            {"detalles[0].codigo_producto": [str(Field.default_error_messages["required"])]},
+        )
+
+        payload["detalles"][0]["codigo_producto"] = ""
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(codigos(resp), ["blank"])
+
+    def test_un_numero_de_linea_repetido_responde_400_y_no_500(self):
+        payload = self._payload_documento()
+        segunda = {**payload["detalles"][0], "codigo_producto": "SRV-2"}
+        payload["detalles"].append(segunda)
+
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            errores_por_campo(resp), {"detalles": [mensaje_lineas_repetidas([1])]}
+        )
+
+    def test_el_periodo_de_la_linea_tiene_que_ir_hacia_adelante(self):
+        """El inicio antes del fin; iguales tampoco pasa (decisión de MarioA)."""
+        hoy = timezone.localdate()
+        for desde, hasta in ((hoy, hoy - timedelta(days=1)), (hoy, hoy)):
+            with self.subTest(desde=desde, hasta=hasta):
+                payload = self._payload_documento()
+                payload["detalles"][0].update(
+                    {"periodo_desde": desde.isoformat(), "periodo_hasta": hasta.isoformat()}
+                )
+                resp = self.client.post("/api/documentos/documento/", payload, format="json")
+                self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+                self.assertEqual(
+                    errores_por_campo(resp),
+                    {"detalles[0].periodo_hasta": [MENSAJE_PERIODO_AL_REVES]},
+                )
+
+        payload = self._payload_documento()
+        payload["detalles"][0].update({
+            "periodo_desde": (hoy - timedelta(days=30)).isoformat(),
+            "periodo_hasta": hoy.isoformat(),
+        })
         resp = self.client.post("/api/documentos/documento/", payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
 

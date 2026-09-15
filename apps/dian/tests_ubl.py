@@ -157,3 +157,55 @@ class GeneracionUBLTests(TestCase):
         if not valido:
             self.fail("XML inválido contra XSD:\n" + str(esquema.error_log))
         self.assertTrue(valido)
+
+    def test_un_tributo_con_varias_tarifas_lleva_un_subtotal_por_tarifa(self):
+        """Un TaxTotal por tributo y, dentro, un TaxSubtotal por tarifa.
+
+        Antes se agrupaba solo por tributo con la tarifa de la primera línea:
+        esta factura salía con un único subtotal al 19 % sobre 1.600.000 y un
+        impuesto de 290.000, que no es el 19 % de nada.
+        """
+        linea = doc.DocumentoDetalle.objects.create(
+            documento=self.documento, numero_linea=2, descripcion="Producto al 5 %",
+            codigo_producto="DEMO-2", cantidad=Decimal("1"),
+            unidad_medida=self.cat["unidad"], valor_unitario=Decimal("100000"),
+            valor_total=Decimal("100000.00"),
+        )
+        doc.DocumentoDetalleImpuesto.objects.create(
+            detalle=linea, tributo=self.cat["iva"], base_gravable=Decimal("100000.00"),
+            tarifa=Decimal("5.00"), valor=Decimal("5000.00"),
+        )
+
+        xml = self._generar()
+        arbol = etree.fromstring(xml)
+        cac, cbc = f"{{{ubl.NS['cac']}}}", f"{{{ubl.NS['cbc']}}}"
+        # Solo los del documento: `findall` sin `.//` no baja a las líneas.
+        totales = arbol.findall(f"{cac}TaxTotal")
+        self.assertEqual(len(totales), 1)
+        self.assertEqual(totales[0].findtext(f"{cbc}TaxAmount"), "290000.00")
+        subtotales = [
+            (
+                sub.findtext(f"{cac}TaxCategory/{cbc}Percent"),
+                sub.findtext(f"{cbc}TaxableAmount"),
+                sub.findtext(f"{cbc}TaxAmount"),
+            )
+            for sub in totales[0].findall(f"{cac}TaxSubtotal")
+        ]
+        self.assertEqual(subtotales, [
+            ("19.00", "1500000.00", "285000.00"),
+            ("5.00", "100000.00", "5000.00"),
+        ])
+
+        esquema = etree.XMLSchema(etree.parse(
+            str(settings.DIAN_XSD_DIR / "maindoc" / "UBL-Invoice-2.1.xsd")
+        ))
+        if not esquema.validate(arbol):
+            self.fail("XML inválido contra XSD:\n" + str(esquema.error_log))
+
+    def test_cada_linea_lleva_su_propio_subtotal(self):
+        """En la línea no se agrupa: su TaxTotal lleva un único subtotal."""
+        arbol = etree.fromstring(self._generar())
+        cac, cbc = f"{{{ubl.NS['cac']}}}", f"{{{ubl.NS['cbc']}}}"
+        total = arbol.find(f"{cac}InvoiceLine/{cac}TaxTotal")
+        self.assertEqual(len(total.findall(f"{cac}TaxSubtotal")), 1)
+        self.assertEqual(total.findtext(f"{cac}TaxSubtotal/{cac}TaxCategory/{cbc}Percent"), "19.00")

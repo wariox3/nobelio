@@ -254,9 +254,9 @@ class AlcanceDeDocumentosTests(AlcanceBase):
             "moneda": c["cop"].id,
             "detalles": [
                 {
-                    "numero_linea": 1, "descripcion": "Servicio",
+                    "numero_linea": 1, "descripcion": "Servicio", "codigo_producto": "SRV-1",
                     "cantidad": "1", "unidad_medida": c["unidad"].id,
-                    "valor_unitario": "1000", "valor_total": "1000.00",
+                    "valor_unitario": "1000", "valor_total": "1000.00", "descuento": "0.00",
                     "impuestos": [],
                 }
             ],

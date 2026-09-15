@@ -831,13 +831,27 @@ va en la firma y el envío (**D3**), y puede leer la propia tabla de documentos.
    emitido). Si el país es Colombia, departamento, municipio y dirección son
    obligatorios, y el municipio tiene que ser de ese departamento (por la
    relación del catálogo o, si no está cargada, por los dos primeros dígitos del
-   código DANE); fuera, departamento y municipio se descartan. Sustituye a la
+   código DANE); fuera, departamento y municipio se descartan. En las líneas,
+   `codigo_producto` es obligatorio (sin él el XML identificaba el ítem con el
+   número de línea) y un `numero_linea` repetido responde 400: antes era un
+   `IntegrityError` sin capturar, un 500. Si una línea trae `periodo_desde` y
+   `periodo_hasta`, el inicio tiene que ser anterior al fin, estrictamente (por
+   decisión de MarioA, iguales tampoco). `descuento` es obligatorio en la línea
+   y `valor_total` tiene que ser cantidad × valor unitario − descuento (antes una
+   línea descuadrada se sumaba y se firmaba). Cantidad, precio, total de línea y
+   base gravable tienen que ser mayores que cero (`mayor_que_cero`, código propio
+   porque el `min_value` de DRF admite el cero); tarifa, valor del impuesto,
+   descuentos, cargos y subtotal del P.O.S., no negativos. Y el XML del documento agrupa los
+   impuestos por tributo **y tarifa**: un `TaxTotal` por tributo con un
+   `TaxSubtotal` por tarifa. Antes tomaba la tarifa de la primera línea, y una
+   factura con IVA al 19 % y al 5 % salía con un único subtotal cuyo impuesto no
+   era la tarifa de su base. Sustituye a la
    regla que solo tenía el documento soporte residente. Ninguna de estas
    reglas tenía pruebas. Tiene que hacerlo la raíz porque DRF valida cada anidado en medio de
    los campos del padre. El mixin no lleva docstring porque
    drf-spectacular publica en `schema.yml` la primera que encuentra en la MRO.
    Una prueba cambió de expectativa: mandar `resolucion` por id responde ahora
-   por ese campo y no por el `numero_resolucion` que falta. **444 en verde.**
+   por ese campo y no por el `numero_resolucion` que falta. **455 en verde.**
 2. **Duplicado → 409 con el id del existente**, siempre: la clave es emisor +
    número, y el emisor ya está dentro del alcance.
 3. **El `IntegrityError` de dos creaciones simultáneas** → el mismo 409, no un

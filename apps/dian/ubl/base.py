@@ -177,16 +177,32 @@ def _cantidad(valor) -> str:
 
 
 def agrupar_impuestos(documento) -> "OrderedDict[str, dict]":
-    """Agrupa los impuestos del documento por código de tributo."""
+    """Agrupa los impuestos del documento por tributo y, dentro, por tarifa.
+
+    El XML del documento lleva un ``cac:TaxTotal`` por tributo con un
+    ``cac:TaxSubtotal`` por cada tarifa. Antes se agrupaba solo por tributo y
+    se tomaba la tarifa de la primera línea: una factura con IVA al 19 % y al
+    5 % salía con un único subtotal al 19 % sobre la base de las dos, y su
+    impuesto no era el 19 % de esa base.
+
+    ``base`` y ``valor`` del grupo suman todas sus tarifas: es el total del
+    tributo, lo que entra en el CUFE (``_valor_por_tributo``).
+    """
     grupos: "OrderedDict[str, dict]" = OrderedDict()
     for linea in documento.detalles.all():
         for imp in linea.impuestos.all():
-            codigo = imp.tributo.codigo
             grupo = grupos.setdefault(
-                codigo,
+                imp.tributo.codigo,
                 {"nombre": imp.tributo.nombre, "base": Decimal("0"),
-                 "valor": Decimal("0"), "tarifa": imp.tarifa},
+                 "valor": Decimal("0"), "subtotales": OrderedDict()},
             )
+            # `Decimal("19.00") == Decimal("19.0000")` y hashean igual, así que
+            # la misma tarifa escrita con otros decimales cae en el mismo grupo.
+            subtotal = grupo["subtotales"].setdefault(
+                imp.tarifa, {"base": Decimal("0"), "valor": Decimal("0")},
+            )
+            subtotal["base"] += imp.base_gravable
+            subtotal["valor"] += imp.valor
             grupo["base"] += imp.base_gravable
             grupo["valor"] += imp.valor
     return grupos
@@ -538,18 +554,24 @@ class ConstructorUBL:
             return "WithholdingTaxTotal"
         return "TaxTotal"
 
-    def _bloque_impuesto(self, padre, etiqueta, *, codigo, nombre, tarifa, base, valor):
-        """Un cac:TaxTotal (o WithholdingTaxTotal) con su único TaxSubtotal."""
+    def _bloque_impuesto(self, padre, etiqueta, *, codigo, nombre, valor, subtotales):
+        """Un cac:TaxTotal (o WithholdingTaxTotal) con un TaxSubtotal por tarifa.
+
+        ``subtotales`` es ``[(tarifa, base, valor), ...]``: uno solo en la
+        línea, uno por cada tarifa del tributo en el documento. ``valor`` es el
+        del tributo entero, la suma de los subtotales.
+        """
         tax_total = _sub(padre, "cac", etiqueta)
         _sub(tax_total, "cbc", "TaxAmount", _valor(valor), currencyID=self.moneda)
-        subtotal = _sub(tax_total, "cac", "TaxSubtotal")
-        _sub(subtotal, "cbc", "TaxableAmount", _valor(base), currencyID=self.moneda)
-        _sub(subtotal, "cbc", "TaxAmount", _valor(valor), currencyID=self.moneda)
-        categoria = _sub(subtotal, "cac", "TaxCategory")
-        _sub(categoria, "cbc", "Percent", _valor(tarifa))
-        esquema = _sub(categoria, "cac", "TaxScheme")
-        _sub(esquema, "cbc", "ID", codigo)
-        _sub(esquema, "cbc", "Name", nombre)
+        for tarifa, base, valor_tarifa in subtotales:
+            subtotal = _sub(tax_total, "cac", "TaxSubtotal")
+            _sub(subtotal, "cbc", "TaxableAmount", _valor(base), currencyID=self.moneda)
+            _sub(subtotal, "cbc", "TaxAmount", _valor(valor_tarifa), currencyID=self.moneda)
+            categoria = _sub(subtotal, "cac", "TaxCategory")
+            _sub(categoria, "cbc", "Percent", _valor(tarifa))
+            esquema = _sub(categoria, "cac", "TaxScheme")
+            _sub(esquema, "cbc", "ID", codigo)
+            _sub(esquema, "cbc", "Name", nombre)
 
     def _totales_impuestos(self, raiz):
         # El XSD manda el orden: primero todos los TaxTotal y después todos los
@@ -560,7 +582,11 @@ class ConstructorUBL:
                     continue
                 self._bloque_impuesto(
                     raiz, etiqueta, codigo=codigo, nombre=datos["nombre"],
-                    tarifa=datos["tarifa"], base=datos["base"], valor=datos["valor"],
+                    valor=datos["valor"],
+                    subtotales=[
+                        (tarifa, sub["base"], sub["valor"])
+                        for tarifa, sub in datos["subtotales"].items()
+                    ],
                 )
 
     def _total_monetario(self, raiz):
@@ -610,8 +636,8 @@ class ConstructorUBL:
                         continue
                     self._bloque_impuesto(
                         il, etiqueta, codigo=imp.tributo.codigo,
-                        nombre=imp.tributo.nombre, tarifa=imp.tarifa,
-                        base=imp.base_gravable, valor=imp.valor,
+                        nombre=imp.tributo.nombre, valor=imp.valor,
+                        subtotales=[(imp.tarifa, imp.base_gravable, imp.valor)],
                     )
 
             if not self.descuento_linea_antes_de_impuestos:
