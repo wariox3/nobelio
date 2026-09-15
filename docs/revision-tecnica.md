@@ -851,11 +851,20 @@ va en la firma y el envío (**D3**), y puede leer la propia tabla de documentos.
    los campos del padre. El mixin no lleva docstring porque
    drf-spectacular publica en `schema.yml` la primera que encuentra en la MRO.
    Una prueba cambió de expectativa: mandar `resolucion` por id responde ahora
-   por ese campo y no por el `numero_resolucion` que falta. **455 en verde.**
-2. **Duplicado → 409 con el id del existente**, siempre: la clave es emisor +
-   número, y el emisor ya está dentro del alcance.
-3. **El `IntegrityError` de dos creaciones simultáneas** → el mismo 409, no un
-   500 (`DocumentoCrearSerializer` no lo captura).
+   por ese campo y no por el `numero_resolucion` que falta. **460 en verde.**
+2. ~~Duplicado → 409 con el id del existente.~~ El cuerpo sigue la forma común
+   (código `documento_duplicado`) y la ruta del documento existente va en la
+   cabecera `Location`, que es donde HTTP la pone y así no rompe el formato de
+   error acordado. El orden es estructura → duplicado → datos: un reintento del
+   día siguiente, que ya no pasaría la fecha, sigue siendo 409. La búsqueda va
+   dentro del alcance, así que un documento de un emisor ajeno no se revela: se
+   responde como a cualquier emisor ajeno. Sustituye al
+   `UniqueTogetherValidator` («El documento ya fue creado.», un 400 sin id).
+3. ~~El `IntegrityError` de dos creaciones simultáneas.~~ La inserción va en su
+   propio punto de guardado; si choca con la restricción de unicidad, se busca
+   el que ganó y se responde el mismo 409. Si no aparece, el error se relanza:
+   no se tapa un `IntegrityError` que no sea el duplicado. **La nómina sigue
+   con el 400 de siempre**: queda para aplicarle lo mismo.
 4. **Mensajes que mandan a editar** un documento que no tiene `PUT` ni `PATCH`:
    el de `generar_y_firmar` («Actualice la fecha de emisión») y los de
    `docs/checklist-emision.md` (§5 y §7). Y los `update()` que ya no usa nadie en

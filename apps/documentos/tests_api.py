@@ -2,6 +2,7 @@
 import tempfile
 from datetime import date, timedelta
 from decimal import Decimal
+from unittest import mock
 
 from cryptography.hazmat.primitives.serialization import (
     BestAvailableEncryption, pkcs12,
@@ -46,6 +47,8 @@ from apps.documentos.serializers.documento import (
     mensaje_sin_resolucion,
 )
 from apps.documentos.tests_utils import crear_documento_factura
+from apps.documentos.views import DocumentoViewSet
+from apps.documentos.views.documento import CODIGO_DOCUMENTO_DUPLICADO
 from apps.emisores.models import Certificado, Emisor, Resolucion
 from apps.emisores.servicios import (
     MENSAJE_EMISOR_INACTIVO,
@@ -480,6 +483,74 @@ class DocumentoAPITests(APITestCase):
         })
         resp = self.client.post("/api/documentos/documento/", payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+    # --- Duplicados: 409 con la ruta del que ya existe ---------------------
+
+    def test_crear_dos_veces_responde_409_con_la_ruta_del_existente(self):
+        """El reintento del ERP recupera lo que ya se creó, sin buscarlo."""
+        primero = self._crear()
+        self.assertEqual(primero.status_code, status.HTTP_201_CREATED, primero.data)
+
+        resp = self._crear()
+        self.assertEqual(resp.status_code, status.HTTP_409_CONFLICT, resp.data)
+        self.assertEqual(codigos(resp), [CODIGO_DOCUMENTO_DUPLICADO])
+        self.assertEqual(
+            resp["Location"], f"/api/documentos/documento/{primero.data['id']}/"
+        )
+        self.assertIn(primero.data["numero"], resp.data["detail"])
+        self.assertEqual(Documento.objects.filter(consecutivo=990000130).count(), 1)
+
+    def test_el_duplicado_se_detecta_antes_que_los_datos(self):
+        """Un reintento al día siguiente ya no pasaría la fecha: igual es 409."""
+        self.assertEqual(self._crear().status_code, status.HTTP_201_CREATED)
+        payload = self._payload_documento()
+        payload["fecha_emision"] = "2020-01-01"
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_409_CONFLICT, resp.data)
+
+    def test_la_estructura_va_antes_que_el_duplicado(self):
+        self.assertEqual(self._crear().status_code, status.HTTP_201_CREATED)
+        payload = self._payload_documento()
+        payload["prueba"] = "x"
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(codigos(resp), [CODIGO_CAMPO_DESCONOCIDO])
+
+    def test_el_duplicado_de_un_emisor_ajeno_no_se_revela(self):
+        """Sin alcance sobre el emisor no hay 409: responde como un emisor ajeno."""
+        self.assertEqual(self._crear().status_code, status.HTTP_201_CREATED)
+        otro = get_user_model().objects.create_user(email="otro@example.com", password="x")
+        self.client.force_authenticate(otro)
+
+        resp = self._crear()
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertIn("emisor", errores_por_campo(resp))
+
+    def test_dos_creaciones_simultaneas_dan_409_y_no_500(self):
+        """La carrera: las dos pasan la búsqueda previa y chocan en la base.
+
+        Se simula haciendo que la primera búsqueda no vea el documento, como le
+        pasaría a la petición que llega mientras la otra aún no ha insertado.
+        """
+        primero = self._crear()
+        self.assertEqual(primero.status_code, status.HTTP_201_CREATED)
+        original = DocumentoViewSet._existente
+        llamadas = []
+
+        def ciega_la_primera_vez(vista, datos):
+            llamadas.append(datos)
+            return None if len(llamadas) == 1 else original(vista, datos)
+
+        with mock.patch.object(DocumentoViewSet, "_existente", ciega_la_primera_vez):
+            resp = self._crear()
+
+        self.assertEqual(len(llamadas), 2)
+        self.assertEqual(resp.status_code, status.HTTP_409_CONFLICT, resp.data)
+        self.assertEqual(
+            resp["Location"], f"/api/documentos/documento/{primero.data['id']}/"
+        )
 
     def test_la_clave_prefijo_es_obligatoria(self):
         payload = self._payload_documento()

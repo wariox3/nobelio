@@ -1391,18 +1391,22 @@ paths:
     post:
       operationId: documentos_documento_create
       description: |-
-        Un documento no se edita: se crea, se emite y, si estaba mal, se borra.
+        Crea el documento, o responde 409 si ese número ya existe.
 
-        **Sin `PUT` ni `PATCH`** sobre el documento. No es una restricción de
-        permisos sino de forma: un documento fiscal es un hecho con fecha, número y
-        firma, y editarlo en sitio abre la puerta a que lo que se emitió y lo que se
-        guarda dejen de coincidir. Mientras es borrador, corregirlo es borrarlo y
-        volver a crearlo —que además libera el consecutivo—; una vez emitido, lo que
-        corrige una factura es una nota, no un `PATCH`.
+        El orden es **estructura → duplicado → datos**. La estructura va
+        primero, como en toda la recepción. El duplicado va antes que los datos
+        porque es la respuesta que necesita un reintento: el ERP que perdió la
+        respuesta del primer intento y repite la petición al día siguiente ya
+        no pasaría la fecha de emisión, y un 400 por la fecha le escondería que
+        el documento existe.
 
-        Lo que sí cambia el documento son las acciones de más abajo, cada una con su
-        regla: `emitir`, `enviar`, `actualizar-estado`, `notificar`. El estado no es
-        un campo que se escriba, es la consecuencia de una operación.
+        El 409 lleva el cuerpo de error común (código `documento_duplicado`) y
+        la ruta del existente en `Location`: es donde HTTP la pone, y así el
+        cuerpo no se sale de `detail` + `errores`.
+
+        La búsqueda previa no cubre la carrera —dos peticiones iguales que la
+        pasan a la vez—: esa la resuelve la restricción de unicidad de la base,
+        y el `IntegrityError` se traduce al mismo 409.
       tags:
       - documentos
       requestBody:
@@ -1425,6 +1429,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DocumentoCrear'
+          description: ''
+        '409':
+          headers:
+            Location:
+              schema:
+                type: string
+              description: Ruta del documento que ya existe con el mismo emisor, tipo,
+                prefijo y consecutivo.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: ''
         '401':
           description: Error
@@ -6971,6 +6987,38 @@ components:
       description: |-
         * `test_set` - Set de Pruebas (SendTestSetAsync)
         * `nomina_sync` - Síncrono (SendNominaSync)
+    Error:
+      type: object
+      description: Cuerpo común de los errores de la API. Lo produce `apps.nucleo.api.exception_handler`,
+        así que tiene esta forma venga de donde venga el fallo.
+      properties:
+        detail:
+          type: string
+          description: Mensaje para mostrar a la persona.
+        errores:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            properties:
+              codigo:
+                type: string
+                description: Identificador estable del error.
+              mensaje:
+                type: string
+                description: Texto para la persona, con la ruta del campo delante
+                  cuando el error es de un campo.
+            required:
+            - codigo
+            - mensaje
+          description: 'Nunca vacía. Cada error trae `codigo`, que es lo que el cliente
+            mapea —los de DRF tal cual (`required`, `invalid`, `does_not_exist`, `not_found`…)
+            y los propios en español (`campo_desconocido`, `solicitud_invalida`…)—,
+            y `mensaje`, para la persona. Si el error es de un campo, su ruta va delante
+            del mensaje: `detalles[0].impuestos[0].tributo: Este campo es obligatorio.`'
+      required:
+      - detail
+      - errores
     GrupoEnum:
       enum:
       - devengado
@@ -9070,38 +9118,6 @@ components:
       description: |-
         * `102` - Documento soporte de pago de nómina electrónica
         * `103` - Nota de ajuste de documento soporte de pago de nómina
-    Error:
-      type: object
-      description: Cuerpo común de los errores de la API. Lo produce `apps.nucleo.api.exception_handler`,
-        así que tiene esta forma venga de donde venga el fallo.
-      properties:
-        detail:
-          type: string
-          description: Mensaje para mostrar a la persona.
-        errores:
-          type: array
-          minItems: 1
-          items:
-            type: object
-            properties:
-              codigo:
-                type: string
-                description: Identificador estable del error.
-              mensaje:
-                type: string
-                description: Texto para la persona, con la ruta del campo delante
-                  cuando el error es de un campo.
-            required:
-            - codigo
-            - mensaje
-          description: 'Nunca vacía. Cada error trae `codigo`, que es lo que el cliente
-            mapea —los de DRF tal cual (`required`, `invalid`, `does_not_exist`, `not_found`…)
-            y los propios en español (`campo_desconocido`, `solicitud_invalida`…)—,
-            y `mensaje`, para la persona. Si el error es de un campo, su ruta va delante
-            del mensaje: `detalles[0].impuestos[0].tributo: Este campo es obligatorio.`'
-      required:
-      - detail
-      - errores
   securitySchemes:
     LlaveApi:
       type: apiKey

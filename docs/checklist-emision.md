@@ -224,7 +224,12 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
   Cantidad, valor unitario, total de la línea y base gravable tienen que ser
   mayores que cero (código `mayor_que_cero`); tarifa y valor del impuesto,
   descuento de la línea, descuentos y cargos del documento y subtotal del
-  P.O.S. pueden ser cero, pero no negativos (`min_value`). Antes se descartaba y el documento se creaba sin ese dato.
+  P.O.S. pueden ser cero, pero no negativos (`min_value`).
+- **Duplicado:** si ya existe un documento con el mismo emisor, tipo, prefijo y
+  consecutivo, responde **409** con código `documento_duplicado` y la ruta del
+  existente en la cabecera `Location`. Se comprueba después de la estructura y
+  antes que los datos, así que un reintento sigue recibiendo 409 aunque su
+  fecha ya no sea la de hoy. Dos creaciones simultáneas también dan 409. Antes se descartaba y el documento se creaba sin ese dato.
   Se comprueba **antes que ningún dato**, junto con los obligatorios que falten:
   si la estructura está mal, la respuesta solo trae eso, y los errores de datos
   salen en el intento siguiente.

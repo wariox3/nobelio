@@ -4,7 +4,6 @@ from decimal import ROUND_HALF_UP, Decimal
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
-from rest_framework.validators import UniqueTogetherValidator
 
 from apps.documentos import models
 from apps.emisores.models import Emisor, Resolucion
@@ -335,15 +334,12 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
             "medio_pago": {"required": True, "allow_null": False},
             "fecha_vencimiento": {"required": True, "allow_null": True},
         }
-        # Mensaje propio para la unicidad (emisor+prefijo+consecutivo+tipo) en vez
-        # del genérico "deben formar un conjunto único".
-        validators = [
-            UniqueTogetherValidator(
-                queryset=models.Documento.objects.all(),
-                fields=["emisor", "prefijo", "consecutivo", "documento_tipo"],
-                message="El documento ya fue creado.",
-            )
-        ]
+        # Sin validador de unicidad, a propósito: el duplicado no es un error de
+        # datos (400) sino un conflicto (409) con un documento que ya existe, y
+        # lo resuelve `DocumentoViewSet.create`, que devuelve dónde está. La
+        # lista vacía es explícita porque sin ella DRF deduciría el validador de
+        # la restricción del modelo.
+        validators = []
 
     def validate_fecha_emision(self, fecha):
         """Solo se admite la fecha de hoy (regla FAD09).

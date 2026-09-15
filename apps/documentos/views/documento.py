@@ -1,10 +1,13 @@
 """API de documentos electrónicos y acciones del ciclo de vida DIAN."""
 import requests
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Count
 from django.http import FileResponse, HttpResponse
+from django.urls import reverse
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from apps.dian import representacion, servicios
@@ -17,9 +20,25 @@ from apps.documentos.servicios import (
     enviar_notificacion,
     nombre_dian,
 )
-from apps.nucleo.api import ErrorPasarela, ErrorSolicitud, entero_de_query
+from apps.nucleo.api import (
+    ErrorPasarela,
+    ErrorSolicitud,
+    cuerpo_de_error,
+    entero_de_query,
+)
+from apps.nucleo.esquema import ErrorSerializer
 from apps.seguridad.alcance import AlcanceEmisorMixin
 from apps.utilidades.zinc import ZincNoDisponible
+
+CODIGO_DOCUMENTO_DUPLICADO = "documento_duplicado"
+
+
+def mensaje_documento_duplicado(documento):
+    """Mensaje del 409: la ruta no va aquí sino en la cabecera `Location`."""
+    return (
+        f"El documento {documento.numero} ya fue creado; su ruta va en la "
+        "cabecera Location."
+    )
 
 
 class DocumentoViewSet(
@@ -83,6 +102,91 @@ class DocumentoViewSet(
         if self.action == "list":
             return serializers.DocumentoListaSerializer
         return serializers.DocumentoSerializer
+
+    @extend_schema(
+        responses={201: serializers.DocumentoCrearSerializer, 409: ErrorSerializer},
+        parameters=[
+            OpenApiParameter(
+                name="Location", type=str, location=OpenApiParameter.HEADER,
+                response=[409],
+                description=(
+                    "Ruta del documento que ya existe con el mismo emisor, "
+                    "tipo, prefijo y consecutivo."
+                ),
+            ),
+        ],
+    )
+    def create(self, request, *args, **kwargs):
+        """Crea el documento, o responde 409 si ese número ya existe.
+
+        El orden es **estructura → duplicado → datos**. La estructura va
+        primero, como en toda la recepción. El duplicado va antes que los datos
+        porque es la respuesta que necesita un reintento: el ERP que perdió la
+        respuesta del primer intento y repite la petición al día siguiente ya
+        no pasaría la fecha de emisión, y un 400 por la fecha le escondería que
+        el documento existe.
+
+        El 409 lleva el cuerpo de error común (código `documento_duplicado`) y
+        la ruta del existente en `Location`: es donde HTTP la pone, y así el
+        cuerpo no se sale de `detail` + `errores`.
+
+        La búsqueda previa no cubre la carrera —dos peticiones iguales que la
+        pasan a la vez—: esa la resuelve la restricción de unicidad de la base,
+        y el `IntegrityError` se traduce al mismo 409.
+        """
+        serializer = self.get_serializer(data=request.data)
+        errores = serializer.errores_de_estructura(request.data)
+        if errores:
+            raise ValidationError(errores)
+
+        existente = self._existente(request.data)
+        if existente is not None:
+            return self._respuesta_duplicado(existente)
+
+        serializer.is_valid(raise_exception=True)
+        try:
+            # Punto de guardado propio: tras el `IntegrityError` la transacción
+            # queda inservible, y hace falta consultar quién ganó la carrera.
+            with transaction.atomic():
+                self.perform_create(serializer)
+        except IntegrityError:
+            existente = self._existente(request.data)
+            if existente is None:
+                # No era el duplicado: no se tapa otro error de integridad.
+                raise
+            return self._respuesta_duplicado(existente)
+        return Response(
+            serializer.data, status=status.HTTP_201_CREATED,
+            headers=self.get_success_headers(serializer.data),
+        )
+
+    def _existente(self, datos):
+        """El documento con la misma identidad dentro del alcance, o ``None``.
+
+        Se busca con los datos crudos porque va antes de validarlos: si alguno
+        no tiene forma de id o de número, no hay nada que buscar y lo dirá la
+        validación. Dentro del alcance, para que un documento de un emisor
+        ajeno no se revele: ahí se responde como a cualquier emisor ajeno.
+        """
+        try:
+            identidad = {
+                "emisor_id": int(datos["emisor"]),
+                "documento_tipo_id": int(datos["documento_tipo"]),
+                "prefijo": str(datos["prefijo"]),
+                "consecutivo": int(datos["consecutivo"]),
+            }
+        except (KeyError, TypeError, ValueError):
+            return None
+        return self.get_queryset().filter(**identidad).first()
+
+    def _respuesta_duplicado(self, documento):
+        return Response(
+            cuerpo_de_error(
+                mensaje_documento_duplicado(documento), CODIGO_DOCUMENTO_DUPLICADO,
+            ),
+            status=status.HTTP_409_CONFLICT,
+            headers={"Location": reverse("documento-detail", args=[documento.pk])},
+        )
 
     def get_queryset(self):
         """Permite filtrar el listado por ``emisor`` (id), ``estado`` y
