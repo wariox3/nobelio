@@ -820,12 +820,24 @@ va en la firma y el envío (**D3**), y puede leer la propia tabla de documentos.
    de pago); en las notas, `null` o 400, porque la emitían a medias en
    `PaymentDueDate`. El `digito_verificacion` del adquiriente pasa a ser de
    solo lectura: `Adquiriente.save` lo calcula del NIT y el que mandara el ERP
-   se sobrescribía sin avisar. Ninguna de estas
+   se sobrescribía sin avisar. El nombre desglosado pasa a depender del tipo de
+   organización, en todos los tipos de documento: una persona natural exige
+   primer nombre y primer apellido, y a una jurídica se le descartan los
+   nombres. Antes el XML emitía `cac:Person` con que viniera cualquier parte del
+   nombre, fuera cual fuera el tipo. `responsabilidades` del adquiriente pasa a
+   ser obligatoria como clave; admite la lista vacía, que sale como `R-99-PN`.
+   El `correo` del adquiriente es obligatorio y con valor en todos los tipos (es
+   a donde se notifica; antes el fallo salía al notificar, con el documento ya
+   emitido). Si el país es Colombia, departamento, municipio y dirección son
+   obligatorios, y el municipio tiene que ser de ese departamento (por la
+   relación del catálogo o, si no está cargada, por los dos primeros dígitos del
+   código DANE); fuera, departamento y municipio se descartan. Sustituye a la
+   regla que solo tenía el documento soporte residente. Ninguna de estas
    reglas tenía pruebas. Tiene que hacerlo la raíz porque DRF valida cada anidado en medio de
    los campos del padre. El mixin no lleva docstring porque
    drf-spectacular publica en `schema.yml` la primera que encuentra en la MRO.
    Una prueba cambió de expectativa: mandar `resolucion` por id responde ahora
-   por ese campo y no por el `numero_resolucion` que falta. **432 en verde.**
+   por ese campo y no por el `numero_resolucion` que falta. **444 en verde.**
 2. **Duplicado → 409 con el id del existente**, siempre: la clave es emisor +
    número, y el emisor ya está dentro del alcance.
 3. **El `IntegrityError` de dos creaciones simultáneas** → el mismo 409, no un

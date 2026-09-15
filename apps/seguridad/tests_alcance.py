@@ -234,8 +234,17 @@ class AlcanceDeDocumentosTests(AlcanceBase):
                 "razon_social": "Cliente Demo",
                 "tipo_identificacion": c["nit"].id,
                 "numero_identificacion": "800100009",
+                "responsabilidades": [],
                 "tipo_organizacion": c["juridica"].id,
                 "pais": c["colombia"].id,
+                # Completo a propósito: con la estructura mal, las dos respuestas
+                # serían el mismo error de estructura y la prueba no compararía
+                # lo que dice su nombre, el error del emisor.
+                "departamento": c["antioquia"].id,
+                "municipio": c["medellin"].id,
+                "direccion": "Cra 4 # 5-6",
+                "codigo_postal": "050001",
+                "correo": "cliente@demo.co",
             },
             "prefijo": "SETP", "consecutivo": 1, "numero": "SETP1",
             "fecha_emision": "2024-01-10",

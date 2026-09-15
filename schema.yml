@@ -4411,19 +4411,18 @@ components:
           title: Teléfono
           maxLength: 50
         correo:
+          type: string
+          format: email
           title: Correo electrónico
-          oneOf:
-          - type: string
-            format: email
-            maxLength: 254
-          - type: string
-            maxLength: 0
+          maxLength: 254
       required:
       - codigo_postal
+      - correo
       - digito_verificacion
       - numero_identificacion
       - pais
       - razon_social
+      - responsabilidades
       - tipo_identificacion
       - tipo_organizacion
     AdquirienteRequest:
@@ -4489,18 +4488,18 @@ components:
           title: Teléfono
           maxLength: 50
         correo:
+          type: string
+          format: email
+          minLength: 1
           title: Correo electrónico
-          oneOf:
-          - type: string
-            format: email
-            maxLength: 254
-          - type: string
-            maxLength: 0
+          maxLength: 254
       required:
       - codigo_postal
+      - correo
       - numero_identificacion
       - pais
       - razon_social
+      - responsabilidades
       - tipo_identificacion
       - tipo_organizacion
     AmbienteEnum:

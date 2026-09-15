@@ -203,7 +203,18 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
   anterior a la emisión); en contado, si viene, se descarta y se guarda en null;
   en las notas tiene que ir en null, o responde 400.
   El `digito_verificacion` del `adquiriente` no se envía: lo calcula el sistema
-  a partir del NIT, y mandarlo responde 400 con `campo_solo_lectura`. Antes se descartaba y el documento se creaba sin ese dato.
+  a partir del NIT, y mandarlo responde 400 con `campo_solo_lectura`.
+  Si el `adquiriente` es persona natural (`tipo_organizacion` 2), `primer_nombre` y
+  `primer_apellido` son obligatorios; los segundos, opcionales. Si es persona
+  jurídica (1), los nombres que vengan se descartan. Vale también en el
+  documento soporte.
+  `responsabilidades` del `adquiriente` es obligatoria como clave; admite `[]`,
+  que el XML emite como `R-99-PN`.
+  El `correo` del `adquiriente` es obligatorio y no admite vacío, en todos los
+  tipos: es a donde se notifica. Si el `pais` es Colombia, `departamento`,
+  `municipio` y `direccion` son obligatorios, y el municipio tiene que ser de ese
+  departamento; en otro país, departamento y
+  municipio se descartan. El `telefono` es opcional. Antes se descartaba y el documento se creaba sin ese dato.
   Se comprueba **antes que ningún dato**, junto con los obligatorios que falten:
   si la estructura está mal, la respuesta solo trae eso, y los errores de datos
   salen en el intento siguiente.

@@ -13,10 +13,18 @@ from rest_framework import status
 from rest_framework.fields import Field
 from rest_framework.test import APITestCase
 
-from apps.catalogos.models import FormaPago
+from apps.catalogos.models import (
+    Departamento, FormaPago, Municipio, Pais, TipoOrganizacion,
+)
 from apps.dian.tests_firma import _generar_certificado
 from apps.documentos.models import (
     Adquiriente, Documento, DocumentoEstado, DocumentoTipo,
+)
+from apps.documentos.serializers.adquiriente import (
+    CODIGO_PERSONA_NATURAL,
+    mensaje_falta_en_colombia,
+    mensaje_falta_en_persona_natural,
+    mensaje_municipio_de_otro_departamento,
 )
 from apps.documentos.serializers.documento import (
     CODIGO_FORMA_PAGO_CREDITO,
@@ -155,6 +163,8 @@ class DocumentoAPITests(APITestCase):
                 # Obligatorio desde que el anexo lo exige en el AddressLine del
                 # adquiriente; el serializer lo pide y sin él la creación es 400.
                 "codigo_postal": "050001",
+                "responsabilidades": [],
+                "correo": "cliente@demo.co",
             },
             "prefijo": "SETP",
             "consecutivo": 990000130,
@@ -532,6 +542,164 @@ class DocumentoAPITests(APITestCase):
 
     def _crear_con(self, payload):
         return self.client.post("/api/documentos/documento/", payload, format="json")
+
+    # --- Nombre desglosado según el tipo de organización --------------------
+
+    def _payload_persona_natural(self, **nombres):
+        natural, _ = TipoOrganizacion.objects.get_or_create(
+            codigo=CODIGO_PERSONA_NATURAL, defaults={"nombre": "Persona Natural"},
+        )
+        payload = self._payload_documento()
+        payload["adquiriente"].update(
+            {"tipo_organizacion": natural.id, "razon_social": "Ana Pérez", **nombres}
+        )
+        return payload
+
+    def test_las_responsabilidades_del_adquiriente_son_clave_obligatoria(self):
+        payload = self._payload_documento()
+        del payload["adquiriente"]["responsabilidades"]
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            errores_por_campo(resp),
+            {"adquiriente.responsabilidades": [str(Field.default_error_messages["required"])]},
+        )
+
+    def test_las_responsabilidades_admiten_la_lista_vacia(self):
+        """Vacía sale como R-99-PN en el XML."""
+        resp = self._crear()
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["adquiriente"]["responsabilidades"], [])
+
+    def test_persona_natural_sin_nombres_no_se_crea(self):
+        resp = self._crear_con(self._payload_persona_natural())
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(errores_por_campo(resp), {
+            "adquiriente.primer_nombre": [mensaje_falta_en_persona_natural("primer_nombre")],
+            "adquiriente.primer_apellido": [
+                mensaje_falta_en_persona_natural("primer_apellido")
+            ],
+        })
+
+    def test_persona_natural_sin_segundo_nombre_ni_segundo_apellido_se_crea(self):
+        payload = self._payload_persona_natural(primer_nombre="Ana", primer_apellido="Pérez")
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["adquiriente"]["primer_nombre"], "Ana")
+        self.assertEqual(resp.data["adquiriente"]["primer_apellido"], "Pérez")
+
+    def test_persona_juridica_con_nombres_se_crea_sin_ellos(self):
+        """Se descartan: antes una empresa con nombres salía con cac:Person."""
+        payload = self._payload_documento()
+        payload["adquiriente"].update({
+            "primer_nombre": "Ana", "segundo_nombre": "María",
+            "primer_apellido": "Pérez", "segundo_apellido": "Gómez",
+        })
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        adquiriente = Documento.objects.get(pk=resp.data["id"]).adquiriente
+        for campo in ("primer_nombre", "segundo_nombre", "primer_apellido", "segundo_apellido"):
+            self.assertEqual(getattr(adquiriente, campo), "", campo)
+
+    # --- Correo y ubicación del adquiriente ---------------------------------
+
+    def test_el_correo_del_adquiriente_es_obligatorio(self):
+        """Es a donde `notificar` entrega el documento."""
+        payload = self._payload_documento()
+        del payload["adquiriente"]["correo"]
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            errores_por_campo(resp),
+            {"adquiriente.correo": [str(Field.default_error_messages["required"])]},
+        )
+
+    def test_el_correo_del_adquiriente_no_puede_ir_vacio(self):
+        payload = self._payload_documento()
+        payload["adquiriente"]["correo"] = ""
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(codigos(resp), ["blank"])
+
+    def test_adquiriente_en_colombia_sin_ubicacion_no_se_crea(self):
+        payload = self._payload_documento()
+        for campo in ("departamento", "municipio", "direccion"):
+            del payload["adquiriente"][campo]
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(errores_por_campo(resp), {
+            f"adquiriente.{campo}": [mensaje_falta_en_colombia(campo)]
+            for campo in ("departamento", "municipio", "direccion")
+        })
+
+    def test_el_municipio_tiene_que_ser_del_departamento(self):
+        """Antes Medellín con Cundinamarca pasaba."""
+        cundinamarca, _ = Departamento.objects.get_or_create(
+            codigo="25", defaults={"nombre": "Cundinamarca"},
+        )
+        payload = self._payload_documento()
+        payload["adquiriente"]["departamento"] = cundinamarca.id
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(errores_por_campo(resp), {
+            "adquiriente.municipio": [
+                mensaje_municipio_de_otro_departamento(self.cat["medellin"], cundinamarca)
+            ],
+        })
+
+    def test_sin_departamento_en_el_catalogo_se_compara_por_el_codigo(self):
+        """La relación del catálogo es nullable; sin ella mandan los dos dígitos."""
+        bogota_dc, _ = Departamento.objects.get_or_create(
+            codigo="11", defaults={"nombre": "Bogotá D.C."},
+        )
+        bogota, _ = Municipio.objects.get_or_create(
+            codigo="11001", defaults={"nombre": "Bogotá"},
+        )
+        self.assertIsNone(bogota.departamento_id)
+        payload = self._payload_documento()
+        payload["adquiriente"]["municipio"] = bogota.id
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertIn("adquiriente.municipio", errores_por_campo(resp))
+
+        payload["adquiriente"]["departamento"] = bogota_dc.id
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+    def test_adquiriente_extranjero_se_crea_sin_departamento_ni_municipio(self):
+        """Son catálogos colombianos: se descartan. La dirección se conserva."""
+        extranjero, _ = Pais.objects.get_or_create(
+            codigo="US", defaults={"nombre": "Estados Unidos"},
+        )
+        payload = self._payload_documento()
+        payload["adquiriente"]["pais"] = extranjero.id
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        adquiriente = Documento.objects.get(pk=resp.data["id"]).adquiriente
+        self.assertIsNone(adquiriente.departamento)
+        self.assertIsNone(adquiriente.municipio)
+        self.assertEqual(adquiriente.direccion, "Cra 4 # 5-6")
+
+    def test_adquiriente_extranjero_no_necesita_ubicacion(self):
+        extranjero, _ = Pais.objects.get_or_create(
+            codigo="US", defaults={"nombre": "Estados Unidos"},
+        )
+        payload = self._payload_documento()
+        payload["adquiriente"]["pais"] = extranjero.id
+        for campo in ("departamento", "municipio", "direccion"):
+            del payload["adquiriente"][campo]
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
 
     def test_el_documento_no_se_edita(self):
         """Ni `PUT` ni `PATCH`, en ningún estado.
