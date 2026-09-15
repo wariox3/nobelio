@@ -13,15 +13,22 @@ from rest_framework import status
 from rest_framework.fields import Field
 from rest_framework.test import APITestCase
 
+from apps.catalogos.models import FormaPago
 from apps.dian.tests_firma import _generar_certificado
 from apps.documentos.models import (
     Adquiriente, Documento, DocumentoEstado, DocumentoTipo,
 )
 from apps.documentos.serializers.documento import (
+    CODIGO_FORMA_PAGO_CREDITO,
+    MENSAJE_CREDITO_SIN_VENCIMIENTO,
+    MENSAJE_VENCIMIENTO_ANTERIOR_A_EMISION,
+    mensaje_vencimiento_en_nota,
     MENSAJE_RESOLUCION_AMBIGUA,
     MENSAJE_RESOLUCION_NO_ENCONTRADA,
     mensaje_consecutivo_fuera_de_rango,
     mensaje_prefijo_ajeno,
+    mensaje_resolucion_no_aplica,
+    mensaje_sin_resolucion,
 )
 from apps.documentos.tests_utils import crear_documento_factura
 from apps.emisores.models import Certificado, Emisor, Resolucion
@@ -36,6 +43,7 @@ from apps.nucleo.serializers import (
     MENSAJE_CAMPO_DESCONOCIDO,
     MENSAJE_CAMPO_SOLO_LECTURA,
 )
+from apps.nomina.tests_utils import crear_catalogos_de_pago
 from apps.nucleo.tests_utils import codigos, errores_por_campo
 
 MEDIA_TEMP = tempfile.mkdtemp()
@@ -49,6 +57,10 @@ class DocumentoAPITests(APITestCase):
         cls.documento = datos["documento"]
         cls.emisor = datos["emisor"]
         cls.cat = datos["catalogos"]
+        cls.contado, cls.efectivo = crear_catalogos_de_pago()
+        cls.credito, _ = FormaPago.objects.get_or_create(
+            codigo=CODIGO_FORMA_PAGO_CREDITO, defaults={"nombre": "Crédito"},
+        )
         # El documento del helper lleva la fecha del ejemplo oficial de la DIAN,
         # con la que se comprueba el CUFE en otras pruebas. Aquí se emite de
         # verdad, y firmar exige la fecha de hoy (regla FAD09).
@@ -151,7 +163,9 @@ class DocumentoAPITests(APITestCase):
             # Firmar exige la fecha de hoy (FAD09), y el serializer la valida ya
             # al crear: una fecha fija dejaría de valer al día siguiente.
             "fecha_emision": timezone.localdate().isoformat(),
-            "hora_emision": "10:00:00",
+            "forma_pago": self.contado.id,
+            "medio_pago": self.efectivo.id,
+            "fecha_vencimiento": None,
             "moneda": c["cop"].id,
             "detalles": [
                 {
@@ -314,6 +328,176 @@ class DocumentoAPITests(APITestCase):
         resp = self.client.post("/api/documentos/documento/", payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
 
+    def test_la_clave_prefijo_es_obligatoria(self):
+        payload = self._payload_documento()
+        del payload["prefijo"]
+
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            errores_por_campo(resp),
+            {"prefijo": [str(Field.default_error_messages["required"])]},
+        )
+        self.assertEqual(codigos(resp), [CODIGO_OBLIGATORIO])
+
+    def test_la_fecha_de_emision_es_obligatoria(self):
+        payload = self._payload_documento()
+        del payload["fecha_emision"]
+
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            errores_por_campo(resp),
+            {"fecha_emision": [str(Field.default_error_messages["required"])]},
+        )
+
+    def test_la_hora_de_emision_no_se_envia(self):
+        """La pone el sistema al firmar: la del ERP se descartaba sin avisar."""
+        payload = self._payload_documento()
+        payload["hora_emision"] = "10:00:00"
+
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            errores_por_campo(resp), {"hora_emision": [MENSAJE_CAMPO_DESCONOCIDO]}
+        )
+
+    def test_el_documento_creado_lleva_la_hora_del_sistema(self):
+        antes = timezone.localtime().replace(microsecond=0).time()
+        resp = self._crear()
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertGreaterEqual(resp.data["hora_emision"], antes.isoformat())
+
+    # --- Forma de pago y vencimiento ----------------------------------------
+
+    def _post(self, payload):
+        return self.client.post("/api/documentos/documento/", payload, format="json")
+
+    def test_forma_medio_y_vencimiento_son_claves_obligatorias(self):
+        """Sin forma de pago el XML salía como contado en efectivo."""
+        payload = self._payload_documento()
+        for campo in ("forma_pago", "medio_pago", "fecha_vencimiento"):
+            del payload[campo]
+
+        resp = self._post(payload)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        obligatorio = str(Field.default_error_messages["required"])
+        self.assertEqual(errores_por_campo(resp), {
+            "forma_pago": [obligatorio],
+            "medio_pago": [obligatorio],
+            "fecha_vencimiento": [obligatorio],
+        })
+
+    def test_la_forma_de_pago_no_admite_nulo(self):
+        payload = self._payload_documento()
+        payload["forma_pago"] = None
+
+        resp = self._post(payload)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(codigos(resp), ["null"])
+
+    def test_contado_sin_vencimiento_se_crea(self):
+        resp = self._post(self._payload_documento())
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertIsNone(resp.data["fecha_vencimiento"])
+
+    def test_contado_con_vencimiento_se_crea_sin_el(self):
+        """La fecha se descarta: antes salía con DueDate en un XML que decía contado."""
+        payload = self._payload_documento()
+        payload["fecha_vencimiento"] = (timezone.localdate() + timedelta(days=30)).isoformat()
+
+        resp = self._post(payload)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertIsNone(resp.data["fecha_vencimiento"])
+        self.assertIsNone(Documento.objects.get(pk=resp.data["id"]).fecha_vencimiento)
+
+    def test_credito_sin_vencimiento_no_se_crea(self):
+        payload = self._payload_documento()
+        payload["forma_pago"] = self.credito.id
+
+        resp = self._post(payload)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            errores_por_campo(resp), {"fecha_vencimiento": [MENSAJE_CREDITO_SIN_VENCIMIENTO]}
+        )
+
+    def test_credito_con_vencimiento_anterior_a_la_emision_no_se_crea(self):
+        payload = self._payload_documento()
+        payload["forma_pago"] = self.credito.id
+        payload["fecha_vencimiento"] = (timezone.localdate() - timedelta(days=1)).isoformat()
+
+        resp = self._post(payload)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            errores_por_campo(resp),
+            {"fecha_vencimiento": [MENSAJE_VENCIMIENTO_ANTERIOR_A_EMISION]},
+        )
+
+    def test_credito_con_vencimiento_se_crea(self):
+        payload = self._payload_documento()
+        payload["forma_pago"] = self.credito.id
+        vence = timezone.localdate() + timedelta(days=30)
+        payload["fecha_vencimiento"] = vence.isoformat()
+
+        resp = self._post(payload)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["fecha_vencimiento"], vence.isoformat())
+
+    def test_una_nota_con_vencimiento_no_se_crea(self):
+        """En la nota salía a medias: sin DueDate pero con PaymentDueDate.
+
+        Vale aunque la nota sea a crédito: la regla de las notas va primero, y
+        no se le exige un vencimiento que no puede llevar.
+        """
+        tipo = DocumentoTipo.objects.get(codigo=DocumentoTipo.Codigo.NOTA_CREDITO)
+        payload = self._payload_documento()
+        payload.update({
+            "documento_tipo": tipo.id,
+            "numero_resolucion": "",
+            "documento_referencia": str(self.documento.id),
+            "concepto_correccion": Documento.ConceptoNotaCredito.ANULACION,
+            "prefijo": "NC", "consecutivo": 1, "numero": "NC1",
+            "forma_pago": self.credito.id,
+            "fecha_vencimiento": (timezone.localdate() + timedelta(days=30)).isoformat(),
+        })
+
+        resp = self._post(payload)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            errores_por_campo(resp),
+            {"fecha_vencimiento": [mensaje_vencimiento_en_nota(tipo)]},
+        )
+
+    def test_una_nota_a_credito_sin_vencimiento_se_crea(self):
+        tipo = DocumentoTipo.objects.get(codigo=DocumentoTipo.Codigo.NOTA_CREDITO)
+        payload = self._payload_documento()
+        payload.update({
+            "documento_tipo": tipo.id,
+            "numero_resolucion": "",
+            "documento_referencia": str(self.documento.id),
+            "concepto_correccion": Documento.ConceptoNotaCredito.ANULACION,
+            "prefijo": "NC", "consecutivo": 1, "numero": "NC1",
+            "forma_pago": self.credito.id,
+        })
+
+        resp = self._post(payload)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+    def test_el_prefijo_vacio_pasa_la_estructura_y_lo_juzga_la_resolucion(self):
+        """`""` dice «sin prefijo»: es válido como estructura, y si la resolución
+        sí numera con prefijo lo rechaza la regla de numeración, no el contrato."""
+        payload = self._payload_documento()
+        payload["prefijo"] = ""
+        payload["numero"] = "990000130"
+
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            errores_por_campo(resp),
+            {"prefijo": [mensaje_prefijo_ajeno(self.documento.resolucion)]},
+        )
+        self.assertEqual(codigos(resp), ["invalid"])
+
     def test_un_campo_de_solo_lectura_se_rechaza(self):
         """Lo que devuelve la lectura no se puede reenviar tal cual al crear."""
         payload = self._payload_documento()
@@ -370,14 +554,69 @@ class DocumentoAPITests(APITestCase):
             resp.data["resolucion_numero"], self.documento.resolucion.numero_resolucion
         )
 
-    def test_el_numero_de_resolucion_es_obligatorio(self):
+    def test_la_clave_numero_de_resolucion_es_obligatoria(self):
         payload = self._payload_documento()
         del payload["numero_resolucion"]
 
         resp = self.client.post("/api/documentos/documento/", payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("numero_resolucion", errores_por_campo(resp))
+        self.assertEqual(
+            errores_por_campo(resp),
+            {"numero_resolucion": [str(Field.default_error_messages["required"])]},
+        )
+        self.assertEqual(codigos(resp), [CODIGO_OBLIGATORIO])
         self.assertFalse(Documento.objects.filter(consecutivo=990000130).exists())
+
+    def test_una_factura_con_la_resolucion_vacia_no_se_crea(self):
+        """`""` pasa la estructura —es lo que mandan las notas—, pero una factura
+        se numera con resolución y eso lo dice la regla de datos."""
+        payload = self._payload_documento()
+        payload["numero_resolucion"] = ""
+
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        tipo = DocumentoTipo.objects.get(codigo=DocumentoTipo.Codigo.FACTURA_VENTA)
+        self.assertEqual(
+            errores_por_campo(resp), {"numero_resolucion": [mensaje_sin_resolucion(tipo)]}
+        )
+        self.assertFalse(Documento.objects.filter(consecutivo=990000130).exists())
+
+    def test_una_nota_se_crea_con_la_resolucion_vacia(self):
+        """La nota no se numera con resolución: manda la clave vacía y se crea."""
+        payload = self._payload_documento()
+        payload.update({
+            "documento_tipo": DocumentoTipo.objects.get(
+                codigo=DocumentoTipo.Codigo.NOTA_CREDITO
+            ).id,
+            "numero_resolucion": "",
+            "documento_referencia": str(self.documento.id),
+            "concepto_correccion": Documento.ConceptoNotaCredito.ANULACION,
+            "prefijo": "NC", "consecutivo": 1, "numero": "NC1",
+        })
+
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertIsNone(resp.data["resolucion"])
+
+    def test_una_nota_con_resolucion_no_se_crea(self):
+        """Antes se le asociaba la resolución y se validaba contra ella."""
+        payload = self._payload_documento()
+        tipo = DocumentoTipo.objects.get(codigo=DocumentoTipo.Codigo.NOTA_CREDITO)
+        payload.update({
+            "documento_tipo": tipo.id,
+            "documento_referencia": str(self.documento.id),
+            "concepto_correccion": Documento.ConceptoNotaCredito.ANULACION,
+            "prefijo": "NC", "consecutivo": 1, "numero": "NC1",
+        })
+        self.assertTrue(payload["numero_resolucion"])
+
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            errores_por_campo(resp),
+            {"numero_resolucion": [mensaje_resolucion_no_aplica(tipo)]},
+        )
+        self.assertFalse(Documento.objects.filter(documento_tipo=tipo).exists())
 
     def test_el_id_de_la_resolucion_no_se_acepta_al_crear(self):
         """Mandar el id no numera: el campo ya no existe en la creación.
@@ -392,9 +631,10 @@ class DocumentoAPITests(APITestCase):
 
         resp = self.client.post("/api/documentos/documento/", payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            errores_por_campo(resp), {"resolucion": [MENSAJE_CAMPO_DESCONOCIDO]}
-        )
+        self.assertEqual(errores_por_campo(resp), {
+            "resolucion": [MENSAJE_CAMPO_DESCONOCIDO],
+            "numero_resolucion": [str(Field.default_error_messages["required"])],
+        })
 
     def test_numero_de_resolucion_inexistente(self):
         payload = self._payload_documento()

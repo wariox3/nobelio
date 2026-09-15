@@ -297,7 +297,9 @@ curl -X POST http://localhost:8000/api/documentos/documento/ \
       "tipo_organizacion": 1, "pais": 1
     },
     "prefijo": "SETP", "consecutivo": 990000001, "numero": "SETP990000001",
-    "fecha_emision": "2026-06-21", "hora_emision": "10:00:00",
+    "fecha_emision": "<fecha-de-hoy>",
+    "forma_pago": "<id-contado>", "medio_pago": "<id-medio>",
+    "fecha_vencimiento": null,
     "moneda": 1,
     "detalles": [
       {

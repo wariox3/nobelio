@@ -21,6 +21,7 @@ from apps.documentos.tests_utils import (
 )
 from apps.emisores.models import Emisor
 from apps.seguridad.models import LlaveApi
+from apps.nomina.tests_utils import crear_catalogos_de_pago
 from apps.nucleo.tests_utils import errores_por_campo
 
 Usuario = get_user_model()
@@ -237,7 +238,10 @@ class AlcanceDeDocumentosTests(AlcanceBase):
                 "pais": c["colombia"].id,
             },
             "prefijo": "SETP", "consecutivo": 1, "numero": "SETP1",
-            "fecha_emision": "2024-01-10", "hora_emision": "10:00:00",
+            "fecha_emision": "2024-01-10",
+            "forma_pago": crear_catalogos_de_pago()[0].id,
+            "medio_pago": crear_catalogos_de_pago()[1].id,
+            "fecha_vencimiento": None,
             "moneda": c["cop"].id,
             "detalles": [
                 {

@@ -42,6 +42,14 @@ def mensaje_sin_resolucion(tipo):
         f"{tipo.nombre} debe indicar el número de una resolución activa del emisor."
     )
 
+
+def mensaje_resolucion_no_aplica(tipo):
+    """Mensaje para un documento que no se numera con resolución y trae una."""
+    return (
+        f"{tipo.nombre} no se numera con resolución: envíe `numero_resolucion` "
+        "vacío."
+    )
+
 # Tipos cuyo XML se construye con DiscrepancyResponse y BillingReference: sin
 # el documento corregido no hay nota que valga (ver `_ConstructorNotaUBL`). La
 # lista vive en el modelo porque `generar_y_firmar` exige lo mismo al emitir.
@@ -88,6 +96,14 @@ MENSAJE_CREDITO_SIN_VENCIMIENTO = (
 MENSAJE_VENCIMIENTO_ANTERIOR_A_EMISION = (
     "La fecha de vencimiento no puede ser anterior a la de emisión."
 )
+
+
+def mensaje_vencimiento_en_nota(tipo):
+    """Mensaje para una nota que trae fecha de vencimiento."""
+    return (
+        f"{tipo.nombre} no lleva fecha de vencimiento: envíe `fecha_vencimiento` "
+        "en null."
+    )
 
 
 def mensaje_nota_sin_referencia(tipo):
@@ -283,9 +299,14 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
     # Solo el P.O.S. lo lleva; lo comprueba `_validar_pos`, que es quien conoce
     # el tipo de documento.
     pos = DocumentoPOSSerializer(required=False)
-    # Opcional porque solo la factura se numera con resolución: la nota lleva
-    # su propia numeración y su XML ni siquiera incluye el InvoiceControl.
-    numero_resolucion = serializers.CharField(write_only=True, required=False)
+    # Clave obligatoria en todos los tipos, como `prefijo`, pero admite `""`:
+    # solo la factura, el documento soporte y el P.O.S. se numeran con
+    # resolución, y las notas —que llevan su propia numeración y cuyo XML ni
+    # siquiera incluye el InvoiceControl— la mandan vacía. Que un tipo con
+    # resolución la traiga con valor, y una nota vacía, lo exige `validate()`.
+    numero_resolucion = serializers.CharField(
+        write_only=True, required=True, allow_blank=True,
+    )
     adquiriente = AdquirienteSerializer()
     # Todo lo que se referencia se busca solo dentro del alcance del
     # solicitante: un id de otra cuenta responde igual que uno inexistente.
@@ -299,7 +320,7 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
         fields = [
             "id", "documento_tipo", "emisor", "numero_resolucion",
             "adquiriente", "prefijo", "consecutivo", "numero",
-            "fecha_emision", "hora_emision", "moneda", "forma_pago", "medio_pago",
+            "fecha_emision", "moneda", "forma_pago", "medio_pago",
             "total_descuentos", "descuentos_motivo",
             "total_cargos", "cargos_motivo", "documento_referencia",
             "concepto_correccion", "fecha_vencimiento",
@@ -307,6 +328,29 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
             "orden_compra_documento",
             "observaciones", "detalles", "pos",
         ]
+        # La clave `prefijo` es obligatoria aunque admita vacío: la DIAN autoriza
+        # numeraciones sin prefijo, y para ellas se manda `""`. Omitirla no
+        # puede ser la forma de decirlo, igual que un importe en cero se manda.
+        # Que coincida con el de la resolución lo comprueba `validate()`.
+        #
+        # `fecha_emision` es obligatoria aunque el modelo tenga la de hoy por
+        # defecto, y además tiene que ser hoy (`validate_fecha_emision`). La
+        # hora no está en la lista: la pone `generar_y_firmar` con la de la
+        # firma, así que la que mandara el ERP se descartaba sin avisar.
+        #
+        # `forma_pago` y `medio_pago` también, y sin nulo: si faltaban, el XML
+        # salía como contado en efectivo, y una venta a crédito sin forma de
+        # pago se emitía como contado sin que la regla del vencimiento llegara a
+        # aplicarse. `fecha_vencimiento` es obligatoria como clave pero admite
+        # null: una nota tiene que mandarlo así, y en un contado la fecha que
+        # venga se descarta (`_validar_vencimiento`).
+        extra_kwargs = {
+            "prefijo": {"required": True, "allow_blank": True},
+            "fecha_emision": {"required": True},
+            "forma_pago": {"required": True, "allow_null": False},
+            "medio_pago": {"required": True, "allow_null": False},
+            "fecha_vencimiento": {"required": True, "allow_null": True},
+        }
         # Mensaje propio para la unicidad (emisor+prefijo+consecutivo+tipo) en vez
         # del genérico "deben formar un conjunto único".
         validators = [
@@ -354,6 +398,17 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
             # Falta el emisor: ya lo reporta la validación de campo obligatorio.
             return attrs
         tipo = attrs.get("documento_tipo") or getattr(self.instance, "documento_tipo", None)
+        # Una nota con resolución no es un dato de más que se pueda ignorar: se
+        # buscaba, se le asociaba y su prefijo y rango se validaban contra ella,
+        # cuando la nota tiene su propia numeración.
+        if (
+            numero_resolucion
+            and tipo is not None
+            and tipo.codigo not in TIPOS_CON_RESOLUCION
+        ):
+            raise serializers.ValidationError(
+                {"numero_resolucion": mensaje_resolucion_no_aplica(tipo)}
+            )
         if numero_resolucion:
             attrs["resolucion"] = self._resolucion_por_numero(
                 emisor, numero_resolucion, attrs, tipo,
@@ -379,7 +434,7 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
                 {"documento_referencia": mensaje_nota_sin_referencia(tipo)}
             )
         self._validar_concepto(attrs, tipo)
-        self._validar_vencimiento(attrs)
+        self._validar_vencimiento(attrs, tipo)
         self._validar_direccion_vendedor(attrs, tipo)
 
         resolucion = attrs.get("resolucion") or getattr(self.instance, "resolucion", None)
@@ -534,11 +589,17 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
                 {"adquiriente": mensaje_vendedor_sin_direccion(faltantes)}
             )
 
-    def _validar_vencimiento(self, attrs):
-        """El plazo de pago: obligatorio a crédito, coherente siempre.
+    def _validar_vencimiento(self, attrs, tipo):
+        """El plazo de pago: solo a crédito, obligatorio ahí, coherente siempre.
 
         La DIAN exige el ``DueDate`` cuando la venta es a crédito, y sin campo
         que lo lleve el documento saldría sin él y lo rechazarían al enviarlo.
+
+        En contado se descarta, por decisión de MarioA: antes llegaba al XML con
+        ``DueDate`` y ``PaymentDueDate``, contradiciendo su propia forma de pago,
+        y ahora se guarda en nulo —la respuesta lo muestra así—. En las notas sí
+        se rechaza: su UBL no tiene ``DueDate``, pero ``PaymentMeans`` es común a
+        todos los tipos, así que la fecha salía a medias en ``PaymentDueDate``.
         """
         def dato(campo):
             if campo in attrs:
@@ -546,8 +607,18 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
             return getattr(self.instance, campo, None)
 
         vencimiento = dato("fecha_vencimiento")
+        if tipo is not None and tipo.codigo in TIPOS_QUE_EXIGEN_REFERENCIA:
+            if vencimiento is not None:
+                raise serializers.ValidationError(
+                    {"fecha_vencimiento": mensaje_vencimiento_en_nota(tipo)}
+                )
+            return
+
         forma_pago = dato("forma_pago")
         es_credito = forma_pago is not None and forma_pago.codigo == CODIGO_FORMA_PAGO_CREDITO
+        if not es_credito and vencimiento is not None:
+            attrs["fecha_vencimiento"] = None
+            return
         if es_credito and vencimiento is None:
             raise serializers.ValidationError(
                 {"fecha_vencimiento": MENSAJE_CREDITO_SIN_VENCIMIENTO}

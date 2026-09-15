@@ -802,11 +802,28 @@ va en la firma y el envío (**D3**), y puede leer la propia tabla de documentos.
    dato (resolución, referencia, `pos`, conceptos) siguen en `validate()`. Los
    importes de cada línea (`cantidad`, `valor_unitario`, `valor_total`) y de cada
    impuesto (`base_gravable`, `tarifa`, `valor`) pasan a ser obligatorios en la
-   petición: el modelo los dejaba en cero si no venían. Tiene que hacerlo la raíz porque DRF valida cada anidado en medio de
+   petición: el modelo los dejaba en cero si no venían. Las claves `prefijo` y
+   `numero_resolucion` también, en todos los tipos, admitiendo `""`: sin prefijo
+   en las numeraciones que no lo llevan y sin resolución en las notas. Que el
+   valor cuadre con el tipo y la resolución sigue siendo de `validate()`, que
+   ahora además rechaza una nota que traiga resolución: antes se le asociaba y
+   su prefijo y rango se validaban contra ella. `fecha_emision` pasa a ser
+   obligatoria (y sigue teniendo que ser hoy), y `hora_emision` sale de la
+   creación: `generar_y_firmar` la reescribe con la hora de la firma, así que la
+   del ERP se descartaba sin avisar. Mandarla es ahora un campo desconocido.
+   `forma_pago` y `medio_pago` son obligatorias y sin nulo —si faltaban, el XML
+   salía como contado en efectivo, y un crédito sin forma de pago se emitía
+   como contado sin pasar por la regla del vencimiento—, y `fecha_vencimiento`
+   es obligatoria como clave con `null` admitido. Reglas: a crédito, fecha y no
+   anterior a la emisión; en contado, la que venga se descarta y se guarda en
+   `null` (decisión de MarioA: antes salía con `DueDate` contradiciendo su forma
+   de pago); en las notas, `null` o 400, porque la emitían a medias en
+   `PaymentDueDate`. Ninguna de estas
+   reglas tenía pruebas. Tiene que hacerlo la raíz porque DRF valida cada anidado en medio de
    los campos del padre. El mixin no lleva docstring porque
    drf-spectacular publica en `schema.yml` la primera que encuentra en la MRO.
    Una prueba cambió de expectativa: mandar `resolucion` por id responde ahora
-   por ese campo y no por el `numero_resolucion` que falta. **413 en verde.**
+   por ese campo y no por el `numero_resolucion` que falta. **430 en verde.**
 2. **Duplicado → 409 con el id del existente**, siempre: la clave es emisor +
    número, y el emisor ya está dentro del alcance.
 3. **El `IntegrityError` de dos creaciones simultáneas** → el mismo 409, no un
