@@ -17,6 +17,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from apps.nucleo.api import cuerpo_de_error
 from apps.nucleo.esquema import DetalleSerializer, ErrorSerializer
 from apps.seguridad import mfa as servicio_mfa
 from apps.seguridad import sesion as servicio_sesion
@@ -90,17 +91,16 @@ class SesionView(APIView):
         )
         if usuario is None:
             return Response(
-                {"detail": "Credenciales inválidas.", "errores": {}},
+                cuerpo_de_error("Credenciales inválidas.", "credenciales_invalidas"),
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
         if not usuario.is_verified:
             return Response(
-                {
-                    "detail": "Tienes que confirmar tu correo antes de iniciar "
-                              "sesión.",
-                    "errores": {},
-                },
+                cuerpo_de_error(
+                    "Tienes que confirmar tu correo antes de iniciar sesión.",
+                    "correo_sin_confirmar",
+                ),
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -170,7 +170,7 @@ class SesionMfaView(APIView):
             )
         except servicio_mfa.ErrorMfa as exc:
             return Response(
-                {"detail": str(exc), "errores": {}},
+                cuerpo_de_error(str(exc), "mfa_invalido"),
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
@@ -206,7 +206,7 @@ class SesionMfaReenviarView(APIView):
             servicio_mfa.reenviar_codigo(serializer.validated_data["mfa_token"])
         except servicio_mfa.ErrorMfa as exc:
             return Response(
-                {"detail": str(exc), "errores": {}},
+                cuerpo_de_error(str(exc), "mfa_invalido"),
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return Response({"detail": "Código reenviado."})
@@ -237,7 +237,7 @@ class RefrescoView(APIView):
         crudo = request.COOKIES.get(COOKIE_REFRESCO)
         if not crudo:
             return Response(
-                {"detail": "No hay sesión que renovar.", "errores": {}},
+                cuerpo_de_error("No hay sesión que renovar.", "sin_sesion"),
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
@@ -252,11 +252,11 @@ class RefrescoView(APIView):
                 refresco.payload.get("iat")
             if inicio and timezone.now().timestamp() - inicio > _SESION_MAXIMA:
                 return Response(
-                    {
-                        "detail": "La sesión alcanzó su duración máxima. "
-                                  "Inicia sesión de nuevo.",
-                        "errores": {},
-                    },
+                    cuerpo_de_error(
+                        "La sesión alcanzó su duración máxima. "
+                        "Inicia sesión de nuevo.",
+                        "sesion_expirada",
+                    ),
                     status=status.HTTP_401_UNAUTHORIZED,
                 )
 
@@ -271,7 +271,7 @@ class RefrescoView(APIView):
             nuevo = str(refresco)
         except TokenError:
             return Response(
-                {"detail": "La sesión no es válida o expiró.", "errores": {}},
+                cuerpo_de_error("La sesión no es válida o expiró.", "sesion_invalida"),
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 

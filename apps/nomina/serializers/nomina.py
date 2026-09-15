@@ -150,9 +150,10 @@ class NominaCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
     contra la suma de los conceptos y, si no cuadran, se rechaza la creación.
 
     La estructura es estricta aquí, en el empleado y en cada concepto: una clave
-    que no sea un campo escribible responde 400 con esa clave en `errores`. Pesa
-    más que en la factura, porque las condiciones que no vienen se heredan del
-    empleado: un `sueldo` mal escrito no fallaría, se firmaría con el anterior.
+    que no sea un campo escribible —o un obligatorio que falte— responde 400 con
+    su código de error, antes de validar ningún dato. Pesa más que en la factura, porque las condiciones
+    que no vienen se heredan del empleado: un `sueldo` mal escrito no fallaría,
+    se firmaría con el anterior.
     """
 
     # Opcional aquí, obligatorio en ``_validar_conceptos``: quien decide si los

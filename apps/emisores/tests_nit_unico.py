@@ -21,6 +21,7 @@ from apps.emisores.models import Emisor, Resolucion
 from apps.emisores.serializers.emisor import MENSAJE_DUPLICADO
 from apps.nucleo.api import MENSAJE_GENERICO
 from apps.seguridad.models import Usuario
+from apps.nucleo.tests_utils import errores_por_campo
 
 NIT = "901192048"
 URL_RESOLUCIONES = "/api/emisores/resolucion/"
@@ -94,9 +95,9 @@ class NitUnicoTests(APITestCase):
         resp = self.client.post(URL_EMISORES, self.payload_emisor(), format="json")
 
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertNotIn("non_field_errors", resp.data["errores"])
+        self.assertNotIn("", errores_por_campo(resp))
         self.assertEqual(
-            resp.data["errores"]["numero_identificacion"],
+            errores_por_campo(resp)["numero_identificacion"],
             [MENSAJE_DUPLICADO.format(numero=NIT)],
         )
         self.assertEqual(resp.data["detail"], MENSAJE_GENERICO)
@@ -104,7 +105,7 @@ class NitUnicoTests(APITestCase):
     def test_el_mensaje_no_revela_de_quien_es_el_nit(self):
         """Decir quién lo tiene sería filtrar quién usa la plataforma."""
         resp = self.client.post(URL_EMISORES, self.payload_emisor(), format="json")
-        texto = str(resp.data["errores"]["numero_identificacion"])
+        texto = str(errores_por_campo(resp)["numero_identificacion"])
         self.assertNotIn(self.dueno.email, texto)
         self.assertNotIn("Semantica", texto.replace("Semantica Digital", ""))
 

@@ -273,8 +273,10 @@ emisor y se guarda su id. El `prefijo` y el `consecutivo` tienen que caber en lo
 que esa resolución autorizó, o la petición responde 400.
 
 La estructura es estricta: una clave que no sea un campo del documento —también
-dentro del `adquiriente`, las líneas y sus impuestos— responde 400 con su nombre
-en `errores`, en vez de descartarse. Un campo mal escrito no pasa en silencio.
+dentro del `adquiriente`, las líneas y sus impuestos— responde 400 con el código
+`campo_desconocido`, en vez de descartarse. Un campo mal escrito no pasa en silencio.
+Se comprueba antes que los datos, junto con los obligatorios que falten: si la
+estructura está mal, la respuesta solo trae eso.
 
 Los datos del `adquiriente` van **dentro de cada documento**: no hay cartera de
 clientes ni endpoint propio. Cada documento guarda su copia del receptor, que es

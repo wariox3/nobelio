@@ -12,6 +12,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.nucleo.api import cuerpo_de_error
 from apps.nucleo.esquema import DetalleSerializer, ErrorSerializer
 from apps.seguridad import mfa as servicio_mfa
 from apps.seguridad import recuperacion as servicio
@@ -89,7 +90,7 @@ class RestablecerView(APIView):
             usuario = servicio.usuario_de_token(serializer.validated_data["token"])
         except servicio.TokenInvalido as exc:
             return Response(
-                {"detail": str(exc), "errores": {}},
+                cuerpo_de_error(str(exc), "token_invalido"),
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

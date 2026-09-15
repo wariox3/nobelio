@@ -11,6 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.nucleo.api import cuerpo_de_error
 from apps.nucleo.esquema import DetalleSerializer, ErrorSerializer
 from apps.seguridad import mfa as servicio_mfa
 from apps.seguridad.models import METODO_TOTP, METODOS, MfaUsuario
@@ -200,7 +201,7 @@ class MfaConfirmarView(APIView):
         mfa = MfaUsuario.objects.filter(usuario=request.user).first()
         if mfa is None:
             return Response(
-                {"detail": "No hay un enrolamiento en curso.", "errores": {}},
+                cuerpo_de_error("No hay un enrolamiento en curso.", "sin_enrolamiento"),
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -218,7 +219,7 @@ class MfaConfirmarView(APIView):
                 valido = True
             except servicio_mfa.ErrorMfa as exc:
                 return Response(
-                    {"detail": str(exc), "errores": {}},
+                    cuerpo_de_error(str(exc), "mfa_invalido"),
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             finally:
@@ -226,7 +227,7 @@ class MfaConfirmarView(APIView):
 
         if not valido:
             return Response(
-                {"detail": "El código no es válido.", "errores": {}},
+                cuerpo_de_error("El código no es válido.", "codigo_invalido"),
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -271,7 +272,7 @@ class MfaDesactivarView(APIView):
         serializer.is_valid(raise_exception=True)
         if not request.user.check_password(serializer.validated_data["password"]):
             return Response(
-                {"detail": "La contraseña no es correcta.", "errores": {}},
+                cuerpo_de_error("La contraseña no es correcta.", "clave_incorrecta"),
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -310,7 +311,7 @@ class MfaCodigosRespaldoView(APIView):
         serializer.is_valid(raise_exception=True)
         if not request.user.check_password(serializer.validated_data["password"]):
             return Response(
-                {"detail": "La contraseña no es correcta.", "errores": {}},
+                cuerpo_de_error("La contraseña no es correcta.", "clave_incorrecta"),
                 status=status.HTTP_403_FORBIDDEN,
             )
         return Response({

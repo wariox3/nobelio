@@ -14,6 +14,7 @@ from rest_framework.test import APITestCase
 from apps.documentos.tests_utils import crear_usuario, crear_catalogos_minimos
 from apps.emisores.models import Emisor
 from apps.seguridad.models import Usuario
+from apps.nucleo.tests_utils import errores_por_campo
 
 URL_EMISORES = "/api/emisores/emisor/"
 _RUES = "apps.utilidades.rues.consultar_nit"
@@ -82,7 +83,7 @@ class AltaSinValidarRuesTests(APITestCase):
             URL_EMISORES, self.payload(municipio="99999"), format="json"
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("municipio", resp.data["errores"])
+        self.assertIn("municipio", errores_por_campo(resp))
 
     def test_mandar_el_id_en_vez_del_codigo_se_rechaza(self):
         resp = self.client.post(
@@ -91,7 +92,7 @@ class AltaSinValidarRuesTests(APITestCase):
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("municipio", resp.data["errores"])
+        self.assertIn("municipio", errores_por_campo(resp))
 
     def test_editar_el_nit_tampoco_consulta_el_rues(self):
         self.client.post(URL_EMISORES, self.payload(), format="json")

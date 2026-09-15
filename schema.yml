@@ -4939,7 +4939,11 @@ components:
 
         La estructura es estricta en todos los niveles: una clave que no sea un
         campo escribible —aquí o en el adquiriente, las líneas, sus impuestos o el
-        bloque `pos`— responde 400 con esa clave en `errores`, en vez de perderse.
+        bloque `pos`— responde 400 con el código `campo_desconocido`, en vez de
+        perderse.
+        Se comprueba antes que ningún dato, junto con los obligatorios que falten: si
+        la estructura está mal, la respuesta solo trae eso, y los errores de datos
+        salen en el intento siguiente.
 
         La resolución se indica siempre con `numero_resolucion` (el número que la
         DIAN le dio al emisor, lo único que este conoce); el id no se acepta. Los
@@ -5077,7 +5081,11 @@ components:
 
         La estructura es estricta en todos los niveles: una clave que no sea un
         campo escribible —aquí o en el adquiriente, las líneas, sus impuestos o el
-        bloque `pos`— responde 400 con esa clave en `errores`, en vez de perderse.
+        bloque `pos`— responde 400 con el código `campo_desconocido`, en vez de
+        perderse.
+        Se comprueba antes que ningún dato, junto con los obligatorios que falten: si
+        la estructura está mal, la respuesta solo trae eso, y los errores de datos
+        salen en el intento siguiente.
 
         La resolución se indica siempre con `numero_resolucion` (el número que la
         DIAN le dio al emisor, lo único que este conoce); el id no se acepta. Los
@@ -5298,11 +5306,14 @@ components:
           description: cac:InvoicePeriod/cbc:DescriptionCode.
           maxLength: 20
       required:
+      - cantidad
       - descripcion
       - id
       - impuestos
       - numero_linea
       - unidad_medida
+      - valor_total
+      - valor_unitario
     DocumentoDetalleImpuesto:
       type: object
       properties:
@@ -5329,9 +5340,12 @@ components:
           pattern: ^-?\d{0,16}(?:\.\d{0,2})?$
           title: Valor del impuesto
       required:
+      - base_gravable
       - id
+      - tarifa
       - tributo
       - tributo_codigo
+      - valor
     DocumentoDetalleImpuestoRequest:
       type: object
       properties:
@@ -5352,7 +5366,10 @@ components:
           pattern: ^-?\d{0,16}(?:\.\d{0,2})?$
           title: Valor del impuesto
       required:
+      - base_gravable
+      - tarifa
       - tributo
+      - valor
     DocumentoDetalleRequest:
       type: object
       properties:
@@ -5444,10 +5461,13 @@ components:
           description: cac:InvoicePeriod/cbc:DescriptionCode.
           maxLength: 20
       required:
+      - cantidad
       - descripcion
       - impuestos
       - numero_linea
       - unidad_medida
+      - valor_total
+      - valor_unitario
     DocumentoError:
       type: object
       properties:
@@ -7411,9 +7431,10 @@ components:
         contra la suma de los conceptos y, si no cuadran, se rechaza la creación.
 
         La estructura es estricta aquí, en el empleado y en cada concepto: una clave
-        que no sea un campo escribible responde 400 con esa clave en `errores`. Pesa
-        más que en la factura, porque las condiciones que no vienen se heredan del
-        empleado: un `sueldo` mal escrito no fallaría, se firmaría con el anterior.
+        que no sea un campo escribible —o un obligatorio que falte— responde 400 con
+        su código de error, antes de validar ningún dato. Pesa más que en la factura, porque las condiciones
+        que no vienen se heredan del empleado: un `sueldo` mal escrito no fallaría,
+        se firmaría con el anterior.
       properties:
         id:
           type: string
@@ -7605,9 +7626,10 @@ components:
         contra la suma de los conceptos y, si no cuadran, se rechaza la creación.
 
         La estructura es estricta aquí, en el empleado y en cada concepto: una clave
-        que no sea un campo escribible responde 400 con esa clave en `errores`. Pesa
-        más que en la factura, porque las condiciones que no vienen se heredan del
-        empleado: un `sueldo` mal escrito no fallaría, se firmaría con el anterior.
+        que no sea un campo escribible —o un obligatorio que falte— responde 400 con
+        su código de error, antes de validar ningún dato. Pesa más que en la factura, porque las condiciones
+        que no vienen se heredan del empleado: un `sueldo` mal escrito no fallaría,
+        se firmaría con el anterior.
       properties:
         emisor:
           type: integer
@@ -9062,13 +9084,26 @@ components:
           type: string
           description: Mensaje para mostrar a la persona.
         errores:
-          type: object
-          additionalProperties:
-            type: array
-            items:
-              type: string
-          description: 'Fallos por campo cuando el error es de validación: la clave
-            es el campo y el valor la lista de mensajes. Vacío en los demás casos.'
+          type: array
+          minItems: 1
+          items:
+            type: object
+            properties:
+              codigo:
+                type: string
+                description: Identificador estable del error.
+              mensaje:
+                type: string
+                description: Texto para la persona, con la ruta del campo delante
+                  cuando el error es de un campo.
+            required:
+            - codigo
+            - mensaje
+          description: 'Nunca vacía. Cada error trae `codigo`, que es lo que el cliente
+            mapea —los de DRF tal cual (`required`, `invalid`, `does_not_exist`, `not_found`…)
+            y los propios en español (`campo_desconocido`, `solicitud_invalida`…)—,
+            y `mensaje`, para la persona. Si el error es de un campo, su ruta va delante
+            del mensaje: `detalles[0].impuestos[0].tributo: Este campo es obligatorio.`'
       required:
       - detail
       - errores

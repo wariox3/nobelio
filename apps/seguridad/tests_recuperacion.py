@@ -10,6 +10,7 @@ from rest_framework.test import APIClient
 from apps.seguridad import mfa as servicio_mfa
 from apps.seguridad import recuperacion as servicio
 from apps.seguridad.models import METODO_TOTP, MfaUsuario
+from apps.nucleo.tests_utils import errores_por_campo
 
 Usuario = get_user_model()
 
@@ -112,7 +113,7 @@ class RestablecerTests(BaseRecuperacion):
                               {"token": self._token(), "password": "123"},
                               format="json")
         self.assertEqual(r.status_code, 400)
-        self.assertIn("password", r.data["errores"])
+        self.assertIn("password", errores_por_campo(r))
         self.usuario.refresh_from_db()
         self.assertTrue(self.usuario.check_password(CLAVE_VIEJA))
 

@@ -13,8 +13,11 @@ puede faltar. Las rutas cuelgan de `/api/`.
 > Ver [docs/autenticacion.md](autenticacion.md).
 >
 > Errores: todas las respuestas 4xx/5xx tienen el mismo cuerpo
-> `{"detail": "<mensaje>", "errores": {"<campo>": ["<msg>"]}}` (`errores` queda
-> `{}` cuando el error no es por campo). Lo normaliza `apps.nucleo.api.exception_handler`.
+> `{"detail": "<mensaje>", "errores": [{"codigo": "<código>", "mensaje": "<msg>"}]}`.
+> La lista nunca va vacía y el cliente decide por `codigo`. Cuando el error es de
+> un campo, su ruta va delante del mensaje
+> (`detalles[0].impuestos[0].tributo: Este campo es obligatorio.`). Lo normaliza
+> `apps.nucleo.api.exception_handler`.
 
 ---
 
@@ -183,8 +186,14 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
       Los totales se calculan al crear.
 - La estructura es **estricta**: una clave que no sea un campo escribible —en
   el documento, el `adquiriente`, los `detalles`, sus `impuestos` o el bloque
-  `pos`— responde 400 con esa clave en `errores` («Campo desconocido» o «Es de
-  solo lectura»). Antes se descartaba y el documento se creaba sin ese dato.
+  `pos`— responde 400 con el código `campo_desconocido` o `campo_solo_lectura`,
+  y una obligatoria que falte, con `required`.
+  Los importes de cada línea (`cantidad`, `valor_unitario`, `valor_total`) y de
+  cada impuesto (`base_gravable`, `tarifa`, `valor`) son obligatorios: un cero se
+  manda, no se deduce de que falte. Antes se descartaba y el documento se creaba sin ese dato.
+  Se comprueba **antes que ningún dato**, junto con los obligatorios que falten:
+  si la estructura está mal, la respuesta solo trae eso, y los errores de datos
+  salen en el intento siguiente.
   Vale igual para `POST /api/nomina/nomina/`, su `empleado` y sus `conceptos`.
 - La resolución se pide **siempre** por `numero_resolucion` (el número DIAN, que
   es lo que el emisor conoce); el id no se acepta al crear. Se busca entre las

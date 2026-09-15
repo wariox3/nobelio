@@ -268,7 +268,11 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
 
     La estructura es estricta en todos los niveles: una clave que no sea un
     campo escribible —aquí o en el adquiriente, las líneas, sus impuestos o el
-    bloque `pos`— responde 400 con esa clave en `errores`, en vez de perderse.
+    bloque `pos`— responde 400 con el código `campo_desconocido`, en vez de
+    perderse.
+    Se comprueba antes que ningún dato, junto con los obligatorios que falten: si
+    la estructura está mal, la respuesta solo trae eso, y los errores de datos
+    salen en el intento siguiente.
 
     La resolución se indica siempre con `numero_resolucion` (el número que la
     DIAN le dio al emisor, lo único que este conoce); el id no se acepta. Los

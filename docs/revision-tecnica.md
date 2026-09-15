@@ -795,11 +795,18 @@ va en la firma y el envío (**D3**), y puede leer la propia tabla de documentos.
    con 400 las claves que no son un campo escribible —desconocidas o de solo
    lectura— al crear documentos y nóminas y en todos sus anidados (adquiriente,
    líneas, impuestos, `pos`, empleado, conceptos). Antes DRF las descartaba: así
-   nació el P.O.S. del 2026-09-01 con los impuestos en cero. Los sobrantes se
-   informan junto con los errores de campo. El mixin no lleva docstring porque
+   nació el P.O.S. del 2026-09-01 con los impuestos en cero. **La estructura se
+   valida primero y sola**, por decisión de MarioA: la raíz recorre la petición
+   entera antes de validar ningún dato, y si sobra una clave o falta una
+   obligatoria la respuesta solo trae eso. Los obligatorios que dependen de otro
+   dato (resolución, referencia, `pos`, conceptos) siguen en `validate()`. Los
+   importes de cada línea (`cantidad`, `valor_unitario`, `valor_total`) y de cada
+   impuesto (`base_gravable`, `tarifa`, `valor`) pasan a ser obligatorios en la
+   petición: el modelo los dejaba en cero si no venían. Tiene que hacerlo la raíz porque DRF valida cada anidado en medio de
+   los campos del padre. El mixin no lleva docstring porque
    drf-spectacular publica en `schema.yml` la primera que encuentra en la MRO.
    Una prueba cambió de expectativa: mandar `resolucion` por id responde ahora
-   por ese campo y no por el `numero_resolucion` que falta. **401 en verde.**
+   por ese campo y no por el `numero_resolucion` que falta. **413 en verde.**
 2. **Duplicado → 409 con el id del existente**, siempre: la clave es emisor +
    número, y el emisor ya está dentro del alcance.
 3. **El `IntegrityError` de dos creaciones simultáneas** → el mismo 409, no un
@@ -812,6 +819,17 @@ va en la firma y el envío (**D3**), y puede leer la propia tabla de documentos.
    al pasarlas borra un tercio —con muchos emisores los contadores se reinician
    solos—, y cada petición hace un `SELECT COUNT(*)` contra la base remota. Redis
    o, como mínimo, subir `MAX_ENTRIES`.
+6. ~~Cuerpo de error plano.~~ Por decisión de MarioA, en **toda** la API:
+   `{"detail", "errores": [{"codigo", "mensaje"}]}`, sin campo aparte. Antes
+   `errores` era un objeto con la forma de la petición, que un cliente generado
+   no puede tipar. La ruta del campo va delante del mensaje
+   (`detalles[0].impuestos[0].tributo: …`), la lista nunca va vacía y los códigos
+   de DRF van tal cual; los propios, en español (`campo_desconocido`,
+   `campo_solo_lectura`, `credenciales_invalidas`…). Las vistas de sesión que
+   armaban su `Response` usan `cuerpo_de_error`. **Rompe el contrato**: frontend
+   y ERP cambian a la vez, confirmado. Las pruebas leen la lista con
+   `apps/nucleo/tests_utils.errores_por_campo`. Queda por hacer que las reglas de
+   `validate()` lleven un código propio: hoy salen todas como `invalid`.
 
 Anotado para la fase del envío, no para esta: el contador de archivos de P.O.S. y
 nómina se reserva dentro de la transacción de `enviar` y queda bloqueado durante

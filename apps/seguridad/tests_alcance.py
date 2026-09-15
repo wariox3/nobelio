@@ -21,6 +21,7 @@ from apps.documentos.tests_utils import (
 )
 from apps.emisores.models import Emisor
 from apps.seguridad.models import LlaveApi
+from apps.nucleo.tests_utils import errores_por_campo
 
 Usuario = get_user_model()
 
@@ -267,7 +268,7 @@ class AlcanceDeDocumentosTests(AlcanceBase):
             return re.sub(r"\d+", "N", str(errores))
 
         self.assertEqual(
-            sin_ids(con_ajeno.data["errores"]), sin_ids(con_inexistente.data["errores"])
+            sin_ids(errores_por_campo(con_ajeno)), sin_ids(errores_por_campo(con_inexistente))
         )
 
     def test_no_se_puede_referenciar_un_documento_de_otro_emisor(self):

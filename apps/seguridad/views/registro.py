@@ -11,6 +11,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.nucleo.api import cuerpo_de_error
 from apps.nucleo.esquema import DetalleSerializer, ErrorSerializer
 from apps.seguridad import aviso_usuario_nuevo, verificacion
 from apps.seguridad.serializers import (
@@ -108,7 +109,7 @@ class VerificarView(APIView):
             )
         except verificacion.TokenInvalido as exc:
             return Response(
-                {"detail": str(exc), "errores": {}},
+                cuerpo_de_error(str(exc), "token_invalido"),
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

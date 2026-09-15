@@ -10,6 +10,7 @@ from apps.emisores.models import Emisor, Resolucion, SoftwareDian
 from apps.emisores.servicios import RESOLUCION_SET_PRUEBAS
 from apps.nomina.tests_utils import crear_catalogos_de_pago
 from apps.nucleo.models import Ambiente
+from apps.nucleo.tests_utils import errores_por_campo
 
 
 def _crear_emisor(cat, nit="901192048"):
@@ -73,14 +74,14 @@ class SoftwareDianAPITests(APITestCase):
         del payload["tipo"]
         resp = self.client.post(self.url, payload, format="json")
         self.assertEqual(resp.status_code, 400)
-        self.assertIn("tipo", resp.data["errores"])
+        self.assertIn("tipo", errores_por_campo(resp))
 
     def test_pin_es_obligatorio(self):
         payload = self._payload()
         del payload["pin"]
         resp = self.client.post(self.url, payload, format="json")
         self.assertEqual(resp.status_code, 400)
-        self.assertIn("pin", resp.data["errores"])
+        self.assertIn("pin", errores_por_campo(resp))
 
     def test_filtra_por_emisor(self):
         SoftwareDian.objects.create(
@@ -110,7 +111,7 @@ class SoftwareDianAPITests(APITestCase):
         # El mensaje trae la ruta del que ya existe, para poder actualizarlo.
         self.assertIn(
             f"/api/emisores/software/{primero.data['id']}/",
-            resp.data["errores"]["tipo"][0],
+            errores_por_campo(resp)["tipo"][0],
         )
         self.assertEqual(SoftwareDian.objects.filter(emisor=self.emisor).count(), 1)
 

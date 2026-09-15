@@ -10,7 +10,8 @@ que la API es abierta y el botón «Authorize» de Swagger no serviría de nada,
 es la forma más rápida de que alguien concluya que la documentación miente.
 
 **El cuerpo de error.** `apps.nucleo.api.exception_handler` devuelve siempre la
-misma forma —`detail` y `errores`—, y eso es justo lo que un integrador necesita
+misma forma —`detail` y una lista `errores` de `{codigo, mensaje}`—, y eso es
+justo lo que un integrador necesita
 saber para escribir su manejo de errores una sola vez. Como no sale de ningún
 serializer, hay que declararlo.
 
@@ -67,6 +68,15 @@ class JwtDeCookieEsquema(OpenApiAuthenticationExtension):
         }
 
 
+DESCRIPCION_ERRORES = (
+    "Nunca vacía. Cada error trae `codigo`, que es lo que el cliente mapea —los "
+    "de DRF tal cual (`required`, `invalid`, `does_not_exist`, `not_found`…) y "
+    "los propios en español (`campo_desconocido`, `solicitud_invalida`…)—, y "
+    "`mensaje`, para la persona. Si el error es de un campo, su ruta va delante "
+    "del mensaje: `detalles[0].impuestos[0].tributo: Este campo es obligatorio.`"
+)
+
+
 class ErrorSerializer(serializers.Serializer):
     """El cuerpo que devuelve cualquier error de la API.
 
@@ -77,12 +87,9 @@ class ErrorSerializer(serializers.Serializer):
     detail = serializers.CharField(
         help_text="Mensaje para mostrar a la persona.",
     )
-    errores = serializers.DictField(
-        help_text=(
-            "Fallos por campo, cuando el error es de validación: la clave es el "
-            "campo y el valor la lista de mensajes. Vacío en los demás casos."
-        ),
-        child=serializers.ListField(child=serializers.CharField()),
+    errores = serializers.ListField(
+        help_text=DESCRIPCION_ERRORES,
+        child=serializers.DictField(child=serializers.CharField()),
     )
 
 
@@ -206,15 +213,26 @@ def documentar_errores(result, generator, request, public):
                 "description": "Mensaje para mostrar a la persona.",
             },
             "errores": {
-                "type": "object",
-                "additionalProperties": {
-                    "type": "array", "items": {"type": "string"},
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "codigo": {
+                            "type": "string",
+                            "description": "Identificador estable del error.",
+                        },
+                        "mensaje": {
+                            "type": "string",
+                            "description": (
+                                "Texto para la persona, con la ruta del campo "
+                                "delante cuando el error es de un campo."
+                            ),
+                        },
+                    },
+                    "required": ["codigo", "mensaje"],
                 },
-                "description": (
-                    "Fallos por campo cuando el error es de validación: la "
-                    "clave es el campo y el valor la lista de mensajes. Vacío "
-                    "en los demás casos."
-                ),
+                "description": DESCRIPCION_ERRORES,
             },
         },
         "required": ["detail", "errores"],

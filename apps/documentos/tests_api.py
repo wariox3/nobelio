@@ -10,6 +10,7 @@ from django.core.files.base import ContentFile
 from django.test import override_settings
 from django.utils import timezone
 from rest_framework import status
+from rest_framework.fields import Field
 from rest_framework.test import APITestCase
 
 from apps.dian.tests_firma import _generar_certificado
@@ -29,9 +30,13 @@ from apps.emisores.servicios import (
     MENSAJE_SIN_CERTIFICADO,
 )
 from apps.nucleo.serializers import (
+    CODIGO_CAMPO_DESCONOCIDO,
+    CODIGO_CAMPO_SOLO_LECTURA,
+    CODIGO_OBLIGATORIO,
     MENSAJE_CAMPO_DESCONOCIDO,
     MENSAJE_CAMPO_SOLO_LECTURA,
 )
+from apps.nucleo.tests_utils import codigos, errores_por_campo
 
 MEDIA_TEMP = tempfile.mkdtemp()
 
@@ -211,7 +216,7 @@ class DocumentoAPITests(APITestCase):
 
         resp = self.client.post("/api/documentos/documento/", payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("adquiriente", resp.data["errores"])
+        self.assertIn("adquiriente", errores_por_campo(resp))
 
     # --- La estructura de la petición es estricta ---------------------------
 
@@ -224,8 +229,9 @@ class DocumentoAPITests(APITestCase):
         resp = self.client.post("/api/documentos/documento/", payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
         self.assertEqual(
-            resp.data["errores"], {"fecha_vencimento": [MENSAJE_CAMPO_DESCONOCIDO]}
+            errores_por_campo(resp), {"fecha_vencimento": [MENSAJE_CAMPO_DESCONOCIDO]}
         )
+        self.assertEqual(codigos(resp), [CODIGO_CAMPO_DESCONOCIDO])
         self.assertEqual(Documento.objects.count(), antes)
 
     def test_un_campo_mal_escrito_en_un_impuesto_se_rechaza(self):
@@ -236,9 +242,77 @@ class DocumentoAPITests(APITestCase):
         resp = self.client.post("/api/documentos/documento/", payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
         self.assertEqual(
-            resp.data["errores"]["detalles"][0]["impuestos"][0],
-            {"porcentaje": [MENSAJE_CAMPO_DESCONOCIDO]},
+            errores_por_campo(resp),
+            {"detalles[0].impuestos[0].porcentaje": [MENSAJE_CAMPO_DESCONOCIDO]},
         )
+
+    def test_la_estructura_se_valida_antes_que_los_datos(self):
+        """Con una clave de más la respuesta solo trae eso.
+
+        Aquí el emisor no existe y la fecha no es la de hoy, dos errores que
+        la validación de campos informaría; no salen hasta que la estructura
+        esté bien, para no mezclar «lee otro contrato» con «un dato está mal».
+        """
+        payload = self._payload_documento()
+        payload["emisor"] = 999999
+        payload["fecha_emision"] = "2020-01-01"
+        payload["prueba"] = "x"
+
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(errores_por_campo(resp), {"prueba": [MENSAJE_CAMPO_DESCONOCIDO]})
+
+        del payload["prueba"]
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(set(errores_por_campo(resp)), {"emisor", "fecha_emision"})
+
+    def test_lo_que_sobra_y_lo_que_falta_salen_juntos(self):
+        """Los dos son la misma pregunta: ¿la petición sigue el contrato?"""
+        payload = self._payload_documento()
+        payload["prueba"] = "x"
+        del payload["moneda"]
+        del payload["detalles"][0]["impuestos"][0]["tributo"]
+
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        obligatorio = str(Field.default_error_messages["required"])
+        self.assertEqual(errores_por_campo(resp), {
+            "prueba": [MENSAJE_CAMPO_DESCONOCIDO],
+            "moneda": [obligatorio],
+            "detalles[0].impuestos[0].tributo": [obligatorio],
+        })
+        self.assertEqual(
+            sorted(codigos(resp)),
+            sorted([CODIGO_CAMPO_DESCONOCIDO, CODIGO_OBLIGATORIO, CODIGO_OBLIGATORIO]),
+        )
+
+    def test_los_importes_no_se_pueden_omitir(self):
+        """Antes un importe que no venía se guardaba en cero sin avisar."""
+        payload = self._payload_documento()
+        linea = payload["detalles"][0]
+        for campo in ("cantidad", "valor_unitario", "valor_total"):
+            del linea[campo]
+        for campo in ("base_gravable", "tarifa", "valor"):
+            del linea["impuestos"][0][campo]
+
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        obligatorio = str(Field.default_error_messages["required"])
+        self.assertEqual(errores_por_campo(resp), {
+            "detalles[0].cantidad": [obligatorio],
+            "detalles[0].valor_unitario": [obligatorio],
+            "detalles[0].valor_total": [obligatorio],
+            "detalles[0].impuestos[0].base_gravable": [obligatorio],
+            "detalles[0].impuestos[0].tarifa": [obligatorio],
+            "detalles[0].impuestos[0].valor": [obligatorio],
+        })
+
+    def test_el_descuento_de_la_linea_sigue_siendo_opcional(self):
+        payload = self._payload_documento()
+        self.assertNotIn("descuento", payload["detalles"][0])
+
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
 
     def test_un_campo_de_solo_lectura_se_rechaza(self):
         """Lo que devuelve la lectura no se puede reenviar tal cual al crear."""
@@ -248,9 +322,10 @@ class DocumentoAPITests(APITestCase):
         resp = self.client.post("/api/documentos/documento/", payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
         self.assertEqual(
-            resp.data["errores"]["detalles"][0]["impuestos"][0],
-            {"tributo_codigo": [MENSAJE_CAMPO_SOLO_LECTURA]},
+            errores_por_campo(resp),
+            {"detalles[0].impuestos[0].tributo_codigo": [MENSAJE_CAMPO_SOLO_LECTURA]},
         )
+        self.assertEqual(codigos(resp), [CODIGO_CAMPO_SOLO_LECTURA])
 
     def test_el_documento_no_se_edita(self):
         """Ni `PUT` ni `PATCH`, en ningún estado.
@@ -301,7 +376,7 @@ class DocumentoAPITests(APITestCase):
 
         resp = self.client.post("/api/documentos/documento/", payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("numero_resolucion", resp.data["errores"])
+        self.assertIn("numero_resolucion", errores_por_campo(resp))
         self.assertFalse(Documento.objects.filter(consecutivo=990000130).exists())
 
     def test_el_id_de_la_resolucion_no_se_acepta_al_crear(self):
@@ -318,7 +393,7 @@ class DocumentoAPITests(APITestCase):
         resp = self.client.post("/api/documentos/documento/", payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(
-            resp.data["errores"], {"resolucion": [MENSAJE_CAMPO_DESCONOCIDO]}
+            errores_por_campo(resp), {"resolucion": [MENSAJE_CAMPO_DESCONOCIDO]}
         )
 
     def test_numero_de_resolucion_inexistente(self):
@@ -328,7 +403,7 @@ class DocumentoAPITests(APITestCase):
         resp = self.client.post("/api/documentos/documento/", payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(
-            resp.data["errores"]["numero_resolucion"],
+            errores_por_campo(resp)["numero_resolucion"],
             [MENSAJE_RESOLUCION_NO_ENCONTRADA],
         )
 
@@ -363,7 +438,7 @@ class DocumentoAPITests(APITestCase):
         resp = self._crear()
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(
-            resp.data["errores"]["numero_resolucion"],
+            errores_por_campo(resp)["numero_resolucion"],
             [MENSAJE_RESOLUCION_NO_ENCONTRADA],
         )
 
@@ -395,7 +470,7 @@ class DocumentoAPITests(APITestCase):
         resp = self.client.post("/api/documentos/documento/", payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(
-            resp.data["errores"]["numero_resolucion"], [MENSAJE_RESOLUCION_AMBIGUA]
+            errores_por_campo(resp)["numero_resolucion"], [MENSAJE_RESOLUCION_AMBIGUA]
         )
         self.assertTrue(Resolucion.objects.filter(pk=gemela.pk).exists())
 
@@ -409,7 +484,7 @@ class DocumentoAPITests(APITestCase):
         resp = self.client.post("/api/documentos/documento/", payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(
-            resp.data["errores"]["prefijo"],
+            errores_por_campo(resp)["prefijo"],
             [mensaje_prefijo_ajeno(self.documento.resolucion)],
         )
         self.assertFalse(Documento.objects.filter(consecutivo=990000130).exists())
@@ -423,7 +498,7 @@ class DocumentoAPITests(APITestCase):
         resp = self.client.post("/api/documentos/documento/", payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(
-            resp.data["errores"]["consecutivo"],
+            errores_por_campo(resp)["consecutivo"],
             [mensaje_consecutivo_fuera_de_rango(resolucion)],
         )
 
@@ -442,7 +517,7 @@ class DocumentoAPITests(APITestCase):
         Certificado.objects.filter(emisor=self.emisor).delete()
         resp = self._crear()
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(resp.data["errores"]["emisor"], [MENSAJE_SIN_CERTIFICADO])
+        self.assertEqual(errores_por_campo(resp)["emisor"], [MENSAJE_SIN_CERTIFICADO])
         self.assertFalse(Documento.objects.filter(consecutivo=990000130).exists())
 
     def test_no_se_crea_con_el_certificado_vencido(self):
@@ -452,7 +527,7 @@ class DocumentoAPITests(APITestCase):
 
         resp = self._crear()
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("venció", resp.data["errores"]["emisor"][0])
+        self.assertIn("venció", errores_por_campo(resp)["emisor"][0])
 
     def test_no_se_crea_si_el_certificado_aun_no_rige(self):
         certificado = Certificado.objects.get(emisor=self.emisor)
@@ -461,7 +536,7 @@ class DocumentoAPITests(APITestCase):
 
         resp = self._crear()
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("no rige hasta", resp.data["errores"]["emisor"][0])
+        self.assertIn("no rige hasta", errores_por_campo(resp)["emisor"][0])
 
     def test_se_crea_con_el_certificado_en_vigencia(self):
         certificado = Certificado.objects.get(emisor=self.emisor)
@@ -477,7 +552,7 @@ class DocumentoAPITests(APITestCase):
 
         resp = self._crear()
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(resp.data["errores"]["emisor"], [MENSAJE_EMISOR_INACTIVO])
+        self.assertEqual(errores_por_campo(resp)["emisor"], [MENSAJE_EMISOR_INACTIVO])
 
 
 class CatalogoAPITests(APITestCase):

@@ -11,6 +11,12 @@ class DocumentoDetalleImpuestoSerializer(EstructuraEstricta, serializers.ModelSe
     class Meta:
         model = DocumentoDetalleImpuesto
         fields = ["id", "tributo", "tributo_codigo", "base_gravable", "tarifa", "valor"]
+        # El modelo los deja en cero por defecto, y así un importe que no venía
+        # se guardaba como un cero que nadie había informado. Se exigen en la
+        # petición: cero es un valor que se manda, no lo que queda si se olvida.
+        extra_kwargs = {
+            campo: {"required": True} for campo in ("base_gravable", "tarifa", "valor")
+        }
 
 
 class DocumentoDetalleSerializer(EstructuraEstricta, serializers.ModelSerializer):
@@ -27,3 +33,9 @@ class DocumentoDetalleSerializer(EstructuraEstricta, serializers.ModelSerializer
             "periodo_desde", "periodo_hasta",
             "periodo_descripcion", "periodo_descripcion_codigo",
         ]
+        # Como en el impuesto: los importes de la línea no se pueden omitir. El
+        # `descuento` sí, porque una línea sin descuento es lo normal.
+        extra_kwargs = {
+            campo: {"required": True}
+            for campo in ("cantidad", "valor_unitario", "valor_total")
+        }

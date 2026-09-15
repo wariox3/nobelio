@@ -16,7 +16,12 @@ from apps.documentos.models import DocumentoEstado
 from apps.emisores.models import Certificado
 from apps.nomina.models import Nomina
 from apps.nomina.tests_utils import crear_emisor_de_nomina, crear_nomina
-from apps.nucleo.serializers import MENSAJE_CAMPO_DESCONOCIDO
+from apps.nucleo.serializers import (
+    CODIGO_CAMPO_DESCONOCIDO,
+    CODIGO_OBLIGATORIO,
+    MENSAJE_CAMPO_DESCONOCIDO,
+)
+from apps.nucleo.tests_utils import codigos, errores_por_campo
 
 
 # El parcheo apunta a `servicios_nomina` y no a `servicios`: el pipeline de
@@ -242,25 +247,26 @@ class NominaAlcanceTests(NominaAPIBase):
 
 
 class NominaEstructuraTests(NominaAPIBase):
-    def test_los_campos_mal_escritos_se_rechazan_en_todos_los_niveles(self):
+    def test_la_estructura_se_rechaza_en_todos_los_niveles(self):
         """En la nómina un campo perdido no falla: hereda el valor del maestro.
 
         Un `sueldo` mal escrito en la nómina o en el empleado haría firmar con
-        el sueldo que ya tuviera guardado el trabajador. Los sobrantes se
-        informan junto con lo que falta, para corregirlo todo en una vuelta.
+        el sueldo que ya tuviera guardado el trabajador. Lo que sobra sale junto
+        con los obligatorios que faltan, y nada más: el `grupo` inventado es un
+        error de datos y no se informa hasta que la estructura esté bien.
         """
         resp = self.client.post("/api/nomina/nomina/", {
             "emisor": self.emisor.id,
             "sueldoo": "1500000",
             "empleado": {"numero_documento": "123", "sueldoo": "1500000"},
-            "conceptos": [{"grupo": "devengado", "valorr": "1500000"}],
+            "conceptos": [{"grupo": "no-existe", "valorr": "1500000"}],
         }, format="json")
 
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
-        errores = resp.data["errores"]
+        errores = errores_por_campo(resp)
         self.assertEqual(errores["sueldoo"], [MENSAJE_CAMPO_DESCONOCIDO])
-        self.assertEqual(errores["empleado"]["sueldoo"], [MENSAJE_CAMPO_DESCONOCIDO])
+        self.assertEqual(errores["empleado.sueldoo"], [MENSAJE_CAMPO_DESCONOCIDO])
+        self.assertEqual(errores["conceptos[0].valorr"], [MENSAJE_CAMPO_DESCONOCIDO])
         self.assertEqual(
-            errores["conceptos"][0]["valorr"], [MENSAJE_CAMPO_DESCONOCIDO]
+            set(codigos(resp)), {CODIGO_CAMPO_DESCONOCIDO, CODIGO_OBLIGATORIO}
         )
-        self.assertTrue(set(errores) - {"sueldoo", "empleado", "conceptos"})

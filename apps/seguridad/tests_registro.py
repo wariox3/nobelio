@@ -8,6 +8,7 @@ from rest_framework.test import APIClient
 
 from apps.documentos.tests_utils import crear_catalogos_minimos, crear_usuario
 from apps.seguridad import verificacion
+from apps.nucleo.tests_utils import errores_por_campo
 
 Usuario = get_user_model()
 
@@ -72,12 +73,12 @@ class RegistroTests(TestCase):
         self._registrar()
         r = self._registrar()
         self.assertEqual(r.status_code, 400)
-        self.assertIn("email", r.data["errores"])
+        self.assertIn("email", errores_por_campo(r))
 
     def test_contrasena_debil_se_rechaza(self):
         r = self._registrar(password="123")
         self.assertEqual(r.status_code, 400)
-        self.assertIn("password", r.data["errores"])
+        self.assertIn("password", errores_por_campo(r))
         self.assertFalse(Usuario.objects.filter(email="ana@empresa.co").exists())
 
     def test_si_el_correo_no_sale_la_cuenta_igual_queda(self):

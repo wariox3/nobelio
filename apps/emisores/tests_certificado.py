@@ -18,6 +18,7 @@ from rest_framework.test import APIClient, APITestCase
 from apps.documentos.tests_utils import crear_catalogos_minimos
 from apps.emisores.models import Certificado, Emisor
 from apps.utilidades import almacenamiento
+from apps.nucleo.tests_utils import errores_por_campo
 
 _TMP_MEDIA = tempfile.mkdtemp()
 
@@ -211,8 +212,8 @@ class CertificadoAPITests(APITestCase):
             self.url_cargar, {"emisor": self.emisor.id}, format="multipart"
         )
         self.assertEqual(resp.status_code, 400)
-        self.assertIn("clave", resp.data["errores"])
-        self.assertIn("archivo", resp.data["errores"])
+        self.assertIn("clave", errores_por_campo(resp))
+        self.assertIn("archivo", errores_por_campo(resp))
 
     def test_post_generico_deshabilitado(self):
         # La creación genérica está bloqueada: solo se sube por 'cargar'.
