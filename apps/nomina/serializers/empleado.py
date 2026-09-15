@@ -3,6 +3,7 @@ from rest_framework import serializers
 
 from apps.emisores.models import Emisor
 from apps.nomina.models import Empleado
+from apps.nucleo.serializers import EstructuraEstricta
 from apps.seguridad.alcance import RelacionDelAlcance
 
 
@@ -42,13 +43,18 @@ class EmpleadoSerializer(serializers.ModelSerializer):
         read_only_fields = ["creado_en", "actualizado_en"]
 
 
-class EmpleadoAnidadoSerializer(EmpleadoSerializer):
+class EmpleadoAnidadoSerializer(EstructuraEstricta, EmpleadoSerializer):
     """El empleado tal como viaja dentro de la nómina.
 
     Igual que el de su endpoint pero sin ``emisor`` —lo pone la nómina, que ya
     lo trae— y sin el validador de unicidad, porque aquí el par emisor +
     identificación no identifica un error sino al empleado que hay que crear o
     actualizar: la nómina hace ese *upsert* al guardarse.
+
+    Estricto: una clave que no sea un campo escribible responde 400. Aquí
+    importa más que en el endpoint del empleado, porque un campo mal escrito
+    haría heredar a la nómina el valor viejo del maestro sin que nadie se
+    enterara.
     """
 
     class Meta(EmpleadoSerializer.Meta):

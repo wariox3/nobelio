@@ -2,9 +2,10 @@
 from rest_framework import serializers
 
 from apps.documentos.models import Adquiriente
+from apps.nucleo.serializers import EstructuraEstricta
 
 
-class AdquirienteSerializer(serializers.ModelSerializer):
+class AdquirienteSerializer(EstructuraEstricta, serializers.ModelSerializer):
     """Datos del receptor. No tiene endpoint propio: se piden en el documento."""
 
     class Meta:

@@ -4937,6 +4937,10 @@ components:
 
         Calcula automáticamente los totales a partir de los detalles.
 
+        La estructura es estricta en todos los niveles: una clave que no sea un
+        campo escribible —aquí o en el adquiriente, las líneas, sus impuestos o el
+        bloque `pos`— responde 400 con esa clave en `errores`, en vez de perderse.
+
         La resolución se indica siempre con `numero_resolucion` (el número que la
         DIAN le dio al emisor, lo único que este conoce); el id no se acepta. Los
         datos del `adquiriente` van anidados en cada documento y se guardan con él.
@@ -5070,6 +5074,10 @@ components:
         Serializer de creación con detalles e impuestos anidados.
 
         Calcula automáticamente los totales a partir de los detalles.
+
+        La estructura es estricta en todos los niveles: una clave que no sea un
+        campo escribible —aquí o en el adquiriente, las líneas, sus impuestos o el
+        bloque `pos`— responde 400 con esa clave en `errores`, en vez de perderse.
 
         La resolución se indica siempre con `numero_resolucion` (el número que la
         DIAN le dio al emisor, lo único que este conoce); el id no se acepta. Los
@@ -6583,6 +6591,11 @@ components:
         lo trae— y sin el validador de unicidad, porque aquí el par emisor +
         identificación no identifica un error sino al empleado que hay que crear o
         actualizar: la nómina hace ese *upsert* al guardarse.
+
+        Estricto: una clave que no sea un campo escribible responde 400. Aquí
+        importa más que en el endpoint del empleado, porque un campo mal escrito
+        haría heredar a la nómina el valor viejo del maestro sin que nadie se
+        enterara.
       properties:
         id:
           type: integer
@@ -6713,6 +6726,11 @@ components:
         lo trae— y sin el validador de unicidad, porque aquí el par emisor +
         identificación no identifica un error sino al empleado que hay que crear o
         actualizar: la nómina hace ese *upsert* al guardarse.
+
+        Estricto: una clave que no sea un campo escribible responde 400. Aquí
+        importa más que en el endpoint del empleado, porque un campo mal escrito
+        haría heredar a la nómina el valor viejo del maestro sin que nadie se
+        enterara.
       properties:
         tipo_identificacion:
           type: integer
@@ -7391,6 +7409,11 @@ components:
 
         Los totales llegan en la petición y **no se calculan**: se comprueban
         contra la suma de los conceptos y, si no cuadran, se rechaza la creación.
+
+        La estructura es estricta aquí, en el empleado y en cada concepto: una clave
+        que no sea un campo escribible responde 400 con esa clave en `errores`. Pesa
+        más que en la factura, porque las condiciones que no vienen se heredan del
+        empleado: un `sueldo` mal escrito no fallaría, se firmaría con el anterior.
       properties:
         id:
           type: string
@@ -7580,6 +7603,11 @@ components:
 
         Los totales llegan en la petición y **no se calculan**: se comprueban
         contra la suma de los conceptos y, si no cuadran, se rechaza la creación.
+
+        La estructura es estricta aquí, en el empleado y en cada concepto: una clave
+        que no sea un campo escribible responde 400 con esa clave en `errores`. Pesa
+        más que en la factura, porque las condiciones que no vienen se heredan del
+        empleado: un `sueldo` mal escrito no fallaría, se firmaría con el anterior.
       properties:
         emisor:
           type: integer

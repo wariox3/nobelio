@@ -272,6 +272,10 @@ es el que este conoce—; se busca entre las resoluciones **activas** de ese
 emisor y se guarda su id. El `prefijo` y el `consecutivo` tienen que caber en lo
 que esa resolución autorizó, o la petición responde 400.
 
+La estructura es estricta: una clave que no sea un campo del documento —también
+dentro del `adquiriente`, las líneas y sus impuestos— responde 400 con su nombre
+en `errores`, en vez de descartarse. Un campo mal escrito no pasa en silencio.
+
 Los datos del `adquiriente` van **dentro de cada documento**: no hay cartera de
 clientes ni endpoint propio. Cada documento guarda su copia del receptor, que es
 la que quedó firmada en el XML y entró en el CUFE.

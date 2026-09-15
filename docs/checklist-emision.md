@@ -181,6 +181,11 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
       `documento_tipo`, `emisor`, `numero_resolucion`, `adquiriente`, `moneda`,
       formas/medios de pago, y `detalles` (cada uno con sus `impuestos`/tributos).
       Los totales se calculan al crear.
+- La estructura es **estricta**: una clave que no sea un campo escribible —en
+  el documento, el `adquiriente`, los `detalles`, sus `impuestos` o el bloque
+  `pos`— responde 400 con esa clave en `errores` («Campo desconocido» o «Es de
+  solo lectura»). Antes se descartaba y el documento se creaba sin ese dato.
+  Vale igual para `POST /api/nomina/nomina/`, su `empleado` y sus `conceptos`.
 - La resolución se pide **siempre** por `numero_resolucion` (el número DIAN, que
   es lo que el emisor conoce); el id no se acepta al crear. Se busca entre las
   **activas** del emisor del documento; si el número está repetido (importado

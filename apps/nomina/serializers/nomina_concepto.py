@@ -2,9 +2,10 @@
 from rest_framework import serializers
 
 from apps.nomina.models import NominaConcepto
+from apps.nucleo.serializers import EstructuraEstricta
 
 
-class NominaConceptoSerializer(serializers.ModelSerializer):
+class NominaConceptoSerializer(EstructuraEstricta, serializers.ModelSerializer):
     """Un devengado o una deducción. Va anidado en la nómina.
 
     ``concepto`` es el discriminador interno, no un código de la DIAN: el anexo

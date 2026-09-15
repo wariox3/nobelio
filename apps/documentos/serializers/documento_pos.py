@@ -2,9 +2,10 @@
 from rest_framework import serializers
 
 from apps.documentos import models
+from apps.nucleo.serializers import EstructuraEstricta
 
 
-class DocumentoPOSSerializer(serializers.ModelSerializer):
+class DocumentoPOSSerializer(EstructuraEstricta, serializers.ModelSerializer):
     """Va anidado en el documento, como el adquiriente.
 
     Alimenta dos de las tres extensiones obligatorias del P.O.S. (DEPD11 y

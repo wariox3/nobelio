@@ -28,6 +28,10 @@ from apps.emisores.servicios import (
     MENSAJE_EMISOR_INACTIVO,
     MENSAJE_SIN_CERTIFICADO,
 )
+from apps.nucleo.serializers import (
+    MENSAJE_CAMPO_DESCONOCIDO,
+    MENSAJE_CAMPO_SOLO_LECTURA,
+)
 
 MEDIA_TEMP = tempfile.mkdtemp()
 
@@ -209,6 +213,45 @@ class DocumentoAPITests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("adquiriente", resp.data["errores"])
 
+    # --- La estructura de la petición es estricta ---------------------------
+
+    def test_un_campo_mal_escrito_no_crea_el_documento(self):
+        """Antes se descartaba en silencio y el documento nacía sin ese dato."""
+        payload = self._payload_documento()
+        payload["fecha_vencimento"] = timezone.localdate().isoformat()
+        antes = Documento.objects.count()
+
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            resp.data["errores"], {"fecha_vencimento": [MENSAJE_CAMPO_DESCONOCIDO]}
+        )
+        self.assertEqual(Documento.objects.count(), antes)
+
+    def test_un_campo_mal_escrito_en_un_impuesto_se_rechaza(self):
+        """El caso del P.O.S. del 2026-09-01: los impuestos con otro nombre."""
+        payload = self._payload_documento()
+        payload["detalles"][0]["impuestos"][0]["porcentaje"] = "19.00"
+
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            resp.data["errores"]["detalles"][0]["impuestos"][0],
+            {"porcentaje": [MENSAJE_CAMPO_DESCONOCIDO]},
+        )
+
+    def test_un_campo_de_solo_lectura_se_rechaza(self):
+        """Lo que devuelve la lectura no se puede reenviar tal cual al crear."""
+        payload = self._payload_documento()
+        payload["detalles"][0]["impuestos"][0]["tributo_codigo"] = "01"
+
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            resp.data["errores"]["detalles"][0]["impuestos"][0],
+            {"tributo_codigo": [MENSAJE_CAMPO_SOLO_LECTURA]},
+        )
+
     def test_el_documento_no_se_edita(self):
         """Ni `PUT` ni `PATCH`, en ningún estado.
 
@@ -262,14 +305,21 @@ class DocumentoAPITests(APITestCase):
         self.assertFalse(Documento.objects.filter(consecutivo=990000130).exists())
 
     def test_el_id_de_la_resolucion_no_se_acepta_al_crear(self):
-        """Mandar el id no numera: el campo ya no existe en la creación."""
+        """Mandar el id no numera: el campo ya no existe en la creación.
+
+        Y lo dice él mismo. Antes el `resolucion` se descartaba y el 400 salía
+        por el `numero_resolucion` que faltaba, que no le explica a quien
+        integra por qué su id no valió.
+        """
         payload = self._payload_documento()
         del payload["numero_resolucion"]
         payload["resolucion"] = self.documento.resolucion.id
 
         resp = self.client.post("/api/documentos/documento/", payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("numero_resolucion", resp.data["errores"])
+        self.assertEqual(
+            resp.data["errores"], {"resolucion": [MENSAJE_CAMPO_DESCONOCIDO]}
+        )
 
     def test_numero_de_resolucion_inexistente(self):
         payload = self._payload_documento()

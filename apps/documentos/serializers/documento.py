@@ -9,6 +9,7 @@ from rest_framework.validators import UniqueTogetherValidator
 from apps.documentos import models
 from apps.emisores.models import Emisor, Resolucion
 from apps.emisores.servicios import motivo_no_puede_emitir
+from apps.nucleo.serializers import EstructuraEstricta
 from apps.seguridad.alcance import RelacionDelAlcance
 
 from .adquiriente import AdquirienteSerializer
@@ -260,10 +261,14 @@ class DocumentoListaSerializer(DocumentoSerializer):
         return anotado if anotado is not None else obj.errores.count()
 
 
-class DocumentoCrearSerializer(serializers.ModelSerializer):
+class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
     """Serializer de creación con detalles e impuestos anidados.
 
     Calcula automáticamente los totales a partir de los detalles.
+
+    La estructura es estricta en todos los niveles: una clave que no sea un
+    campo escribible —aquí o en el adquiriente, las líneas, sus impuestos o el
+    bloque `pos`— responde 400 con esa clave en `errores`, en vez de perderse.
 
     La resolución se indica siempre con `numero_resolucion` (el número que la
     DIAN le dio al emisor, lo único que este conoce); el id no se acepta. Los

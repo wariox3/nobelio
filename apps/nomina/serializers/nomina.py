@@ -7,6 +7,7 @@ from rest_framework.validators import UniqueTogetherValidator
 
 from apps.emisores.models import Emisor
 from apps.nomina import models
+from apps.nucleo.serializers import EstructuraEstricta
 from apps.seguridad.alcance import RelacionDelAlcance
 
 from .empleado import EmpleadoAnidadoSerializer
@@ -142,11 +143,16 @@ class NominaListaSerializer(NominaSerializer):
         return anotado if anotado is not None else obj.errores.count()
 
 
-class NominaCrearSerializer(serializers.ModelSerializer):
+class NominaCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
     """Serializer de creación con los conceptos anidados.
 
     Los totales llegan en la petición y **no se calculan**: se comprueban
     contra la suma de los conceptos y, si no cuadran, se rechaza la creación.
+
+    La estructura es estricta aquí, en el empleado y en cada concepto: una clave
+    que no sea un campo escribible responde 400 con esa clave en `errores`. Pesa
+    más que en la factura, porque las condiciones que no vienen se heredan del
+    empleado: un `sueldo` mal escrito no fallaría, se firmaría con el anterior.
     """
 
     # Opcional aquí, obligatorio en ``_validar_conceptos``: quien decide si los

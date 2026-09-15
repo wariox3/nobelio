@@ -782,3 +782,38 @@ no existen. 274 pruebas en verde.
 6. ~~`DIRECTORIO_CAPTURA`.~~ Deja de ser un global reasignable desde cualquier
    import —lo que volcaba es el documento firmado y el certificado— y pasa a
    `settings.DIAN_DIRECTORIO_CAPTURA`, que sale del entorno. **(E2)**
+
+### Fase 5 — Recepción del documento · **en curso desde el 2026-09-15**
+
+Primera fase del proceso de emisión atacado por partes. Decidido con MarioA: la
+recepción es **síncrona y sin cola** —se valida estructura y datos, se guarda y
+se responde en la misma petición—, porque crear no sale del servidor (solo
+PostgreSQL) y encolarlo le quitaría al ERP el 400 por campo. La cola, si llega,
+va en la firma y el envío (**D3**), y puede leer la propia tabla de documentos.
+
+1. ~~Estructura estricta.~~ `apps/nucleo/serializers.EstructuraEstricta` rechaza
+   con 400 las claves que no son un campo escribible —desconocidas o de solo
+   lectura— al crear documentos y nóminas y en todos sus anidados (adquiriente,
+   líneas, impuestos, `pos`, empleado, conceptos). Antes DRF las descartaba: así
+   nació el P.O.S. del 2026-09-01 con los impuestos en cero. Los sobrantes se
+   informan junto con los errores de campo. El mixin no lleva docstring porque
+   drf-spectacular publica en `schema.yml` la primera que encuentra en la MRO.
+   Una prueba cambió de expectativa: mandar `resolucion` por id responde ahora
+   por ese campo y no por el `numero_resolucion` que falta. **401 en verde.**
+2. **Duplicado → 409 con el id del existente**, siempre: la clave es emisor +
+   número, y el emisor ya está dentro del alcance.
+3. **El `IntegrityError` de dos creaciones simultáneas** → el mismo 409, no un
+   500 (`DocumentoCrearSerializer` no lo captura).
+4. **Mensajes que mandan a editar** un documento que no tiene `PUT` ni `PATCH`:
+   el de `generar_y_firmar` («Actualice la fecha de emisión») y los de
+   `docs/checklist-emision.md` (§5 y §7). Y los `update()` que ya no usa nadie en
+   los dos serializers de creación.
+5. **Caché de los límites.** `dbcache` sin `MAX_ENTRIES` se queda en 300 claves y
+   al pasarlas borra un tercio —con muchos emisores los contadores se reinician
+   solos—, y cada petición hace un `SELECT COUNT(*)` contra la base remota. Redis
+   o, como mínimo, subir `MAX_ENTRIES`.
+
+Anotado para la fase del envío, no para esta: el contador de archivos de P.O.S. y
+nómina se reserva dentro de la transacción de `enviar` y queda bloqueado durante
+toda la llamada SOAP, así que los envíos de un mismo emisor salen de uno en uno y
+pueden ocupar todos los hilos de gunicorn.

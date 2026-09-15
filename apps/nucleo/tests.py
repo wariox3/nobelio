@@ -1,9 +1,15 @@
 """Pruebas del manejo homogéneo de errores de la API."""
 from botocore.exceptions import ClientError, EndpointConnectionError
 from django.test import SimpleTestCase
+from rest_framework import serializers
 from rest_framework.exceptions import NotFound, ValidationError
 
 from apps.nucleo.api import ErrorPasarela, ErrorSolicitud, exception_handler
+from apps.nucleo.serializers import (
+    MENSAJE_CAMPO_DESCONOCIDO,
+    MENSAJE_CAMPO_SOLO_LECTURA,
+    EstructuraEstricta,
+)
 from apps.utilidades import almacenamiento
 
 
@@ -112,3 +118,50 @@ class ErroresDeAlmacenamientoTests(SimpleTestCase):
         self.assertIsNone(exception_handler(RuntimeError("boom"), {}))
         r = self._data(NotFound())
         self.assertEqual(r.status_code, 404)
+
+
+class _Linea(EstructuraEstricta, serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    valor = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+
+class _Documento(EstructuraEstricta, serializers.Serializer):
+    numero = serializers.CharField()
+    lineas = _Linea(many=True)
+
+
+class EstructuraEstrictaTests(SimpleTestCase):
+    """Lo que no es un campo escribible se rechaza, en cualquier nivel."""
+
+    def _errores(self, datos):
+        serializer = _Documento(data=datos)
+        self.assertFalse(serializer.is_valid())
+        return serializer.errors
+
+    def test_lo_correcto_pasa(self):
+        serializer = _Documento(data={"numero": "1", "lineas": [{"valor": "1.00"}]})
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_un_campo_desconocido_se_rechaza(self):
+        errores = self._errores(
+            {"numero": "1", "lineas": [{"valor": "1.00"}], "numro": "1"}
+        )
+        self.assertEqual(errores, {"numro": [MENSAJE_CAMPO_DESCONOCIDO]})
+
+    def test_un_campo_de_solo_lectura_se_rechaza_dentro_de_un_anidado(self):
+        """El error queda colgado del campo y de la posición que lo traía."""
+        errores = self._errores(
+            {"numero": "1", "lineas": [{"valor": "1.00"}, {"id": 5, "valor": "2.00"}]}
+        )
+        self.assertEqual(
+            errores, {"lineas": [{}, {"id": [MENSAJE_CAMPO_SOLO_LECTURA]}]}
+        )
+
+    def test_los_sobrantes_se_suman_a_los_errores_de_campo(self):
+        """Quien integra ve todo en una respuesta, no un error por intento."""
+        errores = self._errores({"lineas": [{"valor": "1.00"}], "numro": "1"})
+        self.assertEqual(set(errores), {"numero", "numro"})
+
+    def test_lo_que_no_es_un_objeto_da_el_error_de_siempre(self):
+        errores = self._errores("texto")
+        self.assertIn("non_field_errors", errores)

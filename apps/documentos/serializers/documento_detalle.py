@@ -2,9 +2,10 @@
 from rest_framework import serializers
 
 from apps.documentos.models import DocumentoDetalleImpuesto, DocumentoDetalle
+from apps.nucleo.serializers import EstructuraEstricta
 
 
-class DocumentoDetalleImpuestoSerializer(serializers.ModelSerializer):
+class DocumentoDetalleImpuestoSerializer(EstructuraEstricta, serializers.ModelSerializer):
     tributo_codigo = serializers.CharField(source="tributo.codigo", read_only=True)
 
     class Meta:
@@ -12,7 +13,7 @@ class DocumentoDetalleImpuestoSerializer(serializers.ModelSerializer):
         fields = ["id", "tributo", "tributo_codigo", "base_gravable", "tarifa", "valor"]
 
 
-class DocumentoDetalleSerializer(serializers.ModelSerializer):
+class DocumentoDetalleSerializer(EstructuraEstricta, serializers.ModelSerializer):
     impuestos = DocumentoDetalleImpuestoSerializer(many=True)
 
     class Meta:

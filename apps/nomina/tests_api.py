@@ -16,6 +16,7 @@ from apps.documentos.models import DocumentoEstado
 from apps.emisores.models import Certificado
 from apps.nomina.models import Nomina
 from apps.nomina.tests_utils import crear_emisor_de_nomina, crear_nomina
+from apps.nucleo.serializers import MENSAJE_CAMPO_DESCONOCIDO
 
 
 # El parcheo apunta a `servicios_nomina` y no a `servicios`: el pipeline de
@@ -238,3 +239,28 @@ class NominaAlcanceTests(NominaAPIBase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         emisores = {fila["emisor"] for fila in resp.data["results"]}
         self.assertEqual(emisores, {self.emisor.id})
+
+
+class NominaEstructuraTests(NominaAPIBase):
+    def test_los_campos_mal_escritos_se_rechazan_en_todos_los_niveles(self):
+        """En la nómina un campo perdido no falla: hereda el valor del maestro.
+
+        Un `sueldo` mal escrito en la nómina o en el empleado haría firmar con
+        el sueldo que ya tuviera guardado el trabajador. Los sobrantes se
+        informan junto con lo que falta, para corregirlo todo en una vuelta.
+        """
+        resp = self.client.post("/api/nomina/nomina/", {
+            "emisor": self.emisor.id,
+            "sueldoo": "1500000",
+            "empleado": {"numero_documento": "123", "sueldoo": "1500000"},
+            "conceptos": [{"grupo": "devengado", "valorr": "1500000"}],
+        }, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        errores = resp.data["errores"]
+        self.assertEqual(errores["sueldoo"], [MENSAJE_CAMPO_DESCONOCIDO])
+        self.assertEqual(errores["empleado"]["sueldoo"], [MENSAJE_CAMPO_DESCONOCIDO])
+        self.assertEqual(
+            errores["conceptos"][0]["valorr"], [MENSAJE_CAMPO_DESCONOCIDO]
+        )
+        self.assertTrue(set(errores) - {"sueldoo", "empleado", "conceptos"})
