@@ -851,7 +851,7 @@ va en la firma y el envío (**D3**), y puede leer la propia tabla de documentos.
    los campos del padre. El mixin no lleva docstring porque
    drf-spectacular publica en `schema.yml` la primera que encuentra en la MRO.
    Una prueba cambió de expectativa: mandar `resolucion` por id responde ahora
-   por ese campo y no por el `numero_resolucion` que falta. **466 en verde.**
+   por ese campo y no por el `numero_resolucion` que falta. **475 en verde.**
 2. ~~Duplicado → 409 con el id del existente.~~ El cuerpo sigue la forma común
    (código `documento_duplicado`) y la ruta del documento existente va en la
    cabecera `Location`, que es donde HTTP la pone y así no rompe el formato de
@@ -895,6 +895,14 @@ va en la firma y el envío (**D3**), y puede leer la propia tabla de documentos.
    documento se declara sobre esa base, y un descuento mayor dejaba el total a
    pagar en negativo. Igualarlo vale. Con cargos e impuestos no negativos, el
    total a pagar ya no puede quedar por debajo de cero.
+9. ~~Incidente de producción del 2026-09-15 (certificados).~~ Una
+   `CERT_ENCRYPTION_KEY` mal formada dejaba arrancar y fallaba al cargar el
+   `.p12`, que ya estaba subido a B2 y quedaba huérfano; el intento siguiente
+   salía con un sufijo aleatorio. Tres arreglos: las claves Fernet se
+   comprueban al arrancar (`config/claves.py`); `Certificado.save` borra el
+   `.p12` si el guardado falla después de subirlo; y el archivo se guarda como
+   `<id_emisor>/certificados/<uuid><ext>`, sin la razón social del nombre
+   original. Los huérfanos ya existentes en el bucket hay que borrarlos a mano.
 
 Anotado para la fase del envío, no para esta: el contador de archivos de P.O.S. y
 nómina se reserva dentro de la transacción de `enviar` y queda bloqueado durante

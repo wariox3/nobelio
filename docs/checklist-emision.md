@@ -56,7 +56,9 @@ sin certificado cargado y vigente responde 400.
   - Se **valida** antes de guardar: integridad + clave, llave RSA ≥ 2048, vigencia,
     y que el **NIT del certificado coincida** con el del emisor.
   - `vigente_desde`/`vigente_hasta` se autocompletan del propio certificado.
-  - Se guarda en **B2** (`<id_emisor>/certificados/`). **Uno por emisor**, y lo
+  - Se guarda en **B2** (`<id_emisor>/certificados/<uuid>.p12`, con la extensión
+    del archivo subido: el nombre lo pone el sistema, no el archivo). Si el
+    guardado falla después de subirlo, el `.p12` se borra del bucket. **Uno por emisor**, y lo
     impone la base (`Certificado.emisor` es `OneToOne`): ya no hay histórico ni
     bandera `activo`.
 - [ ] *(para renovar)* `DELETE /api/emisores/certificado/{id}/` y volver a cargar,

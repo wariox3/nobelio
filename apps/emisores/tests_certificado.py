@@ -95,9 +95,8 @@ class CertificadoAPITests(APITestCase):
         self.assertEqual(resp.status_code, 201, resp.data)
         self.assertNotIn("clave", resp.data)
         self.assertNotIn("archivo", resp.data)
-        # Django puede añadir un sufijo si el nombre ya existe en el storage.
-        self.assertTrue(resp.data["nombre_archivo"].startswith("cert"))
-        self.assertTrue(resp.data["nombre_archivo"].endswith(".p12"))
+        # El nombre lo pone el sistema: un uuid con la extensión del subido.
+        self.assertRegex(resp.data["nombre_archivo"], r"^[0-9a-f]{32}\.p12$")
         # La vigencia se autocompleta desde el propio certificado.
         self.assertIsNotNone(resp.data["vigente_desde"])
         self.assertIsNotNone(resp.data["vigente_hasta"])
@@ -337,3 +336,50 @@ class CertificadoAPITests(APITestCase):
         self.assertEqual(resp.data["detail"], almacenamiento.MENSAJE_ALMACENAMIENTO)
         # La transacción se deshace: ni certificado nuevo ni los previos tocados.
         self.assertFalse(Certificado.objects.filter(emisor=self.emisor).exists())
+
+    # --- Nombre propio y limpieza de huérfanos ------------------------------
+
+    @staticmethod
+    def _archivos(carpeta):
+        storage = Certificado._meta.get_field("archivo").storage
+        try:
+            return set(storage.listdir(carpeta)[1])
+        except FileNotFoundError:
+            return set()
+
+    def test_el_p12_se_guarda_con_un_nombre_propio(self):
+        """Ni la razón social ni sus tildes llegan a la ruta del bucket."""
+        resp = self._cargar(
+            archivo=_p12(nombre="firma-901192048-SEMÁNTICA DIGITAL SAS-.pfx")
+        )
+        self.assertEqual(resp.status_code, 201, resp.data)
+        nombre = Certificado.objects.get(pk=resp.data["id"]).archivo.name
+        self.assertRegex(
+            nombre, rf"^{self.emisor.id}/certificados/[0-9a-f]{{32}}\.pfx$"
+        )
+
+    def test_si_el_guardado_falla_despues_de_subir_se_borra_el_p12(self):
+        """El incidente de producción del 2026-09-15.
+
+        La clave no se pudo cifrar después de subir el .p12, y el archivo quedó
+        huérfano en el bucket: el intento siguiente salió con un sufijo porque
+        el nombre ya estaba ocupado.
+        """
+        carpeta = f"{self.emisor.id}/certificados"
+        antes = self._archivos(carpeta)
+        error = ValueError("Fernet key must be 32 url-safe base64-encoded bytes.")
+
+        with mock.patch("apps.utilidades.cifrado.cifrar", side_effect=error):
+            with self.assertRaises(ValueError):
+                self._cargar()
+
+        self.assertFalse(Certificado.objects.filter(emisor=self.emisor).exists())
+        self.assertEqual(self._archivos(carpeta), antes)
+
+    def test_si_tambien_falla_el_borrado_sube_el_error_del_guardado(self):
+        """El que explica qué pasó es el del guardado, no el de la limpieza."""
+        storage = Certificado._meta.get_field("archivo").storage
+        with mock.patch("apps.utilidades.cifrado.cifrar", side_effect=ValueError("clave")), \
+                mock.patch.object(storage, "delete", side_effect=OSError("bucket caído")):
+            with self.assertRaises(ValueError):
+                self._cargar()

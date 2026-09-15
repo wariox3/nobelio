@@ -266,7 +266,16 @@ chmod 640 /opt/nobelio/.env
 > `CERT_ENCRYPTION_KEY` no tiene default: si falta, Django no arranca y te
 > enteras en el acto. `MFA_ENCRYPTION_KEY` sí lo tiene (vacío), así que el
 > despliegue parece correcto y revienta con `ImproperlyConfigured` el día que
-> alguien enrola el segundo factor. Compruébalas las dos antes de dar por bueno
+> alguien enrola el segundo factor.
+>
+> **Mal formadas, ninguna de las dos arranca.** Desde el 2026-09-15 Django
+> comprueba al arrancar que sean claves Fernet de verdad (`config/claves.py`).
+> Antes una clave generada con el comando de la `DJANGO_SECRET_KEY`
+> (`token_urlsafe`), o copiada sin el `=` final, dejaba arrancar y fallaba al
+> cargar el primer certificado, con el `.p12` ya subido a B2. Si al arrancar
+> ves «no es una clave Fernet válida», genérala con el comando de arriba. Y
+> si ya hay certificados guardados, **no generes una nueva**: recupera la
+> original, o las claves de los `.p12` quedarán ilegibles. Compruébalas las dos antes de dar por bueno
 > el servidor.
 >
 > Lo que sigue vale para ambas, con la `CERT_ENCRYPTION_KEY` como ejemplo:

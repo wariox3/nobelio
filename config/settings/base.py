@@ -42,7 +42,13 @@ ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[])
 # no arranca. Es deliberado. Un default silencioso significaría que un
 # despliegue con la variable mal escrita seguiría funcionando y guardando las
 # claves en claro, que es justamente lo que esto viene a evitar.
-CERT_ENCRYPTION_KEY = env("CERT_ENCRYPTION_KEY")
+#
+# Y tampoco arranca si está mal formada (`config.claves.clave_fernet`): antes
+# una clave que no era Fernet dejaba arrancar y reventaba al cargar o leer el
+# primer certificado, con el .p12 ya subido. Pasó en producción el 2026-09-15.
+from config.claves import clave_fernet  # noqa: E402
+
+CERT_ENCRYPTION_KEY = clave_fernet("CERT_ENCRYPTION_KEY", env("CERT_ENCRYPTION_KEY"))
 
 # --- Aplicaciones -----------------------------------------------------------
 DJANGO_APPS = [
@@ -411,7 +417,10 @@ AUTH_COOKIE_SAMESITE = env("AUTH_COOKIE_SAMESITE", default="Lax")
 # Separada de CERT_ENCRYPTION_KEY y de SECRET_KEY a propósito: son secretos de
 # dominios distintos y rotar uno no puede dejar inservibles los otros.
 #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-MFA_ENCRYPTION_KEY = env("MFA_ENCRYPTION_KEY", default="")
+# Vacía sí arranca (el MFA falla al usarlo, no antes); mal formada, no.
+MFA_ENCRYPTION_KEY = clave_fernet(
+    "MFA_ENCRYPTION_KEY", env("MFA_ENCRYPTION_KEY", default=""), obligatoria=False,
+)
 
 # --- CORS (la SPA vive en otro dominio) -------------------------------------
 # Orígenes permitidos del frontend, p. ej. https://app.midominio.com

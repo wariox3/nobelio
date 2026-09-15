@@ -1,4 +1,8 @@
 """Certificado digital del emisor para la firma XAdES."""
+import logging
+import os
+import uuid
+
 from django.db import models
 
 from apps.nucleo.models import ModeloConFechas
@@ -7,14 +11,24 @@ from apps.utilidades.cifrado import ClaveCifradaField
 
 from .emisor import Emisor
 
+logger = logging.getLogger(__name__)
+
 
 def ruta_certificado(instance, filename):
-    """Ruta del .p12 dentro del bucket: ``<id_emisor>/certificados/<archivo>``.
+    """Ruta del .p12 dentro del bucket: ``<id_emisor>/certificados/<uuid><ext>``.
 
     Se usa el id del emisor para aislar los certificados de cada uno en su
     propia carpeta. ``instance.emisor_id`` evita una consulta extra a la BD.
+
+    El nombre lo pone el sistema. Antes era el del archivo subido
+    (``firma-901192048-SEMÁNTICA_DIGITAL_SAS-.pfx``): llevaba la razón social y
+    sus tildes a la ruta del bucket, y como el storage no sobrescribe, cuando
+    un intento fallido dejaba el archivo ahí el siguiente salía con un sufijo
+    aleatorio (``…_s55b3PJ.pfx``) que no se sabía de dónde venía. Con un uuid no
+    hay dos iguales. Del subido solo se conserva la extensión (.p12 o .pfx).
     """
-    return f"{instance.emisor_id}/certificados/{filename}"
+    extension = os.path.splitext(filename)[1].lower() or ".p12"
+    return f"{instance.emisor_id}/certificados/{uuid.uuid4().hex}{extension}"
 
 
 class Certificado(ModeloConFechas):
@@ -80,8 +94,39 @@ class Certificado(ModeloConFechas):
     # cerrarlo del todo, es una señal `post_delete`.
 
     def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
+        # El .p12 se sube a B2 en mitad del INSERT (`FileField.pre_save`), antes
+        # de preparar el resto de columnas. Si algo falla después —la clave no
+        # se cifra, choca el índice único, se cae la base—, la transacción
+        # deshace la fila pero no el archivo, que queda huérfano en el bucket:
+        # material criptográfico vivo que ya nadie lista. Pasó en producción el
+        # 2026-09-15 con una CERT_ENCRYPTION_KEY mal formada.
+        sube_archivo = bool(self.archivo) and not self.archivo._committed
+        try:
+            super().save(*args, **kwargs)
+        except Exception:
+            if sube_archivo:
+                self._borrar_archivo_subido()
+            raise
         self._sincronizar_resumen()
+
+    def _borrar_archivo_subido(self):
+        """Borra del bucket el .p12 que subió un guardado que después falló.
+
+        Solo si llegó a subirse: ``_committed`` pasa a verdadero justo al
+        subirlo, así que si lo que falló fue la propia subida no hay nada que
+        borrar. Y sin tapar el error del guardado: si el borrado también falla,
+        se registra y sigue subiendo la excepción original, que es la que
+        explica qué pasó.
+        """
+        if not (self.archivo and self.archivo._committed):
+            return
+        try:
+            self.archivo.storage.delete(self.archivo.name)
+        except Exception:
+            logger.exception(
+                "No se pudo borrar el .p12 de un guardado fallido: %s",
+                self.archivo.name,
+            )
 
     def delete(self, *args, **kwargs):
         resultado = super().delete(*args, **kwargs)
