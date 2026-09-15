@@ -16,7 +16,7 @@ from rest_framework.fields import Field
 from rest_framework.test import APITestCase
 
 from apps.catalogos.models import (
-    Departamento, FormaPago, Municipio, Pais, TipoOrganizacion,
+    Departamento, FormaPago, Municipio, Pais, TipoOrganizacion, Tributo,
 )
 from apps.dian.tests_firma import _generar_certificado
 from apps.documentos.models import (
@@ -38,7 +38,10 @@ from apps.documentos.serializers.documento import (
     MENSAJE_CREDITO_SIN_VENCIMIENTO,
     MENSAJE_VENCIMIENTO_ANTERIOR_A_EMISION,
     mensaje_vencimiento_en_nota,
+    DocumentoCrearSerializer,
+    mensaje_descuentos_mayores_que_el_bruto,
     mensaje_lineas_repetidas,
+    mensaje_retencion_no_admitida,
     MENSAJE_RESOLUCION_AMBIGUA,
     MENSAJE_RESOLUCION_NO_ENCONTRADA,
     mensaje_consecutivo_fuera_de_rango,
@@ -483,6 +486,99 @@ class DocumentoAPITests(APITestCase):
         })
         resp = self.client.post("/api/documentos/documento/", payload, format="json")
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+    # --- Descuentos globales -------------------------------------------------
+
+    def test_los_descuentos_globales_no_superan_el_valor_bruto(self):
+        """Antes dejaban el total a pagar en negativo."""
+        payload = self._payload_documento()
+        payload["total_descuentos"] = "2000.01"
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(errores_por_campo(resp), {
+            "total_descuentos": [
+                mensaje_descuentos_mayores_que_el_bruto(Decimal("2000.01"), Decimal("2000.00"))
+            ],
+        })
+
+    def test_los_descuentos_globales_pueden_igualar_el_valor_bruto(self):
+        payload = self._payload_documento()
+        payload.update({"total_descuentos": "2000.00", "descuentos_motivo": "Cortesía"})
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        # Bruto 2000 − descuentos 2000 + IVA 380.
+        self.assertEqual(resp.data["total_a_pagar"], "380.00")
+
+    def test_un_descuento_global_menor_se_resta_del_total(self):
+        payload = self._payload_documento()
+        payload.update({"total_descuentos": "500.00", "descuentos_motivo": "Promoción"})
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["total_a_pagar"], "1880.00")
+
+    # --- Retenciones: solo en el documento soporte --------------------------
+
+    def _con_retencion(self, payload):
+        """Añade una ReteFuente a la primera línea, con la aritmética correcta."""
+        retefuente, _ = Tributo.objects.get_or_create(
+            codigo="06", defaults={"nombre": "ReteFuente"},
+        )
+        payload["detalles"][0]["impuestos"].append({
+            "tributo": retefuente.id, "base_gravable": "2000.00",
+            "tarifa": "2.50", "valor": "50.00",
+        })
+        return retefuente
+
+    def test_una_factura_con_retencion_no_se_crea(self):
+        """Antes salía como un impuesto más y aumentaba el total a pagar."""
+        payload = self._payload_documento()
+        retefuente = self._con_retencion(payload)
+        tipo = DocumentoTipo.objects.get(codigo=DocumentoTipo.Codigo.FACTURA_VENTA)
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(errores_por_campo(resp), {
+            "detalles[0].impuestos[1].tributo": [
+                mensaje_retencion_no_admitida(tipo, retefuente)
+            ],
+        })
+        self.assertFalse(Documento.objects.filter(consecutivo=990000130).exists())
+
+    def test_una_nota_con_retencion_no_se_crea(self):
+        tipo = DocumentoTipo.objects.get(codigo=DocumentoTipo.Codigo.NOTA_CREDITO)
+        payload = self._payload_documento()
+        payload.update({
+            "documento_tipo": tipo.id,
+            "numero_resolucion": "",
+            "documento_referencia": str(self.documento.id),
+            "concepto_correccion": Documento.ConceptoNotaCredito.ANULACION,
+            "prefijo": "NC", "consecutivo": 1, "numero": "NC1",
+        })
+        retefuente = self._con_retencion(payload)
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(errores_por_campo(resp), {
+            "detalles[0].impuestos[1].tributo": [
+                mensaje_retencion_no_admitida(tipo, retefuente)
+            ],
+        })
+
+    def test_el_documento_soporte_si_admite_retenciones(self):
+        """Allí van en WithholdingTaxTotal y no suman al total a pagar."""
+        retefuente, _ = Tributo.objects.get_or_create(
+            codigo="06", defaults={"nombre": "ReteFuente"},
+        )
+        iva = self.cat["iva"]
+        attrs = {"detalles": [{"impuestos": [{"tributo": iva}, {"tributo": retefuente}]}]}
+        for codigo in DocumentoTipo.CODIGOS_CON_RETENCIONES:
+            with self.subTest(tipo=codigo):
+                tipo = DocumentoTipo.objects.get(codigo=codigo)
+                # No lanza: es la única comprobación que hace falta aquí.
+                DocumentoCrearSerializer()._validar_retenciones(attrs, tipo)
 
     # --- Duplicados: 409 con la ruta del que ya existe ---------------------
 

@@ -42,6 +42,22 @@ def mensaje_sin_resolucion(tipo):
     )
 
 
+def mensaje_descuentos_mayores_que_el_bruto(descuentos, bruto):
+    """Mensaje para unos descuentos globales que superan el valor bruto."""
+    return (
+        f"Los descuentos del documento ({descuentos}) no pueden superar su valor "
+        f"bruto ({bruto}), que es la suma de los totales de las líneas."
+    )
+
+
+def mensaje_retencion_no_admitida(tipo, tributo):
+    """Mensaje para una retención en un tipo que no las separa del total."""
+    return (
+        f"{tipo.nombre} no admite retenciones: {tributo.nombre} "
+        f"({tributo.codigo}) solo va en el documento soporte y su nota de ajuste."
+    )
+
+
 def mensaje_lineas_repetidas(repetidos):
     """Mensaje para un documento con números de línea repetidos."""
     return (
@@ -421,6 +437,8 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
             )
         self._validar_concepto(attrs, tipo)
         self._validar_vencimiento(attrs, tipo)
+        self._validar_retenciones(attrs, tipo)
+        self._validar_descuentos_globales(attrs)
 
         resolucion = attrs.get("resolucion") or getattr(self.instance, "resolucion", None)
         # Sin resolución no hay sts:InvoiceControl que emitir —ni clave técnica
@@ -446,6 +464,60 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
         if motivo:
             raise serializers.ValidationError({"emisor": motivo})
         return attrs
+
+    def _validar_descuentos_globales(self, attrs):
+        """Los descuentos del documento no superan su valor bruto.
+
+        El ``cac:AllowanceCharge`` del documento declara el descuento sobre el
+        valor bruto (``_descuentos_documento``), y ``create`` calcula el total a
+        pagar como bruto − descuentos + cargos + impuestos. Unos descuentos
+        mayores que el bruto dejaban un descuento más grande que su base y, sin
+        cargos ni impuestos que lo compensaran, un total a pagar negativo.
+
+        Igualarlo sí vale: un documento descontado entero es raro, pero no
+        contradice nada. Cargos e impuestos no pueden ser negativos, así que
+        con esto el total a pagar ya no puede quedar por debajo de cero.
+        """
+        descuentos = attrs.get("total_descuentos") or CERO
+        if not descuentos:
+            return
+        bruto = sum(
+            (detalle["valor_total"] for detalle in attrs.get("detalles") or []), CERO,
+        )
+        if descuentos > bruto:
+            raise serializers.ValidationError({
+                "total_descuentos": mensaje_descuentos_mayores_que_el_bruto(
+                    descuentos, bruto,
+                ),
+            })
+
+    def _validar_retenciones(self, attrs, tipo):
+        """Las retenciones solo van en los tipos que las separan del total.
+
+        Hoy son el documento soporte y su nota de ajuste
+        (``CODIGOS_CON_RETENCIONES``): allí salen en ``WithholdingTaxTotal`` y
+        no suman al total a pagar. En los demás no había nada que las separara:
+        una ReteFuente en una factura salía como un ``TaxTotal`` más y
+        **aumentaba** el total a pagar, cuando lo retenido se descuenta. Se
+        rechazan por decisión de MarioA, en vez de emitirlas aparte, mientras
+        ningún tipo más las necesite.
+
+        El error se cuelga del tributo exacto (``detalles[0].impuestos[1].tributo``)
+        con la misma forma anidada que DRF da a los errores de campo.
+        """
+        if tipo is None or tipo.codigo in models.DocumentoTipo.CODIGOS_CON_RETENCIONES:
+            return
+        detalles = attrs.get("detalles") or []
+        errores = []
+        for detalle in detalles:
+            impuestos = [
+                {"tributo": mensaje_retencion_no_admitida(tipo, imp["tributo"])}
+                if imp["tributo"].es_retencion else {}
+                for imp in detalle.get("impuestos") or []
+            ]
+            errores.append({"impuestos": impuestos} if any(impuestos) else {})
+        if any(errores):
+            raise serializers.ValidationError({"detalles": errores})
 
     def _validar_impuestos(self, attrs):
         """El impuesto informado tiene que ser el de su base por su tarifa.

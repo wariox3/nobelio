@@ -851,7 +851,7 @@ va en la firma y el envío (**D3**), y puede leer la propia tabla de documentos.
    los campos del padre. El mixin no lleva docstring porque
    drf-spectacular publica en `schema.yml` la primera que encuentra en la MRO.
    Una prueba cambió de expectativa: mandar `resolucion` por id responde ahora
-   por ese campo y no por el `numero_resolucion` que falta. **460 en verde.**
+   por ese campo y no por el `numero_resolucion` que falta. **466 en verde.**
 2. ~~Duplicado → 409 con el id del existente.~~ El cuerpo sigue la forma común
    (código `documento_duplicado`) y la ruta del documento existente va en la
    cabecera `Location`, que es donde HTTP la pone y así no rompe el formato de
@@ -884,6 +884,17 @@ va en la firma y el envío (**D3**), y puede leer la propia tabla de documentos.
    y ERP cambian a la vez, confirmado. Las pruebas leen la lista con
    `apps/nucleo/tests_utils.errores_por_campo`. Queda por hacer que las reglas de
    `validate()` lleven un código propio: hoy salen todas como `invalid`.
+7. ~~Retenciones fuera del documento soporte.~~ Factura, notas y P.O.S. rechazan
+   las retenciones (ReteIVA 05, ReteFuente 06, ReteICA 07, ReteCREE 08), por
+   decisión de MarioA. Antes no había nada que las separara: salían como un
+   `TaxTotal` más y **aumentaban** el total a pagar. Solo el documento soporte y
+   su nota de ajuste las admiten, porque allí van en `WithholdingTaxTotal` y no
+   suman. El error señala el tributo exacto (`detalles[0].impuestos[1].tributo`).
+8. ~~Descuentos globales mayores que el valor bruto.~~ `total_descuentos` no puede
+   superar la suma de los totales de las líneas: el `AllowanceCharge` del
+   documento se declara sobre esa base, y un descuento mayor dejaba el total a
+   pagar en negativo. Igualarlo vale. Con cargos e impuestos no negativos, el
+   total a pagar ya no puede quedar por debajo de cero.
 
 Anotado para la fase del envío, no para esta: el contador de archivos de P.O.S. y
 nómina se reserva dentro de la transacción de `enviar` y queda bloqueado durante

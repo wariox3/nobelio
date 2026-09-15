@@ -225,6 +225,10 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
   mayores que cero (código `mayor_que_cero`); tarifa y valor del impuesto,
   descuento de la línea, descuentos y cargos del documento y subtotal del
   P.O.S. pueden ser cero, pero no negativos (`min_value`).
+  Las retenciones (tributos 05, 06, 07 y 08) solo se admiten en el documento
+  soporte y su nota de ajuste; en factura, notas y P.O.S. responden 400.
+  `total_descuentos` no puede superar el valor bruto (la suma de los `valor_total`
+  de las líneas); igualarlo sí vale.
 - **Duplicado:** si ya existe un documento con el mismo emisor, tipo, prefijo y
   consecutivo, responde **409** con código `documento_duplicado` y la ruta del
   existente en la cabecera `Location`. Se comprueba después de la estructura y
