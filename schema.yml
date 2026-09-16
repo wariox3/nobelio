@@ -15,9 +15,9 @@ info:
 
     **Errores.** Todos comparten cuerpo: `detail` con el mensaje y `errores` con los fallos por campo cuando los hay.
 
-    **Límites de peticiones.** Hay un tope por credencial, y los catálogos —que se leen sin credencial— lo tienen por IP. Al superarlo la respuesta es 429 con la cabecera `Retry-After`.
+    **Límites de peticiones.** Hay un tope por credencial. Al superarlo la respuesta es 429 con la cabecera `Retry-After`.
 
-    **Catálogos.** `/api/catalogos/…` es de solo lectura y no pide credencial: son las listas oficiales de la DIAN, y sus códigos son lo que el resto de la API espera recibir.
+    **Catálogos.** `/api/catalogos/…` es de solo lectura y pide la misma llave que el resto, aunque no depende de sus emisores: son las listas oficiales de la DIAN, y sus códigos son lo que el resto de la API espera recibir.
 paths:
   /api/catalogos/departamento/:
     get:
@@ -40,7 +40,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -75,7 +74,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -122,7 +120,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -157,7 +154,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -204,7 +200,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -239,7 +234,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -286,7 +280,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -321,7 +314,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -367,7 +359,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -401,7 +392,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -448,7 +438,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -483,7 +472,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -530,7 +518,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -565,7 +552,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -612,7 +598,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -648,7 +633,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -695,7 +679,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -730,7 +713,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -777,7 +759,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -812,7 +793,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -859,7 +839,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -894,7 +873,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -941,7 +919,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -976,7 +953,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -1023,7 +999,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -1058,7 +1033,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -1105,7 +1079,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -1140,7 +1113,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -1187,7 +1159,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -1222,7 +1193,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -1269,7 +1239,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:
@@ -1304,7 +1273,6 @@ paths:
       - catalogos
       security:
       - LlaveApi: []
-      - {}
       responses:
         '200':
           content:

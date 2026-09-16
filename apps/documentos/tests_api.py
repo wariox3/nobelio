@@ -1304,8 +1304,30 @@ class CatalogoAPITests(APITestCase):
         Tributo.objects.create(codigo="01", nombre="IVA")
         Tributo.objects.create(codigo="04", nombre="INC")
 
-    def test_catalogo_es_publico_y_busca(self):
-        resp = self.client.get("/api/catalogos/tributo/?search=IVA")
+    def test_catalogo_sin_credencial_responde_401(self):
+        resp = self.client.get("/api/catalogos/tributo/")
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_catalogo_con_llave_invalida_responde_401(self):
+        resp = self.client.get(
+            "/api/catalogos/municipio/",
+            HTTP_AUTHORIZATION="Api-Key noexiste.secreto",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_catalogo_con_llave_busca(self):
+        # Cualquier llave válida basta: el catálogo no depende de los emisores
+        # de la persona, así que ni siquiera hace falta que tenga uno.
+        from apps.seguridad.models import LlaveApi
+
+        usuario = get_user_model().objects.create_user(
+            email="catalogos@test.co", password="x"
+        )
+        _, clave = LlaveApi.generar(usuario=usuario, nombre="ERP")
+        resp = self.client.get(
+            "/api/catalogos/tributo/?search=IVA",
+            HTTP_AUTHORIZATION=f"Api-Key {clave}",
+        )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         codigos = [r["codigo"] for r in resp.data["results"]]
         self.assertIn("01", codigos)

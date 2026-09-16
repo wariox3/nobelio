@@ -532,12 +532,12 @@ SPECTACULAR_SETTINGS = {
         "ajeno no aparece en los listados y responde 404. No hay `Bearer`.\n\n"
         "**Errores.** Todos comparten cuerpo: `detail` con el mensaje y `errores` "
         "con los fallos por campo cuando los hay.\n\n"
-        "**Límites de peticiones.** Hay un tope por credencial, y los catálogos "
-        "—que se leen sin credencial— lo tienen por IP. Al superarlo la "
+        "**Límites de peticiones.** Hay un tope por credencial. Al superarlo la "
         "respuesta es 429 con la cabecera `Retry-After`.\n\n"
-        "**Catálogos.** `/api/catalogos/…` es de solo lectura y no pide "
-        "credencial: son las listas oficiales de la DIAN, y sus códigos son lo "
-        "que el resto de la API espera recibir."
+        "**Catálogos.** `/api/catalogos/…` es de solo lectura y pide la misma "
+        "llave que el resto, aunque no depende de sus emisores: son las listas "
+        "oficiales de la DIAN, y sus códigos son lo que el resto de la API "
+        "espera recibir."
     ),
     "VERSION": "1.0.0",
     # El esquema no lleva las rutas de la propia documentación: describirse a sí
