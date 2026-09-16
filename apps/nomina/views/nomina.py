@@ -3,17 +3,41 @@ import requests
 from django.db import transaction
 from django.db.models import Count
 from django.http import HttpResponse
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import filters, mixins, viewsets
+from rest_framework import serializers as campos
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.dian import servicios
 from apps.dian.errores import error_pasarela_dian
+from apps.dian.esquema import (
+    RESPUESTA_CONSULTA_DIAN,
+    campo_track_id,
+    campos_respuesta_dian,
+)
 from apps.documentos.models import DocumentoEstado
 from apps.nomina import serializers
 from apps.nomina.models import Nomina
 from apps.nucleo.api import ErrorSolicitud, entero_de_query
+from apps.nucleo.esquema import ErrorSerializer
 from apps.seguridad.alcance import AlcanceEmisorMixin
+
+# Las acciones no reciben la nómina ni la devuelven, pero spectacular las
+# describía con el serializer del ViewSet: `emitir/` pedía una nómina entera como
+# cuerpo y prometía devolver otra. Aquí se declara lo que de verdad entra y sale;
+# lo que comparte con documentos está en `apps.dian.esquema`. El 401, el 429 y el
+# 404 los añade `apps.nucleo.esquema.documentar_errores`; el 400 y el 502 de las
+# acciones sin cuerpo los declaran ellas.
+RESPUESTA_EMISION_NOMINA = inline_serializer(
+    name="EmisionNominaRespuesta",
+    fields={
+        **campos_respuesta_dian(),
+        "cune": campos.CharField(help_text="CUNE de la nómina firmada."),
+        "track_id": campo_track_id(),
+    },
+)
 
 
 class NominaViewSet(
@@ -121,6 +145,10 @@ class NominaViewSet(
         """
         return type(obj).objects.select_for_update().get(pk=obj.pk)
 
+    @extend_schema(
+        request=None,
+        responses={200: RESPUESTA_EMISION_NOMINA, 400: ErrorSerializer, 502: ErrorSerializer},
+    )
     @action(detail=True, methods=["post"])
     def emitir(self, request, pk=None):
         """Firma la nómina y la envía a la DIAN, en una sola llamada.
@@ -179,6 +207,10 @@ class NominaViewSet(
             "errores": respuesta.errores,
         })
 
+    @extend_schema(
+        request=None,
+        responses={200: RESPUESTA_CONSULTA_DIAN, 400: ErrorSerializer, 502: ErrorSerializer},
+    )
     @action(detail=True, methods=["get", "post"])
     def consultar(self, request, pk=None):
         """Consulta el estado en la DIAN y lo aplica a la nómina.
@@ -218,6 +250,9 @@ class NominaViewSet(
             "errores": respuesta.errores,
         })
 
+    @extend_schema(
+        responses={(200, "application/xml"): OpenApiTypes.BINARY, 400: ErrorSerializer},
+    )
     @action(detail=True, methods=["get"])
     def xml(self, request, pk=None):
         """Descarga el XML firmado."""

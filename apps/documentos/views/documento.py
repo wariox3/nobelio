@@ -14,6 +14,11 @@ from rest_framework.response import Response
 
 from apps.dian import representacion, servicios
 from apps.dian.errores import error_pasarela_dian
+from apps.dian.esquema import (
+    RESPUESTA_CONSULTA_DIAN,
+    campo_track_id,
+    campos_respuesta_dian,
+)
 from apps.documentos import serializers
 from apps.documentos.models import Documento, DocumentoEstado
 from apps.documentos.servicios import (
@@ -44,39 +49,16 @@ CODIGO_DOCUMENTO_DUPLICADO = "documento_duplicado"
 # El 401, el 429 y el 404 los añade `apps.nucleo.esquema.documentar_errores` a
 # todas las rutas de detalle; el 400 solo donde hay cuerpo, así que las acciones
 # sin cuerpo que responden 400 lo declaran ellas, igual que el 502.
-
-def _campos_respuesta_dian():
-    """Lo que devuelve la DIAN, común a emitir y a las consultas."""
-    return {
-        "estado": campos.CharField(
-            help_text="Estado del documento en el sistema tras la operación.",
-        ),
-        "es_valido": campos.BooleanField(
-            help_text="`true` si la DIAN lo dio por válido.",
-        ),
-        "codigo_estado": campos.CharField(
-            help_text="Código de estado de la DIAN (`00` aceptado, `99` con errores…).",
-        ),
-        "descripcion": campos.CharField(help_text="Descripción del estado según la DIAN."),
-        "errores": campos.ListField(
-            child=campos.CharField(),
-            help_text="Reglas de rechazo y notificaciones, tal como las devuelve la DIAN.",
-        ),
-    }
-
+#
+# Lo que comparte con nómina —las consultas a la DIAN— está en `apps.dian.esquema`.
 
 RESPUESTA_EMISION = inline_serializer(
     name="EmisionRespuesta",
     fields={
-        **_campos_respuesta_dian(),
+        **campos_respuesta_dian(),
         "cufe_cude": campos.CharField(help_text="CUFE o CUDE del documento firmado."),
-        "track_id": campos.CharField(
-            help_text="ZipKey si salió al Set de Pruebas; identificador del envío si salió síncrono.",
-        ),
+        "track_id": campo_track_id(),
     },
-)
-RESPUESTA_CONSULTA_DIAN = inline_serializer(
-    name="ConsultaDianRespuesta", fields=_campos_respuesta_dian(),
 )
 RESPUESTA_NOTIFICACION = inline_serializer(
     name="NotificacionRespuesta",

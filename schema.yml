@@ -4008,7 +4008,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Nomina'
+                $ref: '#/components/schemas/ConsultaDianRespuesta'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: ''
         '401':
           description: Error
@@ -4059,18 +4071,6 @@ paths:
         required: true
       tags:
       - nomina
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NominaRequest'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/NominaRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/NominaRequest'
-        required: true
       security:
       - LlaveApi: []
       responses:
@@ -4078,7 +4078,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Nomina'
+                $ref: '#/components/schemas/ConsultaDianRespuesta'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: ''
         '401':
           description: Error
@@ -4087,12 +4099,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '429':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '400':
           description: Error
           content:
             application/json:
@@ -4141,18 +4147,6 @@ paths:
         required: true
       tags:
       - nomina
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NominaRequest'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/NominaRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/NominaRequest'
-        required: true
       security:
       - LlaveApi: []
       responses:
@@ -4160,7 +4154,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Nomina'
+                $ref: '#/components/schemas/EmisionNominaRespuesta'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: ''
         '401':
           description: Error
@@ -4169,12 +4175,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '429':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '400':
           description: Error
           content:
             application/json:
@@ -4205,9 +4205,16 @@ paths:
       responses:
         '200':
           content:
+            application/xml:
+              schema:
+                type: string
+                format: binary
+          description: ''
+        '400':
+          content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Nomina'
+                $ref: '#/components/schemas/Error'
           description: ''
         '401':
           description: Error
@@ -4566,7 +4573,7 @@ components:
       properties:
         estado:
           type: string
-          description: Estado del documento en el sistema tras la operación.
+          description: Estado en el sistema tras la operación.
         es_valido:
           type: boolean
           description: '`true` si la DIAN lo dio por válido.'
@@ -5825,12 +5832,48 @@ components:
       - codigo
       - id
       - nombre
+    EmisionNominaRespuesta:
+      type: object
+      properties:
+        estado:
+          type: string
+          description: Estado en el sistema tras la operación.
+        es_valido:
+          type: boolean
+          description: '`true` si la DIAN lo dio por válido.'
+        codigo_estado:
+          type: string
+          description: Código de estado de la DIAN (`00` aceptado, `99` con errores…).
+        descripcion:
+          type: string
+          description: Descripción del estado según la DIAN.
+        errores:
+          type: array
+          items:
+            type: string
+          description: Reglas de rechazo y notificaciones, tal como las devuelve la
+            DIAN.
+        cune:
+          type: string
+          description: CUNE de la nómina firmada.
+        track_id:
+          type: string
+          description: ZipKey si salió al Set de Pruebas; identificador del envío
+            si salió síncrono.
+      required:
+      - codigo_estado
+      - cune
+      - descripcion
+      - errores
+      - es_valido
+      - estado
+      - track_id
     EmisionRespuesta:
       type: object
       properties:
         estado:
           type: string
-          description: Estado del documento en el sistema tras la operación.
+          description: Estado en el sistema tras la operación.
         es_valido:
           type: boolean
           description: '`true` si la DIAN lo dio por válido.'
@@ -7905,236 +7948,6 @@ components:
       - tipo_contrato
       - tipo_trabajador
       - total_errores
-    NominaRequest:
-      type: object
-      description: Serializer de lectura, con los conceptos anidados.
-      properties:
-        emisor:
-          type: integer
-        empleado:
-          type: integer
-        estado:
-          type: integer
-        tipo_xml:
-          allOf:
-          - $ref: '#/components/schemas/TipoXmlEnum'
-          title: Tipo de XML
-        tipo_nota:
-          title: Tipo de nota
-          description: |-
-            Vacío en la nómina; obligatorio en la nota de ajuste.
-
-            * `1` - Reemplazar
-            * `2` - Eliminar
-          oneOf:
-          - $ref: '#/components/schemas/TipoNotaEnum'
-          - $ref: '#/components/schemas/BlankEnum'
-        nomina_predecesora:
-          type: string
-          format: uuid
-          nullable: true
-          title: Nómina que ajusta
-        prefijo:
-          type: string
-          description: 'Lo elige el emisor: la nómina no se numera con resolución
-            de la DIAN (regla NIE010).'
-          maxLength: 10
-        consecutivo:
-          type: integer
-          maximum: 9223372036854775807
-          minimum: 0
-          format: int64
-        numero:
-          type: string
-          title: Número
-          description: Número del documento. Si se omite, se arma como prefijo + consecutivo.
-          maxLength: 30
-        periodo_nomina:
-          type: integer
-          title: Periodo de nómina
-        fecha_liquidacion_inicio:
-          type: string
-          format: date
-          title: Inicio de la liquidación
-        fecha_liquidacion_fin:
-          type: string
-          format: date
-          title: Fin de la liquidación
-        tiempo_laborado:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-          description: Días laborados en el periodo (numeral 8.3.1).
-        fecha_generacion:
-          type: string
-          format: date
-          title: Fecha de generación
-        hora_generacion:
-          type: string
-          format: time
-          title: Hora de generación
-        fecha_pago:
-          type: string
-          format: date
-          title: Fecha de pago
-        moneda:
-          type: integer
-        trm:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,13}(?:\.\d{0,2})?$
-          nullable: true
-          description: Solo cuando la moneda no es COP.
-        notas:
-          type: string
-        novedad:
-          type: boolean
-          title: Novedad contractual
-        cune_novedad:
-          type: string
-          title: CUNE de la novedad
-          maxLength: 96
-        total_devengados:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,13}(?:\.\d{0,2})?$
-        total_deducciones:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,13}(?:\.\d{0,2})?$
-        redondeo:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,13}(?:\.\d{0,2})?$
-        total_comprobante:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,13}(?:\.\d{0,2})?$
-          title: Total del comprobante
-          description: Devengados menos deducciones, más el redondeo.
-        cune:
-          type: string
-          description: Código Único de Nómina Electrónica (SHA-384). Se calcula al
-            firmar.
-          maxLength: 96
-        envio:
-          title: Operación de envío
-          description: |-
-            Con qué operación se envió a la DIAN. Vacío mientras no se haya enviado.
-
-            * `test_set` - Set de Pruebas (SendTestSetAsync)
-            * `nomina_sync` - Síncrono (SendNominaSync)
-          oneOf:
-          - $ref: '#/components/schemas/EnvioNominaEnum'
-          - $ref: '#/components/schemas/BlankEnum'
-        track_id:
-          type: string
-          title: TrackId / ZipKey
-          description: 'Lo devuelve el envío al Set de Pruebas, que es asíncrono:
-            es la llave con la que se consulta esa entrega (GetStatusZip). El envío
-            síncrono no devuelve ninguno; ahí se consulta por el CUNE.'
-          maxLength: 100
-        ambiente:
-          allOf:
-          - $ref: '#/components/schemas/AmbienteEnum'
-          title: Ambiente DIAN
-          description: |-
-            Se hereda del ``ambiente_nomina`` del emisor al crear y se sella al firmar: la DIAN habilita la nómina aparte de la facturación, así que un emisor puede estar en producción para una y en habilitación para la otra.
-
-            * `1` - Producción
-            * `2` - Habilitación
-          minimum: 0
-          maximum: 32767
-        fecha_validacion:
-          type: string
-          format: date-time
-          nullable: true
-          title: Fecha de validación DIAN
-        codigo_trabajador:
-          type: string
-          title: Código del trabajador
-          description: Va en NumeroSecuenciaXML, que identifica el documento.
-          maxLength: 20
-        alto_riesgo_pension:
-          type: boolean
-          title: Alto riesgo de pensión
-        salario_integral:
-          type: boolean
-        sueldo:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,13}(?:\.\d{0,2})?$
-        tipo_trabajador:
-          type: integer
-          title: Tipo de trabajador
-        subtipo_trabajador:
-          type: integer
-          title: Subtipo de trabajador
-        tipo_contrato:
-          type: integer
-          title: Tipo de contrato
-        lugar_trabajo_pais:
-          type: integer
-          title: País del lugar de trabajo
-        lugar_trabajo_departamento:
-          type: integer
-          title: Departamento del lugar de trabajo
-        lugar_trabajo_municipio:
-          type: integer
-          title: Municipio del lugar de trabajo
-        lugar_trabajo_direccion:
-          type: string
-          minLength: 1
-          title: Dirección del lugar de trabajo
-          maxLength: 255
-        forma_pago:
-          type: integer
-          title: Forma de pago
-        medio_pago:
-          type: integer
-          title: Medio de pago
-        banco:
-          type: string
-          maxLength: 100
-        tipo_cuenta:
-          title: Tipo de cuenta
-          oneOf:
-          - $ref: '#/components/schemas/TipoCuentaEnum'
-          - $ref: '#/components/schemas/BlankEnum'
-        numero_cuenta:
-          type: string
-          title: Número de cuenta
-          maxLength: 30
-        fecha_retiro:
-          type: string
-          format: date
-          nullable: true
-          title: Fecha de retiro
-      required:
-      - ambiente
-      - consecutivo
-      - emisor
-      - empleado
-      - estado
-      - fecha_generacion
-      - fecha_liquidacion_fin
-      - fecha_liquidacion_inicio
-      - fecha_pago
-      - forma_pago
-      - hora_generacion
-      - lugar_trabajo_departamento
-      - lugar_trabajo_direccion
-      - lugar_trabajo_municipio
-      - lugar_trabajo_pais
-      - medio_pago
-      - moneda
-      - periodo_nomina
-      - prefijo
-      - subtipo_trabajador
-      - sueldo
-      - tiempo_laborado
-      - tipo_contrato
-      - tipo_trabajador
     NotificacionRequest:
       type: object
       description: |-

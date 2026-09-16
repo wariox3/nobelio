@@ -45,27 +45,38 @@ class EsquemaVersionadoTests(SimpleTestCase):
         """
         call_command("spectacular", "--fail-on-warn", stdout=StringIO())
 
-    def test_las_acciones_del_documento_no_piden_el_documento_como_cuerpo(self):
+    def test_las_acciones_no_piden_el_documento_como_cuerpo(self):
         """Sin `@extend_schema`, spectacular las describía con el serializer del ViewSet.
 
-        `emitir/` salía pidiendo un documento entero como cuerpo y prometiendo
-        devolver otro: un cliente generado desde `schema.yml` mandaba un cuerpo
-        que nadie lee y esperaba una forma que nunca llega. Solo `notificar/`
-        recibe algo, y en multipart.
+        `emitir/` salía pidiendo un documento —o una nómina— entero como cuerpo
+        y prometiendo devolver otro: un cliente generado desde `schema.yml`
+        mandaba un cuerpo que nadie lee y esperaba una forma que nunca llega.
+        De las acciones, solo `notificar/` recibe algo, y en multipart.
         """
         salida = StringIO()
         call_command("spectacular", "--format", "openapi-json", stdout=salida)
         rutas = json.loads(salida.getvalue())["paths"]
-        base = "/api/documentos/documento/{id}/"
+        documento = "/api/documentos/documento/{id}/"
+        nomina = "/api/nomina/nomina/{id}/"
 
-        for accion, metodo in (
-            ("emitir", "post"), ("actualizar-estado", "post"), ("consultar", "get"),
-            ("xml", "get"), ("attached", "get"), ("pdf", "get"),
+        for ruta, metodo, modelo in (
+            (f"{documento}emitir/", "post", "Documento"),
+            (f"{documento}actualizar-estado/", "post", "Documento"),
+            (f"{documento}consultar/", "get", "Documento"),
+            (f"{documento}xml/", "get", "Documento"),
+            (f"{documento}attached/", "get", "Documento"),
+            (f"{documento}pdf/", "get", "Documento"),
+            (f"{nomina}emitir/", "post", "Nomina"),
+            (f"{nomina}consultar/", "get", "Nomina"),
+            (f"{nomina}consultar/", "post", "Nomina"),
+            (f"{nomina}xml/", "get", "Nomina"),
         ):
-            with self.subTest(accion=accion):
-                operacion = rutas[f"{base}{accion}/"][metodo]
+            with self.subTest(ruta=ruta, metodo=metodo):
+                operacion = rutas[ruta][metodo]
                 self.assertNotIn("requestBody", operacion)
-                self.assertNotIn("Documento", json.dumps(operacion["responses"]["200"]))
+                self.assertNotIn(
+                    f"schemas/{modelo}", json.dumps(operacion["responses"]["200"])
+                )
 
-        notificar = rutas[f"{base}notificar/"]["post"]
+        notificar = rutas[f"{documento}notificar/"]["post"]
         self.assertEqual(list(notificar["requestBody"]["content"]), ["multipart/form-data"])
