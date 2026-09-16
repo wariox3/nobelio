@@ -3428,6 +3428,326 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/emisores/webhook/:
+    get:
+      operationId: emisores_webhook_list
+      description: |-
+        Los webhooks del emisor: a qué URL avisarle, y de qué.
+
+        Un emisor puede tener varios. `estado_validado` y `estado_notificado` dicen
+        si a ese webhook se le avisa de la validación de la DIAN y de la
+        notificación al adquiriente. Por ahora solo se guardan: el envío de los
+        avisos todavía no está hecho.
+
+        Filtro: ``?emisor=<id>``.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un número de página dentro del conjunto de resultados paginado.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - emisores
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedWebhookList'
+          description: ''
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: emisores_webhook_create
+      description: |-
+        Los webhooks del emisor: a qué URL avisarle, y de qué.
+
+        Un emisor puede tener varios. `estado_validado` y `estado_notificado` dicen
+        si a ese webhook se le avisa de la validación de la DIAN y de la
+        notificación al adquiriente. Por ahora solo se guardan: el envío de los
+        avisos todavía no está hecho.
+
+        Filtro: ``?emisor=<id>``.
+      tags:
+      - emisores
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/WebhookRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/WebhookRequest'
+        required: true
+      security:
+      - LlaveApi: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Webhook'
+          description: ''
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/emisores/webhook/{id}/:
+    get:
+      operationId: emisores_webhook_retrieve
+      description: |-
+        Los webhooks del emisor: a qué URL avisarle, y de qué.
+
+        Un emisor puede tener varios. `estado_validado` y `estado_notificado` dicen
+        si a ese webhook se le avisa de la validación de la DIAN y de la
+        notificación al adquiriente. Por ahora solo se guardan: el envío de los
+        avisos todavía no está hecho.
+
+        Filtro: ``?emisor=<id>``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este webhook.
+        required: true
+      tags:
+      - emisores
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Webhook'
+          description: ''
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      operationId: emisores_webhook_update
+      description: |-
+        Los webhooks del emisor: a qué URL avisarle, y de qué.
+
+        Un emisor puede tener varios. `estado_validado` y `estado_notificado` dicen
+        si a ese webhook se le avisa de la validación de la DIAN y de la
+        notificación al adquiriente. Por ahora solo se guardan: el envío de los
+        avisos todavía no está hecho.
+
+        Filtro: ``?emisor=<id>``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este webhook.
+        required: true
+      tags:
+      - emisores
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/WebhookRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/WebhookRequest'
+        required: true
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Webhook'
+          description: ''
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      operationId: emisores_webhook_partial_update
+      description: |-
+        Los webhooks del emisor: a qué URL avisarle, y de qué.
+
+        Un emisor puede tener varios. `estado_validado` y `estado_notificado` dicen
+        si a ese webhook se le avisa de la validación de la DIAN y de la
+        notificación al adquiriente. Por ahora solo se guardan: el envío de los
+        avisos todavía no está hecho.
+
+        Filtro: ``?emisor=<id>``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este webhook.
+        required: true
+      tags:
+      - emisores
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedWebhookRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedWebhookRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedWebhookRequest'
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Webhook'
+          description: ''
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: emisores_webhook_destroy
+      description: |-
+        Los webhooks del emisor: a qué URL avisarle, y de qué.
+
+        Un emisor puede tener varios. `estado_validado` y `estado_notificado` dicen
+        si a ese webhook se le avisa de la validación de la DIAN y de la
+        notificación al adquiriente. Por ahora solo se guardan: el envío de los
+        avisos todavía no está hecho.
+
+        Filtro: ``?emisor=<id>``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este webhook.
+        required: true
+      tags:
+      - emisores
+      security:
+      - LlaveApi: []
+      responses:
+        '204':
+          description: No response body
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/nomina/empleado/:
     get:
       operationId: nomina_empleado_list
@@ -8120,6 +8440,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SoftwareDian'
+    PaginatedWebhookList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Webhook'
     PatchedEmisorRequest:
       type: object
       properties:
@@ -8419,6 +8762,26 @@ components:
           title: Nombre del software
           description: Par `NombreSoftware`. Vacío usa DIAN_FABRICANTE_NOMBRE_SOFTWARE.
           maxLength: 200
+    PatchedWebhookRequest:
+      type: object
+      properties:
+        emisor:
+          type: integer
+        nombre:
+          type: string
+          minLength: 1
+          maxLength: 150
+        url:
+          type: string
+          minLength: 1
+          format: uri
+          maxLength: 500
+        estado_validado:
+          type: boolean
+          title: Avisar la validación
+        estado_notificado:
+          type: boolean
+          title: Avisar la notificación
     Resolucion:
       type: object
       properties:
@@ -8691,6 +9054,66 @@ components:
       description: |-
         * `102` - Documento soporte de pago de nómina electrónica
         * `103` - Nota de ajuste de documento soporte de pago de nómina
+    Webhook:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        emisor:
+          type: integer
+        nombre:
+          type: string
+          maxLength: 150
+        url:
+          type: string
+          format: uri
+          maxLength: 500
+        estado_validado:
+          type: boolean
+          title: Avisar la validación
+        estado_notificado:
+          type: boolean
+          title: Avisar la notificación
+        creado_en:
+          type: string
+          format: date-time
+          readOnly: true
+        actualizado_en:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - actualizado_en
+      - creado_en
+      - emisor
+      - id
+      - nombre
+      - url
+    WebhookRequest:
+      type: object
+      properties:
+        emisor:
+          type: integer
+        nombre:
+          type: string
+          minLength: 1
+          maxLength: 150
+        url:
+          type: string
+          minLength: 1
+          format: uri
+          maxLength: 500
+        estado_validado:
+          type: boolean
+          title: Avisar la validación
+        estado_notificado:
+          type: boolean
+          title: Avisar la notificación
+      required:
+      - emisor
+      - nombre
+      - url
   securitySchemes:
     LlaveApi:
       type: apiKey

@@ -8,5 +8,6 @@ router.register("emisor", views.EmisorViewSet)
 router.register("software", views.SoftwareDianViewSet)
 router.register("certificado", views.CertificadoViewSet)
 router.register("resolucion", views.ResolucionViewSet)
+router.register("webhook", views.WebhookViewSet)
 
 urlpatterns = router.urls
