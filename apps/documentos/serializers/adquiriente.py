@@ -1,6 +1,7 @@
 """Serializer del adquiriente: va anidado dentro del documento."""
 from rest_framework import serializers
 
+from apps.catalogos.memoria import RelacionDeCatalogo
 from apps.documentos.models import Adquiriente
 from apps.nucleo.serializers import EstructuraEstricta
 
@@ -58,6 +59,10 @@ def _pertenece(municipio, departamento):
 
 class AdquirienteSerializer(EstructuraEstricta, serializers.ModelSerializer):
     """Datos del receptor. No tiene endpoint propio: se piden en el documento."""
+
+    # Tipo de identificación, organización, país, departamento, municipio y
+    # responsabilidades: todos catálogos.
+    serializer_related_field = RelacionDeCatalogo
 
     class Meta:
         model = Adquiriente

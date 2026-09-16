@@ -34,6 +34,11 @@ LOGGING["loggers"]["apps"]["level"] = "CRITICAL"  # noqa: F405
 # confunde al leer un fallo de verdad.
 LOGGING["loggers"]["django.request"]["level"] = "CRITICAL"  # noqa: F405
 
+# Sin catálogos en memoria: la memoria es del proceso y dura entre pruebas, así
+# que un catálogo creado en una prueba y deshecho al terminarla seguiría vivo en
+# la siguiente. Las pruebas de `apps.catalogos.memoria` la encienden.
+CATALOGOS_EN_MEMORIA_SEGUNDOS = 0
+
 # Sin límite de peticiones en la suite: el contador vive en la caché y se
 # acumula entre pruebas del mismo proceso, así que una clase con muchos casos
 # empezaría a recibir 429 por el orden en que se ejecutan, no por lo que prueba.

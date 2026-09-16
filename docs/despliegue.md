@@ -711,6 +711,13 @@ chmod -R g+rX /opt/nobelio
 systemctl restart nobelio
 ```
 
+Cada proceso guarda los catálogos DIAN en memoria durante
+`CATALOGOS_EN_MEMORIA_SEGUNDOS` (5 minutos por defecto). Un
+`cargar_catalogos` suelto, con el servicio en marcha, añade filas que se ven
+enseguida, pero **un cambio en una fila que ya existía** —un nombre corregido—
+no se ve hasta que vence esa memoria o se hace `systemctl restart nobelio`.
+`actualizar.sh` no tiene ese problema: carga con el servicio parado.
+
 ---
 
 ## 12. Paso a producción ante la DIAN

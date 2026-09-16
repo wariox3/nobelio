@@ -5,6 +5,7 @@ from django.db import transaction
 from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
 
+from apps.catalogos.memoria import RelacionDeCatalogo
 from apps.emisores.models import Emisor
 from apps.nomina import models
 from apps.nucleo.serializers import EstructuraEstricta
@@ -156,6 +157,11 @@ class NominaCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
     se firmaría con el anterior.
     """
 
+    # Periodo, moneda y las condiciones del trabajador (tipo, contrato, lugar):
+    # catálogos. Muchos son los mismos que trae el empleado, pero en otro campo,
+    # así que la memoria por petición no los juntaba; la del proceso, sí.
+    serializer_related_field = RelacionDeCatalogo
+
     # Opcional aquí, obligatorio en ``_validar_conceptos``: quien decide si los
     # lleva es el ``tipo_nota``, y la nota que elimina el documento anterior no
     # lleva ninguno.
@@ -262,6 +268,10 @@ class NominaCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
         empleado, _ = models.Empleado.objects.update_or_create(
             emisor=emisor, **identificacion, defaults=datos,
         )
+        # Cuando ya existía, la fila sale de la base sin su tipo de
+        # identificación cargado, y la respuesta lo pide para
+        # `tipo_identificacion_codigo`. Es el mismo que se buscó con él.
+        empleado.tipo_identificacion = identificacion["tipo_identificacion"]
         return empleado
 
     def _dato(self, attrs, campo):

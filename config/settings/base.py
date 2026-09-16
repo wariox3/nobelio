@@ -148,6 +148,14 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
+# --- Catálogos en memoria ----------------------------------------------------
+# Segundos que cada proceso guarda las tablas de catálogo DIAN antes de volver a
+# leerlas. Crear un documento valida una decena de ids de catálogo, y con la base
+# remota cada uno era un viaje por la red. Un id nuevo se encuentra enseguida; un
+# cambio en una fila existente tarda como mucho esto en verse, o un reinicio del
+# servicio. `0` apaga la memoria. Ver apps/catalogos/memoria.py.
+CATALOGOS_EN_MEMORIA_SEGUNDOS = env.int("CATALOGOS_EN_MEMORIA_SEGUNDOS", default=300)
+
 # --- Internacionalización (Colombia) ---------------------------------------
 LANGUAGE_CODE = "es-co"
 TIME_ZONE = "America/Bogota"
@@ -177,7 +185,13 @@ CORREO_AVISO_USUARIO_NUEVO = env(
 # workers de Gunicorn un tope de 5/hora se convierte en 5·N/hora, y se reinicia
 # en cada despliegue. En producción tiene que ser un backend compartido.
 # `CACHE_URL` acepta también redis:// el día que haga falta.
-CACHES = {"default": env.cache("CACHE_URL", default="locmemcache://")}
+#
+# Vacía cuenta como no definida: `env.cache` solo aplica el default cuando la
+# variable no existe, y con `CACHE_URL=` —como viene en `.env.example`— la app no
+# arrancaba (`Invalid cache schema`).
+CACHES = {
+    "default": env.cache_url_config(env("CACHE_URL", default="") or "locmemcache://")
+}
 
 # --- Páginas del frontend ---------------------------------------------------
 # Raíz del sitio que abre la persona en el navegador, no de esta API. De aquí

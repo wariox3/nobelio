@@ -114,3 +114,34 @@ def _errores_del_anidado(campo, valor):
     if isinstance(campo, EstructuraEstricta):
         return campo.errores_de_estructura(valor)
     return {}
+
+
+class RelacionMemorizada(serializers.PrimaryKeyRelatedField):
+    """Relación por id que no repite la búsqueda de un id que ya encontró.
+
+    Es para los campos que se repiten en cada elemento de una lista, como la
+    unidad de medida o el tributo de cada línea de un documento: DRF valida
+    cada aparición con un ``get`` propio, así que un tiquete de veinte líneas
+    con la misma unidad y el mismo IVA hacía cuarenta consultas iguales.
+
+    La memoria vive en el propio campo, y eso basta para acotarla a una
+    petición: DRF valida todos los elementos de una lista con la misma
+    instancia del serializer hijo, y los campos se crean de nuevo con cada
+    serializer, que la vista instancia en cada petición. No hay nada que
+    invalidar. Solo se recuerdan los aciertos: un id que no existe se busca y
+    se reporta en cada elemento donde aparezca.
+    """
+
+    def to_internal_value(self, data):
+        # El tipo va en la clave: `1`, `"1"` y `True` no son el mismo dato, y
+        # cada uno debe pasar su propia validación la primera vez.
+        clave = (type(data), data)
+        try:
+            hash(clave)
+        except TypeError:
+            # Una lista o un dict: no es un id, y la validación de DRF lo dirá.
+            return super().to_internal_value(data)
+        memoria = self.__dict__.setdefault("_memoria", {})
+        if clave not in memoria:
+            memoria[clave] = super().to_internal_value(data)
+        return memoria[clave]

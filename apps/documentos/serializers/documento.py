@@ -5,6 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
+from apps.catalogos.memoria import RelacionDeCatalogo
 from apps.documentos import models
 from apps.emisores.models import Emisor, Resolucion
 from apps.emisores.servicios import motivo_no_puede_emitir
@@ -196,6 +197,19 @@ MENSAJE_POS_SOLO_EN_POS = (
 )
 
 
+def _precargar(instancia, relacion, objetos):
+    """Deja ``objetos`` como el contenido ya leído de una relación a muchos.
+
+    Es lo mismo que hace ``prefetch_related`` después de su consulta: un
+    queryset con el resultado puesto, guardado donde el manager lo busca. Así
+    ``instancia.<relacion>.all()`` devuelve esos objetos sin ir a la base.
+    """
+    queryset = getattr(instancia, relacion).get_queryset()
+    queryset._result_cache = list(objetos)
+    queryset._prefetch_done = True
+    instancia.__dict__.setdefault("_prefetched_objects_cache", {})[relacion] = queryset
+
+
 class DocumentoSerializer(serializers.ModelSerializer):
     """Serializer de lectura del documento, con detalles anidados."""
 
@@ -290,6 +304,10 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
     datos del `adquiriente` van anidados en cada documento y se guardan con él.
     """
 
+    # Moneda, forma y medio de pago salen de la memoria de catálogos; el tipo de
+    # documento no es catálogo y se busca en la base.
+    serializer_related_field = RelacionDeCatalogo
+
     detalles = DocumentoDetalleSerializer(many=True)
     # Solo el P.O.S. lo lleva; lo comprueba `_validar_pos`, que es quien conoce
     # el tipo de documento.
@@ -305,7 +323,11 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
     adquiriente = AdquirienteSerializer()
     # Todo lo que se referencia se busca solo dentro del alcance del
     # solicitante: un id de otra cuenta responde igual que uno inexistente.
-    emisor = RelacionDelAlcance(queryset=Emisor.objects.all(), campo_emisor="id")
+    # Con su certificado: `validate()` comprueba que sea vigente, y traerlo aparte
+    # era otra consulta.
+    emisor = RelacionDelAlcance(
+        queryset=Emisor.objects.select_related("certificado"), campo_emisor="id",
+    )
     documento_referencia = RelacionDelAlcance(
         queryset=models.Documento.objects.all(), required=False, allow_null=True
     )
@@ -708,7 +730,10 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
                 )
         return candidatas[0]
 
-    @transaction.atomic
+    # Sin punto de guardado propio: la vista ya abre la transacción, y un
+    # savepoint anidado eran dos viajes más a la base para nada. Fuera de una
+    # transacción —el serializer usado suelto— sigue abriendo la suya.
+    @transaction.atomic(savepoint=False)
     def create(self, validated_data):
         detalles_data = validated_data.pop("detalles")
         adquiriente_data = validated_data.pop("adquiriente")
@@ -716,45 +741,85 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
         descuentos = validated_data.get("total_descuentos", Decimal("0")) or Decimal("0")
         cargos = validated_data.get("total_cargos", Decimal("0")) or Decimal("0")
 
-        valor_bruto = Decimal("0")
-        total_impuestos = Decimal("0")
-
-        documento = models.Documento.objects.create(
-            valor_bruto=Decimal("0"), total_impuestos=Decimal("0"),
-            total_a_pagar=Decimal("0"), **validated_data,
-        )
-
-        responsabilidades = adquiriente_data.pop("responsabilidades", [])
-        adquiriente = models.Adquiriente.objects.create(
-            documento=documento, **adquiriente_data
-        )
-        adquiriente.responsabilidades.set(responsabilidades)
-
-        if pos_data is not None:
-            models.DocumentoPOS.objects.create(documento=documento, **pos_data)
-
         # En el documento soporte las retenciones no suman al total a pagar: el
         # adquiriente las practica sobre el pago, no se las cobra el vendedor, y
         # en el XML van fuera del TaxInclusiveAmount.
         retenciones_aparte = (
-            documento.documento_tipo.codigo
+            validated_data["documento_tipo"].codigo
             in models.DocumentoTipo.CODIGOS_CON_RETENCIONES
         )
+        # Los totales salen de los datos ya validados y entran en el propio
+        # INSERT: calcularlos después obligaba a un UPDATE del documento.
+        valor_bruto = sum((d["valor_total"] for d in detalles_data), Decimal("0"))
+        total_impuestos = sum(
+            (
+                impuesto["valor"]
+                for detalle in detalles_data
+                for impuesto in detalle.get("impuestos", [])
+                if not (retenciones_aparte and impuesto["tributo"].es_retencion)
+            ),
+            Decimal("0"),
+        )
 
+        documento = models.Documento.objects.create(
+            valor_bruto=valor_bruto,
+            total_impuestos=total_impuestos,
+            total_a_pagar=valor_bruto - descuentos + cargos + total_impuestos,
+            **validated_data,
+        )
+
+        responsabilidades = sorted(
+            set(adquiriente_data.pop("responsabilidades", [])), key=lambda r: r.codigo,
+        )
+        adquiriente = models.Adquiriente.objects.create(
+            documento=documento, **adquiriente_data
+        )
+        # `add` y no `set`: el adquiriente es nuevo, así que no hay nada que
+        # quitar, y `set` consultaba las que ya tenía —incluso con la lista
+        # vacía—. En PostgreSQL `add` es un solo INSERT, y sin nada que añadir
+        # no va a la base.
+        adquiriente.responsabilidades.add(*responsabilidades)
+
+        if pos_data is not None:
+            models.DocumentoPOS.objects.create(documento=documento, **pos_data)
+        else:
+            # Sin esto, la respuesta consulta la tabla para descubrir que no hay.
+            models.Documento.pos.related.set_cached_value(documento, None)
+
+        # Las líneas y sus impuestos se insertan en bloque: con un INSERT por
+        # fila, cada línea costaba dos viajes a la base, y un tiquete P.O.S. de
+        # veinte líneas pasaba de cuarenta. Ninguno de los dos modelos tiene
+        # `save()` propio ni señales, que `bulk_create` se saltaría.
+        detalles = []
+        impuestos_por_detalle = []
         for detalle_data in detalles_data:
             impuestos_data = detalle_data.pop("impuestos", [])
-            detalle = models.DocumentoDetalle.objects.create(documento=documento, **detalle_data)
-            valor_bruto += detalle.valor_total
-            for imp in impuestos_data:
-                impuesto = models.DocumentoDetalleImpuesto.objects.create(detalle=detalle, **imp)
-                if retenciones_aparte and impuesto.tributo.es_retencion:
-                    continue
-                total_impuestos += impuesto.valor
+            detalle = models.DocumentoDetalle(documento=documento, **detalle_data)
+            detalles.append(detalle)
+            impuestos_por_detalle.append(impuestos_data)
+        # PostgreSQL devuelve los ids del INSERT, así que los impuestos ya
+        # pueden apuntar a su línea.
+        models.DocumentoDetalle.objects.bulk_create(detalles)
 
-        documento.valor_bruto = valor_bruto
-        documento.total_impuestos = total_impuestos
-        documento.total_a_pagar = valor_bruto - descuentos + cargos + total_impuestos
-        documento.save(update_fields=["valor_bruto", "total_impuestos", "total_a_pagar"])
+        impuestos = []
+        for detalle, impuestos_data in zip(detalles, impuestos_por_detalle):
+            del_detalle = [
+                models.DocumentoDetalleImpuesto(detalle=detalle, **imp)
+                for imp in impuestos_data
+            ]
+            impuestos.extend(del_detalle)
+            _precargar(detalle, "impuestos", del_detalle)
+        models.DocumentoDetalleImpuesto.objects.bulk_create(impuestos)
+
+        # La respuesta del 201 se arma con lo que se acaba de guardar, en vez
+        # de releerlo: eran seis consultas más dos por línea para devolver lo
+        # mismo que ya está en memoria. El orden es el que daría la base
+        # —`ordering` de cada modelo—, y la prueba
+        # `test_la_respuesta_de_crear_es_la_misma_que_la_lectura` vigila que
+        # el cuerpo no se aparte del de `GET`.
+        _precargar(documento, "detalles", sorted(detalles, key=lambda d: d.numero_linea))
+        _precargar(documento, "errores", [])
+        _precargar(adquiriente, "responsabilidades", responsabilidades)
         return documento
 
     @transaction.atomic

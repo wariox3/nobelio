@@ -1,6 +1,7 @@
 """Serializer del empleado."""
 from rest_framework import serializers
 
+from apps.catalogos.memoria import RelacionDeCatalogo
 from apps.emisores.models import Emisor
 from apps.nomina.models import Empleado
 from apps.nucleo.serializers import EstructuraEstricta
@@ -14,6 +15,10 @@ class EmpleadoSerializer(serializers.ModelSerializer):
     empleado no es un dato de un documento sino una relación que dura, y cada
     nómina lo referencia por id.
     """
+
+    # Identificación, trabajador, contrato, lugar y forma de pago: todos
+    # catálogos, que salen de la memoria del proceso.
+    serializer_related_field = RelacionDeCatalogo
 
     # El emisor se busca solo dentro del alcance del solicitante: uno de otra
     # cuenta responde igual que uno inexistente.

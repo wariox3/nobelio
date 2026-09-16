@@ -6,15 +6,22 @@ pipeline y que el estado acabe donde debe, no que la DIAN conteste.
 """
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
+from django.db import connection
+from django.test import override_settings
+from django.test.utils import CaptureQueriesContext
 from cryptography.hazmat.primitives.serialization import BestAvailableEncryption, pkcs12
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.catalogos import memoria as memoria_de_catalogos
 from apps.dian import soap
 from apps.dian.tests_firma import _generar_certificado
 from apps.documentos.models import DocumentoEstado
 from apps.emisores.models import Certificado
 from apps.nomina.models import Nomina
+from apps.nomina.serializers import NominaCrearSerializer, NominaSerializer
+from apps.nomina.serializers.empleado import EmpleadoAnidadoSerializer
+from apps.nomina.serializers.nomina_concepto import NominaConceptoSerializer
 from apps.nomina.tests_utils import crear_emisor_de_nomina, crear_nomina
 from apps.nucleo.serializers import (
     CODIGO_CAMPO_DESCONOCIDO,
@@ -270,3 +277,75 @@ class NominaEstructuraTests(NominaAPIBase):
         self.assertEqual(
             set(codigos(resp)), {CODIGO_CAMPO_DESCONOCIDO, CODIGO_OBLIGATORIO}
         )
+
+
+class NominaCreacionTests(NominaAPIBase):
+    """Crear una nómina por la API, con su empleado y sus conceptos."""
+
+    def _payload(self, consecutivo):
+        """La nómina del fixture, tal como la mandaría el ERP.
+
+        Se arma desde los serializers de escritura para no copiar a mano la
+        lista de campos: lo que sea de solo lectura se queda fuera.
+        """
+        def escribibles(serializer):
+            return {n for n, campo in serializer.fields.items() if not campo.read_only}
+
+        empleado = EmpleadoAnidadoSerializer(self.nomina.empleado)
+        conceptos = NominaConceptoSerializer(self.nomina.conceptos.all(), many=True)
+        crear = NominaCrearSerializer()
+        datos = {
+            campo: valor
+            for campo, valor in NominaSerializer(self.nomina).data.items()
+            if campo in escribibles(crear) and valor is not None
+        }
+        datos.update({
+            "consecutivo": consecutivo,
+            "empleado": {
+                k: v for k, v in empleado.data.items()
+                if k in escribibles(EmpleadoAnidadoSerializer()) and v is not None
+            },
+            "conceptos": [
+                {
+                    k: v for k, v in concepto.items()
+                    if k in escribibles(NominaConceptoSerializer()) and v is not None
+                }
+                for concepto in conceptos.data
+            ],
+        })
+        return datos
+
+    def test_crea_la_nomina_con_su_empleado_y_sus_conceptos(self):
+        resp = self.client.post("/api/nomina/nomina/", self._payload(900), format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        creada = Nomina.objects.get(pk=resp.data["id"])
+        self.assertEqual(creada.empleado, self.nomina.empleado)
+        self.assertEqual(creada.conceptos.count(), self.nomina.conceptos.count())
+        # Sale del tipo con el que se buscó al empleado, sin releerlo.
+        self.assertEqual(
+            resp.data["empleado"]["tipo_identificacion_codigo"],
+            self.nomina.empleado.tipo_identificacion.codigo,
+        )
+
+    @override_settings(CATALOGOS_EN_MEMORIA_SEGUNDOS=300)
+    def test_con_los_catalogos_en_memoria_crear_no_los_consulta(self):
+        """Tras la primera creación del proceso, ningún catálogo va a la base.
+
+        En la nómina pesa más que en la factura: las condiciones del trabajador
+        repiten los catálogos del empleado en otros campos, y eran diecinueve
+        consultas.
+        """
+        memoria_de_catalogos.olvidar()
+        self.addCleanup(memoria_de_catalogos.olvidar)
+        primera = self.client.post("/api/nomina/nomina/", self._payload(901), format="json")
+        self.assertEqual(primera.status_code, status.HTTP_201_CREATED, primera.data)
+
+        payload = self._payload(902)
+        with CaptureQueriesContext(connection) as capturadas:
+            segunda = self.client.post("/api/nomina/nomina/", payload, format="json")
+        self.assertEqual(segunda.status_code, status.HTTP_201_CREATED, segunda.data)
+        lecturas = [
+            q["sql"] for q in capturadas.captured_queries if ' FROM "cat_' in q["sql"]
+        ]
+        self.assertEqual(lecturas, [], "\n\n".join(lecturas))

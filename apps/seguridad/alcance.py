@@ -147,7 +147,19 @@ class AlcanceEmisorMixin:
         return qs.filter(**{f"{self.campo_emisor}__in": permitidos})
 
     def exigir_alcance_de(self, serializer):
-        """Valida el emisor que trae el serializer (o el de la instancia)."""
+        """Valida el emisor que trae el serializer (o el de la instancia).
+
+        Si el emisor llegó por una `RelacionDelAlcance` dentro de esta petición,
+        ya se buscó acotado al alcance: uno ajeno no habría pasado la validación.
+        Repetir la comprobación era otra consulta con la misma respuesta.
+        """
+        campo = serializer.fields.get("emisor")
+        if (
+            "emisor" in serializer.validated_data
+            and isinstance(campo, RelacionDelAlcance)
+            and campo.context.get("request") is self.request
+        ):
+            return
         emisor = serializer.validated_data.get("emisor")
         if emisor is None and serializer.instance is not None:
             emisor = getattr(serializer.instance, "emisor", None)

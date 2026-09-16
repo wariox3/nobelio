@@ -4,6 +4,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from rest_framework import serializers
 
 from apps.documentos.models import DocumentoDetalleImpuesto, DocumentoDetalle
+from apps.catalogos.memoria import RelacionDeCatalogo
 from apps.nucleo.serializers import EstructuraEstricta
 
 CERO = Decimal("0")
@@ -36,6 +37,9 @@ def _mayor_que_cero(valor):
 
 
 class DocumentoDetalleImpuestoSerializer(EstructuraEstricta, serializers.ModelSerializer):
+    # El mismo tributo se repite en casi todas las líneas: sale de la memoria de
+    # catálogos, o se busca una sola vez por petición.
+    serializer_related_field = RelacionDeCatalogo
     tributo_codigo = serializers.CharField(source="tributo.codigo", read_only=True)
 
     class Meta:
@@ -58,6 +62,8 @@ class DocumentoDetalleImpuestoSerializer(EstructuraEstricta, serializers.ModelSe
 
 
 class DocumentoDetalleSerializer(EstructuraEstricta, serializers.ModelSerializer):
+    # Y la misma unidad de medida.
+    serializer_related_field = RelacionDeCatalogo
     impuestos = DocumentoDetalleImpuestoSerializer(many=True)
 
     class Meta:

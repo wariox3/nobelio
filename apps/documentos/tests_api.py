@@ -1,4 +1,6 @@
 """Pruebas de la API REST de documentos (flujo end-to-end)."""
+import copy
+import json
 import tempfile
 from datetime import date, timedelta
 from decimal import Decimal
@@ -9,14 +11,19 @@ from cryptography.hazmat.primitives.serialization import (
 )
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
+from django.db import connection
 from django.test import override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.fields import Field
 from rest_framework.test import APITestCase
+from rest_framework.utils.encoders import JSONEncoder
 
+from apps.catalogos import memoria as memoria_de_catalogos
 from apps.catalogos.models import (
-    Departamento, FormaPago, Municipio, Pais, TipoOrganizacion, Tributo,
+    Departamento, FormaPago, Municipio, Pais, ResponsabilidadFiscal,
+    TipoOrganizacion, Tributo,
 )
 from apps.dian.tests_firma import _generar_certificado
 from apps.documentos.models import (
@@ -215,6 +222,112 @@ class DocumentoAPITests(APITestCase):
         self.assertEqual(resp.data["valor_bruto"], "2000.00")
         self.assertEqual(resp.data["total_impuestos"], "380.00")
         self.assertEqual(resp.data["total_a_pagar"], "2380.00")
+
+    def _payload_varias_lineas(self, lineas=3, consecutivo=990000140):
+        """Líneas en desorden, dos impuestos en la primera y dos responsabilidades.
+
+        Es lo que puede delatar una respuesta armada en memoria que no respete
+        el orden que daría la base.
+        """
+        inc, _ = Tributo.objects.get_or_create(codigo="04", defaults={"nombre": "INC"})
+        r_mayor, _ = ResponsabilidadFiscal.objects.get_or_create(
+            codigo="R-99-PN", defaults={"nombre": "No aplica"},
+        )
+        r_menor, _ = ResponsabilidadFiscal.objects.get_or_create(
+            codigo="O-13", defaults={"nombre": "Gran contribuyente"},
+        )
+        payload = self._payload_documento()
+        payload["consecutivo"] = consecutivo
+        payload["numero"] = f"SETP{consecutivo}"
+        payload["adquiriente"]["responsabilidades"] = [r_mayor.id, r_menor.id]
+        base = payload["detalles"][0]
+        payload["detalles"] = []
+        for numero in reversed(range(1, lineas + 1)):
+            linea = copy.deepcopy(base)
+            linea["numero_linea"] = numero
+            linea["codigo_producto"] = f"SRV-{numero}"
+            payload["detalles"].append(linea)
+        payload["detalles"][0]["impuestos"].append(
+            {"tributo": inc.id, "base_gravable": "2000.00", "tarifa": "8.00", "valor": "160.00"}
+        )
+        return payload
+
+    def test_la_respuesta_de_crear_es_la_misma_que_la_lectura(self):
+        """El 201 se arma con lo recién guardado, sin releerlo de la base.
+
+        Si algún día se aparta de lo que devuelve `GET` —un orden, un campo que
+        solo rellena la base—, esta prueba lo dice.
+        """
+        resp = self.client.post(
+            "/api/documentos/documento/", self._payload_varias_lineas(), format="json"
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+        lectura = self.client.get(f"/api/documentos/documento/{resp.data['id']}/")
+        self.assertEqual(
+            json.loads(json.dumps(resp.data, cls=JSONEncoder)),
+            json.loads(json.dumps(lectura.data, cls=JSONEncoder)),
+        )
+        self.assertEqual([d["numero_linea"] for d in resp.data["detalles"]], [1, 2, 3])
+        self.assertEqual(resp.data["total_impuestos"], "1300.00")
+
+    def test_las_lineas_no_suman_consultas(self):
+        """Ni las inserciones, ni la respuesta, ni la validación crecen con las líneas.
+
+        Las inserciones van en bloque, la respuesta se arma sin releer y la
+        unidad y el tributo repetidos se buscan una sola vez por petición.
+        """
+        def consultas(lineas, consecutivo):
+            with CaptureQueriesContext(connection) as capturadas:
+                resp = self.client.post(
+                    "/api/documentos/documento/",
+                    self._payload_varias_lineas(lineas, consecutivo), format="json",
+                )
+            self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+            return len(capturadas)
+
+        # Los `get_or_create` de los catálogos del payload, fuera de la cuenta.
+        self._payload_varias_lineas()
+        una = consultas(1, 990000150)
+        diez = consultas(10, 990000160)
+        # Nueve líneas más con la misma unidad y el mismo IVA.
+        self.assertEqual(diez, una)
+
+    @override_settings(CATALOGOS_EN_MEMORIA_SEGUNDOS=300)
+    def test_con_los_catalogos_en_memoria_crear_no_los_consulta(self):
+        """Tras la primera creación del proceso, ningún catálogo va a la base."""
+        memoria_de_catalogos.olvidar()
+        self.addCleanup(memoria_de_catalogos.olvidar)
+        primera = self.client.post(
+            "/api/documentos/documento/", self._payload_varias_lineas(), format="json"
+        )
+        self.assertEqual(primera.status_code, status.HTTP_201_CREATED, primera.data)
+
+        payload = self._payload_varias_lineas(consecutivo=990000170)
+        with CaptureQueriesContext(connection) as capturadas:
+            segunda = self.client.post("/api/documentos/documento/", payload, format="json")
+        self.assertEqual(segunda.status_code, status.HTTP_201_CREATED, segunda.data)
+        # Las que leen de una tabla de catálogo. Un join desde otra tabla —la
+        # resolución trae su tipo de factura— no es una validación de id.
+        lecturas = [
+            q["sql"] for q in capturadas.captured_queries
+            if ' FROM "cat_' in q["sql"]
+        ]
+        self.assertEqual(lecturas, [], "\n\n".join(lecturas))
+
+    def test_un_id_de_catalogo_inexistente_se_reporta_en_cada_linea(self):
+        """Recordar las búsquedas no puede tapar el error de otra línea.
+
+        La primera línea deja la unidad buena en la memoria del campo; la
+        segunda trae una que no existe y la tercera repite la buena.
+        """
+        payload = self._payload_varias_lineas()
+        payload["detalles"][1]["unidad_medida"] = 999999
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(set(errores_por_campo(resp)), {"detalles[1].unidad_medida"})
+        self.assertEqual(codigos(resp), ["does_not_exist"])
 
     # --- El receptor viaja en cada documento y se guarda con él ------------
 
@@ -579,6 +692,34 @@ class DocumentoAPITests(APITestCase):
                 tipo = DocumentoTipo.objects.get(codigo=codigo)
                 # No lanza: es la única comprobación que hace falta aquí.
                 DocumentoCrearSerializer()._validar_retenciones(attrs, tipo)
+
+    def test_las_retenciones_del_documento_soporte_no_suman_al_total(self):
+        """Los totales se calculan antes del INSERT y tienen que respetarlo.
+
+        Se llama a `create` con los datos ya validados de la factura del
+        payload, cambiando el tipo y añadiendo la retención: la validación de
+        tipos y retenciones tiene sus propias pruebas, y lo que se mira aquí es
+        solo la suma.
+        """
+        retefuente, _ = Tributo.objects.get_or_create(
+            codigo="06", defaults={"nombre": "ReteFuente"},
+        )
+        soporte = DocumentoTipo.objects.get(codigo=DocumentoTipo.Codigo.DOCUMENTO_SOPORTE)
+        serializer = DocumentoCrearSerializer(data=self._payload_documento())
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        serializer.validated_data["detalles"][0]["impuestos"].append({
+            "tributo": retefuente, "base_gravable": Decimal("2000.00"),
+            "tarifa": Decimal("2.50"), "valor": Decimal("50.00"),
+        })
+
+        documento = serializer.save(documento_tipo=soporte)
+
+        documento.refresh_from_db()
+        self.assertEqual(documento.valor_bruto, Decimal("2000.00"))
+        # Solo el IVA: la retención la practica quien paga.
+        self.assertEqual(documento.total_impuestos, Decimal("380.00"))
+        self.assertEqual(documento.total_a_pagar, Decimal("2380.00"))
+        self.assertEqual(documento.detalles.get().impuestos.count(), 2)
 
     # --- Duplicados: 409 con la ruta del que ya existe ---------------------
 
