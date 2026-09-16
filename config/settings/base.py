@@ -113,7 +113,23 @@ ASGI_APPLICATION = "config.asgi.application"
 # --- Base de datos (PostgreSQL) ---------------------------------------------
 # DATABASE_URL es obligatorio: si falta, la app falla al arrancar.
 DATABASES = {
-    "default": env.db_url("DATABASE_URL"),
+    "default": {
+        **env.db_url("DATABASE_URL"),
+        # Segundos que un hilo conserva su conexión entre peticiones. Con `0`,
+        # el default de Django, cada petición abría una nueva, y con la base
+        # fuera del servidor eso es un TCP y un handshake TLS cada vez: medido
+        # sobre una creación de documento, la aplicación tarda ~30 ms y la
+        # petición en producción ~420 ms. Cada hilo de gunicorn guarda la suya,
+        # así que son hasta `workers × threads` conexiones vivas (12 por
+        # servidor): el plan de la base tiene que admitirlas. `0` vuelve al
+        # comportamiento anterior.
+        "CONN_MAX_AGE": env.int("DB_CONN_MAX_AGE", default=60),
+        # Una conexión guardada puede haberla cerrado el otro lado —reinicio o
+        # mantenimiento del servicio, un corte por inactividad—. Con esto se
+        # comprueba al empezar cada petición y se reabre, en vez de fallar la
+        # primera consulta con un 500.
+        "CONN_HEALTH_CHECKS": True,
+    },
 }
 
 # --- Modelo de usuario personalizado ---------------------------------------

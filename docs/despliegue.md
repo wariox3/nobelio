@@ -421,13 +421,19 @@ Tres decisiones que importan:
 > Y apágala después. Esos archivos llevan el documento firmado y el certificado
 > del emisor, y quedan en un disco que no se respalda con las reglas del paso 10.
 
-> **Las conexiones ahora cruzan la red.** Django abre y cierra una conexión por
-> petición (`CONN_MAX_AGE` no está definido, y su default es `0`). Con la base en
-> `localhost` eso no se notaba; contra una base remota son un TCP y un handshake
-> TLS por cada petición, sumados a la latencia de todas las consultas. Si el
-> tiempo de respuesta se resiente, lo que hay que mirar es reutilizar conexiones
-> con `CONN_MAX_AGE`, teniendo en cuenta cuántas admite el plan contratado:
-> `--workers 3 × --threads 4` son hasta 12 conexiones vivas por servidor.
+> **Las conexiones cruzan la red.** Contra una base remota, abrir una conexión
+> cuesta un TCP y un handshake TLS, así que cada hilo conserva la suya entre
+> peticiones durante `DB_CONN_MAX_AGE` segundos (60 por defecto), y se comprueba
+> que siga viva antes de usarla. La cuenta que importa es la del plan de la
+> base: `--workers 3 × --threads 4` son **hasta 12 conexiones vivas por
+> servidor**, y durante un reinicio (`systemctl reload`) conviven un momento las
+> de los workers viejos y las de los nuevos. Si el plan no da para eso, o si
+> delante de la base hay un pooler en modo *transaction*, `DB_CONN_MAX_AGE=0`
+> vuelve a una conexión por petición.
+>
+> Aun reutilizando la conexión, cada consulta es un viaje por la red: una
+> creación de documento hace ~40. Para saber cuánto pesa cada uno, desde este
+> servidor: `psql "$DATABASE_URL"`, `\timing` y varias veces `select 1;`.
 
 `User=nobelio` es la cuenta de sistema del paso 1; systemd no necesita que
 tenga shell para lanzar el proceso. Y como el resto de `/opt/nobelio` queda

@@ -94,6 +94,7 @@ Variables principales (`config/settings/base.py` las lee con `django-environ`):
 | `DEBUG` | Modo depuración | `True` (dev) |
 | `ALLOWED_HOSTS` | Hosts permitidos (CSV) | `localhost,127.0.0.1` |
 | `DATABASE_URL` | Conexión PostgreSQL (obligatorio) | — |
+| `DB_CONN_MAX_AGE` | Segundos que se reutiliza una conexión a la base (`0` = una por petición) | `60` |
 | `DIAN_ENVIRONMENT` | `2` habilitación / `1` producción | `2` |
 | `DIAN_POLICY_ID` | URL de la política de firma | política v2 DIAN |
 | `DIAN_POLICY_HASH` | SHA-256 (base64) del PDF de la política | el de la política v2 |
