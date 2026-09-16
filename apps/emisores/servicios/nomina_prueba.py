@@ -235,8 +235,8 @@ def crear_nomina_de_prueba(software, consecutivo=None):
 
     La misma que siembra el alta, pero de una en una. Sin ``consecutivo`` toma
     el siguiente libre del emisor para el prefijo de pruebas, y el periodo
-    continúa la serie (ver ``siguiente_periodo``); si hace falta otro, se ajusta
-    en el borrador con un ``PATCH``.
+    continúa la serie (ver ``siguiente_periodo``). La nómina no se edita: si hace
+    falta otro periodo, se borra el borrador y se crea por la API de nómina.
 
     Lanza ``ValueError`` con el motivo cuando no se puede: quien llama lo
     traduce a un 400.

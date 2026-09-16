@@ -60,8 +60,8 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         ya se usó de esa resolución para ese tipo, o el primero del rango si
         todavía no hay ninguno.
 
-        Solo lo crea: no lo firma ni lo envía. Para eso están ``emitir`` y
-        ``enviar`` de ``/api/documentos/documento/{id}/``.
+        Solo lo crea: no lo firma ni lo envía. Para eso está ``emitir`` de
+        ``/api/documentos/documento/{id}/``, que firma y envía.
         """
         # `get_object` va contra el queryset del mixin, así que una resolución
         # fuera del alcance no se encuentra (404) en vez de responder 403 y

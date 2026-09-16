@@ -77,10 +77,11 @@ class SoftwareDianViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         Sin ``consecutivo`` toma el siguiente libre del emisor para el prefijo
         de pruebas. El periodo de liquidación continúa la serie hacia atrás —la
         regla 90 rechaza dos nóminas del mismo trabajador para el mismo
-        periodo—; si hace falta otro, se ajusta en el borrador con un ``PATCH``.
+        periodo—. La nómina no se edita: si hace falta otro periodo, se borra
+        el borrador y se crea por ``POST /api/nomina/nomina/`` con el que toque.
 
-        Solo la crea: no la firma ni la envía. Para eso están ``emitir`` y
-        ``enviar`` de ``/api/nomina/nomina/{id}/``.
+        Solo la crea: no la firma ni la envía. Para eso está ``emitir`` de
+        ``/api/nomina/nomina/{id}/``, que firma y envía.
         """
         # `get_object` va contra el queryset del mixin, así que un software
         # fuera del alcance no se encuentra (404) en vez de responder 403 y
@@ -130,8 +131,8 @@ class SoftwareDianViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         ninguna así, responde 400 y no crea nada. **Solo sobre un software de
         nómina**, y con el emisor todavía en pruebas.
 
-        Solo las crea: no las firma ni las envía. Para eso están ``emitir`` y
-        ``enviar`` de ``/api/nomina/nomina/{id}/``.
+        Solo las crea: no las firma ni las envía. Para eso está ``emitir`` de
+        ``/api/nomina/nomina/{id}/``, que firma y envía.
         """
         software = self.get_object()
 

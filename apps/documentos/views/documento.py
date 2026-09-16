@@ -59,7 +59,7 @@ class DocumentoViewSet(
     corrige una factura es una nota, no un `PATCH`.
 
     Lo que sí cambia el documento son las acciones de más abajo, cada una con su
-    regla: `emitir`, `enviar`, `actualizar-estado`, `notificar`. El estado no es
+    regla: `emitir` (firma y envía), `actualizar-estado`, `notificar`. El estado no es
     un campo que se escriba, es la consecuencia de una operación.
     """
 
@@ -262,7 +262,7 @@ class DocumentoViewSet(
 
         Sin esto, dos peticiones simultáneas sobre el mismo documento hacen el
         trabajo dos veces: dos `emitir` gastan dos veces el consecutivo y dejan
-        dos XML firmados con CUFE distinto, y dos `enviar` mandan el mismo
+        dos XML firmados con CUFE distinto, y dos envíos mandan el mismo
         documento dos veces a la DIAN, que responde el segundo con "procesado
         anteriormente" —o algo peor, si el primero aún no había terminado—.
 
@@ -338,34 +338,6 @@ class DocumentoViewSet(
         documento = self.get_object()
         try:
             respuesta = servicios.consultar_estado(documento)
-        except servicios.ErrorEmision as exc:
-            raise ErrorSolicitud(str(exc))
-        except requests.RequestException as exc:
-            raise error_pasarela_dian(exc)
-        return Response({
-            "estado": documento.estado.nombre,  # estado local (sin cambios)
-            "es_valido": respuesta.es_valido,
-            "codigo_estado": respuesta.codigo_estado,
-            "descripcion": respuesta.descripcion_estado,
-            "errores": respuesta.errores,
-        })
-
-    @action(detail=True, methods=["get"], url_path="consultar-zip")
-    def consultar_zip(self, request, pk=None):
-        """Consulta (solo lectura) el **envío** al Set de Pruebas.
-
-        ``GET /api/documentos/documento/{id}/consultar-zip/`` → GetStatusZip,
-        por el ZipKey que devolvió ``SendTestSetAsync`` y que quedó en
-        ``track_id``.
-
-        Responde por esa entrega, no por el documento: si el mismo CUFE se
-        envió más de una vez, sale como duplicado (regla 90) aunque el
-        documento esté aceptado. Para saber cómo quedó el documento, la acción
-        es ``consultar``.
-        """
-        documento = self.get_object()
-        try:
-            respuesta = servicios.consultar_estado_zip(documento)
         except servicios.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
         except requests.RequestException as exc:

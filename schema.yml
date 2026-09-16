@@ -1312,7 +1312,7 @@ paths:
         corrige una factura es una nota, no un `PATCH`.
 
         Lo que sí cambia el documento son las acciones de más abajo, cada una con su
-        regla: `emitir`, `enviar`, `actualizar-estado`, `notificar`. El estado no es
+        regla: `emitir` (firma y envía), `actualizar-estado`, `notificar`. El estado no es
         un campo que se escriba, es la consecuencia de una operación.
       parameters:
       - name: ordering
@@ -1442,7 +1442,7 @@ paths:
         corrige una factura es una nota, no un `PATCH`.
 
         Lo que sí cambia el documento son las acciones de más abajo, cada una con su
-        regla: `emitir`, `enviar`, `actualizar-estado`, `notificar`. El estado no es
+        regla: `emitir` (firma y envía), `actualizar-estado`, `notificar`. El estado no es
         un campo que se escriba, es la consecuencia de una operación.
       parameters:
       - in: path
@@ -1494,7 +1494,7 @@ paths:
         corrige una factura es una nota, no un `PATCH`.
 
         Lo que sí cambia el documento son las acciones de más abajo, cada una con su
-        regla: `emitir`, `enviar`, `actualizar-estado`, `notificar`. El estado no es
+        regla: `emitir` (firma y envía), `actualizar-estado`, `notificar`. El estado no es
         un campo que se escriba, es la consecuencia de una operación.
       parameters:
       - in: path
@@ -1652,57 +1652,6 @@ paths:
 
         No modifica el documento; devuelve lo que responde la DIAN. Para aplicar
         el resultado usa la acción ``actualizar-estado``.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-          format: uuid
-        description: Un Cadena UUID que identifique este documento electrónico.
-        required: true
-      tags:
-      - documentos
-      security:
-      - LlaveApi: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Documento'
-          description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '429':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '404':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-  /api/documentos/documento/{id}/consultar-zip/:
-    get:
-      operationId: documentos_documento_consultar_zip_retrieve
-      description: |-
-        Consulta (solo lectura) el **envío** al Set de Pruebas.
-
-        ``GET /api/documentos/documento/{id}/consultar-zip/`` → GetStatusZip,
-        por el ZipKey que devolvió ``SendTestSetAsync`` y que quedó en
-        ``track_id``.
-
-        Responde por esa entrega, no por el documento: si el mismo CUFE se
-        envió más de una vez, sale como duplicado (regla 90) aunque el
-        documento esté aceptado. Para saber cómo quedó el documento, la acción
-        es ``consultar``.
       parameters:
       - in: path
         name: id
@@ -2889,8 +2838,8 @@ paths:
         ya se usó de esa resolución para ese tipo, o el primero del rango si
         todavía no hay ninguno.
 
-        Solo lo crea: no lo firma ni lo envía. Para eso están ``emitir`` y
-        ``enviar`` de ``/api/documentos/documento/{id}/``.
+        Solo lo crea: no lo firma ni lo envía. Para eso está ``emitir`` de
+        ``/api/documentos/documento/{id}/``, que firma y envía.
       parameters:
       - in: path
         name: id
@@ -3366,10 +3315,11 @@ paths:
         Sin ``consecutivo`` toma el siguiente libre del emisor para el prefijo
         de pruebas. El periodo de liquidación continúa la serie hacia atrás —la
         regla 90 rechaza dos nóminas del mismo trabajador para el mismo
-        periodo—; si hace falta otro, se ajusta en el borrador con un ``PATCH``.
+        periodo—. La nómina no se edita: si hace falta otro periodo, se borra
+        el borrador y se crea por ``POST /api/nomina/nomina/`` con el que toque.
 
-        Solo la crea: no la firma ni la envía. Para eso están ``emitir`` y
-        ``enviar`` de ``/api/nomina/nomina/{id}/``.
+        Solo la crea: no la firma ni la envía. Para eso está ``emitir`` de
+        ``/api/nomina/nomina/{id}/``, que firma y envía.
       parameters:
       - in: path
         name: id
@@ -3439,8 +3389,8 @@ paths:
         ninguna así, responde 400 y no crea nada. **Solo sobre un software de
         nómina**, y con el emisor todavía en pruebas.
 
-        Solo las crea: no las firma ni las envía. Para eso están ``emitir`` y
-        ``enviar`` de ``/api/nomina/nomina/{id}/``.
+        Solo las crea: no las firma ni las envía. Para eso está ``emitir`` de
+        ``/api/nomina/nomina/{id}/``, que firma y envía.
       parameters:
       - in: path
         name: id
@@ -4127,71 +4077,30 @@ paths:
   /api/nomina/nomina/{id}/emitir/:
     post:
       operationId: nomina_nomina_emitir_create
-      description: Genera el XML, calcula el CUNE y firma la nómina.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-          format: uuid
-        description: Un Cadena UUID que identifique este nómina electrónica.
-        required: true
-      tags:
-      - nomina
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NominaRequest'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/NominaRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/NominaRequest'
-        required: true
-      security:
-      - LlaveApi: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Nomina'
-          description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '429':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '400':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '404':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-  /api/nomina/nomina/{id}/enviar/:
-    post:
-      operationId: nomina_nomina_enviar_create
       description: |-
-        Envía la nómina firmada a la DIAN.
+        Firma la nómina y la envía a la DIAN, en una sola llamada.
 
-        Va al Set de Pruebas (``SendTestSetAsync``) mientras el emisor esté en
-        habilitación de nómina, y por ``SendNominaSync`` después; lo decide el
-        servicio, no el llamador.
+        Antes eran dos acciones, `emitir` (firmar) y `enviar`, igual que en
+        documentos; nadie firmaba sin enviar a continuación, y la segunda
+        llamada solo sumaba un viaje.
+
+        El envío va al Set de Pruebas (``SendTestSetAsync``) mientras el emisor
+        esté en habilitación de nómina, y por ``SendNominaSync`` después; lo
+        decide el servicio, no el llamador.
+
+        **Son dos transacciones, y a propósito.** La firma se confirma antes de
+        enviar: si el envío falla por red —o la DIAN recibe la nómina y la
+        respuesta se pierde—, la nómina queda `firmado` con su CUNE, y el
+        reintento manda **ese mismo** CUNE. En una sola transacción la firma se
+        desharía con el fallo y el reintento firmaría con otra `HoraGen` y otro
+        CUNE para el mismo número. Por eso un 502 aquí no pierde nada: se
+        vuelve a llamar.
+
+        Según el estado: `borrador` se firma y se envía; `firmado` —un intento
+        anterior que no llegó a enviar— solo se envía. `enviado`, `aceptado` y
+        `rechazado` responden 400: el primero se sigue con `consultar/`, un
+        aceptado se corrige con una nota de ajuste, y un rechazado —la nómina no
+        se edita— se borra y se crea de nuevo corregido.
       parameters:
       - in: path
         name: id

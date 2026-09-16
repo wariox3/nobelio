@@ -204,6 +204,16 @@ class DocumentoAPITests(APITestCase):
         resp = self.client.post(self._url("enviar/"))
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
+    def test_consultar_zip_ya_no_existe(self):
+        """La entrega al Set la consulta `actualizar-estado/`; el documento, `consultar/`.
+
+        Existía por los reenvíos del mismo CUFE, que respondían "procesado
+        anteriormente" por la entrega aunque el documento estuviera aceptado.
+        `emitir/` ya no reenvía lo que salió hacia la DIAN.
+        """
+        resp = self.client.get(self._url("consultar-zip/"))
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
     def test_descargar_xml_tras_emitir(self):
         self._emitir()
         resp = self.client.get(self._url("xml/"))

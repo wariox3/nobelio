@@ -127,8 +127,17 @@ def generar_y_firmar_nomina(nomina, *, firmador=None, ambiente=None, **cred):
 
     bloqueados = {
         DocumentoEstado.Nombre.FIRMADO: "La nómina ya está firmada.",
-        DocumentoEstado.Nombre.ENVIADO: "La nómina ya fue enviada a la DIAN.",
+        DocumentoEstado.Nombre.ENVIADO: (
+            "La nómina ya fue enviada a la DIAN; su estado se consulta con "
+            "consultar."
+        ),
         DocumentoEstado.Nombre.ACEPTADO: "La nómina ya fue aceptada por la DIAN.",
+        # Volver a firmarla no cambia nada de lo que la DIAN rechazó —la nómina
+        # no se edita—: solo produce otro CUNE para el mismo número.
+        DocumentoEstado.Nombre.RECHAZADO: (
+            "La nómina fue rechazada por la DIAN y no se vuelve a emitir: "
+            "bórrela y créela de nuevo con los datos corregidos."
+        ),
     }
     if nomina.estado_id and nomina.estado.nombre in bloqueados:
         raise ErrorEmision(bloqueados[nomina.estado.nombre])

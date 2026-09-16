@@ -87,9 +87,11 @@ def crear_nota_ajuste(nomina, *, tipo_nota, prefijo=None, consecutivo=None,
     sitio donde ese documento está completo y tal como se firmó es el propio
     predecesor.
 
-    Queda en borrador. Para corregir algo —que es el motivo de la nota— se edita
-    el borrador y después se llama a ``emitir`` y ``enviar``; tal cual sale es
-    idéntica al original, que solo sirve para reemitir.
+    Queda en borrador, y tal cual sale es idéntica al original: solo sirve para
+    reemitirlo, que es lo que pide el Set de Pruebas. La nómina no se edita, así
+    que una nota que **corrija** algo no sale de aquí: se crea por
+    ``POST /api/nomina/nomina/`` con ``tipo_xml`` 103 y el documento corregido
+    completo. En los dos casos, después se llama a ``emitir``, que firma y envía.
 
     La eliminación sale sin conceptos y con los totales en cero: su XML no lleva
     ni ``Devengados`` ni ``DevengadosTotal``, y los totales entran en el CUNE

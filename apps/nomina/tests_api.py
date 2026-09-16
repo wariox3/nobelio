@@ -1,9 +1,12 @@
-"""El ciclo de vida de una nómina por la API: emitir, enviar y consultar.
+"""El ciclo de vida de una nómina por la API: emitir (firma y envía) y consultar.
 
 No hay red: el envío y la consulta usan un cliente SOAP falso, igual que en
 `apps.dian.tests_servicios`. Lo que se prueba es que la vista encadene bien el
 pipeline y que el estado acabe donde debe, no que la DIAN conteste.
 """
+from unittest.mock import Mock, patch
+
+import requests
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 from django.db import connection
@@ -96,8 +99,11 @@ class NominaAPIBase(APITestCase):
     def _url(self, sufijo="", nomina=None):
         return f"/api/nomina/nomina/{(nomina or self.nomina).id}/{sufijo}"
 
-    def _emitir(self, nomina=None):
-        return self.client.post(self._url("emitir/", nomina))
+    def _emitir(self, cliente=None, nomina=None):
+        """`emitir/` con la DIAN simulada: por defecto, acepta."""
+        cliente = cliente or ClienteNominaFalso(_respuesta())
+        with patch("apps.dian.servicios_nomina.construir_cliente_emisor", return_value=cliente):
+            return self.client.post(self._url("emitir/", nomina))
 
 
 class NominaCicloTests(NominaAPIBase):
@@ -118,42 +124,67 @@ class NominaCicloTests(NominaAPIBase):
                     resp.status_code, status.HTTP_405_METHOD_NOT_ALLOWED, resp.data
                 )
 
-    def test_emitir_firma_y_calcula_el_cune(self):
-        resp = self._emitir()
+    def test_emitir_firma_y_envia_en_una_llamada(self):
+        cliente = ClienteNominaFalso(_respuesta())
+        resp = self._emitir(cliente)
+
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
-        self.assertEqual(resp.data["estado"], DocumentoEstado.Nombre.FIRMADO)
+        self.assertEqual(resp.data["estado"], DocumentoEstado.Nombre.ACEPTADO)
         self.assertEqual(len(resp.data["cune"]), 96)
+        self.assertEqual(resp.data["track_id"], "ZIPKEY-1")
+        self.assertTrue(resp.data["es_valido"])
+        self.assertEqual(len(cliente.llamadas), 1)
 
         self.nomina.refresh_from_db()
         self.assertTrue(self.nomina.xml_archivo)
+        self.assertIsNotNone(self.nomina.fecha_validacion)
         # El ambiente queda sellado en la nómina: lo que entra en el CUNE tiene
         # que ser lo mismo que después decide a qué servidor se envía.
         self.assertEqual(self.nomina.ambiente, 2)
 
-    def test_no_se_emite_dos_veces(self):
-        self._emitir()
-        resp = self._emitir()
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("firmada", resp.data["detail"])
+    def test_si_el_envio_falla_queda_firmada_y_el_reintento_manda_el_mismo_cune(self):
+        """La firma se confirma antes de enviar.
 
-    def test_no_se_envia_sin_firmar(self):
-        resp = self.client.post(self._url("enviar/"))
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("no está firmada", resp.data["detail"])
+        Si se deshiciera con el fallo, el reintento firmaría con otra
+        ``HoraGen`` y otro CUNE para el mismo número.
+        """
+        caido = Mock()
+        caido.enviar_set_pruebas.side_effect = requests.ConnectionError("sin red")
+        caido.enviar_nomina_sincrono.side_effect = requests.ConnectionError("sin red")
+        fallo = self._emitir(caido)
 
-    def test_enviar_aceptado_deja_la_nomina_aceptada(self):
-        from unittest.mock import patch
-
-        self._emitir()
-        cliente = ClienteNominaFalso(_respuesta())
-        with patch("apps.dian.servicios_nomina.construir_cliente_emisor", return_value=cliente):
-            resp = self.client.post(self._url("enviar/"))
-
-        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
-        self.assertTrue(resp.data["es_valido"])
+        self.assertEqual(fallo.status_code, status.HTTP_502_BAD_GATEWAY, fallo.data)
         self.nomina.refresh_from_db()
-        self.assertEqual(self.nomina.estado.nombre, DocumentoEstado.Nombre.ACEPTADO)
-        self.assertIsNotNone(self.nomina.fecha_validacion)
+        self.assertEqual(self.nomina.estado.nombre, DocumentoEstado.Nombre.FIRMADO)
+        cune = self.nomina.cune
+        self.assertEqual(len(cune), 96)
+
+        reintento = self._emitir()
+        self.assertEqual(reintento.status_code, status.HTTP_200_OK, reintento.data)
+        self.assertEqual(reintento.data["estado"], DocumentoEstado.Nombre.ACEPTADO)
+        self.assertEqual(reintento.data["cune"], cune)
+
+    def test_no_se_emite_lo_que_ya_salio_hacia_la_dian(self):
+        """Enviada se sigue con `consultar/`; rechazada se borra y se recrea."""
+        for estado in (
+            DocumentoEstado.Nombre.ENVIADO,
+            DocumentoEstado.Nombre.ACEPTADO,
+            DocumentoEstado.Nombre.RECHAZADO,
+        ):
+            with self.subTest(estado=estado):
+                self.nomina.estado = DocumentoEstado.objects.get(nombre=estado)
+                self.nomina.save(update_fields=["estado"])
+                cliente = ClienteNominaFalso(_respuesta())
+
+                resp = self._emitir(cliente)
+
+                self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+                self.assertEqual(cliente.llamadas, [])
+
+    def test_enviar_ya_no_existe(self):
+        """Firmar y enviar es una sola acción: `emitir/`."""
+        resp = self.client.post(self._url("enviar/"))
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_en_habilitacion_sale_por_el_set_de_pruebas(self):
         """Con el Set sin aceptar y ambiente 2, va por ``SendTestSetAsync``.
@@ -161,12 +192,8 @@ class NominaCicloTests(NominaAPIBase):
         Y queda anotado en ``envio``, que es lo que decide cómo se consulta
         después: el Set de Pruebas es asíncrono y se pregunta por ZipKey.
         """
-        from unittest.mock import patch
-
-        self._emitir()
         cliente = ClienteNominaFalso(_respuesta())
-        with patch("apps.dian.servicios_nomina.construir_cliente_emisor", return_value=cliente):
-            self.client.post(self._url("enviar/"))
+        self._emitir(cliente)
 
         self.assertEqual(cliente.llamadas[0][0], "set_pruebas")
         self.assertEqual(cliente.llamadas[0][2], "set-de-pruebas-nomina")
@@ -174,29 +201,21 @@ class NominaCicloTests(NominaAPIBase):
         self.assertEqual(self.nomina.envio, Nomina.Envio.SET_PRUEBAS)
 
     def test_con_el_set_aceptado_sale_por_el_sincrono(self):
-        from unittest.mock import patch
-
         self.base["software"].set_pruebas_aceptado = True
         self.base["software"].save(update_fields=["set_pruebas_aceptado"])
-        self._emitir()
         cliente = ClienteNominaFalso(_respuesta())
-        with patch("apps.dian.servicios_nomina.construir_cliente_emisor", return_value=cliente):
-            self.client.post(self._url("enviar/"))
+        self._emitir(cliente)
 
         self.assertEqual(cliente.llamadas[0][0], "sincrono")
         self.nomina.refresh_from_db()
         self.assertEqual(self.nomina.envio, Nomina.Envio.SINCRONO)
 
     def test_el_rechazo_guarda_los_errores(self):
-        from unittest.mock import patch
-
-        self._emitir()
         cliente = ClienteNominaFalso(_respuesta(
             es_valido=False,
             errores=["Regla: NIE001, Rechazo: El CUNE no corresponde."],
         ))
-        with patch("apps.dian.servicios_nomina.construir_cliente_emisor", return_value=cliente):
-            resp = self.client.post(self._url("enviar/"))
+        resp = self._emitir(cliente)
 
         self.assertFalse(resp.data["es_valido"])
         self.nomina.refresh_from_db()
@@ -210,14 +229,8 @@ class NominaCicloTests(NominaAPIBase):
         Sin esto una nómina rechazada se quedaría en ``enviado`` y con cero
         errores para siempre.
         """
-        from unittest.mock import patch
-
-        self._emitir()
         # Envío al Set de Pruebas: sin veredicto (ni válido ni con errores).
-        sin_veredicto = _respuesta(es_valido=False, errores=[])
-        cliente = ClienteNominaFalso(sin_veredicto)
-        with patch("apps.dian.servicios_nomina.construir_cliente_emisor", return_value=cliente):
-            self.client.post(self._url("enviar/"))
+        self._emitir(ClienteNominaFalso(_respuesta(es_valido=False, errores=[])))
         self.nomina.refresh_from_db()
         self.assertEqual(self.nomina.estado.nombre, DocumentoEstado.Nombre.ENVIADO)
 

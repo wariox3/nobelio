@@ -168,9 +168,9 @@ La nota se crea de una de dos formas:
   de arriba: el reemplazo repite el documento entero, y el único sitio donde
   está completo y tal como se firmó es el predecesor.
 
-Después van `emitir` y `enviar`, iguales que en la nómina: el envío decide solo
-entre el Set de Pruebas y `SendNominaSync`, y el archivo sale con el prefijo
-`niae`.
+Después va `emitir/`, igual que en la nómina —firma y envía en una sola
+llamada—: el envío decide solo entre el Set de Pruebas y `SendNominaSync`, y el
+archivo sale con el prefijo `niae`.
 
 La nota hereda el **ambiente** del documento que ajusta y no del emisor: apunta
 a un CUNE que se firmó en uno concreto, y una nota de producción sobre una

@@ -110,7 +110,7 @@ class NominaViewSet(
 
         Sin esto, dos peticiones simultáneas sobre el mismo documento hacen el
         trabajo dos veces: dos `emitir` gastan dos veces el consecutivo y dejan
-        dos XML firmados con CUFE distinto, y dos `enviar` mandan el mismo
+        dos XML firmados con CUFE distinto, y dos envíos mandan el mismo
         documento dos veces a la DIAN, que responde el segundo con "procesado
         anteriormente" —o algo peor, si el primero aún no había terminado—.
 
@@ -123,40 +123,56 @@ class NominaViewSet(
 
     @action(detail=True, methods=["post"])
     def emitir(self, request, pk=None):
-        """Genera el XML, calcula el CUNE y firma la nómina."""
-        nomina = self.get_object()
-        try:
-            with transaction.atomic():
-                nomina = self._bloquear(nomina)
-                servicios.generar_y_firmar_nomina(nomina)
-        except ValueError as exc:
-            raise ErrorSolicitud(str(exc))
-        except servicios.ErrorEmision as exc:
-            raise ErrorSolicitud(str(exc))
-        return Response({
-            "estado": nomina.estado.nombre,
-            "cune": nomina.cune,
-        })
+        """Firma la nómina y la envía a la DIAN, en una sola llamada.
 
-    @action(detail=True, methods=["post"])
-    def enviar(self, request, pk=None):
-        """Envía la nómina firmada a la DIAN.
+        Antes eran dos acciones, `emitir` (firmar) y `enviar`, igual que en
+        documentos; nadie firmaba sin enviar a continuación, y la segunda
+        llamada solo sumaba un viaje.
 
-        Va al Set de Pruebas (``SendTestSetAsync``) mientras el emisor esté en
-        habilitación de nómina, y por ``SendNominaSync`` después; lo decide el
-        servicio, no el llamador.
+        El envío va al Set de Pruebas (``SendTestSetAsync``) mientras el emisor
+        esté en habilitación de nómina, y por ``SendNominaSync`` después; lo
+        decide el servicio, no el llamador.
+
+        **Son dos transacciones, y a propósito.** La firma se confirma antes de
+        enviar: si el envío falla por red —o la DIAN recibe la nómina y la
+        respuesta se pierde—, la nómina queda `firmado` con su CUNE, y el
+        reintento manda **ese mismo** CUNE. En una sola transacción la firma se
+        desharía con el fallo y el reintento firmaría con otra `HoraGen` y otro
+        CUNE para el mismo número. Por eso un 502 aquí no pierde nada: se
+        vuelve a llamar.
+
+        Según el estado: `borrador` se firma y se envía; `firmado` —un intento
+        anterior que no llegó a enviar— solo se envía. `enviado`, `aceptado` y
+        `rechazado` responden 400: el primero se sigue con `consultar/`, un
+        aceptado se corrige con una nota de ajuste, y un rechazado —la nómina no
+        se edita— se borra y se crea de nuevo corregido.
         """
         nomina = self.get_object()
         try:
             with transaction.atomic():
                 nomina = self._bloquear(nomina)
+                if nomina.estado.nombre != DocumentoEstado.Nombre.FIRMADO:
+                    # Lo que no se puede firmar lo explica el propio servicio.
+                    servicios.generar_y_firmar_nomina(nomina)
+            with transaction.atomic():
+                nomina = self._bloquear(nomina)
+                # Entre las dos transacciones otra petición pudo enviarla.
+                if nomina.estado.nombre != DocumentoEstado.Nombre.FIRMADO:
+                    raise servicios.ErrorEmision(
+                        f"La nómina {nomina.numero} ya no está firmada y "
+                        f"pendiente de envío: está '{nomina.estado.nombre}'."
+                    )
                 respuesta = servicios.enviar_nomina_a_dian(nomina)
+        except ValueError as exc:
+            raise ErrorSolicitud(str(exc))
         except servicios.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
         except requests.RequestException as exc:
             raise error_pasarela_dian(exc)
         return Response({
             "estado": nomina.estado.nombre,
+            "cune": nomina.cune,
+            "track_id": respuesta.track_id,
             "es_valido": respuesta.es_valido,
             "codigo_estado": respuesta.codigo_estado,
             "descripcion": respuesta.descripcion_estado,
