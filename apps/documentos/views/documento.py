@@ -4,8 +4,10 @@ from django.db import IntegrityError, transaction
 from django.db.models import Count
 from django.http import FileResponse, HttpResponse
 from django.urls import reverse
-from drf_spectacular.utils import OpenApiParameter, extend_schema
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
 from rest_framework import filters, mixins, status, viewsets
+from rest_framework import serializers as campos
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
@@ -31,6 +33,67 @@ from apps.seguridad.alcance import AlcanceEmisorMixin
 from apps.utilidades.zinc import ZincNoDisponible
 
 CODIGO_DOCUMENTO_DUPLICADO = "documento_duplicado"
+
+# --- Esquema de las acciones --------------------------------------------------
+# Las acciones no reciben el documento ni lo devuelven, pero spectacular las
+# describía con el serializer del ViewSet: `emitir/` pedía un documento entero
+# como cuerpo y prometía devolver otro. Quien generara un cliente desde
+# `schema.yml` mandaba un cuerpo que nadie lee y esperaba una forma que no llega.
+# Aquí se declara lo que de verdad entra y sale.
+#
+# El 401, el 429 y el 404 los añade `apps.nucleo.esquema.documentar_errores` a
+# todas las rutas de detalle; el 400 solo donde hay cuerpo, así que las acciones
+# sin cuerpo que responden 400 lo declaran ellas, igual que el 502.
+
+def _campos_respuesta_dian():
+    """Lo que devuelve la DIAN, común a emitir y a las consultas."""
+    return {
+        "estado": campos.CharField(
+            help_text="Estado del documento en el sistema tras la operación.",
+        ),
+        "es_valido": campos.BooleanField(
+            help_text="`true` si la DIAN lo dio por válido.",
+        ),
+        "codigo_estado": campos.CharField(
+            help_text="Código de estado de la DIAN (`00` aceptado, `99` con errores…).",
+        ),
+        "descripcion": campos.CharField(help_text="Descripción del estado según la DIAN."),
+        "errores": campos.ListField(
+            child=campos.CharField(),
+            help_text="Reglas de rechazo y notificaciones, tal como las devuelve la DIAN.",
+        ),
+    }
+
+
+RESPUESTA_EMISION = inline_serializer(
+    name="EmisionRespuesta",
+    fields={
+        **_campos_respuesta_dian(),
+        "cufe_cude": campos.CharField(help_text="CUFE o CUDE del documento firmado."),
+        "track_id": campos.CharField(
+            help_text="ZipKey si salió al Set de Pruebas; identificador del envío si salió síncrono.",
+        ),
+    },
+)
+RESPUESTA_CONSULTA_DIAN = inline_serializer(
+    name="ConsultaDianRespuesta", fields=_campos_respuesta_dian(),
+)
+RESPUESTA_NOTIFICACION = inline_serializer(
+    name="NotificacionRespuesta",
+    fields={
+        "destinatario": campos.EmailField(help_text="Correo del adquiriente."),
+        "archivo": campos.CharField(help_text="Nombre del zip enviado."),
+        "tipo": campos.CharField(help_text="Tipo MIME del paquete: `application/zip`."),
+        "tamano": campos.IntegerField(help_text="Tamaño del zip, en bytes."),
+        "contenido": campos.ListField(
+            child=campos.CharField(), help_text="Nombres de los archivos dentro del zip.",
+        ),
+        "notificado": campos.BooleanField(),
+        "enviado": campos.BooleanField(),
+        "codigo_envio": campos.CharField(help_text="Identificador del envío en la pasarela de correo."),
+        "respuesta": campos.DictField(help_text="Respuesta cruda de la pasarela de correo."),
+    },
+)
 
 
 def mensaje_documento_duplicado(documento):
@@ -272,6 +335,10 @@ class DocumentoViewSet(
         """
         return type(obj).objects.select_for_update().get(pk=obj.pk)
 
+    @extend_schema(
+        request=None,
+        responses={200: RESPUESTA_EMISION, 400: ErrorSerializer, 502: ErrorSerializer},
+    )
     @action(detail=True, methods=["post"])
     def emitir(self, request, pk=None):
         """Firma el documento y lo envía a la DIAN, en una sola llamada.
@@ -323,6 +390,9 @@ class DocumentoViewSet(
             "errores": respuesta.errores,
         })
 
+    @extend_schema(
+        responses={200: RESPUESTA_CONSULTA_DIAN, 400: ErrorSerializer, 502: ErrorSerializer},
+    )
     @action(detail=True, methods=["get"])
     def consultar(self, request, pk=None):
         """Consulta (solo lectura) el estado del **documento** en la DIAN.
@@ -349,6 +419,10 @@ class DocumentoViewSet(
             "errores": respuesta.errores,
         })
 
+    @extend_schema(
+        request=None,
+        responses={200: RESPUESTA_CONSULTA_DIAN, 400: ErrorSerializer, 502: ErrorSerializer},
+    )
     @action(detail=True, methods=["post"], url_path="actualizar-estado")
     def actualizar_estado(self, request, pk=None):
         """Consulta la DIAN y actualiza el estado del documento.
@@ -370,6 +444,9 @@ class DocumentoViewSet(
             "errores": respuesta.errores,
         })
 
+    @extend_schema(
+        responses={(200, "application/xml"): OpenApiTypes.BINARY, 400: ErrorSerializer},
+    )
     @action(detail=True, methods=["get"])
     def xml(self, request, pk=None):
         """Descarga el XML firmado del documento (stream desde object storage)."""
@@ -384,6 +461,9 @@ class DocumentoViewSet(
         )
         return respuesta
 
+    @extend_schema(
+        responses={(200, "application/xml"): OpenApiTypes.BINARY, 400: ErrorSerializer},
+    )
     @action(detail=True, methods=["get"])
     def attached(self, request, pk=None):
         """Descarga el AttachedDocument: el documento y el acuse de la DIAN juntos.
@@ -406,6 +486,25 @@ class DocumentoViewSet(
         )
         return respuesta
 
+    @extend_schema(
+        request={"multipart/form-data": serializers.NotificacionSerializer},
+        parameters=[
+            OpenApiParameter(
+                name="descargar", type=OpenApiTypes.BOOL, location=OpenApiParameter.QUERY,
+                required=False,
+                description=(
+                    "Con `1` no envía nada: devuelve el zip (`application/zip`) "
+                    "para revisarlo."
+                ),
+            ),
+        ],
+        responses={
+            (200, "application/json"): RESPUESTA_NOTIFICACION,
+            (200, "application/zip"): OpenApiTypes.BINARY,
+            400: ErrorSerializer,
+            502: ErrorSerializer,
+        },
+    )
     @action(detail=True, methods=["post"])
     def notificar(self, request, pk=None):
         """Arma lo que se le entrega al adquiriente y lo deja listo para enviar.
@@ -456,6 +555,9 @@ class DocumentoViewSet(
             "respuesta": respuesta_zinc,
         })
 
+    @extend_schema(
+        responses={(200, "application/pdf"): OpenApiTypes.BINARY, 400: ErrorSerializer},
+    )
     @action(detail=True, methods=["get"])
     def pdf(self, request, pk=None):
         """Descarga la representación gráfica (PDF) del documento."""

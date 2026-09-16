@@ -9,6 +9,7 @@ silencio. De eso se ocupa esta prueba: si alguien añade un campo y no regenera,
 la suite falla y dice qué comando correr. La alternativa —confiar en acordarse—
 ya sabemos cómo termina.
 """
+import json
 from io import StringIO
 from pathlib import Path
 
@@ -43,3 +44,28 @@ class EsquemaVersionadoTests(SimpleTestCase):
         entera hasta que alguien intenta usarlo.
         """
         call_command("spectacular", "--fail-on-warn", stdout=StringIO())
+
+    def test_las_acciones_del_documento_no_piden_el_documento_como_cuerpo(self):
+        """Sin `@extend_schema`, spectacular las describía con el serializer del ViewSet.
+
+        `emitir/` salía pidiendo un documento entero como cuerpo y prometiendo
+        devolver otro: un cliente generado desde `schema.yml` mandaba un cuerpo
+        que nadie lee y esperaba una forma que nunca llega. Solo `notificar/`
+        recibe algo, y en multipart.
+        """
+        salida = StringIO()
+        call_command("spectacular", "--format", "openapi-json", stdout=salida)
+        rutas = json.loads(salida.getvalue())["paths"]
+        base = "/api/documentos/documento/{id}/"
+
+        for accion, metodo in (
+            ("emitir", "post"), ("actualizar-estado", "post"), ("consultar", "get"),
+            ("xml", "get"), ("attached", "get"), ("pdf", "get"),
+        ):
+            with self.subTest(accion=accion):
+                operacion = rutas[f"{base}{accion}/"][metodo]
+                self.assertNotIn("requestBody", operacion)
+                self.assertNotIn("Documento", json.dumps(operacion["responses"]["200"]))
+
+        notificar = rutas[f"{base}notificar/"]["post"]
+        self.assertEqual(list(notificar["requestBody"]["content"]), ["multipart/form-data"])

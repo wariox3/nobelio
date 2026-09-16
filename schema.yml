@@ -1546,18 +1546,6 @@ paths:
         required: true
       tags:
       - documentos
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DocumentoRequest'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/DocumentoRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/DocumentoRequest'
-        required: true
       security:
       - LlaveApi: []
       responses:
@@ -1565,7 +1553,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Documento'
+                $ref: '#/components/schemas/ConsultaDianRespuesta'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: ''
         '401':
           description: Error
@@ -1574,12 +1574,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '429':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '400':
           description: Error
           content:
             application/json:
@@ -1618,9 +1612,16 @@ paths:
       responses:
         '200':
           content:
+            application/xml:
+              schema:
+                type: string
+                format: binary
+          description: ''
+        '400':
+          content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Documento'
+                $ref: '#/components/schemas/Error'
           description: ''
         '401':
           description: Error
@@ -1669,7 +1670,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Documento'
+                $ref: '#/components/schemas/ConsultaDianRespuesta'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: ''
         '401':
           description: Error
@@ -1721,18 +1734,6 @@ paths:
         required: true
       tags:
       - documentos
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DocumentoRequest'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/DocumentoRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/DocumentoRequest'
-        required: true
       security:
       - LlaveApi: []
       responses:
@@ -1740,7 +1741,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Documento'
+                $ref: '#/components/schemas/EmisionRespuesta'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: ''
         '401':
           description: Error
@@ -1749,12 +1762,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '429':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '400':
           description: Error
           content:
             application/json:
@@ -1780,6 +1787,12 @@ paths:
         Con ``?descargar=1`` **no envía**: devuelve el zip para revisarlo. Es la
         forma de ver qué se le va a mandar al cliente sin mandárselo.
       parameters:
+      - in: query
+        name: descargar
+        schema:
+          type: boolean
+        description: 'Con `1` no envía nada: devuelve el zip (`application/zip`) para
+          revisarlo.'
       - in: path
         name: id
         schema:
@@ -1791,16 +1804,9 @@ paths:
       - documentos
       requestBody:
         content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DocumentoRequest'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/DocumentoRequest'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/DocumentoRequest'
-        required: true
+              $ref: '#/components/schemas/NotificacionRequest'
       security:
       - LlaveApi: []
       responses:
@@ -1808,7 +1814,23 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Documento'
+                $ref: '#/components/schemas/NotificacionRespuesta'
+            application/zip:
+              schema:
+                type: string
+                format: binary
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: ''
         '401':
           description: Error
@@ -1817,12 +1839,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '429':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '400':
           description: Error
           content:
             application/json:
@@ -1853,9 +1869,16 @@ paths:
       responses:
         '200':
           content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+          description: ''
+        '400':
+          content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Documento'
+                $ref: '#/components/schemas/Error'
           description: ''
         '401':
           description: Error
@@ -1894,9 +1917,16 @@ paths:
       responses:
         '200':
           content:
+            application/xml:
+              schema:
+                type: string
+                format: binary
+          description: ''
+        '400':
+          content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Documento'
+                $ref: '#/components/schemas/Error'
           description: ''
         '401':
           description: Error
@@ -4531,6 +4561,33 @@ components:
         * `pago_tercero` - Pago a tercero
         * `anticipo` - Anticipo
         * `reintegro` - Reintegro
+    ConsultaDianRespuesta:
+      type: object
+      properties:
+        estado:
+          type: string
+          description: Estado del documento en el sistema tras la operación.
+        es_valido:
+          type: boolean
+          description: '`true` si la DIAN lo dio por válido.'
+        codigo_estado:
+          type: string
+          description: Código de estado de la DIAN (`00` aceptado, `99` con errores…).
+        descripcion:
+          type: string
+          description: Descripción del estado según la DIAN.
+        errores:
+          type: array
+          items:
+            type: string
+          description: Reglas de rechazo y notificaciones, tal como las devuelve la
+            DIAN.
+      required:
+      - codigo_estado
+      - descripcion
+      - errores
+      - es_valido
+      - estado
     Documento:
       type: object
       description: Serializer de lectura del documento, con detalles anidados.
@@ -5335,19 +5392,6 @@ components:
       - id
       - mensaje
       - tipo_display
-    DocumentoErrorRequest:
-      type: object
-      properties:
-        regla:
-          type: string
-          maxLength: 20
-        tipo:
-          $ref: '#/components/schemas/DocumentoErrorTipoEnum'
-        mensaje:
-          type: string
-          minLength: 1
-      required:
-      - mensaje
     DocumentoErrorTipoEnum:
       enum:
       - rechazo
@@ -5763,124 +5807,6 @@ components:
       - caja_ubicacion
       - cajero
       - codigo_venta
-    DocumentoRequest:
-      type: object
-      description: Serializer de lectura del documento, con detalles anidados.
-      properties:
-        documento_tipo:
-          type: integer
-          title: Tipo de documento
-        emisor:
-          type: integer
-        resolucion:
-          type: integer
-          nullable: true
-          title: Resolución
-        prefijo:
-          type: string
-          maxLength: 10
-        consecutivo:
-          type: integer
-          maximum: 9223372036854775807
-          minimum: 0
-          format: int64
-        numero:
-          type: string
-          title: Número
-          description: Número del documento (cbc:ID). Si se omite, se arma como prefijo
-            + consecutivo.
-          maxLength: 30
-        concepto_correccion:
-          type: string
-          title: Concepto de corrección
-          description: 'ResponseCode del DiscrepancyResponse: por qué se corrige el
-            documento referenciado. Los códigos válidos dependen del tipo de nota
-            (ConceptoNotaCredito, ConceptoNotaDebito, ConceptoNotaAjuste). Vacío en
-            lo que no es nota.'
-          maxLength: 2
-        fecha_vencimiento:
-          type: string
-          format: date
-          nullable: true
-          title: Fecha de vencimiento
-          description: 'DueDate del XML: hasta cuándo hay plazo para pagar. La DIAN
-            la exige cuando la forma de pago es a crédito; en contado sobra.'
-        orden_compra:
-          type: string
-          title: Orden de compra
-          description: Número de la orden de compra del adquiriente, si la hubo.
-          maxLength: 100
-        orden_compra_fecha:
-          type: string
-          format: date
-          nullable: true
-          title: Fecha de la orden de compra
-        orden_compra_tipo:
-          type: string
-          title: Tipo de la orden de compra
-          description: 'cbc:OrderTypeCode: qué clase de orden es (contrato, pedido…),
-            según la codificación que use el comprador.'
-          maxLength: 20
-        orden_compra_documento:
-          type: string
-          title: Documento de la orden de compra
-          description: 'cac:DocumentReference/cbc:ID: el soporte de la orden (contrato,
-            acuerdo marco) cuando es distinto del número de la orden.'
-          maxLength: 100
-        fecha_emision:
-          type: string
-          format: date
-          title: Fecha de emisión
-          description: IssueDate del XML. Si se omite se toma la fecha de hoy, que
-            es la única con la que se puede firmar (regla FAD09).
-        hora_emision:
-          type: string
-          format: time
-          title: Hora de emisión
-          description: IssueTime del XML. Si se omite se toma la hora actual, y al
-            firmar se reescribe con la hora de la firma.
-        moneda:
-          type: integer
-        forma_pago:
-          type: integer
-          nullable: true
-          title: Forma de pago
-        medio_pago:
-          type: integer
-          nullable: true
-          title: Medio de pago
-        total_descuentos:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,16}(?:\.\d{0,2})?$
-          description: Descuentos globales del documento (no los de línea).
-        descuentos_motivo:
-          type: string
-          title: Motivo de los descuentos
-          description: cbc:AllowanceChargeReason del descuento global.
-          maxLength: 255
-        total_cargos:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,16}(?:\.\d{0,2})?$
-        cargos_motivo:
-          type: string
-          title: Motivo de los cargos
-          description: cbc:AllowanceChargeReason del cargo global.
-          maxLength: 255
-        documento_referencia:
-          type: string
-          format: uuid
-          nullable: true
-          title: Documento de referencia
-        observaciones:
-          type: string
-      required:
-      - consecutivo
-      - documento_tipo
-      - emisor
-      - moneda
-      - prefijo
     ElementoCatalogo:
       type: object
       description: Serializer común para los catálogos simples (modelo base abstracto).
@@ -5899,6 +5825,42 @@ components:
       - codigo
       - id
       - nombre
+    EmisionRespuesta:
+      type: object
+      properties:
+        estado:
+          type: string
+          description: Estado del documento en el sistema tras la operación.
+        es_valido:
+          type: boolean
+          description: '`true` si la DIAN lo dio por válido.'
+        codigo_estado:
+          type: string
+          description: Código de estado de la DIAN (`00` aceptado, `99` con errores…).
+        descripcion:
+          type: string
+          description: Descripción del estado según la DIAN.
+        errores:
+          type: array
+          items:
+            type: string
+          description: Reglas de rechazo y notificaciones, tal como las devuelve la
+            DIAN.
+        cufe_cude:
+          type: string
+          description: CUFE o CUDE del documento firmado.
+        track_id:
+          type: string
+          description: ZipKey si salió al Set de Pruebas; identificador del envío
+            si salió síncrono.
+      required:
+      - codigo_estado
+      - cufe_cude
+      - descripcion
+      - errores
+      - es_valido
+      - estado
+      - track_id
     Emisor:
       type: object
       properties:
@@ -8173,6 +8135,64 @@ components:
       - tiempo_laborado
       - tipo_contrato
       - tipo_trabajador
+    NotificacionRequest:
+      type: object
+      description: |-
+        Lo que el emisor sube para notificar. Todo opcional: sin nada, va el XML.
+
+        El XML firmado no se recibe aquí —lo pone el sistema desde el storage—, así
+        que el tope de 10 MB aplica solo a lo que llega en la petición.
+      properties:
+        pdf:
+          type: string
+          format: binary
+        adjuntos:
+          type: array
+          items:
+            type: string
+            format: binary
+    NotificacionRespuesta:
+      type: object
+      properties:
+        destinatario:
+          type: string
+          format: email
+          description: Correo del adquiriente.
+        archivo:
+          type: string
+          description: Nombre del zip enviado.
+        tipo:
+          type: string
+          description: 'Tipo MIME del paquete: `application/zip`.'
+        tamano:
+          type: integer
+          description: Tamaño del zip, en bytes.
+        contenido:
+          type: array
+          items:
+            type: string
+          description: Nombres de los archivos dentro del zip.
+        notificado:
+          type: boolean
+        enviado:
+          type: boolean
+        codigo_envio:
+          type: string
+          description: Identificador del envío en la pasarela de correo.
+        respuesta:
+          type: object
+          additionalProperties: {}
+          description: Respuesta cruda de la pasarela de correo.
+      required:
+      - archivo
+      - codigo_envio
+      - contenido
+      - destinatario
+      - enviado
+      - notificado
+      - respuesta
+      - tamano
+      - tipo
     PaginatedCertificadoList:
       type: object
       required:
