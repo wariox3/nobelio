@@ -347,8 +347,17 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
 
     bloqueados = {
         DocumentoEstado.Nombre.FIRMADO: "El documento ya está firmado.",
-        DocumentoEstado.Nombre.ENVIADO: "El documento ya fue enviado a la DIAN.",
+        DocumentoEstado.Nombre.ENVIADO: (
+            "El documento ya fue enviado a la DIAN; su estado se consulta con "
+            "actualizar-estado."
+        ),
         DocumentoEstado.Nombre.ACEPTADO: "El documento ya fue aceptado por la DIAN.",
+        # Volver a firmarlo no cambia nada de lo que la DIAN rechazó —el
+        # documento no se edita—: solo produce otro CUFE para el mismo número.
+        DocumentoEstado.Nombre.RECHAZADO: (
+            "El documento fue rechazado por la DIAN y no se vuelve a emitir: "
+            "bórrelo y créelo de nuevo con los datos corregidos."
+        ),
     }
     if documento.estado_id and documento.estado.nombre in bloqueados:
         raise ErrorEmision(bloqueados[documento.estado.nombre])

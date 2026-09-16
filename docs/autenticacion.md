@@ -278,5 +278,5 @@ los demás clientes de esa integración.
   `(emisor, prefijo, consecutivo, documento_tipo)`, que evita duplicar
   consecutivos; falta decidir si se acepta una cabecera `Idempotency-Key` para
   que el reintento del ERP devuelva el mismo recurso en vez de un 400.
-- **Emisión asíncrona + webhooks**: `enviar/` llama al WS de la DIAN dentro del
+- **Emisión asíncrona + webhooks**: `emitir/` llama al WS de la DIAN dentro del
   request; si la DIAN se degrada, el ERP se cuelga y el worker queda ocupado.

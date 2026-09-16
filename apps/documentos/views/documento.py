@@ -275,26 +275,40 @@ class DocumentoViewSet(
 
     @action(detail=True, methods=["post"])
     def emitir(self, request, pk=None):
-        """Genera el XML UBL, calcula el CUFE y firma el documento."""
-        documento = self.get_object()
-        try:
-            with transaction.atomic():
-                documento = self._bloquear(documento)
-                servicios.generar_y_firmar(documento)
-        except servicios.ErrorEmision as exc:
-            raise ErrorSolicitud(str(exc))
-        return Response({
-            "estado": documento.estado.nombre,
-            "cufe_cude": documento.cufe_cude,
-        })
+        """Firma el documento y lo envía a la DIAN, en una sola llamada.
 
-    @action(detail=True, methods=["post"])
-    def enviar(self, request, pk=None):
-        """Envía el documento firmado a la DIAN (Set de Pruebas en habilitación)."""
+        Antes eran dos acciones, `emitir` (firmar) y `enviar`; nadie firmaba
+        sin enviar a continuación, y la segunda llamada solo sumaba un viaje.
+
+        **Son dos transacciones, y a propósito.** La firma se confirma antes de
+        enviar: si el envío falla por red —o la DIAN recibe el documento y la
+        respuesta se pierde—, el documento queda `firmado` con su CUFE, y el
+        reintento manda **ese mismo** CUFE. En una sola transacción la firma se
+        desharía con el fallo, el reintento firmaría con otra hora y otro CUFE
+        para el mismo número, y la DIAN, que ya tenía el primero, lo rechazaría.
+        Por eso un 502 aquí no pierde nada: se vuelve a llamar.
+
+        Según el estado: `borrador` se firma y se envía; `firmado` —un intento
+        anterior que no llegó a enviar— solo se envía. `enviado`, `aceptado` y
+        `rechazado` responden 400: el primero se sigue con
+        `actualizar-estado/`, y un rechazado no se reemite, se borra y se crea
+        corregido.
+        """
         documento = self.get_object()
         try:
             with transaction.atomic():
                 documento = self._bloquear(documento)
+                if documento.estado.nombre != DocumentoEstado.Nombre.FIRMADO:
+                    # Lo que no se puede firmar lo explica el propio servicio.
+                    servicios.generar_y_firmar(documento)
+            with transaction.atomic():
+                documento = self._bloquear(documento)
+                # Entre las dos transacciones otra petición pudo enviarlo.
+                if documento.estado.nombre != DocumentoEstado.Nombre.FIRMADO:
+                    raise servicios.ErrorEmision(
+                        f"El documento {documento.numero} ya no está firmado y "
+                        f"pendiente de envío: está '{documento.estado.nombre}'."
+                    )
                 respuesta = servicios.enviar_a_dian(documento)
         except servicios.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
@@ -302,6 +316,7 @@ class DocumentoViewSet(
             raise error_pasarela_dian(exc)
         return Response({
             "estado": documento.estado.nombre,
+            "cufe_cude": documento.cufe_cude,
             "track_id": respuesta.track_id,
             "es_valido": respuesta.es_valido,
             "codigo_estado": respuesta.codigo_estado,

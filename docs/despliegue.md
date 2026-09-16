@@ -382,7 +382,7 @@ systemctl status nobelio
 
 Tres decisiones que importan:
 
-- **`gthread` y no `sync`**: `POST /enviar/` se queda bloqueado esperando a la
+- **`gthread` y no `sync`**: `POST /emitir/` se queda bloqueado esperando a la
   DIAN (`SendBillSync` puede tardar decenas de segundos). Con workers sync, cada
   envío deja un proceso entero inservible mientras tanto.
 - **`--timeout 120`**: por encima de lo que la DIAN llega a tardar. Con el

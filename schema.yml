@@ -1743,66 +1743,25 @@ paths:
   /api/documentos/documento/{id}/emitir/:
     post:
       operationId: documentos_documento_emitir_create
-      description: Genera el XML UBL, calcula el CUFE y firma el documento.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-          format: uuid
-        description: Un Cadena UUID que identifique este documento electrónico.
-        required: true
-      tags:
-      - documentos
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DocumentoRequest'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/DocumentoRequest'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/DocumentoRequest'
-        required: true
-      security:
-      - LlaveApi: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Documento'
-          description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '429':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '400':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '404':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-  /api/documentos/documento/{id}/enviar/:
-    post:
-      operationId: documentos_documento_enviar_create
-      description: Envía el documento firmado a la DIAN (Set de Pruebas en habilitación).
+      description: |-
+        Firma el documento y lo envía a la DIAN, en una sola llamada.
+
+        Antes eran dos acciones, `emitir` (firmar) y `enviar`; nadie firmaba
+        sin enviar a continuación, y la segunda llamada solo sumaba un viaje.
+
+        **Son dos transacciones, y a propósito.** La firma se confirma antes de
+        enviar: si el envío falla por red —o la DIAN recibe el documento y la
+        respuesta se pierde—, el documento queda `firmado` con su CUFE, y el
+        reintento manda **ese mismo** CUFE. En una sola transacción la firma se
+        desharía con el fallo, el reintento firmaría con otra hora y otro CUFE
+        para el mismo número, y la DIAN, que ya tenía el primero, lo rechazaría.
+        Por eso un 502 aquí no pierde nada: se vuelve a llamar.
+
+        Según el estado: `borrador` se firma y se envía; `firmado` —un intento
+        anterior que no llegó a enviar— solo se envía. `enviado`, `aceptado` y
+        `rechazado` responden 400: el primero se sigue con
+        `actualizar-estado/`, y un rechazado no se reemite, se borra y se crea
+        corregido.
       parameters:
       - in: path
         name: id

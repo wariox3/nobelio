@@ -269,9 +269,14 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
 ## 8. Ciclo de vida DIAN
 
 - [ ] `POST /api/documentos/documento/{id}/emitir/` → genera XML UBL 2.1, calcula
-      **CUFE/CUDE** y **firma XAdES-EPES** (requiere el certificado del emisor, vigente).
-- [ ] `POST /api/documentos/documento/{id}/enviar/` → envía a la DIAN por WS;
-      devuelve `track_id`, `es_valido`, `codigo_estado` y errores.
+      **CUFE/CUDE**, **firma XAdES-EPES** (requiere el certificado del emisor,
+      vigente) y **envía a la DIAN** por WS, todo en una llamada; devuelve
+      `estado`, `cufe_cude`, `track_id`, `es_valido`, `codigo_estado` y errores.
+      No hay `enviar/`: desde el 2026-09-16 es la misma acción.
+      La firma se confirma antes de enviar: si la DIAN no responde (502), el
+      documento queda `firmado` y el reintento de `emitir/` manda el mismo CUFE.
+      `enviado`, `aceptado` y `rechazado` responden 400; un rechazado se borra y
+      se crea de nuevo corregido.
       Se usa `SendTestSetAsync` (con el `test_set_id`) solo mientras se está en
       habilitación **y** el Set de Pruebas aún no ha sido aceptado; una vez
       aceptado (`SoftwareDian.set_pruebas_aceptado`) o en producción, `SendBillSync`.

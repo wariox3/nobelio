@@ -6,6 +6,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from unittest import mock
 
+import requests
 from cryptography.hazmat.primitives.serialization import (
     BestAvailableEncryption, pkcs12,
 )
@@ -25,7 +26,9 @@ from apps.catalogos.models import (
     Departamento, FormaPago, Municipio, Pais, ResponsabilidadFiscal,
     TipoOrganizacion, Tributo,
 )
+from apps.dian import soap
 from apps.dian.tests_firma import _generar_certificado
+from apps.dian.tests_servicios import FakeCliente
 from apps.documentos.models import (
     Adquiriente, Documento, DocumentoEstado, DocumentoTipo,
 )
@@ -136,14 +139,73 @@ class DocumentoAPITests(APITestCase):
             self.client.get(url, {"emisor": 999999}).data["count"], 0
         )
 
-    def test_emitir_firma_el_documento(self):
-        resp = self.client.post(self._url("emitir/"))
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertEqual(resp.data["estado"], DocumentoEstado.Nombre.FIRMADO)
+    def _emitir(self, cliente=None):
+        """`emitir/` con la DIAN simulada: por defecto, acepta."""
+        cliente = cliente or FakeCliente(
+            soap.RespuestaDian(track_id="track-1", es_valido=True, codigo_estado="00")
+        )
+        with mock.patch("apps.dian.servicios.construir_cliente", return_value=cliente):
+            return self.client.post(self._url("emitir/"))
+
+    def test_emitir_firma_y_envia_en_una_llamada(self):
+        cliente = FakeCliente(
+            soap.RespuestaDian(track_id="track-1", es_valido=True, codigo_estado="00")
+        )
+        resp = self._emitir(cliente)
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertEqual(resp.data["estado"], DocumentoEstado.Nombre.ACEPTADO)
         self.assertEqual(len(resp.data["cufe_cude"]), 96)
+        self.assertEqual(resp.data["track_id"], "track-1")
+        self.assertEqual(len(cliente.llamadas), 1)
+
+    def test_si_el_envio_falla_queda_firmado_y_el_reintento_manda_el_mismo_cufe(self):
+        """La firma se confirma antes de enviar.
+
+        Si se deshiciera con el fallo, el reintento firmaría con otra hora y
+        otro CUFE para el mismo número, y la DIAN —que pudo recibir el
+        primero— lo rechazaría.
+        """
+        caido = mock.Mock()
+        caido.enviar_set_pruebas.side_effect = requests.ConnectionError("sin red")
+        caido.enviar_factura_sincrono.side_effect = requests.ConnectionError("sin red")
+        fallo = self._emitir(caido)
+
+        self.assertEqual(fallo.status_code, status.HTTP_502_BAD_GATEWAY, fallo.data)
+        self.documento.refresh_from_db()
+        self.assertEqual(self.documento.estado.nombre, DocumentoEstado.Nombre.FIRMADO)
+        cufe = self.documento.cufe_cude
+        self.assertEqual(len(cufe), 96)
+
+        reintento = self._emitir()
+        self.assertEqual(reintento.status_code, status.HTTP_200_OK, reintento.data)
+        self.assertEqual(reintento.data["estado"], DocumentoEstado.Nombre.ACEPTADO)
+        self.assertEqual(reintento.data["cufe_cude"], cufe)
+
+    def test_no_se_emite_lo_que_ya_salio_hacia_la_dian(self):
+        """Enviado se sigue con `actualizar-estado/`; rechazado se borra y se recrea."""
+        for estado in (
+            DocumentoEstado.Nombre.ENVIADO,
+            DocumentoEstado.Nombre.ACEPTADO,
+            DocumentoEstado.Nombre.RECHAZADO,
+        ):
+            with self.subTest(estado=estado):
+                self.documento.estado = DocumentoEstado.objects.get(nombre=estado)
+                self.documento.save(update_fields=["estado"])
+                cliente = FakeCliente(soap.RespuestaDian(es_valido=True))
+
+                resp = self._emitir(cliente)
+
+                self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+                self.assertEqual(cliente.llamadas, [])
+
+    def test_enviar_ya_no_existe(self):
+        """Firmar y enviar es una sola acción: `emitir/`."""
+        resp = self.client.post(self._url("enviar/"))
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_descargar_xml_tras_emitir(self):
-        self.client.post(self._url("emitir/"))
+        self._emitir()
         resp = self.client.get(self._url("xml/"))
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(resp["Content-Type"], "application/xml")
@@ -151,7 +213,7 @@ class DocumentoAPITests(APITestCase):
         self.assertIn(b"<ds:Signature", b"".join(resp.streaming_content))
 
     def test_descargar_pdf_tras_emitir(self):
-        self.client.post(self._url("emitir/"))
+        self._emitir()
         resp = self.client.get(self._url("pdf/"))
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertEqual(resp["Content-Type"], "application/pdf")

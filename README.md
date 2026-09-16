@@ -319,27 +319,26 @@ curl -X POST http://localhost:8000/api/documentos/documento/ \
 `documento_tipo` es el **id** de la fila de `DocumentoTipo` cuyo `codigo` es
 `factura_venta`, `nota_credito`, `nota_debito`, `documento_soporte` o `nomina`.
 
-### 4. Emitir (genera XML UBL + CUFE + firma)
+### 4. Emitir (firma y envía a la DIAN)
 
-```bash
-curl -X POST http://localhost:8000/api/documentos/documento/<id>/emitir/ \
-  -H "Authorization: Api-Key $API_KEY"
-# → { "estado": "firmado", "cufe_cude": "8bb918b1...f5bd9b4" }
-```
-
-### 5. Enviar a la DIAN
-
-Se usa `SendTestSetAsync` (con el `test_set_id` del software) solo mientras se
-está en habilitación (`DIAN_ENVIRONMENT=2`) **y** el Set de Pruebas todavía no
-ha sido aceptado. En cuanto la DIAN lo acepta hay que marcar
+Una sola llamada: genera el XML UBL, calcula el CUFE, firma y envía. Se usa
+`SendTestSetAsync` (con el `test_set_id` del software) solo mientras se está en
+habilitación (`DIAN_ENVIRONMENT=2`) **y** el Set de Pruebas todavía no ha sido
+aceptado. En cuanto la DIAN lo acepta hay que marcar
 `SoftwareDian.set_pruebas_aceptado` a mano, y a partir de ahí —o en producción—
 se usa `SendBillSync` (síncrono).
 
 ```bash
-curl -X POST http://localhost:8000/api/documentos/documento/<id>/enviar/ \
+curl -X POST http://localhost:8000/api/documentos/documento/<id>/emitir/ \
   -H "Authorization: Api-Key $API_KEY"
-# → { "estado": "...", "track_id": "...", "es_valido": true/false, "errores": [...] }
+# → { "estado": "...", "cufe_cude": "8bb918b1...f5bd9b4", "track_id": "...",
+#     "es_valido": true/false, "codigo_estado": "...", "descripcion": "...", "errores": [...] }
 ```
+
+La firma se guarda antes de enviar. Si la DIAN no responde (502), el documento
+queda `firmado` con su CUFE y se vuelve a llamar a `emitir/`, que manda ese mismo
+CUFE. Un documento `enviado`, `aceptado` o `rechazado` no se vuelve a emitir
+(400); el rechazado se borra y se crea de nuevo corregido.
 
 El documento queda en `aceptado`, `rechazado` o —si la DIAN aún no ha
 resuelto— `enviado`. En ese último caso:

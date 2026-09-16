@@ -599,7 +599,8 @@ llaves si se hace con migración perezosa.
 
 ### D3 · El envío a la DIAN ocurre dentro de la petición HTTP — **abierto, a la espera de datos**
 
-`POST /enviar/` llama a `enviar_a_dian`, que hace el `requests.post` con
+`POST /emitir/` —antes `/enviar/`; desde el 2026-09-16 firma y envía en una
+sola acción— llama a `enviar_a_dian`, que hace el `requests.post` con
 `timeout=60` (`soap.py:531`). Con `--workers 3 --threads 4`, el techo son 12
 envíos simultáneos; el decimotercero espera. Y el cliente HTTP del ERP tiene que
 mantener abierta una conexión durante todo ese tiempo, con el timeout de nginx a
@@ -607,7 +608,7 @@ mantener abierta una conexión durante todo ese tiempo, con el timeout de nginx 
 
 Funciona para el volumen de factura. No funciona para el volumen que justifica
 el documento equivalente P.O.S., que es donde se van a ver los picos. La salida
-natural es una cola (`enviar/` encola y responde 202, un worker envía y aplica el
+natural es una cola (`emitir/` firma, encola y responde 202, un worker envía y aplica el
 estado), reutilizando `actualizar_estado`, que ya está escrito para eso. Es la
 única incidencia de este informe que es un cambio de arquitectura y no un
 arreglo, y por eso va en la última fase.
