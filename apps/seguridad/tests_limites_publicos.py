@@ -129,3 +129,25 @@ class IdentidadDetrasDeProxyTests(TestCase):
             }, content_type="application/json", HTTP_X_FORWARDED_FOR="5.6.7.8")
         self.assertEqual(primera.status_code, 201)
         self.assertEqual(segunda.status_code, 429)
+
+
+class TopeAnonimoTests(TestCase):
+    """El tope anónimo general no se suma al de las rutas que traen el suyo."""
+
+    def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    @con_topes(anon="2/hour", refresco="100/hour")
+    def test_no_ahoga_el_refresco(self):
+        """Antes cortaba en la tercera: una oficina tras un NAT perdía la sesión."""
+        url = reverse("token_refresh")
+        for _ in range(5):
+            r = self.client.post(url)
+            self.assertNotEqual(r.status_code, 429)
+
+    @con_topes(anon="1/hour")
+    def test_sigue_actuando_donde_la_vista_no_trae_tope(self):
+        url = reverse("docs")
+        self.assertEqual(self.client.get(url).status_code, 200)
+        self.assertEqual(self.client.get(url).status_code, 429)

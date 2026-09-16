@@ -11,7 +11,23 @@ que es lo que de verdad identifica a la integración —una persona puede tener
 varias llaves y conviene poder estrangular una sin tocar las demás—, y el
 usuario humano por su clave primaria.
 """
-from rest_framework.throttling import SimpleRateThrottle, UserRateThrottle
+from rest_framework.throttling import (
+    AnonRateThrottle,
+    ScopedRateThrottle,
+    SimpleRateThrottle,
+    UserRateThrottle,
+)
+
+
+def _identidad_de_credencial(request):
+    """La llave o el usuario de la petición; `None` si no trae credencial."""
+    usuario = getattr(request, "user", None)
+    if usuario is None or not usuario.is_authenticated:
+        return None
+    llave = getattr(usuario, "llave", None)
+    if llave is not None:
+        return f"llave-{llave.pk}"
+    return f"usuario-{usuario.pk}"
 
 
 class LimitePorCredencial(UserRateThrottle):
@@ -20,16 +36,45 @@ class LimitePorCredencial(UserRateThrottle):
     scope = "user"
 
     def get_cache_key(self, request, view):
-        usuario = getattr(request, "user", None)
-        if usuario is None or not usuario.is_authenticated:
-            # Sin credencial: de esta se ocupa `AnonRateThrottle`.
+        identidad = _identidad_de_credencial(request)
+        if identidad is None:
+            # Sin credencial: de esta se ocupa `LimiteAnonimo`.
             return None
+        return self.cache_format % {"scope": self.scope, "ident": identidad}
 
-        llave = getattr(usuario, "llave", None)
-        if llave is not None:
-            identidad = f"llave-{llave.pk}"
-        else:
-            identidad = f"usuario-{usuario.pk}"
+
+class LimiteAnonimo(AnonRateThrottle):
+    """El tope anónimo general, solo donde la vista no trae el suyo.
+
+    Las rutas públicas (login, refresco, MFA, registro, recuperación) declaran
+    `authentication_classes = []`, así que para DRF todas son anónimas y el
+    `AnonRateThrottle` les sumaba su tope encima del propio. Y ese tope es uno
+    solo por IP para todas juntas: con 30/hora, una oficina detrás de un NAT
+    agotaba el cupo con los refrescos del access —cuatro por hora por pestaña—
+    y se quedaba sin sesión y sin poder volver a entrar. Los topes de cada
+    ruta (`refresco`, `login`…) nunca llegaban a actuar.
+
+    Donde la vista declara `throttle_scope` ya lleva su tope por IP, pensado
+    para ella; este queda para lo anónimo que no lo trae.
+    """
+
+    def allow_request(self, request, view):
+        if getattr(view, "throttle_scope", None):
+            return True
+        return super().allow_request(request, view)
+
+
+class LimitePorAmbito(ScopedRateThrottle):
+    """`ScopedRateThrottle` que entiende la API Key.
+
+    El de DRF tiene el mismo fallo que `UserRateThrottle`: con credencial usa
+    `request.user.pk`, y una vista autenticada con `throttle_scope` (las de
+    gestión del MFA) respondía 500 a cualquier API Key. Sin credencial cuenta
+    por IP, como el original.
+    """
+
+    def get_cache_key(self, request, view):
+        identidad = _identidad_de_credencial(request) or self.get_ident(request)
         return self.cache_format % {"scope": self.scope, "ident": identidad}
 
 

@@ -748,6 +748,11 @@ Los doce puntos, más **B9**, que salió escribiendo las pruebas de la fase 2.
     entorno. Hizo falta un throttle propio: el de DRF construye su clave con
     `request.user.pk` y el principal de una API Key no es un modelo. **(A7, parcial:
     la auditoría sigue pendiente)**
+    *(2026-09-16: el `AnonRateThrottle` y el `ScopedRateThrottle` de DRF tenían
+    sus propios fallos. El anónimo, con un único cupo de 30/hora por IP, se
+    sumaba al tope de cada ruta pública y cortaba el refresco de toda una oficina
+    tras un NAT. El de ámbito devolvía 500 a una API Key en la gestión del MFA.
+    Se cambiaron por `LimiteAnonimo` y `LimitePorAmbito`.)*
 11. ~~Barrido de documentación.~~ Los tres puntos de **E5** y el scaffolding vacío
     de **E4** (cuatro ficheros de `startapp` sin tocar). **(E4, E5)**
 12. ~~Orden de los listados.~~ `order_by` explícito tras el `annotate`. **(B9)**

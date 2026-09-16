@@ -6,9 +6,11 @@ vive.
 """
 from unittest import mock
 
+from django.conf import settings
 from django.core.cache import cache
 from rest_framework import status
 from rest_framework.test import APITestCase
+from rest_framework.throttling import SimpleRateThrottle
 
 from apps.documentos.tests_utils import crear_usuario
 from apps.seguridad.limites import LimitePorCredencial
@@ -84,8 +86,49 @@ class LimitePorCredencialTests(APITestCase):
             )
 
     def test_sin_credencial_no_lo_cuenta_este_throttle(self):
-        """De lo anónimo se ocupa `AnonRateThrottle`, no este."""
+        """De lo anónimo se ocupa `LimiteAnonimo`, no este."""
         peticion = type("P", (), {"user": None})()
         self.assertIsNone(
             LimitePorCredencial().get_cache_key(peticion, view=None)
         )
+
+
+class LimitePorAmbitoTests(APITestCase):
+    """Las vistas autenticadas con `throttle_scope`, llamadas con API Key."""
+
+    URL = "/api/seguridad/mfa/enrolar/"
+
+    def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.usuario = Usuario.objects.create_user(
+            email="humano@nobelio.co", password="ClaveSegura123"
+        )
+
+    def _tasas(self, **rates):
+        combinados = {**settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"], **rates}
+        return mock.patch.object(SimpleRateThrottle, "THROTTLE_RATES", combinados)
+
+    def _api_key(self):
+        _, clave = LlaveApi.generar(nombre="ERP", usuario=self.usuario)
+        return {"HTTP_AUTHORIZATION": f"Api-Key {clave}"}
+
+    def test_la_api_key_se_cuenta_en_vez_de_dar_500(self):
+        """El `ScopedRateThrottle` de DRF pedía `request.user.pk` y reventaba."""
+        with self._tasas(mfa_gestion="1/hour"):
+            cabecera = self._api_key()
+            primera = self.client.post(self.URL, {}, format="json", **cabecera)
+            segunda = self.client.post(self.URL, {}, format="json", **cabecera)
+
+        self.assertNotEqual(primera.status_code, 429)
+        self.assertLess(primera.status_code, 500)
+        self.assertEqual(segunda.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_la_llave_y_la_persona_llevan_cuentas_distintas(self):
+        with self._tasas(mfa_gestion="1/hour"):
+            cabecera = self._api_key()
+            self.client.post(self.URL, {}, format="json", **cabecera)
+            self.client.force_authenticate(self.usuario)
+            humano = self.client.post(self.URL, {}, format="json")
+
+        self.assertNotEqual(humano.status_code, 429)

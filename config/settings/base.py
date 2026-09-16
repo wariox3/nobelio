@@ -304,11 +304,14 @@ REST_FRAMEWORK = {
         # El de DRF no vale: construye su clave con `request.user.pk` y el
         # principal de una API Key no es un modelo. Ver apps/seguridad/limites.py.
         "apps.seguridad.limites.LimitePorCredencial",
-        "rest_framework.throttling.AnonRateThrottle",
+        # Se aparta donde la vista declara `throttle_scope`: si no, su tope
+        # único por IP se sumaba al de cada ruta pública y las ahogaba a todas.
+        "apps.seguridad.limites.LimiteAnonimo",
         # Solo actúa donde la vista declara `throttle_scope`; en el resto no
-        # estorba. Lo usan las rutas del registro, que son anónimas y caras:
-        # cada una crea filas o dispara un correo por la pasarela.
-        "rest_framework.throttling.ScopedRateThrottle",
+        # estorba. Lo usan las rutas públicas, que son anónimas y caras: cada
+        # una crea filas o dispara un correo por la pasarela. Propio por lo
+        # mismo que el de credencial: el de DRF no entiende la API Key.
+        "apps.seguridad.limites.LimitePorAmbito",
         # Ráfaga corta por IP y tope por destinatario. Ver limites.py: DRF
         # aplica todos, así que frena el más estricto de los que apliquen.
         "apps.seguridad.limites.LimiteRafaga",

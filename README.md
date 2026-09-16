@@ -99,7 +99,7 @@ Variables principales (`config/settings/base.py` las lee con `django-environ`):
 | `DIAN_POLICY_HASH` | SHA-256 (base64) del PDF de la política | el de la política v2 |
 | `CERT_ENCRYPTION_KEY` | Clave Fernet que cifra la clave del `.p12` (**obligatoria**) | — |
 | `THROTTLE_USUARIO` | Tope de peticiones por credencial | `300/hour` |
-| `THROTTLE_ANONIMO` | Tope de peticiones sin credencial | `30/hour` |
+| `THROTTLE_ANONIMO` | Tope de peticiones sin credencial, donde la ruta no trae el suyo propio | `30/hour` |
 | `SENTRY_DSN` | Errores a Sentry; vacío lo desactiva | *(vacío)* |
 | `SENTRY_ENTORNO` | Entorno con el que se etiquetan los eventos | `desarrollo` |
 
