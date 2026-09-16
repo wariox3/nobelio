@@ -11,11 +11,13 @@ from .empleado import Empleado
 from .nomina import Nomina
 from .nomina_concepto import NominaConcepto
 from .nomina_error import NominaError
+from .nomina_evento import NominaEvento
 
 __all__ = [
     "Empleado",
     "Nomina",
     "NominaConcepto",
     "NominaError",
+    "NominaEvento",
     "ConsecutivoArchivo",
 ]

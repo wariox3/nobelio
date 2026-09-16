@@ -6,6 +6,7 @@ from .nomina import (
     NominaSerializer,
 )
 from .nomina_concepto import NominaConceptoSerializer
+from .nomina_evento import NominaEventoSerializer
 
 __all__ = [
     "EmpleadoSerializer",
@@ -13,4 +14,5 @@ __all__ = [
     "NominaListaSerializer",
     "NominaCrearSerializer",
     "NominaConceptoSerializer",
+    "NominaEventoSerializer",
 ]

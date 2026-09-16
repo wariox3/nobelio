@@ -601,6 +601,9 @@ SPECTACULAR_SETTINGS = {
         # atributo, y `Documento.Envio.choices` son dos.
         "EnvioDocumentoEnum": "apps.documentos.models.Documento.Envio",
         "EnvioNominaEnum": "apps.nomina.models.Nomina.Envio",
+        # Los eventos de documento y de nómina tienen la misma lista, y `tipo` es
+        # un nombre de campo que usan otros modelos con otras.
+        "TipoEventoEnum": "apps.documentos.models.DocumentoEvento.Tipo",
     },
     "COMPONENT_SPLIT_REQUEST": True,
     # Qué NO se publica. `/api/seguridad/` queda fuera del esquema: su

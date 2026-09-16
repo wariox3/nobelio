@@ -6,5 +6,6 @@ from apps.nomina import views
 router = SimpleRouter()
 router.register("empleado", views.EmpleadoViewSet)
 router.register("nomina", views.NominaViewSet)
+router.register("nomina-evento", views.NominaEventoViewSet)
 
 urlpatterns = router.urls

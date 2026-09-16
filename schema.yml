@@ -1428,6 +1428,100 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/documentos/documento-evento/:
+    get:
+      operationId: documentos_documento_evento_list
+      description: |-
+        Los cambios de estado de los documentos ante la DIAN.
+
+        Solo cambios de estado —firmado, enviado sin veredicto, validado,
+        rechazado—: crear no deja evento, ni una consulta que no cambia nada. De
+        solo lectura: los eventos los escribe el sistema al emitir.
+
+        Filtros: ``?documento=<uuid>`` y ``?tipo=firmado|enviado|validado|rechazado``.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un número de página dentro del conjunto de resultados paginado.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - documentos
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDocumentoEventoList'
+          description: ''
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/documentos/documento-evento/{id}/:
+    get:
+      operationId: documentos_documento_evento_retrieve
+      description: |-
+        Los cambios de estado de los documentos ante la DIAN.
+
+        Solo cambios de estado —firmado, enviado sin veredicto, validado,
+        rechazado—: crear no deja evento, ni una consulta que no cambia nada. De
+        solo lectura: los eventos los escribe el sistema al emitir.
+
+        Filtros: ``?documento=<uuid>`` y ``?tipo=firmado|enviado|validado|rechazado``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este evento de documento.
+        required: true
+      tags:
+      - documentos
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentoEvento'
+          description: ''
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/documentos/documento/{id}/:
     get:
       operationId: documentos_documento_retrieve
@@ -4146,6 +4240,100 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/nomina/nomina-evento/:
+    get:
+      operationId: nomina_nomina_evento_list
+      description: |-
+        Los cambios de estado de las nóminas ante la DIAN.
+
+        Solo cambios de estado —firmada, enviada sin veredicto, validada,
+        rechazada—: crear no deja evento, ni una consulta que no cambia nada. De
+        solo lectura: los eventos los escribe el sistema al emitir.
+
+        Filtros: ``?nomina=<uuid>`` y ``?tipo=firmado|enviado|validado|rechazado``.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un número de página dentro del conjunto de resultados paginado.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - nomina
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNominaEventoList'
+          description: ''
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/nomina/nomina-evento/{id}/:
+    get:
+      operationId: nomina_nomina_evento_retrieve
+      description: |-
+        Los cambios de estado de las nóminas ante la DIAN.
+
+        Solo cambios de estado —firmada, enviada sin veredicto, validada,
+        rechazada—: crear no deja evento, ni una consulta que no cambia nada. De
+        solo lectura: los eventos los escribe el sistema al emitir.
+
+        Filtros: ``?nomina=<uuid>`` y ``?tipo=firmado|enviado|validado|rechazado``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este evento de nómina.
+        required: true
+      tags:
+      - nomina
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NominaEvento'
+          description: ''
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/nomina/nomina/{id}/:
     get:
       operationId: nomina_nomina_retrieve
@@ -5612,6 +5800,32 @@ components:
         * `rechazo` - Rechazo
         * `notificacion` - Notificación
         * `otro` - Otro
+    DocumentoEvento:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        documento:
+          type: string
+          format: uuid
+          readOnly: true
+        tipo:
+          allOf:
+          - $ref: '#/components/schemas/TipoEventoEnum'
+          readOnly: true
+        datos:
+          readOnly: true
+        fecha:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - datos
+      - documento
+      - fecha
+      - id
+      - tipo
     DocumentoLista:
       type: object
       description: |-
@@ -7913,6 +8127,33 @@ components:
       - moneda
       - periodo_nomina
       - tiempo_laborado
+    NominaEvento:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        nomina:
+          type: string
+          format: uuid
+          readOnly: true
+          title: Nómina
+        tipo:
+          allOf:
+          - $ref: '#/components/schemas/TipoEventoEnum'
+          readOnly: true
+        datos:
+          readOnly: true
+        fecha:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - datos
+      - fecha
+      - id
+      - nomina
+      - tipo
     NominaLista:
       type: object
       description: |-
@@ -8256,6 +8497,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Certificado'
+    PaginatedDocumentoEventoList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentoEvento'
     PaginatedDocumentoListaList:
       type: object
       required:
@@ -8371,6 +8635,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Municipio'
+    PaginatedNominaEventoList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/NominaEvento'
     PaginatedNominaListaList:
       type: object
       required:
@@ -9028,6 +9315,18 @@ components:
       description: |-
         * `ahorros` - Ahorros
         * `corriente` - Corriente
+    TipoEventoEnum:
+      enum:
+      - firmado
+      - enviado
+      - validado
+      - rechazado
+      type: string
+      description: |-
+        * `firmado` - Firmado
+        * `enviado` - Enviado sin veredicto
+        * `validado` - Validado por la DIAN
+        * `rechazado` - Rechazado por la DIAN
     TipoIncapacidadEnum:
       enum:
       - '1'

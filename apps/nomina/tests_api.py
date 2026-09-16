@@ -243,6 +243,43 @@ class NominaCicloTests(NominaAPIBase):
         # Salió por el Set de Pruebas: se pregunta por el ZipKey, y no se reenvía.
         self.assertEqual([llamada[0] for llamada in cliente.llamadas], ["estado_zip"])
 
+    def test_los_eventos_siguen_los_cambios_de_estado(self):
+        """Firmada y enviada sin veredicto; la consulta sin cambio no deja nada."""
+        self._emitir(ClienteNominaFalso(_respuesta(es_valido=False, errores=[])))
+        self._emitir(ClienteNominaFalso(_respuesta(es_valido=False, errores=[])))
+        self.assertEqual(
+            list(self.nomina.eventos.values_list("tipo", flat=True)), ["firmado", "enviado"],
+        )
+
+        self._emitir(ClienteNominaFalso(_respuesta()))
+
+        resp = self.client.get("/api/nomina/nomina-evento/", {"nomina": self.nomina.id})
+        self.nomina.refresh_from_db()
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        eventos = resp.data["results"]
+        self.assertEqual([e["tipo"] for e in eventos], ["firmado", "enviado", "validado"])
+        self.assertEqual(eventos[0]["datos"]["cune"], self.nomina.cune)
+        self.assertEqual(eventos[2]["datos"]["origen"], "consulta")
+        # No se consultan desde la nómina.
+        self.assertEqual(
+            self.client.get(self._url("eventos/")).status_code, status.HTTP_404_NOT_FOUND,
+        )
+
+    def test_documento_y_nomina_tienen_los_mismos_tipos(self):
+        """Los registra el mismo servicio, con el mismo mapa de estado a evento."""
+        from apps.documentos.models import DocumentoEvento
+        from apps.nomina.models import NominaEvento
+
+        self.assertEqual(DocumentoEvento.Tipo.choices, NominaEvento.Tipo.choices)
+
+    def test_el_rechazo_de_la_nomina_guarda_las_reglas(self):
+        errores = ["Regla: NIE001, Rechazo: El CUNE no corresponde."]
+        self._emitir(ClienteNominaFalso(_respuesta(es_valido=False, errores=errores)))
+
+        evento = self.nomina.eventos.last()
+        self.assertEqual(evento.tipo, "rechazado")
+        self.assertEqual(evento.datos["errores"], errores)
+
     def test_consultar_solo_lee(self):
         """Antes aplicaba el resultado; ahora eso es de `emitir/`, y el POST ya no existe."""
         self._emitir(ClienteNominaFalso(_respuesta(es_valido=False, errores=[])))

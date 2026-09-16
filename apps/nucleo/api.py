@@ -25,6 +25,7 @@ código y el mismo texto que ``detail``. Así el cliente decide siempre por
 ``codigo``, venga el fallo de donde venga.
 """
 import logging
+import uuid
 
 from rest_framework.exceptions import APIException
 from rest_framework.settings import api_settings
@@ -69,6 +70,23 @@ def entero_de_query(params, nombre):
         raise ErrorSolicitud(
             f"El filtro '{nombre}' tiene que ser un número entero; "
             f"se recibió '{valor}'."
+        )
+
+
+def uuid_de_query(params, nombre):
+    """Lee un filtro UUID de la query string, o lanza un 400 con sentido.
+
+    Igual que ``entero_de_query``, pero para las claves UUID: un valor que no es
+    UUID llegaría a un ``filter(pk=...)`` y saldría como 500.
+    """
+    valor = params.get(nombre)
+    if valor is None or valor == "":
+        return None
+    try:
+        return uuid.UUID(str(valor))
+    except ValueError:
+        raise ErrorSolicitud(
+            f"El filtro '{nombre}' tiene que ser un UUID; se recibió '{valor}'."
         )
 
 

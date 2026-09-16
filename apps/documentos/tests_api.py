@@ -30,7 +30,7 @@ from apps.dian import soap
 from apps.dian.tests_firma import _generar_certificado
 from apps.dian.tests_servicios import FakeCliente
 from apps.documentos.models import (
-    Adquiriente, Documento, DocumentoEstado, DocumentoTipo,
+    Adquiriente, Documento, DocumentoEstado, DocumentoEvento, DocumentoTipo,
 )
 from apps.documentos.serializers.documento_detalle import (
     CODIGO_MAYOR_QUE_CERO,
@@ -78,6 +78,7 @@ from apps.nomina.tests_utils import crear_catalogos_de_pago
 from apps.nucleo.tests_utils import codigos, errores_por_campo
 
 MEDIA_TEMP = tempfile.mkdtemp()
+URL_EVENTOS = "/api/documentos/documento-evento/"
 
 
 @override_settings(MEDIA_ROOT=MEDIA_TEMP)
@@ -228,6 +229,112 @@ class DocumentoAPITests(APITestCase):
 
                 self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
                 self.assertEqual(cliente.llamadas, [])
+
+    # --- Eventos: un registro por cada cambio de estado ----------------------
+
+    def _eventos(self):
+        return list(self.documento.eventos.values_list("tipo", flat=True))
+
+    def test_crear_no_deja_evento(self):
+        resp = self._crear()
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertFalse(Documento.objects.get(pk=resp.data["id"]).eventos.exists())
+
+    def test_emitir_y_validarse_en_el_envio_deja_firmado_y_validado(self):
+        """Nunca estuvo en `enviado`, así que ese evento no aparece."""
+        self._emitir()
+        self.documento.refresh_from_db()
+
+        self.assertEqual(self._eventos(), ["firmado", "validado"])
+        firmado, validado = self.documento.eventos.all()
+        self.assertEqual(firmado.datos["cufe_cude"], self.documento.cufe_cude)
+        self.assertEqual(validado.datos["origen"], "envio")
+        self.assertEqual(validado.datos["track_id"], "track-1")
+        self.assertIn("fecha_validacion", validado.datos)
+
+    def test_sin_veredicto_deja_enviado_y_la_consulta_deja_validado(self):
+        self._emitir(FakeCliente(soap.RespuestaDian(track_id="zip-1")))
+        self.assertEqual(self._eventos(), ["firmado", "enviado"])
+
+        # Una consulta que sigue sin veredicto no cambia el estado: no deja nada.
+        self._emitir(FakeCliente(soap.RespuestaDian(codigo_estado="99")))
+        self.assertEqual(self._eventos(), ["firmado", "enviado"])
+
+        self._emitir(FakeCliente(soap.RespuestaDian(es_valido=True, codigo_estado="00")))
+        self.assertEqual(self._eventos(), ["firmado", "enviado", "validado"])
+        self.assertEqual(self.documento.eventos.last().datos["origen"], "consulta")
+
+    def test_el_rechazo_guarda_las_reglas(self):
+        errores = ["Regla: FAJ24, Rechazo: DV del NIT no es correcto"]
+        self._emitir(FakeCliente(soap.RespuestaDian(codigo_estado="99", errores=errores)))
+
+        self.assertEqual(self._eventos(), ["firmado", "rechazado"])
+        self.assertEqual(self.documento.eventos.last().datos["errores"], errores)
+
+    def test_un_502_solo_deja_la_firma(self):
+        caido = mock.Mock()
+        caido.enviar_set_pruebas.side_effect = requests.ConnectionError("sin red")
+        caido.enviar_factura_sincrono.side_effect = requests.ConnectionError("sin red")
+        self._emitir(caido)
+
+        self.assertEqual(self._eventos(), ["firmado"])
+
+    def test_el_endpoint_de_eventos_los_devuelve_en_orden(self):
+        self._emitir(FakeCliente(soap.RespuestaDian(track_id="zip-1")))
+        self._emitir(FakeCliente(soap.RespuestaDian(es_valido=True, codigo_estado="00")))
+
+        resp = self.client.get(URL_EVENTOS, {"documento": self.documento.id})
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        eventos = resp.data["results"]
+        self.assertEqual([e["tipo"] for e in eventos], ["firmado", "enviado", "validado"])
+        self.assertEqual(set(eventos[0]), {"id", "documento", "tipo", "datos", "fecha"})
+
+        por_tipo = self.client.get(URL_EVENTOS, {"documento": self.documento.id, "tipo": "enviado"})
+        self.assertEqual([e["tipo"] for e in por_tipo.data["results"]], ["enviado"])
+
+    def test_los_eventos_no_se_consultan_desde_el_documento(self):
+        self.assertEqual(
+            self.client.get(self._url("eventos/")).status_code, status.HTTP_404_NOT_FOUND,
+        )
+
+    def test_los_eventos_son_de_solo_lectura(self):
+        self._emitir()
+        evento = self.documento.eventos.first()
+        self.assertEqual(
+            self.client.post(URL_EVENTOS, {}, format="json").status_code,
+            status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+        self.assertEqual(
+            self.client.delete(f"{URL_EVENTOS}{evento.id}/").status_code,
+            status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    def test_los_eventos_de_otra_cuenta_no_se_ven(self):
+        self._emitir()
+        evento = self.documento.eventos.first()
+        extrano = get_user_model().objects.create_user(email="otro@example.com", password="x")
+        self.client.force_authenticate(extrano)
+
+        self.assertEqual(self.client.get(URL_EVENTOS).data["count"], 0)
+        self.assertEqual(
+            self.client.get(f"{URL_EVENTOS}{evento.id}/").status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
+    def test_el_filtro_de_documento_exige_un_uuid(self):
+        resp = self.client.get(URL_EVENTOS, {"documento": "abc"})
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+
+    def test_borrar_el_documento_borra_sus_eventos(self):
+        errores = ["Regla: FAJ24, Rechazo: DV del NIT no es correcto"]
+        self._emitir(FakeCliente(soap.RespuestaDian(codigo_estado="99", errores=errores)))
+        self.assertTrue(DocumentoEvento.objects.filter(documento=self.documento).exists())
+
+        resp = self.client.delete(self._url())
+
+        self.assertEqual(resp.status_code, status.HTTP_204_NO_CONTENT, resp.data)
+        self.assertFalse(DocumentoEvento.objects.exists())
 
     def test_enviar_ya_no_existe(self):
         """Firmar y enviar es una sola acción: `emitir/`."""

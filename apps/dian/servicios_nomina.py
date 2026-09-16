@@ -32,6 +32,8 @@ from apps.dian.servicios import (
     _ya_procesado,
     construir_cliente_emisor,
     construir_firmador_emisor,
+    datos_del_veredicto,
+    registrar_cambio_de_estado,
 )
 from apps.documentos.models import DocumentoEstado
 from apps.emisores.models import SoftwareDian
@@ -167,11 +169,13 @@ def generar_y_firmar_nomina(nomina, *, firmador=None, ambiente=None, **cred):
         f"{nomina.numero}.xml", ContentFile(xml_firmado), save=False
     )
     nomina.ambiente = ambiente
+    estado_anterior = nomina.estado.nombre if nomina.estado_id else ""
     nomina.estado = _estado(DocumentoEstado.Nombre.FIRMADO)
     nomina.save(update_fields=[
         "cune", "fecha_generacion", "hora_generacion", "xml_archivo", "ambiente",
         "estado", "actualizado_en",
     ])
+    registrar_cambio_de_estado(nomina, estado_anterior, {"cune": nomina.cune})
     logger.info("nomina.firmada %s", campos(
         nomina=nomina.pk,
         emisor=nomina.emisor_id,
@@ -243,6 +247,7 @@ def enviar_nomina_a_dian(nomina, *, cliente=None, ambiente=None, **cred):
         Nomina.Envio.SET_PRUEBAS if usar_set_pruebas else Nomina.Envio.SINCRONO
     )
 
+    estado_anterior = nomina.estado.nombre if nomina.estado_id else ""
     _guardar_respuesta_nomina(nomina, respuesta)
     if respuesta.track_id:
         nomina.track_id = respuesta.track_id
@@ -263,6 +268,9 @@ def enviar_nomina_a_dian(nomina, *, cliente=None, ambiente=None, **cred):
         "respuesta_archivo", "track_id", "envio", "estado", "fecha_validacion",
         "actualizado_en",
     ])
+    registrar_cambio_de_estado(
+        nomina, estado_anterior, datos_del_veredicto(nomina, respuesta, "envio"),
+    )
     _registrar_veredicto("nomina.enviada", nomina, respuesta, campos(
         numero=nomina.numero,
         ambiente=ambiente,
@@ -352,6 +360,9 @@ def actualizar_estado_nomina(nomina, *, cliente=None, ambiente=None, **cred):
     nomina.save(update_fields=[
         "respuesta_archivo", "estado", "fecha_validacion", "actualizado_en",
     ])
+    registrar_cambio_de_estado(
+        nomina, codigo_actual, datos_del_veredicto(nomina, respuesta, "consulta"),
+    )
     _registrar_veredicto("nomina.estado_actualizado", nomina, respuesta, campos(
         numero=nomina.numero,
         desde=codigo_actual,

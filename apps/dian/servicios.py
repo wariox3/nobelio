@@ -22,6 +22,7 @@ from apps.documentos.models import (
     Documento,
     DocumentoError,
     DocumentoEstado,
+    DocumentoEvento,
     DocumentoTipo,
 )
 from apps.emisores.models import SoftwareDian
@@ -71,6 +72,51 @@ def _registrar_veredicto(evento, obj, respuesta, extra="", etiqueta="documento")
 def _estado(nombre: str) -> DocumentoEstado:
     """Devuelve la instancia de estado por su nombre (FK de Documento.estado)."""
     return DocumentoEstado.objects.get(nombre=nombre)
+
+
+# El evento que deja llegar a cada estado. `borrador` no está: se llega al crear,
+# y crear no deja evento. Sirve también para la nómina: `NominaEvento.Tipo` tiene
+# los mismos valores (lo comprueba `test_documento_y_nomina_tienen_los_mismos_tipos`).
+EVENTO_POR_ESTADO = {
+    DocumentoEstado.Nombre.FIRMADO: DocumentoEvento.Tipo.FIRMADO,
+    DocumentoEstado.Nombre.ENVIADO: DocumentoEvento.Tipo.ENVIADO,
+    DocumentoEstado.Nombre.ACEPTADO: DocumentoEvento.Tipo.VALIDADO,
+    DocumentoEstado.Nombre.RECHAZADO: DocumentoEvento.Tipo.RECHAZADO,
+}
+
+
+def registrar_cambio_de_estado(obj, estado_anterior, datos):
+    """Deja el evento del estado al que acaba de pasar ``obj``, si cambió.
+
+    ``obj`` es un documento o una nómina: los dos tienen ``eventos``. Si el
+    estado es el mismo que antes —una consulta que no trajo veredicto, un
+    reenvío que no movió nada— no se registra nada: solo se guardan cambios.
+
+    Va en la misma transacción que el cambio, cuando la hay: si el cambio se
+    deshace, el evento también.
+    """
+    nombre = obj.estado.nombre if obj.estado_id else ""
+    if nombre == estado_anterior or nombre not in EVENTO_POR_ESTADO:
+        return None
+    return obj.eventos.create(tipo=EVENTO_POR_ESTADO[nombre], datos=datos)
+
+
+def datos_del_veredicto(obj, respuesta, origen):
+    """El detalle de un evento que sale de una respuesta de la DIAN.
+
+    ``origen`` dice de dónde vino el cambio: ``envio`` o ``consulta``.
+    """
+    datos = {
+        "origen": origen,
+        "envio": obj.envio,
+        "track_id": obj.track_id,
+        "codigo_estado": respuesta.codigo_estado,
+    }
+    if obj.estado.nombre == DocumentoEstado.Nombre.ACEPTADO:
+        datos["fecha_validacion"] = obj.fecha_validacion
+    elif obj.estado.nombre == DocumentoEstado.Nombre.RECHAZADO:
+        datos["errores"] = list(respuesta.errores)
+    return datos
 
 
 class ErrorEmision(Exception):
@@ -428,11 +474,15 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
         f"{documento.numero}.xml", ContentFile(xml_firmado), save=False
     )
     documento.ambiente = ambiente
+    estado_anterior = documento.estado.nombre if documento.estado_id else ""
     documento.estado = _estado(DocumentoEstado.Nombre.FIRMADO)
     documento.save(update_fields=[
         "cufe_cude", "hora_emision", "xml_archivo", "ambiente", "estado",
         "actualizado_en",
     ])
+    registrar_cambio_de_estado(
+        documento, estado_anterior, {"cufe_cude": documento.cufe_cude},
+    )
     logger.info("documento.firmado %s", campos(
         documento=documento.pk,
         emisor=documento.emisor_id,
@@ -622,6 +672,7 @@ def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):
         Documento.Envio.SET_PRUEBAS if usar_set_pruebas else Documento.Envio.SINCRONO
     )
 
+    estado_anterior = documento.estado.nombre if documento.estado_id else ""
     _guardar_respuesta(documento, respuesta)
     if respuesta.track_id:
         documento.track_id = respuesta.track_id
@@ -639,6 +690,9 @@ def enviar_a_dian(documento, *, cliente=None, ambiente=None, **cred):
         *_CAMPOS_RESPUESTA, "track_id", "envio", "estado", "fecha_validacion",
         "actualizado_en",
     ])
+    registrar_cambio_de_estado(
+        documento, estado_anterior, datos_del_veredicto(documento, respuesta, "envio"),
+    )
     _registrar_veredicto("documento.enviado", documento, respuesta, campos(
         tipo=documento.documento_tipo.codigo,
         numero=documento.numero,
@@ -746,6 +800,9 @@ def actualizar_estado(documento, *, cliente=None, ambiente=None, **cred):
     documento.save(update_fields=[
         *_CAMPOS_RESPUESTA, "estado", "fecha_validacion", "actualizado_en",
     ])
+    registrar_cambio_de_estado(
+        documento, codigo_actual, datos_del_veredicto(documento, respuesta, "consulta"),
+    )
     _registrar_veredicto("documento.estado_actualizado", documento, respuesta, campos(
         numero=documento.numero,
         desde=codigo_actual,
