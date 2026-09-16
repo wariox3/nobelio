@@ -232,7 +232,6 @@ class DocumentoViewSet(
 
         borrables = {
             DocumentoEstado.Nombre.BORRADOR,
-            DocumentoEstado.Nombre.GENERADO,
             DocumentoEstado.Nombre.FIRMADO,
             DocumentoEstado.Nombre.ENVIADO,
             DocumentoEstado.Nombre.RECHAZADO,

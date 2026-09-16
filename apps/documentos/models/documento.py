@@ -361,9 +361,7 @@ class Documento(ModeloUUID, ModeloConFechas):
 
         if not self.estado_id:
             return True
-        return self.estado.nombre in (
-            DocumentoEstado.Nombre.BORRADOR, DocumentoEstado.Nombre.GENERADO,
-        )
+        return self.estado.nombre == DocumentoEstado.Nombre.BORRADOR
 
     def leer_xml(self) -> bytes:
         """Devuelve los bytes del XML firmado desde el storage (B2/local)."""

@@ -14,7 +14,6 @@ class DocumentoEstado(ModeloConFechas):
 
     class Nombre(models.TextChoices):
         BORRADOR = "borrador", "Borrador"
-        GENERADO = "generado", "XML generado"
         FIRMADO = "firmado", "Firmado"
         ENVIADO = "enviado", "Enviado a la DIAN"
         ACEPTADO = "aceptado", "Aceptado por la DIAN"
