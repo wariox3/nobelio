@@ -182,10 +182,40 @@ class DocumentoAPITests(APITestCase):
         self.assertEqual(reintento.data["estado"], DocumentoEstado.Nombre.ACEPTADO)
         self.assertEqual(reintento.data["cufe_cude"], cufe)
 
-    def test_no_se_emite_lo_que_ya_salio_hacia_la_dian(self):
-        """Enviado se sigue con `actualizar-estado/`; rechazado se borra y se recrea."""
+    def test_emitir_un_enviado_consulta_y_aplica_sin_reenviar(self):
+        """Sin `actualizar-estado/`: el ERP llama a `emitir/` hasta el estado final."""
+        sin_veredicto = FakeCliente(soap.RespuestaDian(track_id="zip-1"))
+        primera = self._emitir(sin_veredicto)
+        self.assertEqual(primera.data["estado"], DocumentoEstado.Nombre.ENVIADO, primera.data)
+        self.assertEqual(primera.data["accion"], "enviado")
+        self.assertIsNone(primera.data["fecha_validacion"])
+
+        dian = FakeCliente(soap.RespuestaDian(es_valido=True, codigo_estado="00"))
+        segunda = self._emitir(dian)
+
+        self.assertEqual(segunda.status_code, status.HTTP_200_OK, segunda.data)
+        self.assertEqual(segunda.data["estado"], DocumentoEstado.Nombre.ACEPTADO)
+        self.assertEqual(segunda.data["accion"], "consultado")
+        self.assertIsNotNone(segunda.data["fecha_validacion"])
+        # Solo consultó —por el ZipKey, porque salió al Set de Pruebas—; no reenvió.
+        self.assertEqual([llamada[0] for llamada in dian.llamadas], ["estado_zip"])
+        self.assertEqual(segunda.data["cufe_cude"], primera.data["cufe_cude"])
+
+    def test_consultar_no_cambia_el_documento(self):
+        """Solo lectura, también sobre un enviado: aplicar es de `emitir/`."""
+        self._emitir(FakeCliente(soap.RespuestaDian(track_id="zip-1")))
+        dian = FakeCliente(soap.RespuestaDian(es_valido=True, codigo_estado="00"))
+        with mock.patch("apps.dian.servicios.construir_cliente", return_value=dian):
+            resp = self.client.get(self._url("consultar/"))
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertTrue(resp.data["es_valido"])
+        self.documento.refresh_from_db()
+        self.assertEqual(self.documento.estado.nombre, DocumentoEstado.Nombre.ENVIADO)
+
+    def test_no_se_emite_lo_aceptado_ni_lo_rechazado(self):
+        """Estados finales: 400 sin llamar a la DIAN. El rechazado se lee con `consultar/`."""
         for estado in (
-            DocumentoEstado.Nombre.ENVIADO,
             DocumentoEstado.Nombre.ACEPTADO,
             DocumentoEstado.Nombre.RECHAZADO,
         ):
@@ -204,8 +234,13 @@ class DocumentoAPITests(APITestCase):
         resp = self.client.post(self._url("enviar/"))
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
+    def test_actualizar_estado_ya_no_existe(self):
+        """Lo hace `emitir/` con un documento enviado sin veredicto."""
+        resp = self.client.post(self._url("actualizar-estado/"))
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
     def test_consultar_zip_ya_no_existe(self):
-        """La entrega al Set la consulta `actualizar-estado/`; el documento, `consultar/`.
+        """La entrega al Set la consulta `emitir/`; el documento, `consultar/`.
 
         Existía por los reenvíos del mismo CUFE, que respondían "procesado
         anteriormente" por la entrega aunque el documento estuviera aceptado.

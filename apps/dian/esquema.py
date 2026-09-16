@@ -41,6 +41,23 @@ def campo_track_id():
     )
 
 
+def campos_emision():
+    """Lo que añade `emitir/` a la respuesta de la DIAN, en las dos apps."""
+    return {
+        "accion": serializers.CharField(
+            help_text=(
+                "Qué hizo esta llamada: `enviado` (firmó si hacía falta y envió) "
+                "o `consultado` (estaba enviado sin veredicto: consultó y aplicó "
+                "el resultado, sin reenviar)."
+            ),
+        ),
+        "track_id": campo_track_id(),
+        "fecha_validacion": serializers.DateTimeField(
+            allow_null=True, help_text="Cuándo lo validó la DIAN; nula mientras no.",
+        ),
+    }
+
+
 RESPUESTA_CONSULTA_DIAN = inline_serializer(
     name="ConsultaDianRespuesta", fields=campos_respuesta_dian(),
 )

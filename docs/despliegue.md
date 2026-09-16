@@ -774,5 +774,5 @@ Repasa también los puntos de
   Mantener los dos ambientes separados por host evita el peor error posible:
   emitir contra producción un documento de pruebas.
 - **Reconciliación de estados**: cuando la DIAN deja un documento en `enviado`,
-  hoy depende de que el ERP llame a `actualizar-estado/`. Falta un comando de
-  gestión que recorra los pendientes y un cron que lo dispare.
+  avanza cuando el ERP vuelve a llamar a `emitir/`, que con un documento en
+  `enviado` consulta y aplica el resultado. Nada lo hace solo.

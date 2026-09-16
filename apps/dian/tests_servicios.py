@@ -249,12 +249,18 @@ class ActualizarEstadoTests(TestCase):
         self.documento.estado = DocumentoEstado.objects.get(nombre=codigo)
         self.documento.save(update_fields=["estado"])
 
-    def test_rechazado_pasa_a_aceptado(self):
-        self._poner(DocumentoEstado.Nombre.RECHAZADO)
+    def test_enviado_pasa_a_aceptado(self):
+        self._poner(DocumentoEstado.Nombre.ENVIADO)
         cliente = FakeCliente(soap.RespuestaDian(es_valido=True, codigo_estado="00"))
         servicios.actualizar_estado(self.documento, cliente=cliente, ambiente=2)
         self.documento.refresh_from_db()
         self.assertEqual(self.documento.estado.nombre, DocumentoEstado.Nombre.ACEPTADO)
+
+    def test_rechazado_no_se_actualiza(self):
+        """Es terminal: no se reemite, así que su estado tampoco se reaplica."""
+        self._poner(DocumentoEstado.Nombre.RECHAZADO)
+        with self.assertRaises(servicios.ErrorEmision):
+            servicios.actualizar_estado(self.documento, cliente=FakeCliente(None), ambiente=2)
 
     def test_aceptado_no_se_actualiza(self):
         self._poner(DocumentoEstado.Nombre.ACEPTADO)

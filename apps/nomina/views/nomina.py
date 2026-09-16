@@ -14,7 +14,7 @@ from apps.dian import servicios
 from apps.dian.errores import error_pasarela_dian
 from apps.dian.esquema import (
     RESPUESTA_CONSULTA_DIAN,
-    campo_track_id,
+    campos_emision,
     campos_respuesta_dian,
 )
 from apps.documentos.models import DocumentoEstado
@@ -34,10 +34,27 @@ RESPUESTA_EMISION_NOMINA = inline_serializer(
     name="EmisionNominaRespuesta",
     fields={
         **campos_respuesta_dian(),
+        **campos_emision(),
         "cune": campos.CharField(help_text="CUNE de la nómina firmada."),
-        "track_id": campo_track_id(),
     },
 )
+
+# Lo que dice `accion` en la respuesta de `emitir/`.
+ACCION_ENVIADO = "enviado"
+ACCION_CONSULTADO = "consultado"
+
+# Estados finales: `emitir/` responde 400 y no llama a la DIAN.
+MENSAJES_NO_EMITIBLE = {
+    DocumentoEstado.Nombre.ACEPTADO: (
+        "La nómina {numero} ya fue aceptada por la DIAN: se corrige con una nota "
+        "de ajuste."
+    ),
+    DocumentoEstado.Nombre.RECHAZADO: (
+        "La nómina {numero} fue rechazada por la DIAN y no se vuelve a emitir: "
+        "su detalle se consulta con consultar/, y se borra y se crea de nuevo "
+        "corregida."
+    ),
+}
 
 
 class NominaViewSet(
@@ -151,7 +168,7 @@ class NominaViewSet(
     )
     @action(detail=True, methods=["post"])
     def emitir(self, request, pk=None):
-        """Firma la nómina y la envía a la DIAN, en una sola llamada.
+        """Lleva la nómina a su estado final ante la DIAN.
 
         Antes eran dos acciones, `emitir` (firmar) y `enviar`, igual que en
         documentos; nadie firmaba sin enviar a continuación, y la segunda
@@ -169,28 +186,47 @@ class NominaViewSet(
         CUNE para el mismo número. Por eso un 502 aquí no pierde nada: se
         vuelve a llamar.
 
-        Según el estado: `borrador` se firma y se envía; `firmado` —un intento
-        anterior que no llegó a enviar— solo se envía. `enviado`, `aceptado` y
-        `rechazado` responden 400: el primero se sigue con `consultar/`, un
-        aceptado se corrige con una nota de ajuste, y un rechazado —la nómina no
-        se edita— se borra y se crea de nuevo corregido.
+        Según el estado:
+
+        - `borrador`: se firma y se envía.
+        - `firmado` —un intento anterior que no llegó a enviar—: solo se envía.
+        - `enviado` —se envió sin veredicto, como en el Set de Pruebas—: **se
+          consulta y se aplica** el resultado, sin reenviar. Pregunta por el
+          ZipKey si salió al Set y por el CUNE si salió síncrona.
+        - `aceptado` y `rechazado` responden 400. Un aceptado se corrige con una
+          nota de ajuste; un rechazado —la nómina no se edita— se lee con
+          `consultar/`, y se borra y se crea de nuevo corregido.
+
+        La consulta va con el mismo bloqueo que el envío, para que dos llamadas
+        a la vez no apliquen el resultado dos veces.
         """
         nomina = self.get_object()
         try:
             with transaction.atomic():
                 nomina = self._bloquear(nomina)
-                if nomina.estado.nombre != DocumentoEstado.Nombre.FIRMADO:
-                    # Lo que no se puede firmar lo explica el propio servicio.
-                    servicios.generar_y_firmar_nomina(nomina)
-            with transaction.atomic():
-                nomina = self._bloquear(nomina)
-                # Entre las dos transacciones otra petición pudo enviarla.
-                if nomina.estado.nombre != DocumentoEstado.Nombre.FIRMADO:
+                estado = nomina.estado.nombre
+                if estado in MENSAJES_NO_EMITIBLE:
                     raise servicios.ErrorEmision(
-                        f"La nómina {nomina.numero} ya no está firmada y "
-                        f"pendiente de envío: está '{nomina.estado.nombre}'."
+                        MENSAJES_NO_EMITIBLE[estado].format(numero=nomina.numero)
                     )
-                respuesta = servicios.enviar_nomina_a_dian(nomina)
+                if estado == DocumentoEstado.Nombre.ENVIADO:
+                    respuesta = servicios.actualizar_estado_nomina(nomina)
+                    accion = ACCION_CONSULTADO
+                else:
+                    accion = ACCION_ENVIADO
+                    if estado != DocumentoEstado.Nombre.FIRMADO:
+                        # Lo que no se puede firmar lo explica el propio servicio.
+                        servicios.generar_y_firmar_nomina(nomina)
+            if accion == ACCION_ENVIADO:
+                with transaction.atomic():
+                    nomina = self._bloquear(nomina)
+                    # Entre las dos transacciones otra petición pudo enviarla.
+                    if nomina.estado.nombre != DocumentoEstado.Nombre.FIRMADO:
+                        raise servicios.ErrorEmision(
+                            f"La nómina {nomina.numero} ya no está firmada y "
+                            f"pendiente de envío: está '{nomina.estado.nombre}'."
+                        )
+                    respuesta = servicios.enviar_nomina_a_dian(nomina)
         except ValueError as exc:
             raise ErrorSolicitud(str(exc))
         except servicios.ErrorEmision as exc:
@@ -199,8 +235,10 @@ class NominaViewSet(
             raise error_pasarela_dian(exc)
         return Response({
             "estado": nomina.estado.nombre,
+            "accion": accion,
             "cune": nomina.cune,
-            "track_id": respuesta.track_id,
+            "track_id": nomina.track_id,
+            "fecha_validacion": nomina.fecha_validacion,
             "es_valido": respuesta.es_valido,
             "codigo_estado": respuesta.codigo_estado,
             "descripcion": respuesta.descripcion_estado,
@@ -208,42 +246,30 @@ class NominaViewSet(
         })
 
     @extend_schema(
-        request=None,
         responses={200: RESPUESTA_CONSULTA_DIAN, 400: ErrorSerializer, 502: ErrorSerializer},
     )
-    @action(detail=True, methods=["get", "post"])
+    @action(detail=True, methods=["get"])
     def consultar(self, request, pk=None):
-        """Consulta el estado en la DIAN y lo aplica a la nómina.
+        """Consulta (solo lectura) el estado de la nómina en la DIAN.
 
         Pregunta por el ZipKey si la nómina salió al Set de Pruebas y por el
         CUNE si salió por la operación síncrona: son dos consultas distintas y
         la entrega asíncrona no se puede consultar por CUNE.
 
-        Y **aplica** lo que responda: guarda la respuesta cruda, deja los
-        rechazos en ``NominaError`` y mueve el estado. Hace falta porque el
-        envío al Set de Pruebas no trae veredicto —es asíncrono y solo devuelve
-        el ZipKey—, así que sin esto una nómina rechazada se queda en
-        ``enviado`` y sin errores, y encima bloqueada para volver a emitirse.
-
-        Desde ``aceptado`` o sin enviar se limita a leer: el primero es terminal
-        y el segundo no tiene nada que consultar.
-
-        Acepta GET y POST. El GET escribe, que no es lo ortodoxo, pero es lo que
-        ya llamaba el ERP y tener dos acciones para esto resultó ser una fuente
-        de confusión más que una ayuda.
+        **No modifica la nómina**, en ningún estado —también sirve para leer el
+        detalle de una rechazada—. Antes aplicaba el resultado (y aceptaba POST
+        para eso); ahora lo aplica `emitir/`, cuando la nómina quedó enviada
+        sin veredicto.
         """
         nomina = self.get_object()
         try:
-            if servicios.estado_actualizable(nomina):
-                respuesta = servicios.actualizar_estado_nomina(nomina)
-            else:
-                respuesta = servicios.consultar_segun_envio_nomina(nomina)
+            respuesta = servicios.consultar_segun_envio_nomina(nomina)
         except servicios.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
         except requests.RequestException as exc:
             raise error_pasarela_dian(exc)
         return Response({
-            "estado": nomina.estado.nombre,
+            "estado": nomina.estado.nombre,  # estado local (sin cambios)
             "es_valido": respuesta.es_valido,
             "codigo_estado": respuesta.codigo_estado,
             "descripcion": respuesta.descripcion_estado,

@@ -16,7 +16,7 @@ from apps.dian import representacion, servicios
 from apps.dian.errores import error_pasarela_dian
 from apps.dian.esquema import (
     RESPUESTA_CONSULTA_DIAN,
-    campo_track_id,
+    campos_emision,
     campos_respuesta_dian,
 )
 from apps.documentos import serializers
@@ -39,6 +39,20 @@ from apps.utilidades.zinc import ZincNoDisponible
 
 CODIGO_DOCUMENTO_DUPLICADO = "documento_duplicado"
 
+# Lo que dice `accion` en la respuesta de `emitir/`.
+ACCION_ENVIADO = "enviado"
+ACCION_CONSULTADO = "consultado"
+
+# Estados finales: `emitir/` responde 400 y no llama a la DIAN.
+MENSAJES_NO_EMITIBLE = {
+    DocumentoEstado.Nombre.ACEPTADO: "El documento {numero} ya fue aceptado por la DIAN.",
+    DocumentoEstado.Nombre.RECHAZADO: (
+        "El documento {numero} fue rechazado por la DIAN y no se vuelve a "
+        "emitir: su detalle se consulta con consultar/, y se borra y se crea "
+        "de nuevo corregido."
+    ),
+}
+
 # --- Esquema de las acciones --------------------------------------------------
 # Las acciones no reciben el documento ni lo devuelven, pero spectacular las
 # describía con el serializer del ViewSet: `emitir/` pedía un documento entero
@@ -56,8 +70,8 @@ RESPUESTA_EMISION = inline_serializer(
     name="EmisionRespuesta",
     fields={
         **campos_respuesta_dian(),
+        **campos_emision(),
         "cufe_cude": campos.CharField(help_text="CUFE o CUDE del documento firmado."),
-        "track_id": campo_track_id(),
     },
 )
 RESPUESTA_NOTIFICACION = inline_serializer(
@@ -104,7 +118,7 @@ class DocumentoViewSet(
     corrige una factura es una nota, no un `PATCH`.
 
     Lo que sí cambia el documento son las acciones de más abajo, cada una con su
-    regla: `emitir` (firma y envía), `actualizar-estado`, `notificar`. El estado no es
+    regla: `emitir` (firma, envía o consulta), `notificar`. El estado no es
     un campo que se escriba, es la consecuencia de una operación.
     """
 
@@ -323,7 +337,7 @@ class DocumentoViewSet(
     )
     @action(detail=True, methods=["post"])
     def emitir(self, request, pk=None):
-        """Firma el documento y lo envía a la DIAN, en una sola llamada.
+        """Lleva el documento a su estado final ante la DIAN.
 
         Antes eran dos acciones, `emitir` (firmar) y `enviar`; nadie firmaba
         sin enviar a continuación, y la segunda llamada solo sumaba un viaje.
@@ -336,36 +350,57 @@ class DocumentoViewSet(
         para el mismo número, y la DIAN, que ya tenía el primero, lo rechazaría.
         Por eso un 502 aquí no pierde nada: se vuelve a llamar.
 
-        Según el estado: `borrador` se firma y se envía; `firmado` —un intento
-        anterior que no llegó a enviar— solo se envía. `enviado`, `aceptado` y
-        `rechazado` responden 400: el primero se sigue con
-        `actualizar-estado/`, y un rechazado no se reemite, se borra y se crea
-        corregido.
+        Según el estado:
+
+        - `borrador`: se firma y se envía.
+        - `firmado` —un intento anterior que no llegó a enviar—: solo se envía.
+        - `enviado` —se envió sin veredicto, como en el Set de Pruebas—: **se
+          consulta y se aplica** el resultado, sin reenviar. Por eso no hay
+          `actualizar-estado/`: el ERP llama a `emitir/` hasta que el estado sea
+          final.
+        - `aceptado` y `rechazado` responden 400. El rechazado no se reemite: su
+          detalle se lee con `consultar/`, y se borra y se crea corregido.
+
+        La consulta va con el mismo bloqueo que el envío, para que dos llamadas
+        a la vez no apliquen el resultado dos veces.
         """
         documento = self.get_object()
         try:
             with transaction.atomic():
                 documento = self._bloquear(documento)
-                if documento.estado.nombre != DocumentoEstado.Nombre.FIRMADO:
-                    # Lo que no se puede firmar lo explica el propio servicio.
-                    servicios.generar_y_firmar(documento)
-            with transaction.atomic():
-                documento = self._bloquear(documento)
-                # Entre las dos transacciones otra petición pudo enviarlo.
-                if documento.estado.nombre != DocumentoEstado.Nombre.FIRMADO:
+                estado = documento.estado.nombre
+                if estado in MENSAJES_NO_EMITIBLE:
                     raise servicios.ErrorEmision(
-                        f"El documento {documento.numero} ya no está firmado y "
-                        f"pendiente de envío: está '{documento.estado.nombre}'."
+                        MENSAJES_NO_EMITIBLE[estado].format(numero=documento.numero)
                     )
-                respuesta = servicios.enviar_a_dian(documento)
+                if estado == DocumentoEstado.Nombre.ENVIADO:
+                    respuesta = servicios.actualizar_estado(documento)
+                    accion = ACCION_CONSULTADO
+                else:
+                    accion = ACCION_ENVIADO
+                    if estado != DocumentoEstado.Nombre.FIRMADO:
+                        # Lo que no se puede firmar lo explica el propio servicio.
+                        servicios.generar_y_firmar(documento)
+            if accion == ACCION_ENVIADO:
+                with transaction.atomic():
+                    documento = self._bloquear(documento)
+                    # Entre las dos transacciones otra petición pudo enviarlo.
+                    if documento.estado.nombre != DocumentoEstado.Nombre.FIRMADO:
+                        raise servicios.ErrorEmision(
+                            f"El documento {documento.numero} ya no está firmado y "
+                            f"pendiente de envío: está '{documento.estado.nombre}'."
+                        )
+                    respuesta = servicios.enviar_a_dian(documento)
         except servicios.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
         except requests.RequestException as exc:
             raise error_pasarela_dian(exc)
         return Response({
             "estado": documento.estado.nombre,
+            "accion": accion,
             "cufe_cude": documento.cufe_cude,
-            "track_id": respuesta.track_id,
+            "track_id": documento.track_id,
+            "fecha_validacion": documento.fecha_validacion,
             "es_valido": respuesta.es_valido,
             "codigo_estado": respuesta.codigo_estado,
             "descripcion": respuesta.descripcion_estado,
@@ -383,8 +418,9 @@ class DocumentoViewSet(
         CUFE. Es la pregunta "¿cómo quedó este documento?", y la respuesta vale
         igual para un envío síncrono que para uno del Set de Pruebas.
 
-        No modifica el documento; devuelve lo que responde la DIAN. Para aplicar
-        el resultado usa la acción ``actualizar-estado``.
+        No modifica el documento, en ningún estado —también sirve para leer el
+        detalle de un rechazado—; devuelve lo que responde la DIAN. Lo aplica
+        `emitir/`, cuando el documento quedó enviado sin veredicto.
         """
         documento = self.get_object()
         try:
@@ -395,31 +431,6 @@ class DocumentoViewSet(
             raise error_pasarela_dian(exc)
         return Response({
             "estado": documento.estado.nombre,  # estado local (sin cambios)
-            "es_valido": respuesta.es_valido,
-            "codigo_estado": respuesta.codigo_estado,
-            "descripcion": respuesta.descripcion_estado,
-            "errores": respuesta.errores,
-        })
-
-    @extend_schema(
-        request=None,
-        responses={200: RESPUESTA_CONSULTA_DIAN, 400: ErrorSerializer, 502: ErrorSerializer},
-    )
-    @action(detail=True, methods=["post"], url_path="actualizar-estado")
-    def actualizar_estado(self, request, pk=None):
-        """Consulta la DIAN y actualiza el estado del documento.
-
-        Solo aplica a documentos enviados/rechazados (no aceptados ni en borrador).
-        """
-        documento = self.get_object()
-        try:
-            respuesta = servicios.actualizar_estado(documento)
-        except servicios.ErrorEmision as exc:
-            raise ErrorSolicitud(str(exc))
-        except requests.RequestException as exc:
-            raise error_pasarela_dian(exc)
-        return Response({
-            "estado": documento.estado.nombre,
             "es_valido": respuesta.es_valido,
             "codigo_estado": respuesta.codigo_estado,
             "descripcion": respuesta.descripcion_estado,

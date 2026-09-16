@@ -1312,7 +1312,7 @@ paths:
         corrige una factura es una nota, no un `PATCH`.
 
         Lo que sí cambia el documento son las acciones de más abajo, cada una con su
-        regla: `emitir` (firma y envía), `actualizar-estado`, `notificar`. El estado no es
+        regla: `emitir` (firma, envía o consulta), `notificar`. El estado no es
         un campo que se escriba, es la consecuencia de una operación.
       parameters:
       - name: ordering
@@ -1442,7 +1442,7 @@ paths:
         corrige una factura es una nota, no un `PATCH`.
 
         Lo que sí cambia el documento son las acciones de más abajo, cada una con su
-        regla: `emitir` (firma y envía), `actualizar-estado`, `notificar`. El estado no es
+        regla: `emitir` (firma, envía o consulta), `notificar`. El estado no es
         un campo que se escriba, es la consecuencia de una operación.
       parameters:
       - in: path
@@ -1494,7 +1494,7 @@ paths:
         corrige una factura es una nota, no un `PATCH`.
 
         Lo que sí cambia el documento son las acciones de más abajo, cada una con su
-        regla: `emitir` (firma y envía), `actualizar-estado`, `notificar`. El estado no es
+        regla: `emitir` (firma, envía o consulta), `notificar`. El estado no es
         un campo que se escriba, es la consecuencia de una operación.
       parameters:
       - in: path
@@ -1511,62 +1511,6 @@ paths:
       responses:
         '204':
           description: No response body
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '429':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '404':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-  /api/documentos/documento/{id}/actualizar-estado/:
-    post:
-      operationId: documentos_documento_actualizar_estado_create
-      description: |-
-        Consulta la DIAN y actualiza el estado del documento.
-
-        Solo aplica a documentos enviados/rechazados (no aceptados ni en borrador).
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-          format: uuid
-        description: Un Cadena UUID que identifique este documento electrónico.
-        required: true
-      tags:
-      - documentos
-      security:
-      - LlaveApi: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ConsultaDianRespuesta'
-          description: ''
-        '400':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: ''
-        '502':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: ''
         '401':
           description: Error
           content:
@@ -1651,8 +1595,9 @@ paths:
         CUFE. Es la pregunta "¿cómo quedó este documento?", y la respuesta vale
         igual para un envío síncrono que para uno del Set de Pruebas.
 
-        No modifica el documento; devuelve lo que responde la DIAN. Para aplicar
-        el resultado usa la acción ``actualizar-estado``.
+        No modifica el documento, en ningún estado —también sirve para leer el
+        detalle de un rechazado—; devuelve lo que responde la DIAN. Lo aplica
+        `emitir/`, cuando el documento quedó enviado sin veredicto.
       parameters:
       - in: path
         name: id
@@ -1706,7 +1651,7 @@ paths:
     post:
       operationId: documentos_documento_emitir_create
       description: |-
-        Firma el documento y lo envía a la DIAN, en una sola llamada.
+        Lleva el documento a su estado final ante la DIAN.
 
         Antes eran dos acciones, `emitir` (firmar) y `enviar`; nadie firmaba
         sin enviar a continuación, y la segunda llamada solo sumaba un viaje.
@@ -1719,11 +1664,19 @@ paths:
         para el mismo número, y la DIAN, que ya tenía el primero, lo rechazaría.
         Por eso un 502 aquí no pierde nada: se vuelve a llamar.
 
-        Según el estado: `borrador` se firma y se envía; `firmado` —un intento
-        anterior que no llegó a enviar— solo se envía. `enviado`, `aceptado` y
-        `rechazado` responden 400: el primero se sigue con
-        `actualizar-estado/`, y un rechazado no se reemite, se borra y se crea
-        corregido.
+        Según el estado:
+
+        - `borrador`: se firma y se envía.
+        - `firmado` —un intento anterior que no llegó a enviar—: solo se envía.
+        - `enviado` —se envió sin veredicto, como en el Set de Pruebas—: **se
+          consulta y se aplica** el resultado, sin reenviar. Por eso no hay
+          `actualizar-estado/`: el ERP llama a `emitir/` hasta que el estado sea
+          final.
+        - `aceptado` y `rechazado` responden 400. El rechazado no se reemite: su
+          detalle se lee con `consultar/`, y se borra y se crea corregido.
+
+        La consulta va con el mismo bloqueo que el envío, para que dos llamadas
+        a la vez no apliquen el resultado dos veces.
       parameters:
       - in: path
         name: id
@@ -3973,94 +3926,16 @@ paths:
     get:
       operationId: nomina_nomina_consultar_retrieve
       description: |-
-        Consulta el estado en la DIAN y lo aplica a la nómina.
+        Consulta (solo lectura) el estado de la nómina en la DIAN.
 
         Pregunta por el ZipKey si la nómina salió al Set de Pruebas y por el
         CUNE si salió por la operación síncrona: son dos consultas distintas y
         la entrega asíncrona no se puede consultar por CUNE.
 
-        Y **aplica** lo que responda: guarda la respuesta cruda, deja los
-        rechazos en ``NominaError`` y mueve el estado. Hace falta porque el
-        envío al Set de Pruebas no trae veredicto —es asíncrono y solo devuelve
-        el ZipKey—, así que sin esto una nómina rechazada se queda en
-        ``enviado`` y sin errores, y encima bloqueada para volver a emitirse.
-
-        Desde ``aceptado`` o sin enviar se limita a leer: el primero es terminal
-        y el segundo no tiene nada que consultar.
-
-        Acepta GET y POST. El GET escribe, que no es lo ortodoxo, pero es lo que
-        ya llamaba el ERP y tener dos acciones para esto resultó ser una fuente
-        de confusión más que una ayuda.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-          format: uuid
-        description: Un Cadena UUID que identifique este nómina electrónica.
-        required: true
-      tags:
-      - nomina
-      security:
-      - LlaveApi: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ConsultaDianRespuesta'
-          description: ''
-        '400':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: ''
-        '502':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '429':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '404':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-    post:
-      operationId: nomina_nomina_consultar_create
-      description: |-
-        Consulta el estado en la DIAN y lo aplica a la nómina.
-
-        Pregunta por el ZipKey si la nómina salió al Set de Pruebas y por el
-        CUNE si salió por la operación síncrona: son dos consultas distintas y
-        la entrega asíncrona no se puede consultar por CUNE.
-
-        Y **aplica** lo que responda: guarda la respuesta cruda, deja los
-        rechazos en ``NominaError`` y mueve el estado. Hace falta porque el
-        envío al Set de Pruebas no trae veredicto —es asíncrono y solo devuelve
-        el ZipKey—, así que sin esto una nómina rechazada se queda en
-        ``enviado`` y sin errores, y encima bloqueada para volver a emitirse.
-
-        Desde ``aceptado`` o sin enviar se limita a leer: el primero es terminal
-        y el segundo no tiene nada que consultar.
-
-        Acepta GET y POST. El GET escribe, que no es lo ortodoxo, pero es lo que
-        ya llamaba el ERP y tener dos acciones para esto resultó ser una fuente
-        de confusión más que una ayuda.
+        **No modifica la nómina**, en ningún estado —también sirve para leer el
+        detalle de una rechazada—. Antes aplicaba el resultado (y aceptaba POST
+        para eso); ahora lo aplica `emitir/`, cuando la nómina quedó enviada
+        sin veredicto.
       parameters:
       - in: path
         name: id
@@ -4114,7 +3989,7 @@ paths:
     post:
       operationId: nomina_nomina_emitir_create
       description: |-
-        Firma la nómina y la envía a la DIAN, en una sola llamada.
+        Lleva la nómina a su estado final ante la DIAN.
 
         Antes eran dos acciones, `emitir` (firmar) y `enviar`, igual que en
         documentos; nadie firmaba sin enviar a continuación, y la segunda
@@ -4132,11 +4007,19 @@ paths:
         CUNE para el mismo número. Por eso un 502 aquí no pierde nada: se
         vuelve a llamar.
 
-        Según el estado: `borrador` se firma y se envía; `firmado` —un intento
-        anterior que no llegó a enviar— solo se envía. `enviado`, `aceptado` y
-        `rechazado` responden 400: el primero se sigue con `consultar/`, un
-        aceptado se corrige con una nota de ajuste, y un rechazado —la nómina no
-        se edita— se borra y se crea de nuevo corregido.
+        Según el estado:
+
+        - `borrador`: se firma y se envía.
+        - `firmado` —un intento anterior que no llegó a enviar—: solo se envía.
+        - `enviado` —se envió sin veredicto, como en el Set de Pruebas—: **se
+          consulta y se aplica** el resultado, sin reenviar. Pregunta por el
+          ZipKey si salió al Set y por el CUNE si salió síncrona.
+        - `aceptado` y `rechazado` responden 400. Un aceptado se corrige con una
+          nota de ajuste; un rechazado —la nómina no se edita— se lee con
+          `consultar/`, y se borra y se crea de nuevo corregido.
+
+        La consulta va con el mismo bloqueo que el envío, para que dos llamadas
+        a la vez no apliquen el resultado dos veces.
       parameters:
       - in: path
         name: id
@@ -5853,20 +5736,32 @@ components:
             type: string
           description: Reglas de rechazo y notificaciones, tal como las devuelve la
             DIAN.
-        cune:
+        accion:
           type: string
-          description: CUNE de la nómina firmada.
+          description: 'Qué hizo esta llamada: `enviado` (firmó si hacía falta y envió)
+            o `consultado` (estaba enviado sin veredicto: consultó y aplicó el resultado,
+            sin reenviar).'
         track_id:
           type: string
           description: ZipKey si salió al Set de Pruebas; identificador del envío
             si salió síncrono.
+        fecha_validacion:
+          type: string
+          format: date-time
+          nullable: true
+          description: Cuándo lo validó la DIAN; nula mientras no.
+        cune:
+          type: string
+          description: CUNE de la nómina firmada.
       required:
+      - accion
       - codigo_estado
       - cune
       - descripcion
       - errores
       - es_valido
       - estado
+      - fecha_validacion
       - track_id
     EmisionRespuesta:
       type: object
@@ -5889,20 +5784,32 @@ components:
             type: string
           description: Reglas de rechazo y notificaciones, tal como las devuelve la
             DIAN.
-        cufe_cude:
+        accion:
           type: string
-          description: CUFE o CUDE del documento firmado.
+          description: 'Qué hizo esta llamada: `enviado` (firmó si hacía falta y envió)
+            o `consultado` (estaba enviado sin veredicto: consultó y aplicó el resultado,
+            sin reenviar).'
         track_id:
           type: string
           description: ZipKey si salió al Set de Pruebas; identificador del envío
             si salió síncrono.
+        fecha_validacion:
+          type: string
+          format: date-time
+          nullable: true
+          description: Cuándo lo validó la DIAN; nula mientras no.
+        cufe_cude:
+          type: string
+          description: CUFE o CUDE del documento firmado.
       required:
+      - accion
       - codigo_estado
       - cufe_cude
       - descripcion
       - errores
       - es_valido
       - estado
+      - fecha_validacion
       - track_id
     Emisor:
       type: object

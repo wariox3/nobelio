@@ -164,10 +164,9 @@ class NominaCicloTests(NominaAPIBase):
         self.assertEqual(reintento.data["estado"], DocumentoEstado.Nombre.ACEPTADO)
         self.assertEqual(reintento.data["cune"], cune)
 
-    def test_no_se_emite_lo_que_ya_salio_hacia_la_dian(self):
-        """Enviada se sigue con `consultar/`; rechazada se borra y se recrea."""
+    def test_no_se_emite_lo_aceptado_ni_lo_rechazado(self):
+        """Estados finales: 400 sin llamar a la DIAN. La rechazada se lee con `consultar/`."""
         for estado in (
-            DocumentoEstado.Nombre.ENVIADO,
             DocumentoEstado.Nombre.ACEPTADO,
             DocumentoEstado.Nombre.RECHAZADO,
         ):
@@ -223,27 +222,40 @@ class NominaCicloTests(NominaAPIBase):
         error = self.nomina.errores.get()
         self.assertEqual(error.regla, "NIE001")
 
-    def test_consultar_aplica_el_veredicto_que_el_envio_no_trajo(self):
-        """El envío asíncrono solo devuelve un ZipKey; el rechazo llega al consultar.
+    def test_emitir_una_enviada_consulta_y_aplica_sin_reenviar(self):
+        """El envío asíncrono solo devuelve un ZipKey; el veredicto llega al volver a emitir.
 
         Sin esto una nómina rechazada se quedaría en ``enviado`` y con cero
         errores para siempre.
         """
         # Envío al Set de Pruebas: sin veredicto (ni válido ni con errores).
-        self._emitir(ClienteNominaFalso(_respuesta(es_valido=False, errores=[])))
-        self.nomina.refresh_from_db()
-        self.assertEqual(self.nomina.estado.nombre, DocumentoEstado.Nombre.ENVIADO)
+        primera = self._emitir(ClienteNominaFalso(_respuesta(es_valido=False, errores=[])))
+        self.assertEqual(primera.data["estado"], DocumentoEstado.Nombre.ENVIADO, primera.data)
+        self.assertEqual(primera.data["accion"], "enviado")
 
-        # Y al consultar, la DIAN ya tiene el resultado.
+        cliente = ClienteNominaFalso(_respuesta())
+        resp = self._emitir(cliente)
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertEqual(resp.data["estado"], DocumentoEstado.Nombre.ACEPTADO)
+        self.assertEqual(resp.data["accion"], "consultado")
+        self.assertIsNotNone(resp.data["fecha_validacion"])
+        # Salió por el Set de Pruebas: se pregunta por el ZipKey, y no se reenvía.
+        self.assertEqual([llamada[0] for llamada in cliente.llamadas], ["estado_zip"])
+
+    def test_consultar_solo_lee(self):
+        """Antes aplicaba el resultado; ahora eso es de `emitir/`, y el POST ya no existe."""
+        self._emitir(ClienteNominaFalso(_respuesta(es_valido=False, errores=[])))
         cliente = ClienteNominaFalso(_respuesta())
         with patch("apps.dian.servicios_nomina.construir_cliente_emisor", return_value=cliente):
             resp = self.client.get(self._url("consultar/"))
+            post = self.client.post(self._url("consultar/"))
 
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertTrue(resp.data["es_valido"])
         self.nomina.refresh_from_db()
-        self.assertEqual(self.nomina.estado.nombre, DocumentoEstado.Nombre.ACEPTADO)
-        # Salió por el Set de Pruebas, así que se pregunta por el ZipKey.
-        self.assertEqual(cliente.llamadas[0][0], "estado_zip")
+        self.assertEqual(self.nomina.estado.nombre, DocumentoEstado.Nombre.ENVIADO)
+        self.assertEqual(post.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
 class NominaAlcanceTests(NominaAPIBase):

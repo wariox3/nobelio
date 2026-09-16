@@ -61,14 +61,12 @@ class EsquemaVersionadoTests(SimpleTestCase):
 
         for ruta, metodo, modelo in (
             (f"{documento}emitir/", "post", "Documento"),
-            (f"{documento}actualizar-estado/", "post", "Documento"),
             (f"{documento}consultar/", "get", "Documento"),
             (f"{documento}xml/", "get", "Documento"),
             (f"{documento}attached/", "get", "Documento"),
             (f"{documento}pdf/", "get", "Documento"),
             (f"{nomina}emitir/", "post", "Nomina"),
             (f"{nomina}consultar/", "get", "Nomina"),
-            (f"{nomina}consultar/", "post", "Nomina"),
             (f"{nomina}xml/", "get", "Nomina"),
         ):
             with self.subTest(ruta=ruta, metodo=metodo):

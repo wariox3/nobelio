@@ -271,23 +271,24 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
 - [ ] `POST /api/documentos/documento/{id}/emitir/` → genera XML UBL 2.1, calcula
       **CUFE/CUDE**, **firma XAdES-EPES** (requiere el certificado del emisor,
       vigente) y **envía a la DIAN** por WS, todo en una llamada; devuelve
-      `estado`, `cufe_cude`, `track_id`, `es_valido`, `codigo_estado` y errores.
-      No hay `enviar/`: desde el 2026-09-16 es la misma acción.
-      La firma se confirma antes de enviar: si la DIAN no responde (502), el
-      documento queda `firmado` y el reintento de `emitir/` manda el mismo CUFE.
-      `enviado`, `aceptado` y `rechazado` responden 400; un rechazado se borra y
-      se crea de nuevo corregido.
+      `estado`, `accion`, `cufe_cude`, `track_id`, `fecha_validacion`,
+      `es_valido`, `codigo_estado` y errores.
+      No hay `enviar/` ni `actualizar-estado/`: desde el 2026-09-16 es la misma
+      acción, que hace lo que le falta al documento. Se llama hasta que el
+      estado sea final:
+      `borrador` → firma y envía; `firmado` (un 502 anterior) → envía el mismo
+      CUFE; `enviado` (sin veredicto) → consulta y aplica, sin reenviar;
+      `aceptado` y `rechazado` → 400. Un rechazado se borra y se crea de nuevo
+      corregido.
       Se usa `SendTestSetAsync` (con el `test_set_id`) solo mientras se está en
       habilitación **y** el Set de Pruebas aún no ha sido aceptado; una vez
       aceptado (`SoftwareDian.set_pruebas_aceptado`) o en producción, `SendBillSync`.
       El documento queda en `aceptado`, `rechazado` o —si la DIAN no ha resuelto
       todavía— `enviado`.
-- [ ] *(si quedó en `enviado`)* `GET /api/documentos/documento/{id}/consultar/` →
-      pregunta a la DIAN **sin tocar** el documento; devuelve `es_valido`,
+- [ ] *(cuando haga falta)* `GET /api/documentos/documento/{id}/consultar/` →
+      pregunta a la DIAN **sin tocar** el documento, en cualquier estado —sirve
+      para leer el detalle de un rechazado—; devuelve `es_valido`,
       `codigo_estado` y errores.
-- [ ] *(si quedó en `enviado`)* `POST /api/documentos/documento/{id}/actualizar-estado/` →
-      consulta y **aplica** el resultado. Solo para documentos enviados o
-      rechazados: sobre un borrador o uno ya aceptado responde 400.
 - [ ] `GET /api/documentos/documento/{id}/xml/` → descarga el XML firmado.
 - [ ] `GET /api/documentos/documento/{id}/pdf/` → descarga la representación gráfica (PDF con QR).
 
@@ -303,10 +304,10 @@ Usuario / Llave API
                          └→ 2 facturas       ┘ al registrar el de facturación
                 → Resolución (real, importada de la DIAN)
                 → Documento (lleva dentro al adquiriente)
-                       └→ emitir → enviar → xml/pdf
+                       └→ emitir (firma y envía) → xml/pdf
                                       │
-                                      └→ (enviado) consultar /
-                                                   actualizar-estado
+                                      └→ (enviado) emitir otra vez: consulta
+                                         y aplica · consultar: solo lee
 ```
 
 Estados del documento (`DocumentoEstado.Nombre`):

@@ -127,10 +127,7 @@ def generar_y_firmar_nomina(nomina, *, firmador=None, ambiente=None, **cred):
 
     bloqueados = {
         DocumentoEstado.Nombre.FIRMADO: "La nómina ya está firmada.",
-        DocumentoEstado.Nombre.ENVIADO: (
-            "La nómina ya fue enviada a la DIAN; su estado se consulta con "
-            "consultar."
-        ),
+        DocumentoEstado.Nombre.ENVIADO: "La nómina ya fue enviada a la DIAN.",
         DocumentoEstado.Nombre.ACEPTADO: "La nómina ya fue aceptada por la DIAN.",
         # Volver a firmarla no cambia nada de lo que la DIAN rechazó —la nómina
         # no se edita—: solo produce otro CUNE para el mismo número.
@@ -331,14 +328,14 @@ def actualizar_estado_nomina(nomina, *, cliente=None, ambiente=None, **cred):
     propósito. Sin esto, una nómina rechazada se queda en ``enviado`` y con cero
     errores para siempre, aunque la DIAN ya la haya rechazado.
 
-    Solo desde ``enviado`` o ``rechazado``: un ``aceptado`` es terminal y una
-    que no se ha enviado no tiene nada que consultar.
+    Solo desde ``enviado``: es lo que hace `emitir/` con una nómina que se envió
+    sin veredicto. Nunca reenvía.
     """
     codigo_actual = nomina.estado.nombre if nomina.estado_id else ""
     if codigo_actual not in _ESTADOS_ACTUALIZABLES:
         raise ErrorEmision(
-            "Solo se puede actualizar el estado de nóminas enviadas o "
-            "rechazadas (no aceptadas ni en borrador)."
+            "Solo se aplica el estado de la DIAN a nóminas enviadas y sin "
+            "veredicto."
         )
 
     respuesta = consultar_segun_envio_nomina(

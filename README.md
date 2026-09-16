@@ -331,26 +331,30 @@ se usa `SendBillSync` (síncrono).
 ```bash
 curl -X POST http://localhost:8000/api/documentos/documento/<id>/emitir/ \
   -H "Authorization: Api-Key $API_KEY"
-# → { "estado": "...", "cufe_cude": "8bb918b1...f5bd9b4", "track_id": "...",
-#     "es_valido": true/false, "codigo_estado": "...", "descripcion": "...", "errores": [...] }
+# → { "estado": "...", "accion": "enviado", "cufe_cude": "8bb918b1...f5bd9b4",
+#     "track_id": "...", "fecha_validacion": "...", "es_valido": true/false,
+#     "codigo_estado": "...", "descripcion": "...", "errores": [...] }
 ```
 
-La firma se guarda antes de enviar. Si la DIAN no responde (502), el documento
-queda `firmado` con su CUFE y se vuelve a llamar a `emitir/`, que manda ese mismo
-CUFE. Un documento `enviado`, `aceptado` o `rechazado` no se vuelve a emitir
-(400); el rechazado se borra y se crea de nuevo corregido.
-
 El documento queda en `aceptado`, `rechazado` o —si la DIAN aún no ha
-resuelto— `enviado`. En ese último caso:
+resuelto, como en el Set de Pruebas— `enviado`. **Se vuelve a llamar a
+`emitir/` hasta que el estado sea final**: según cómo esté el documento, hace lo
+que le falta.
+
+| Estado | `emitir/` hace |
+|---|---|
+| `borrador` | Firma y envía (`accion: enviado`) |
+| `firmado` (un 502 anterior) | Envía el mismo CUFE (`accion: enviado`) |
+| `enviado` | Consulta y aplica el resultado, sin reenviar (`accion: consultado`) |
+| `aceptado` / `rechazado` | 400, sin llamar a la DIAN |
+
+La firma se guarda antes de enviar, así que un 502 no pierde nada. El rechazado
+no se reemite: se borra y se crea de nuevo corregido.
 
 ```bash
-# Consulta sin efectos: devuelve lo que dice la DIAN, no toca el documento.
+# Consulta sin efectos, en cualquier estado: devuelve lo que dice la DIAN.
 curl -H "Authorization: Api-Key $API_KEY" \
   http://localhost:8000/api/documentos/documento/<id>/consultar/
-
-# Aplica el resultado al documento (solo si está enviado/rechazado).
-curl -X POST -H "Authorization: Api-Key $API_KEY" \
-  http://localhost:8000/api/documentos/documento/<id>/actualizar-estado/
 ```
 
 ### 6. Descargar artefactos

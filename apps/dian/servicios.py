@@ -347,10 +347,7 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
 
     bloqueados = {
         DocumentoEstado.Nombre.FIRMADO: "El documento ya está firmado.",
-        DocumentoEstado.Nombre.ENVIADO: (
-            "El documento ya fue enviado a la DIAN; su estado se consulta con "
-            "actualizar-estado."
-        ),
+        DocumentoEstado.Nombre.ENVIADO: "El documento ya fue enviado a la DIAN.",
         DocumentoEstado.Nombre.ACEPTADO: "El documento ya fue aceptado por la DIAN.",
         # Volver a firmarlo no cambia nada de lo que la DIAN rechazó —el
         # documento no se edita—: solo produce otro CUFE para el mismo número.
@@ -664,7 +661,8 @@ def consultar_estado(documento, *, cliente=None, ambiente=None, track_id=None, *
     """GetStatus: pregunta por el **documento**, por su CUFE.
 
     Solo lectura: NO modifica el documento; devuelve lo que responde la DIAN.
-    Para aplicar el resultado usa ``actualizar_estado``.
+    Para aplicar el resultado está ``actualizar_estado``, que usa `emitir/`
+    cuando el documento quedó en ``enviado``.
 
     El identificador por defecto es el CUFE porque es el del documento: el
     ``track_id`` de un envío al Set de Pruebas es un ZipKey, que aquí no
@@ -712,36 +710,26 @@ def consultar_segun_envio(documento, *, cliente=None, ambiente=None, **cred):
     return consulta(documento, cliente=cliente, ambiente=ambiente, **cred)
 
 
-# Estados desde los que tiene sentido refrescar contra la DIAN (enviados, no
-# terminales). Un ``aceptado`` es terminal y un borrador/firmado no se ha enviado.
+# El único estado desde el que tiene sentido aplicar lo que diga la DIAN: se
+# envió y no trajo veredicto. `aceptado` y `rechazado` son terminales —el
+# rechazado no se reemite, se borra y se crea corregido— y lo no enviado no tiene
+# nada que consultar. Leer, se puede siempre: eso es `consultar/`.
 _ESTADOS_ACTUALIZABLES = {
     DocumentoEstado.Nombre.ENVIADO,
-    DocumentoEstado.Nombre.RECHAZADO,
 }
-
-
-def estado_actualizable(documento_o_nomina) -> bool:
-    """¿Tiene sentido refrescar su estado contra la DIAN?
-
-    Sirve a quien consulta para decidir si además de leer puede aplicar: un
-    ``aceptado`` es terminal y uno sin enviar no tiene nada que consultar, así
-    que en esos dos casos la consulta se queda en lectura.
-    """
-    nombre = documento_o_nomina.estado.nombre if documento_o_nomina.estado_id else ""
-    return nombre in _ESTADOS_ACTUALIZABLES
 
 
 def actualizar_estado(documento, *, cliente=None, ambiente=None, **cred):
     """Consulta la DIAN y aplica el resultado al documento.
 
-    Solo para documentos enviados y no aceptados (``enviado``/``rechazado``):
-    un ``aceptado`` es terminal y no se toca; un documento sin enviar no aplica.
+    Solo desde ``enviado``: es lo que hace `emitir/` con un documento que se
+    envió sin veredicto. Nunca reenvía.
     """
     codigo_actual = documento.estado.nombre if documento.estado_id else ""
     if codigo_actual not in _ESTADOS_ACTUALIZABLES:
         raise ErrorEmision(
-            "Solo se puede actualizar el estado de documentos enviados o "
-            "rechazados (no aceptados ni en borrador)."
+            "Solo se aplica el estado de la DIAN a documentos enviados y sin "
+            "veredicto."
         )
 
     respuesta = consultar_segun_envio(
@@ -778,6 +766,7 @@ from apps.dian.servicios_nomina import (  # noqa: E402,F401
     PREFIJO_ARCHIVO_ZIP_NOMINA,
     actualizar_estado_nomina,
     consultar_estado_nomina,
+    consultar_segun_envio_nomina,
     enviar_nomina_a_dian,
     generar_y_firmar_nomina,
 )
