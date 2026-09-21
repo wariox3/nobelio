@@ -11,7 +11,8 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.db import transaction
+from django.core.management.color import no_style
+from django.db import connection, transaction
 
 from apps.catalogos import genericode as gc
 from apps.catalogos import models
@@ -43,6 +44,12 @@ MAPEO = {
 COLUMNAS_EXTRA = {
     "Municipio": ["codigo_postal"],
 }
+
+# Listas cuyo id no es el autoincremental sino la posición del código en orden
+# (05 Antioquia = 1 … 99 Vichada = 33): es el id del catálogo de torio, que
+# manda el departamento y el municipio con él como llave primaria. Solo se
+# fija al crear; la migración 0004 renumeró las bases que ya existían.
+IDS_POR_CODIGO = {"Departamentos", "Municipio"}
 
 # Listas propias del documento soporte, en su subcarpeta (ver el README de
 # `datos/listas/documento-soporte/`). Se cargan aparte y no se mezclan con las
@@ -85,6 +92,13 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.WARNING(f"  ⚠ no encontrada: {nombre}"))
                 continue
 
+            ids = {}
+            if nombre in IDS_POR_CODIGO:
+                codigos = sorted({
+                    (fila.get("code") or "").strip() for fila in lista.filas
+                } - {""})
+                ids = {codigo: posicion for posicion, codigo in enumerate(codigos, start=1)}
+
             creados = actualizados = 0
             for fila in lista.filas:
                 codigo = (fila.get("code") or "").strip()
@@ -98,11 +112,18 @@ class Command(BaseCommand):
                     # columna es opcional y puede faltar en cualquier fila.
                     if extra:
                         valores[columna] = extra
+                crear = {**valores, "id": ids[codigo]} if ids else None
                 _, creado = Modelo.objects.update_or_create(
-                    codigo=codigo, defaults=valores,
+                    codigo=codigo, defaults=valores, create_defaults=crear,
                 )
                 creados += creado
                 actualizados += not creado
+
+            if ids:
+                # Con ids puestos a mano la secuencia se queda atrás.
+                with connection.cursor() as cursor:
+                    for sql in connection.ops.sequence_reset_sql(no_style(), [Modelo]):
+                        cursor.execute(sql)
 
             etiqueta = Modelo._meta.verbose_name_plural
             if subdirectorio:
