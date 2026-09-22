@@ -1945,6 +1945,75 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/documentos/documento/{id}/respuesta-validado/:
+    post:
+      operationId: documentos_documento_respuesta_validado_create
+      description: |-
+        Avisa la validación a los webhooks del emisor y, con un 200, la da por respondida.
+
+        ``POST /api/documentos/documento/{id}/respuesta-validado/``. El documento
+        tiene que estar aceptado y sin `respuesta_validado`. Se manda el aviso de
+        validación a cada webhook del emisor con `estado_validado`, esperando la
+        respuesta, y si alguno contesta **200** el documento queda con
+        `respuesta_validado = true`.
+
+        Si el emisor no tiene ninguno, no hay a quién avisar: el documento se
+        marca igual, sin enviar nada, y `avisos` sale vacío.
+
+        Es lo mismo que se hace solo cuando la DIAN acepta el documento; este
+        endpoint recupera los que allí se quedaron sin marcar. Si ninguno
+        responde 200 es un 502: el documento sigue igual y se puede volver a
+        llamar. Cada envío deja su aviso en
+        ``/api/emisores/webhook-aviso/``, con el código y el error.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este documento electrónico.
+        required: true
+      tags:
+      - documentos
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespuestaValidadoRespuesta'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/documentos/documento/{id}/xml/:
     get:
       operationId: documentos_documento_xml_retrieve
@@ -3530,8 +3599,10 @@ paths:
 
         Un emisor puede tener varios. `estado_validado` y `estado_notificado` dicen
         si a ese webhook se le avisa de la validación de la DIAN y de la
-        notificación al adquiriente. Por ahora solo se guardan: el envío de los
-        avisos todavía no está hecho.
+        notificación al adquiriente. El aviso sale firmado con el `secreto` del
+        webhook, una sola vez y sin reintentos; lo que respondió cada uno está en
+        ``/api/emisores/webhook-aviso/``. Sin secreto, o si el emisor no tiene
+        `referencia_externa`, no se manda: el aviso queda fallido con el motivo.
 
         Filtro: ``?emisor=<id>``.
       parameters:
@@ -3577,8 +3648,10 @@ paths:
 
         Un emisor puede tener varios. `estado_validado` y `estado_notificado` dicen
         si a ese webhook se le avisa de la validación de la DIAN y de la
-        notificación al adquiriente. Por ahora solo se guardan: el envío de los
-        avisos todavía no está hecho.
+        notificación al adquiriente. El aviso sale firmado con el `secreto` del
+        webhook, una sola vez y sin reintentos; lo que respondió cada uno está en
+        ``/api/emisores/webhook-aviso/``. Sin secreto, o si el emisor no tiene
+        `referencia_externa`, no se manda: el aviso queda fallido con el motivo.
 
         Filtro: ``?emisor=<id>``.
       tags:
@@ -3622,6 +3695,102 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/emisores/webhook-aviso/:
+    get:
+      operationId: emisores_webhook_aviso_list
+      description: |-
+        Los avisos mandados a los webhooks del emisor, con lo que respondieron.
+
+        Uno por webhook y por cambio: validarse el documento o notificarse. Se
+        mandan una sola vez, sin reintentos; aquí se ve cuáles no llegaron y por
+        qué (`codigo_http` y `error`). De solo lectura: los escribe el sistema.
+
+        Filtros: ``?webhook=<id>``, ``?documento=<uuid>``,
+        ``?tipo=validacion|notificacion`` y ``?estado=pendiente|entregado|fallido``.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un número de página dentro del conjunto de resultados paginado.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - emisores
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedWebhookAvisoList'
+          description: ''
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/emisores/webhook-aviso/{id}/:
+    get:
+      operationId: emisores_webhook_aviso_retrieve
+      description: |-
+        Los avisos mandados a los webhooks del emisor, con lo que respondieron.
+
+        Uno por webhook y por cambio: validarse el documento o notificarse. Se
+        mandan una sola vez, sin reintentos; aquí se ve cuáles no llegaron y por
+        qué (`codigo_http` y `error`). De solo lectura: los escribe el sistema.
+
+        Filtros: ``?webhook=<id>``, ``?documento=<uuid>``,
+        ``?tipo=validacion|notificacion`` y ``?estado=pendiente|entregado|fallido``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este aviso de webhook.
+        required: true
+      tags:
+      - emisores
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookAviso'
+          description: ''
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/emisores/webhook/{id}/:
     get:
       operationId: emisores_webhook_retrieve
@@ -3630,8 +3799,10 @@ paths:
 
         Un emisor puede tener varios. `estado_validado` y `estado_notificado` dicen
         si a ese webhook se le avisa de la validación de la DIAN y de la
-        notificación al adquiriente. Por ahora solo se guardan: el envío de los
-        avisos todavía no está hecho.
+        notificación al adquiriente. El aviso sale firmado con el `secreto` del
+        webhook, una sola vez y sin reintentos; lo que respondió cada uno está en
+        ``/api/emisores/webhook-aviso/``. Sin secreto, o si el emisor no tiene
+        `referencia_externa`, no se manda: el aviso queda fallido con el motivo.
 
         Filtro: ``?emisor=<id>``.
       parameters:
@@ -3677,8 +3848,10 @@ paths:
 
         Un emisor puede tener varios. `estado_validado` y `estado_notificado` dicen
         si a ese webhook se le avisa de la validación de la DIAN y de la
-        notificación al adquiriente. Por ahora solo se guardan: el envío de los
-        avisos todavía no está hecho.
+        notificación al adquiriente. El aviso sale firmado con el `secreto` del
+        webhook, una sola vez y sin reintentos; lo que respondió cada uno está en
+        ``/api/emisores/webhook-aviso/``. Sin secreto, o si el emisor no tiene
+        `referencia_externa`, no se manda: el aviso queda fallido con el motivo.
 
         Filtro: ``?emisor=<id>``.
       parameters:
@@ -3742,8 +3915,10 @@ paths:
 
         Un emisor puede tener varios. `estado_validado` y `estado_notificado` dicen
         si a ese webhook se le avisa de la validación de la DIAN y de la
-        notificación al adquiriente. Por ahora solo se guardan: el envío de los
-        avisos todavía no está hecho.
+        notificación al adquiriente. El aviso sale firmado con el `secreto` del
+        webhook, una sola vez y sin reintentos; lo que respondió cada uno está en
+        ``/api/emisores/webhook-aviso/``. Sin secreto, o si el emisor no tiene
+        `referencia_externa`, no se manda: el aviso queda fallido con el motivo.
 
         Filtro: ``?emisor=<id>``.
       parameters:
@@ -3806,8 +3981,10 @@ paths:
 
         Un emisor puede tener varios. `estado_validado` y `estado_notificado` dicen
         si a ese webhook se le avisa de la validación de la DIAN y de la
-        notificación al adquiriente. Por ahora solo se guardan: el envío de los
-        avisos todavía no está hecho.
+        notificación al adquiriente. El aviso sale firmado con el `secreto` del
+        webhook, una sola vez y sin reintentos; lo que respondió cada uno está en
+        ``/api/emisores/webhook-aviso/``. Sin secreto, o si el emisor no tiene
+        `referencia_externa`, no se manda: el aviso queda fallido con el motivo.
 
         Filtro: ``?emisor=<id>``.
       parameters:
@@ -5081,6 +5258,10 @@ components:
           description: Si ya se le entregó el documento al comprador. Lo marca la
             acción `notificar`; mientras el envío por correo no exista, significa
             que el paquete se armó y se entregó a quien lo pidió.
+        respuesta_validado:
+          type: boolean
+          readOnly: true
+          title: Respuesta de validado
         errores:
           type: array
           items:
@@ -5229,6 +5410,7 @@ components:
       - pos
       - prefijo
       - resolucion_numero
+      - respuesta_validado
       - total_a_pagar
       - total_impuestos
       - track_id
@@ -5924,6 +6106,10 @@ components:
           description: Si ya se le entregó el documento al comprador. Lo marca la
             acción `notificar`; mientras el envío por correo no exista, significa
             que el paquete se armó y se entregó a quien lo pidió.
+        respuesta_validado:
+          type: boolean
+          readOnly: true
+          title: Respuesta de validado
         concepto_correccion:
           type: string
           title: Concepto de corrección
@@ -6063,6 +6249,7 @@ components:
       - pos
       - prefijo
       - resolucion_numero
+      - respuesta_validado
       - total_a_pagar
       - total_errores
       - total_impuestos
@@ -6417,6 +6604,12 @@ components:
             maxLength: 0
         activo:
           type: boolean
+        referencia_externa:
+          type: string
+          description: Identificador del emisor en el sistema que lo integra (en torio,
+            el id del cliente). Viaja como `cliente` en los avisos de webhook; sin
+            él no se envían.
+          maxLength: 100
         habilitado_facturacion:
           type: boolean
           readOnly: true
@@ -6566,6 +6759,12 @@ components:
             maxLength: 0
         activo:
           type: boolean
+        referencia_externa:
+          type: string
+          description: Identificador del emisor en el sistema que lo integra (en torio,
+            el id del cliente). Viaja como `cliente` en los avisos de webhook; sin
+            él no se envían.
+          maxLength: 100
         habilitado_facturacion:
           type: boolean
           readOnly: true
@@ -6721,6 +6920,12 @@ components:
             maxLength: 0
         activo:
           type: boolean
+        referencia_externa:
+          type: string
+          description: Identificador del emisor en el sistema que lo integra (en torio,
+            el id del cliente). Viaja como `cliente` en los avisos de webhook; sin
+            él no se envían.
+          maxLength: 100
         ambiente_facturacion:
           allOf:
           - $ref: '#/components/schemas/AmbienteEnum'
@@ -7301,6 +7506,16 @@ components:
       required:
       - detail
       - errores
+    EstadoEnum:
+      enum:
+      - pendiente
+      - entregado
+      - fallido
+      type: string
+      description: |-
+        * `pendiente` - Pendiente
+        * `entregado` - Entregado
+        * `fallido` - Fallido
     GrupoEnum:
       enum:
       - devengado
@@ -8727,6 +8942,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SoftwareDian'
+    PaginatedWebhookAvisoList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookAviso'
     PaginatedWebhookList:
       type: object
       required:
@@ -8822,6 +9060,12 @@ components:
             maxLength: 0
         activo:
           type: boolean
+        referencia_externa:
+          type: string
+          description: Identificador del emisor en el sistema que lo integra (en torio,
+            el id del cliente). Viaja como `cliente` en los avisos de webhook; sin
+            él no se envían.
+          maxLength: 100
         ambiente_facturacion:
           allOf:
           - $ref: '#/components/schemas/AmbienteEnum'
@@ -9069,6 +9313,10 @@ components:
         estado_notificado:
           type: boolean
           title: Avisar la notificación
+        secreto:
+          type: string
+          writeOnly: true
+          maxLength: 255
     Resolucion:
       type: object
       properties:
@@ -9171,6 +9419,18 @@ components:
       - tipo_factura
       - vigente_desde
       - vigente_hasta
+    RespuestaValidadoRespuesta:
+      type: object
+      properties:
+        respuesta_validado:
+          type: boolean
+        avisos:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookAviso'
+      required:
+      - avisos
+      - respuesta_validado
     SoftwareDian:
       type: object
       properties:
@@ -9389,6 +9649,66 @@ components:
       - id
       - nombre
       - url
+    WebhookAviso:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        webhook:
+          type: integer
+          readOnly: true
+        documento:
+          type: string
+          format: uuid
+          readOnly: true
+        tipo:
+          allOf:
+          - $ref: '#/components/schemas/WebhookAvisoTipoEnum'
+          readOnly: true
+        estado:
+          allOf:
+          - $ref: '#/components/schemas/EstadoEnum'
+          readOnly: true
+        codigo_http:
+          type: integer
+          readOnly: true
+          nullable: true
+          title: Código HTTP
+        error:
+          type: string
+          readOnly: true
+        cuerpo:
+          type: string
+          readOnly: true
+        creado_en:
+          type: string
+          format: date-time
+          readOnly: true
+        enviado_en:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+      required:
+      - codigo_http
+      - creado_en
+      - cuerpo
+      - documento
+      - enviado_en
+      - error
+      - estado
+      - id
+      - tipo
+      - webhook
+    WebhookAvisoTipoEnum:
+      enum:
+      - validacion
+      - notificacion
+      type: string
+      description: |-
+        * `validacion` - Validación de la DIAN
+        * `notificacion` - Notificación al adquiriente
     WebhookRequest:
       type: object
       properties:
@@ -9409,6 +9729,10 @@ components:
         estado_notificado:
           type: boolean
           title: Avisar la notificación
+        secreto:
+          type: string
+          writeOnly: true
+          maxLength: 255
       required:
       - emisor
       - nombre

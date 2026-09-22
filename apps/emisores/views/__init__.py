@@ -4,6 +4,7 @@ from .emisor import EmisorViewSet
 from .resolucion import ResolucionViewSet
 from .software import SoftwareDianViewSet
 from .webhook import WebhookViewSet
+from .webhook_aviso import WebhookAvisoViewSet
 
 __all__ = [
     "EmisorViewSet",
@@ -11,4 +12,5 @@ __all__ = [
     "CertificadoViewSet",
     "ResolucionViewSet",
     "WebhookViewSet",
+    "WebhookAvisoViewSet",
 ]

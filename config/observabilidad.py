@@ -51,6 +51,7 @@ NOMBRES_SENSIBLES = [
     "pin",                   # SoftwareDian.pin: entra en el CUDE y en el CUNE
     "secreto",               # el secreto de una API Key, antes de hashearlo
     "CERT_ENCRYPTION_KEY",   # la clave que cifra las claves
+    "WEBHOOK_ENCRYPTION_KEY",  # la que cifra los secretos de los webhooks
     # Contenido que no es un secreto pero sí datos fiscales de terceros, o
     # binario que no aporta nada en un traceback y sí lo engorda.
     "datos",                 # los bytes del .p12 en validar_pkcs12

@@ -235,7 +235,8 @@ class DocumentoSerializer(serializers.ModelSerializer):
             "estado", "estado_nombre", "estado_descripcion",
             "emisor", "resolucion", "resolucion_numero", "adquiriente",
             "prefijo", "consecutivo", "numero", "cufe_cude", "track_id",
-            "envio", "ambiente", "fecha_validacion", "notificado", "errores",
+            "envio", "ambiente", "fecha_validacion", "notificado",
+            "respuesta_validado", "errores",
             "concepto_correccion", "fecha_vencimiento",
             "orden_compra", "orden_compra_fecha", "orden_compra_tipo",
             "orden_compra_documento",
@@ -247,7 +248,7 @@ class DocumentoSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "estado", "cufe_cude", "track_id", "envio", "ambiente", "fecha_validacion",
-            "notificado",
+            "notificado", "respuesta_validado",
             "valor_bruto", "total_impuestos",
             "total_a_pagar", "creado_en", "actualizado_en",
         ]

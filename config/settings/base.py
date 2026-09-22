@@ -455,6 +455,15 @@ MFA_ENCRYPTION_KEY = clave_fernet(
     "MFA_ENCRYPTION_KEY", env("MFA_ENCRYPTION_KEY", default=""), obligatoria=False,
 )
 
+# --- Webhooks ---------------------------------------------------------------
+# Clave Fernet que cifra el secreto con el que se firman los avisos de cada
+# webhook. Aparte de las otras por lo mismo: rotar una no invalida las demás.
+# Vacía arranca, y lo que falla es guardar un webhook con secreto.
+WEBHOOK_ENCRYPTION_KEY = clave_fernet(
+    "WEBHOOK_ENCRYPTION_KEY", env("WEBHOOK_ENCRYPTION_KEY", default=""),
+    obligatoria=False,
+)
+
 # --- CORS (la SPA vive en otro dominio) -------------------------------------
 # Orígenes permitidos del frontend, p. ej. https://app.midominio.com
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])

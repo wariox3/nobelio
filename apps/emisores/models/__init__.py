@@ -14,6 +14,7 @@ from .resolucion import (
 )
 from .software import SoftwareDian
 from .webhook import Webhook
+from .webhook_aviso import WebhookAviso
 
 __all__ = [
     "Emisor",
@@ -24,4 +25,5 @@ __all__ = [
     "resolucion_activa_en_otra_cuenta",
     "mensaje_resolucion_ocupada",
     "Webhook",
+    "WebhookAviso",
 ]

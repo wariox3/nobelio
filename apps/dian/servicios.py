@@ -30,6 +30,7 @@ from apps.emisores.servicios import (
     MENSAJE_EMISOR_INACTIVO,
     certificado_del_emisor,
     motivo_no_puede_emitir,
+    webhooks,
 )
 from apps.nucleo.registro import campos
 
@@ -98,7 +99,13 @@ def registrar_cambio_de_estado(obj, estado_anterior, datos):
     nombre = obj.estado.nombre if obj.estado_id else ""
     if nombre == estado_anterior or nombre not in EVENTO_POR_ESTADO:
         return None
-    return obj.eventos.create(tipo=EVENTO_POR_ESTADO[nombre], datos=datos)
+    evento = obj.eventos.create(tipo=EVENTO_POR_ESTADO[nombre], datos=datos)
+    # Aquí y no en cada sitio que acepta: es el único punto por el que pasan
+    # el envío y la consulta de estado. Solo documentos: el contrato con torio
+    # no cubre la nómina.
+    if nombre == DocumentoEstado.Nombre.ACEPTADO and isinstance(obj, Documento):
+        webhooks.responder_validado_al_confirmar(obj)
+    return evento
 
 
 def datos_del_veredicto(obj, respuesta, origen):

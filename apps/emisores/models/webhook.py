@@ -3,14 +3,15 @@ from django.core.validators import URLValidator
 from django.db import models
 
 from apps.nucleo.models import ModeloConFechas
+from apps.utilidades.cifrado import ClaveCifradaField
 
 from .emisor import Emisor
 
-MENSAJE_SOLO_HTTPS = "Tiene que ser una URL HTTPS válida (https://…)."
+MENSAJE_URL_WEB = "Tiene que ser una URL http:// o https:// válida."
 
 # Uno solo, compartido por el modelo y el serializer: así una URL mal formada y
-# una `http://` reciben el mismo mensaje, y no dos a la vez.
-validar_url_https = URLValidator(schemes=["https"], message=MENSAJE_SOLO_HTTPS)
+# una `ftp://` reciben el mismo mensaje, y no dos a la vez.
+validar_url_web = URLValidator(schemes=["http", "https"], message=MENSAJE_URL_WEB)
 
 
 class Webhook(ModeloConFechas):
@@ -21,12 +22,20 @@ class Webhook(ModeloConFechas):
     """
 
     nombre = models.CharField("nombre", max_length=150)
-    # Solo HTTPS: el aviso lleva datos fiscales del documento, y por HTTP
-    # viajarían en claro. El validador se suma al de `URLField`, que admite
-    # también http y ftp.
-    url = models.URLField("URL", max_length=500, validators=[validar_url_https])
+    # HTTP y HTTPS. Por HTTP el aviso —CUFE, fecha de validación, id del
+    # documento y del cliente— viaja en claro: la firma prueba que salió de
+    # aquí y que nadie lo alteró, pero no lo oculta. El validador se suma al de
+    # `URLField` para dejar fuera ftp, que ese sí admite.
+    url = models.URLField("URL", max_length=500, validators=[validar_url_web])
     estado_validado = models.BooleanField("avisar la validación", default=False)
     estado_notificado = models.BooleanField("avisar la notificación", default=False)
+    # Con el que se firman las peticiones, para que el emisor pueda comprobar
+    # que el aviso sale de aquí. Lo pone el cliente y es opcional. Se guarda
+    # cifrado con su propia clave; en Python se lee en claro, que es lo que
+    # hace falta para firmar. El 512 es por el token Fernet, no por el secreto.
+    secreto = ClaveCifradaField(
+        "secreto", max_length=512, blank=True, llave="WEBHOOK_ENCRYPTION_KEY",
+    )
 
     emisor = models.ForeignKey(
         Emisor,

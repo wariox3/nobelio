@@ -140,6 +140,19 @@ class DocumentoAPITests(APITestCase):
             self.client.get(url, {"emisor": 999999}).data["count"], 0
         )
 
+    def test_filtrar_por_respuesta_validado_y_mostrarlo_en_la_lista(self):
+        url = "/api/documentos/documento/"
+        self.assertIs(self.client.get(url).data["results"][0]["respuesta_validado"], False)
+        self.assertEqual(self.client.get(url, {"respuesta_validado": "true"}).data["count"], 0)
+        self.assertGreaterEqual(
+            self.client.get(url, {"respuesta_validado": "false"}).data["count"], 1
+        )
+
+        type(self.documento).objects.filter(pk=self.documento.pk).update(respuesta_validado=True)
+        resp = self.client.get(url, {"respuesta_validado": "true"})
+        self.assertEqual(resp.data["count"], 1)
+        self.assertIs(resp.data["results"][0]["respuesta_validado"], True)
+
     def _emitir(self, cliente=None):
         """`emitir/` con la DIAN simulada: por defecto, acepta."""
         cliente = cliente or FakeCliente(
@@ -159,6 +172,46 @@ class DocumentoAPITests(APITestCase):
         self.assertEqual(len(resp.data["cufe_cude"]), 96)
         self.assertEqual(resp.data["track_id"], "track-1")
         self.assertEqual(len(cliente.llamadas), 1)
+
+    def test_emitir_aceptado_marca_respuesta_validado(self):
+        # Sin webhooks de validación no hay a quién avisar: se marca sin más.
+        with self.captureOnCommitCallbacks(execute=True):
+            resp = self._emitir()
+
+        self.assertEqual(resp.data["estado"], DocumentoEstado.Nombre.ACEPTADO)
+        self.documento.refresh_from_db()
+        self.assertTrue(self.documento.respuesta_validado)
+
+    def test_emitir_aceptado_avisa_y_con_un_200_marca(self):
+        from apps.emisores.models import Webhook, WebhookAviso
+
+        self.emisor.referencia_externa = "12"
+        self.emisor.save(update_fields=["referencia_externa"])
+        Webhook.objects.create(
+            emisor=self.emisor, nombre="torio", url="https://torio.co/hook",
+            estado_validado=True, secreto="s3creto",
+        )
+        ok = mock.Mock(status_code=200, text="")
+        with mock.patch("apps.emisores.servicios.webhooks.requests.post", return_value=ok) as post, \
+                self.captureOnCommitCallbacks(execute=True):
+            self._emitir()
+
+        post.assert_called_once()
+        self.assertEqual(WebhookAviso.objects.get().codigo_http, 200)
+        self.documento.refresh_from_db()
+        self.assertTrue(self.documento.respuesta_validado)
+
+    def test_emitir_rechazado_no_marca_respuesta_validado(self):
+        rechazo = FakeCliente(soap.RespuestaDian(
+            track_id="track-1", es_valido=False, codigo_estado="99",
+            errores=["Regla: FAD01, Rechazo: algo"],
+        ))
+        with self.captureOnCommitCallbacks(execute=True):
+            resp = self._emitir(rechazo)
+
+        self.assertEqual(resp.data["estado"], DocumentoEstado.Nombre.RECHAZADO)
+        self.documento.refresh_from_db()
+        self.assertFalse(self.documento.respuesta_validado)
 
     def test_si_el_envio_falla_queda_firmado_y_el_reintento_manda_el_mismo_cufe(self):
         """La firma se confirma antes de enviar.

@@ -143,14 +143,16 @@ los JWT:
 python3 -c "import secrets; print(secrets.token_urlsafe(64))"
 ```
 
-Y **dos claves Fernet más**, una para cifrar en la base la clave de los `.p12`
-(`CERT_ENCRYPTION_KEY`) y otra para los secretos TOTP del segundo factor
-(`MFA_ENCRYPTION_KEY`). Las tres van por separado a propósito: la `SECRET_KEY` se
-rota el día que haya que invalidar los JWT, y eso no puede dejar ilegibles ni los
-certificados de todos los emisores ni el segundo factor de todo el mundo.
+Y **tres claves Fernet más**: una para cifrar en la base la clave de los `.p12`
+(`CERT_ENCRYPTION_KEY`), otra para los secretos TOTP del segundo factor
+(`MFA_ENCRYPTION_KEY`) y otra para el secreto con el que se firman los avisos de
+los webhooks (`WEBHOOK_ENCRYPTION_KEY`). Todas van por separado a propósito: la
+`SECRET_KEY` se rota el día que haya que invalidar los JWT, y eso no puede dejar
+ilegibles ni los certificados de todos los emisores ni el segundo factor de todo
+el mundo.
 
 ```bash
-# Una vez por cada una; no reutilices la misma en las dos.
+# Una vez por cada una; no reutilices la misma en dos.
 python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
@@ -163,6 +165,9 @@ CERT_ENCRYPTION_KEY=<la primera clave Fernet>
 # Tiene default vacío, así que Django arranca sin ella: lo que falla es el MFA,
 # y no al desplegar sino la primera vez que alguien lo enrola.
 MFA_ENCRYPTION_KEY=<la segunda clave Fernet>
+# Cifra el secreto de los webhooks. También arranca vacía: lo que falla es
+# guardar un webhook con secreto.
+WEBHOOK_ENCRYPTION_KEY=<la tercera clave Fernet>
 DEBUG=False
 ALLOWED_HOSTS=api.rededoc.co
 

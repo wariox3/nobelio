@@ -33,6 +33,8 @@ from apps.nucleo.api import (
     cuerpo_de_error,
     entero_de_query,
 )
+from apps.emisores.serializers import WebhookAvisoSerializer
+from apps.emisores.servicios import webhooks
 from apps.nucleo.esquema import ErrorSerializer
 from apps.seguridad.alcance import AlcanceEmisorMixin
 from apps.utilidades.zinc import ZincNoDisponible
@@ -89,6 +91,24 @@ RESPUESTA_NOTIFICACION = inline_serializer(
         "codigo_envio": campos.CharField(help_text="Identificador del envío en la pasarela de correo."),
         "respuesta": campos.DictField(help_text="Respuesta cruda de la pasarela de correo."),
     },
+)
+RESPUESTA_VALIDADO = inline_serializer(
+    name="RespuestaValidadoRespuesta",
+    fields={
+        "respuesta_validado": campos.BooleanField(),
+        "avisos": WebhookAvisoSerializer(many=True),
+    },
+)
+
+MENSAJE_RESPUESTA_NO_ACEPTADO = (
+    "Solo se avisa la validación de un documento aceptado por la DIAN; este "
+    "está '{estado}'."
+)
+MENSAJE_RESPUESTA_YA_VALIDADO = "La validación de este documento ya fue respondida."
+MENSAJE_RESPUESTA_SIN_200 = (
+    "Ningún webhook respondió 200 ({resultados}). El documento sigue sin "
+    "respuesta de validado; el detalle de cada aviso está en "
+    "/api/emisores/webhook-aviso/?documento={documento}."
 )
 
 
@@ -153,6 +173,7 @@ class DocumentoViewSet(
         "fecha_emision", "hora_emision", "consecutivo", "numero",
         "total_a_pagar", "fecha_validacion", "creado_en", "actualizado_en",
         "estado__nombre", "documento_tipo__codigo", "notificado",
+        "respuesta_validado",
     ]
 
     def get_serializer_class(self):
@@ -249,8 +270,9 @@ class DocumentoViewSet(
 
     def get_queryset(self):
         """Permite filtrar el listado por ``emisor`` (id), ``estado`` y
-        ``documento_tipo`` (ambos por código) y ``notificado`` (true/false):
-        p. ej. ``?emisor=2&estado=aceptado&documento_tipo=factura_venta``, o
+        ``documento_tipo`` (ambos por código), ``notificado`` y
+        ``respuesta_validado`` (true/false): p. ej.
+        ``?emisor=2&estado=aceptado&documento_tipo=factura_venta``, o
         ``?estado=aceptado&notificado=false`` para lo que falta por entregar.
 
         El filtro por ``emisor`` acota dentro del alcance, nunca lo amplía: el
@@ -283,8 +305,9 @@ class DocumentoViewSet(
             qs = qs.filter(estado__nombre=estado)
         if tipo := params.get("documento_tipo"):
             qs = qs.filter(documento_tipo__codigo=tipo)
-        if (notificado := params.get("notificado")) is not None:
-            qs = qs.filter(notificado=notificado.lower() in ("1", "true", "si", "sí"))
+        for bandera in ("notificado", "respuesta_validado"):
+            if (valor := params.get(bandera)) is not None:
+                qs = qs.filter(**{bandera: valor.lower() in ("1", "true", "si", "sí")})
         return qs
 
     def destroy(self, request, *args, **kwargs):
@@ -435,6 +458,53 @@ class DocumentoViewSet(
             "codigo_estado": respuesta.codigo_estado,
             "descripcion": respuesta.descripcion_estado,
             "errores": respuesta.errores,
+        })
+
+    @extend_schema(
+        request=None,
+        responses={200: RESPUESTA_VALIDADO, 400: ErrorSerializer, 502: ErrorSerializer},
+    )
+    @action(detail=True, methods=["post"], url_path="respuesta-validado")
+    def respuesta_validado(self, request, pk=None):
+        """Avisa la validación a los webhooks del emisor y, con un 200, la da por respondida.
+
+        ``POST /api/documentos/documento/{id}/respuesta-validado/``. El documento
+        tiene que estar aceptado y sin `respuesta_validado`. Se manda el aviso de
+        validación a cada webhook del emisor con `estado_validado`, esperando la
+        respuesta, y si alguno contesta **200** el documento queda con
+        `respuesta_validado = true`.
+
+        Si el emisor no tiene ninguno, no hay a quién avisar: el documento se
+        marca igual, sin enviar nada, y `avisos` sale vacío.
+
+        Es lo mismo que se hace solo cuando la DIAN acepta el documento; este
+        endpoint recupera los que allí se quedaron sin marcar. Si ninguno
+        responde 200 es un 502: el documento sigue igual y se puede volver a
+        llamar. Cada envío deja su aviso en
+        ``/api/emisores/webhook-aviso/``, con el código y el error.
+        """
+        documento = self.get_object()
+        estado = documento.estado.nombre if documento.estado_id else ""
+        if estado != DocumentoEstado.Nombre.ACEPTADO:
+            raise ErrorSolicitud(MENSAJE_RESPUESTA_NO_ACEPTADO.format(estado=estado))
+        if documento.respuesta_validado:
+            raise ErrorSolicitud(MENSAJE_RESPUESTA_YA_VALIDADO)
+
+        # La misma función que corre sola cuando la DIAN acepta el documento:
+        # esto es para recuperar los que allí se quedaron sin marcar.
+        respondido, avisos = webhooks.responder_validado(documento)
+        if not respondido:
+            resultados = ", ".join(
+                f"{aviso.webhook.nombre}: {aviso.codigo_http or aviso.error}"
+                for aviso in avisos
+            )
+            raise ErrorPasarela(MENSAJE_RESPUESTA_SIN_200.format(
+                resultados=resultados, documento=documento.pk,
+            ))
+
+        return Response({
+            "respuesta_validado": True,
+            "avisos": WebhookAvisoSerializer(avisos, many=True).data,
         })
 
     @extend_schema(

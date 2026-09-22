@@ -4,6 +4,7 @@ from .emisor import EmisorListaSerializer, EmisorSerializer
 from .resolucion import ResolucionSerializer
 from .software import SoftwareDianSerializer
 from .webhook import WebhookSerializer
+from .webhook_aviso import WebhookAvisoSerializer
 
 __all__ = [
     "EmisorSerializer",
@@ -12,4 +13,5 @@ __all__ = [
     "CertificadoSerializer",
     "ResolucionSerializer",
     "WebhookSerializer",
+    "WebhookAvisoSerializer",
 ]

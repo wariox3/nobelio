@@ -38,6 +38,16 @@ class Emisor(ModeloConFechas):
     )
     telefono = models.CharField("teléfono", max_length=50, blank=True)
     correo = models.EmailField("correo electrónico", blank=True)
+    # Cómo conoce al emisor el sistema que lo dio de alta —en torio, el id del
+    # cliente (tenant)—. Nobelio no lo interpreta: lo copia en el `cliente` de
+    # cada aviso de webhook, que es como el receptor sabe a quién aplicarlo.
+    # Genérico a propósito, y no `tenant_id`, para que sirva a cualquier ERP.
+    referencia_externa = models.CharField(
+        "referencia externa", max_length=100, blank=True,
+        help_text="Identificador del emisor en el sistema que lo integra (en "
+        "torio, el id del cliente). Viaja como `cliente` en los avisos de "
+        "webhook; sin él no se envían.",
+    )
     activo = models.BooleanField("activo", default=True)
     habilitado_facturacion = models.BooleanField(
         "habilitado para facturar", default=False,

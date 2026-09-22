@@ -25,6 +25,8 @@ from django.conf import settings
 
 from apps.dian.identificadores import nombre_archivo_dian
 from apps.documentos.models import DocumentoEstado
+from apps.emisores.models import WebhookAviso
+from apps.emisores.servicios import webhooks
 from apps.nucleo.registro import campos
 from apps.utilidades.zinc import Zinc
 
@@ -127,6 +129,9 @@ def marcar_notificado(documento):
         return
     documento.notificado = True
     documento.save(update_fields=["notificado", "actualizado_en"])
+    # Solo cuando de verdad pasa a notificado: una segunda notificación del
+    # mismo documento no vuelve a avisar.
+    webhooks.avisar(documento, WebhookAviso.Tipo.NOTIFICACION)
 
 
 def _attached_document(documento):

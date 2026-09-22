@@ -11,8 +11,10 @@ class WebhookViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
 
     Un emisor puede tener varios. `estado_validado` y `estado_notificado` dicen
     si a ese webhook se le avisa de la validación de la DIAN y de la
-    notificación al adquiriente. Por ahora solo se guardan: el envío de los
-    avisos todavía no está hecho.
+    notificación al adquiriente. El aviso sale firmado con el `secreto` del
+    webhook, una sola vez y sin reintentos; lo que respondió cada uno está en
+    ``/api/emisores/webhook-aviso/``. Sin secreto, o si el emisor no tiene
+    `referencia_externa`, no se manda: el aviso queda fallido con el motivo.
 
     Filtro: ``?emisor=<id>``.
     """

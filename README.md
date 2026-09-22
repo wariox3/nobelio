@@ -100,6 +100,7 @@ Variables principales (`config/settings/base.py` las lee con `django-environ`):
 | `DIAN_POLICY_ID` | URL de la política de firma | política v2 DIAN |
 | `DIAN_POLICY_HASH` | SHA-256 (base64) del PDF de la política | el de la política v2 |
 | `CERT_ENCRYPTION_KEY` | Clave Fernet que cifra la clave del `.p12` (**obligatoria**) | — |
+| `WEBHOOK_ENCRYPTION_KEY` | Clave Fernet que cifra el secreto de los webhooks; vacía impide guardar uno con secreto | *(vacío)* |
 | `THROTTLE_USUARIO` | Tope de peticiones por credencial | `300/hour` |
 | `THROTTLE_ANONIMO` | Tope de peticiones sin credencial, donde la ruta no trae el suyo propio | `30/hour` |
 | `SENTRY_DSN` | Errores a Sentry; vacío lo desactiva | *(vacío)* |

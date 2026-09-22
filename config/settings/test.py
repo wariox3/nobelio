@@ -22,6 +22,8 @@ MEDIA_ROOT = tempfile.mkdtemp(prefix="nobelio-test-media-")
 # .env, y las pruebas no deben depender de que exista ni tocar el material real.
 # Es fija y no generada para que un fallo se reproduzca igual en cada ejecución.
 CERT_ENCRYPTION_KEY = "SsHkSDR23bZuoCyxvHOEipYbGrCJJhcThPCanEwLHi4="
+# Distinta de la anterior: así una prueba nota si algo cifra con la que no es.
+WEBHOOK_ENCRYPTION_KEY = "0S9tlxVKvKdnKnc_6uUHYd1cA0QMyMFL3-kbAtWd8zU="
 
 # Las trazas de emisión, calladas durante la suite: son útiles en el servidor,
 # pero aquí solo ensucian la salida y esconden el fallo que se está buscando.

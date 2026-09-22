@@ -198,6 +198,7 @@ class Documento(ModeloUUID, ModeloConFechas):
         "acción `notificar`; mientras el envío por correo no exista, significa "
         "que el paquete se armó y se entregó a quien lo pidió.",
     )
+    respuesta_validado = models.BooleanField("respuesta de validado", default=False)
     fecha_validacion = models.DateTimeField(
         "fecha y hora de validación DIAN", null=True, blank=True,
         help_text="Momento en que la DIAN aceptó el documento.",

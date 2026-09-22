@@ -197,7 +197,7 @@ class EmisorSerializer(serializers.ModelSerializer):
             "tipo_organizacion", "responsabilidades",
             "pais", "departamento", "municipio", "direccion", "codigo_postal",
             "correo_copia",
-            "telefono", "correo", "activo",
+            "telefono", "correo", "activo", "referencia_externa",
             "habilitado_facturacion", "habilitado_nomina",
             "habilitado_documento_equivalente",
             "ambiente_facturacion", "ambiente_nomina",

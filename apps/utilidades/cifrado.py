@@ -1,8 +1,9 @@
 
 """Cifrado de los secretos que se guardan en la base.
 
-Hoy lo usa la clave del `.p12` del emisor (`Certificado.clave`), que hasta el
-2026-09-02 se guardaba en claro. El motivo del cambio es que las dos mitades
+Lo usan la clave del `.p12` del emisor (`Certificado.clave`), que hasta el
+2026-09-02 se guardaba en claro, y el secreto de los webhooks
+(`Webhook.secreto`), cada uno con su propia clave Fernet. El motivo del cambio es que las dos mitades
 del material de firma vivían en el mismo servidor: un volcado de la base daba
 la clave, y el `.env` de al lado daba las credenciales B2 con las que bajar el
 `.p12`. Con las dos juntas se firma cualquier documento en nombre de cualquier
@@ -18,7 +19,12 @@ from functools import lru_cache
 
 from cryptography.fernet import Fernet, InvalidToken
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.db import models
+
+# La de los certificados, que fue la primera. Cada dominio de secretos tiene la
+# suya para que rotar una no deje ilegibles los de los otros.
+LLAVE_POR_DEFECTO = "CERT_ENCRYPTION_KEY"
 
 
 @lru_cache(maxsize=None)
@@ -31,16 +37,24 @@ def _cifrador_de(clave: str) -> Fernet:
     return Fernet(clave)
 
 
-def cifrador() -> Fernet:
-    return _cifrador_de(settings.CERT_ENCRYPTION_KEY)
+def cifrador(llave: str = LLAVE_POR_DEFECTO) -> Fernet:
+    """El ``Fernet`` de la clave que está en el setting ``llave``.
+
+    La de los certificados es obligatoria y ya la exige el arranque; las demás
+    pueden estar vacías, y entonces se falla aquí, al usarla, nombrando cuál.
+    """
+    clave = getattr(settings, llave, "")
+    if not clave:
+        raise ImproperlyConfigured(f"{llave} no está configurada.")
+    return _cifrador_de(clave)
 
 
-def cifrar(valor: str) -> str:
+def cifrar(valor: str, llave: str = LLAVE_POR_DEFECTO) -> str:
     """Devuelve el token Fernet de ``valor``, en texto para guardarlo."""
-    return cifrador().encrypt(valor.encode()).decode()
+    return cifrador(llave).encrypt(valor.encode()).decode()
 
 
-def descifrar(valor: str) -> str:
+def descifrar(valor: str, llave: str = LLAVE_POR_DEFECTO) -> str:
     """Devuelve el texto en claro de un token Fernet.
 
     Tolera que ``valor`` no sea un token: en ese caso lo devuelve tal cual. Eso
@@ -50,7 +64,7 @@ def descifrar(valor: str) -> str:
     escritura siempre cifra, así que estas filas se van agotando solas.
     """
     try:
-        return cifrador().decrypt(valor.encode()).decode()
+        return cifrador(llave).decrypt(valor.encode()).decode()
     except InvalidToken:
         return valor
 
@@ -66,15 +80,28 @@ class ClaveCifradaField(models.CharField):
     así que el mismo texto da tokens distintos y un ``filter(clave=...)`` no
     encontraría nada. No hay ningún sitio que lo haga, y no tendría sentido que
     lo hubiera.
+
+    ``llave`` es el nombre del setting con la clave Fernet; por defecto, la de
+    los certificados.
     """
+
+    def __init__(self, *args, llave=LLAVE_POR_DEFECTO, **kwargs):
+        self.llave = llave
+        super().__init__(*args, **kwargs)
+
+    def deconstruct(self):
+        nombre, ruta, args, kwargs = super().deconstruct()
+        if self.llave != LLAVE_POR_DEFECTO:
+            kwargs["llave"] = self.llave
+        return nombre, ruta, args, kwargs
 
     def from_db_value(self, value, expression, connection):
         if value is None or value == "":
             return value
-        return descifrar(value)
+        return descifrar(value, self.llave)
 
     def get_prep_value(self, value):
         value = super().get_prep_value(value)
         if value is None or value == "":
             return value
-        return cifrar(value)
+        return cifrar(value, self.llave)
