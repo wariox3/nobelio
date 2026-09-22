@@ -483,6 +483,81 @@ class DocumentoAPITests(APITestCase):
             "/api/documentos/documento/", self._payload_documento(), format="json"
         )
 
+    # --- Emisión en segundo plano (Celery) ----------------------------------
+    # La suite apaga DOCUMENTOS_EMITIR_AL_CREAR y corre las tareas en el acto;
+    # estas pruebas lo encienden. La DIAN va simulada siempre.
+
+    @override_settings(DOCUMENTOS_EMITIR_AL_CREAR=True)
+    def test_crear_encola_la_emision_al_confirmar(self):
+        with mock.patch("apps.documentos.views.documento.emitir_documento") as tarea, \
+                self.captureOnCommitCallbacks(execute=False) as pendientes:
+            resp = self._crear()
+
+            tarea.delay.assert_not_called()
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["estado_nombre"], DocumentoEstado.Nombre.BORRADOR)
+
+        for callback in pendientes:
+            callback()
+        tarea.delay.assert_called_once_with(str(resp.data["id"]))
+
+    def test_sin_emitir_al_crear_no_encola(self):
+        with mock.patch("apps.documentos.views.documento.emitir_documento") as tarea, \
+                self.captureOnCommitCallbacks(execute=True):
+            resp = self._crear()
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        tarea.delay.assert_not_called()
+
+    @override_settings(DOCUMENTOS_EMITIR_AL_CREAR=True)
+    def test_el_broker_caido_no_tumba_la_creacion(self):
+        from kombu.exceptions import OperationalError
+
+        with mock.patch("apps.documentos.views.documento.emitir_documento") as tarea, \
+                self.assertLogs("apps.nucleo.colas", "ERROR"), \
+                self.captureOnCommitCallbacks(execute=True):
+            tarea.delay.side_effect = OperationalError("sin broker")
+            tarea.name = "apps.documentos.tareas.emitir_documento"
+            resp = self._crear()
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        creado = Documento.objects.get(pk=resp.data["id"])
+        self.assertEqual(creado.estado.nombre, DocumentoEstado.Nombre.BORRADOR)
+
+    @override_settings(DOCUMENTOS_EMITIR_AL_CREAR=True)
+    def test_crear_emite_y_marca_la_respuesta_de_validado(self):
+        """De punta a punta: crear → tarea → DIAN acepta → respuesta de validado.
+
+        Sin webhooks de validación, la respuesta se da por hecha.
+        """
+        cliente = FakeCliente(
+            soap.RespuestaDian(track_id="track-9", es_valido=True, codigo_estado="00")
+        )
+        with mock.patch("apps.dian.servicios.construir_cliente", return_value=cliente), \
+                self.captureOnCommitCallbacks(execute=True):
+            resp = self._crear()
+
+        creado = Documento.objects.get(pk=resp.data["id"])
+        self.assertEqual(creado.estado.nombre, DocumentoEstado.Nombre.ACEPTADO)
+        self.assertEqual(len(creado.cufe_cude), 96)
+        self.assertTrue(creado.respuesta_validado)
+        self.assertEqual(len(cliente.llamadas), 1)
+
+    def test_la_tarea_y_emitir_no_envian_dos_veces(self):
+        from apps.documentos.tareas import emitir_documento
+
+        cliente = FakeCliente(
+            soap.RespuestaDian(track_id="track-1", es_valido=True, codigo_estado="00")
+        )
+        with mock.patch("apps.dian.servicios.construir_cliente", return_value=cliente):
+            emitir_documento(str(self.documento.pk))
+        resp = self._emitir(cliente)
+
+        self.assertEqual(len(cliente.llamadas), 1)
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertIn("ya fue aceptado", resp.data["detail"])
+
     def test_crear_documento_calcula_totales(self):
         resp = self._crear()
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)

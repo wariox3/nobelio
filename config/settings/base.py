@@ -464,6 +464,57 @@ WEBHOOK_ENCRYPTION_KEY = clave_fernet(
     obligatoria=False,
 )
 
+# --- Celery (tareas en segundo plano) ----------------------------------------
+# Broker RabbitMQ, gestionado (CloudAMQP): la URL es `amqps://`, porque está en
+# internet. Ver config/celery.py y docs/despliegue.md.
+CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="amqp://guest:guest@localhost:5672//")
+if CELERY_BROKER_URL.startswith("amqps://"):
+    # Con `amqps://` a secas py-amqp verifica el certificado pero no el nombre
+    # del servidor —no manda `server_hostname`—, así que un certificado válido
+    # de otro dominio pasaría. `server_hostname: None` hace que kombu ponga el
+    # host de la URL: se verifica el nombre y se manda el SNI.
+    import ssl
+
+    CELERY_BROKER_USE_SSL = {"cert_reqs": ssl.CERT_REQUIRED, "server_hostname": None}
+# Una conexión por proceso para publicar. Los planes gestionados limitan las
+# conexiones simultáneas, y cada proceso de gunicorn que encola abre las suyas.
+CELERY_BROKER_POOL_LIMIT = 1
+# Una tarea se confirma al terminar y no al tomarla: si el worker muere a mitad,
+# RabbitMQ la vuelve a entregar en vez de perderla. Por eso toda tarea tiene que
+# poder correr dos veces sin efecto doble (ver cada `tareas.py`).
+CELERY_TASK_ACKS_LATE = True
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+# De a una por proceso: las tareas esperan a la DIAN o a un webhook, y con el
+# prefetch por defecto un proceso acapara las que otro podría estar corriendo.
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+# El resultado queda en el documento; no hay backend de resultados que mantener.
+CELERY_TASK_IGNORE_RESULT = True
+CELERY_TASK_SERIALIZER = "json"
+CELERY_ACCEPT_CONTENT = ["json"]
+# Una cola por tipo de tarea: así cada una puede tener su propio worker, y una
+# racha de avisos lentos no demora las emisiones. El worker tiene que
+# escucharlas con `-Q` (docs/despliegue.md); una tarea sin ruta cae en `celery`.
+CELERY_TASK_ROUTES = {
+    "apps.documentos.tareas.emitir_documento": {"queue": "emitir_documento"},
+    "apps.emisores.tareas.*": {"queue": "avisos_webhook"},
+}
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+# Encolar se hace dentro de una petición (crear el documento, emitirlo). Con el
+# broker caído el reintento por defecto dejaba la petición colgada; así falla en
+# un par de segundos y la petición sigue.
+CELERY_BROKER_CONNECTION_TIMEOUT = 3
+CELERY_TASK_PUBLISH_RETRY_POLICY = {
+    "max_retries": 2, "interval_start": 0, "interval_step": 0.5, "interval_max": 1,
+}
+# Corre las tareas en el acto, sin broker ni worker. Solo para desarrollo sin
+# RabbitMQ y para la suite; en el servidor, nunca: la emisión volvería a
+# esperar a la DIAN dentro de la petición que crea el documento.
+CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", default=False)
+
+# Si crear un documento lo encola para emitir. Apagado, el documento se queda en
+# borrador y se emite con `emitir/`, como antes de la cola.
+DOCUMENTOS_EMITIR_AL_CREAR = env.bool("DOCUMENTOS_EMITIR_AL_CREAR", default=True)
+
 # --- CORS (la SPA vive en otro dominio) -------------------------------------
 # Orígenes permitidos del frontend, p. ej. https://app.midominio.com
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])

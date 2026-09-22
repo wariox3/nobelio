@@ -80,6 +80,17 @@ Las variables `DIAN_*` ya traen valores por defecto razonables para
 habilitación (`DIAN_ENVIRONMENT=2`) — no hace falta tocarlas para desarrollar
 localmente.
 
+Las de **Celery** deciden qué pasa al crear un documento (ver el paso 6.1):
+
+- `CELERY_BROKER_URL` — el RabbitMQ de desarrollo. Una instancia propia, nunca la
+  de producción ni la de torio.
+- `CELERY_TASK_ALWAYS_EAGER=True` — para trabajar **sin RabbitMQ**: las tareas
+  corren en el acto, dentro de la petición.
+- `DOCUMENTOS_EMITIR_AL_CREAR` — encendida (el valor por defecto), **crear un
+  documento lo firma y lo envía a la DIAN de habilitación**, con broker o en modo
+  eager. Si solo quieres crear documentos para probar la API, ponla en `False`: se
+  quedan en `borrador` y se emiten con `emitir/` cuando tú decidas.
+
 ---
 
 ## 5. Migraciones, catálogos y usuario staff
@@ -103,6 +114,27 @@ python manage.py runserver
 
 > No hay `/admin/`: `django.contrib.admin` no está instalado y la API es
 > *stateless* (sin sesiones). Todo se hace por la API o por comandos.
+
+### 6.1 El worker de Celery
+
+Crear un documento encola su emisión, y al aceptarse la DIAN se encola el aviso a
+los webhooks. Con broker, eso lo corre el worker, en otra terminal:
+
+```bash
+.venv/bin/celery -A config worker -l info -Q emitir_documento,avisos_webhook,celery \
+    --without-gossip --without-mingle --without-heartbeat
+```
+
+Los tres `--without-*` quitan el tráfico de control entre workers: con uno solo
+no sirve, y en CloudAMQP cuenta contra los mensajes del plan, también en la
+instancia de desarrollo. Son los mismos que lleva la unidad del servidor.
+
+Sin el worker, los documentos se quedan en `borrador` esperando en la cola. Tras
+cambiar código de una tarea hay que reiniciarlo: no recarga solo como `runserver`.
+
+Sin RabbitMQ, `CELERY_TASK_ALWAYS_EAGER=True` en el `.env` y no hace falta worker.
+La suite de pruebas no necesita ninguno de los dos: corre las tareas en el acto y
+no emite al crear (`config/settings/test.py`).
 
 Sigue con el flujo completo de uso de la API en el
 [README](../README.md#flujo-de-uso-completo-api) o el

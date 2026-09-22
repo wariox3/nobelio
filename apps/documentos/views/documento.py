@@ -1,5 +1,6 @@
 """API de documentos electrónicos y acciones del ciclo de vida DIAN."""
 import requests
+from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.db.models import Count
 from django.http import FileResponse, HttpResponse
@@ -20,6 +21,7 @@ from apps.dian.esquema import (
     campos_respuesta_dian,
 )
 from apps.documentos import serializers
+from apps.documentos.tareas import emitir_documento
 from apps.documentos.models import Documento, DocumentoEstado
 from apps.documentos.servicios import (
     ErrorNotificacion,
@@ -35,25 +37,12 @@ from apps.nucleo.api import (
 )
 from apps.emisores.serializers import WebhookAvisoSerializer
 from apps.emisores.servicios import webhooks
+from apps.nucleo.colas import encolar
 from apps.nucleo.esquema import ErrorSerializer
 from apps.seguridad.alcance import AlcanceEmisorMixin
 from apps.utilidades.zinc import ZincNoDisponible
 
 CODIGO_DOCUMENTO_DUPLICADO = "documento_duplicado"
-
-# Lo que dice `accion` en la respuesta de `emitir/`.
-ACCION_ENVIADO = "enviado"
-ACCION_CONSULTADO = "consultado"
-
-# Estados finales: `emitir/` responde 400 y no llama a la DIAN.
-MENSAJES_NO_EMITIBLE = {
-    DocumentoEstado.Nombre.ACEPTADO: "El documento {numero} ya fue aceptado por la DIAN.",
-    DocumentoEstado.Nombre.RECHAZADO: (
-        "El documento {numero} fue rechazado por la DIAN y no se vuelve a "
-        "emitir: su detalle se consulta con consultar/, y se borra y se crea "
-        "de nuevo corregido."
-    ),
-}
 
 # --- Esquema de las acciones --------------------------------------------------
 # Las acciones no reciben el documento ni lo devuelven, pero spectacular las
@@ -199,6 +188,12 @@ class DocumentoViewSet(
     def create(self, request, *args, **kwargs):
         """Crea el documento, o responde 409 si ese número ya existe.
 
+        El 201 sale en `borrador`, y al confirmarse se encola su emisión: un
+        worker de Celery lo firma y lo envía a la DIAN (`emitir_documento`). El
+        resultado se lee en el documento, o llega por el webhook de validación.
+        La creación no espera a la DIAN ni depende del broker: si no responde,
+        el documento se queda en `borrador` y se emite con `emitir/`.
+
         El orden es **estructura → duplicado → datos**. La estructura va
         primero, como en toda la recepción. El duplicado va antes que los datos
         porque es la respuesta que necesita un reintento: el ERP que perdió la
@@ -235,6 +230,10 @@ class DocumentoViewSet(
                 # No era el duplicado: no se tapa otro error de integridad.
                 raise
             return self._respuesta_duplicado(existente)
+        if settings.DOCUMENTOS_EMITIR_AL_CREAR:
+            # El 201 sale en `borrador`; la firma y el envío van en el worker.
+            # Si el broker no responde, se queda así y se emite con `emitir/`.
+            encolar(emitir_documento, str(serializer.instance.pk))
         return Response(
             serializer.data, status=status.HTTP_201_CREATED,
             headers=self.get_success_headers(serializer.data),
@@ -338,22 +337,6 @@ class DocumentoViewSet(
         self.perform_destroy(documento)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    def _bloquear(self, obj):
-        """Relee el objeto con ``FOR UPDATE``. Hay que estar en transacción.
-
-        Sin esto, dos peticiones simultáneas sobre el mismo documento hacen el
-        trabajo dos veces: dos `emitir` gastan dos veces el consecutivo y dejan
-        dos XML firmados con CUFE distinto, y dos envíos mandan el mismo
-        documento dos veces a la DIAN, que responde el segundo con "procesado
-        anteriormente" —o algo peor, si el primero aún no había terminado—.
-
-        El bloqueo es de fila, así que solo espera quien toque **ese mismo**
-        documento. Sí mantiene abierta la transacción mientras dura la llamada
-        SOAP, que es el precio de que el envío sea de uno en uno: es justo la
-        garantía que se busca.
-        """
-        return type(obj).objects.select_for_update().get(pk=obj.pk)
-
     @extend_schema(
         request=None,
         responses={200: RESPUESTA_EMISION, 400: ErrorSerializer, 502: ErrorSerializer},
@@ -389,31 +372,7 @@ class DocumentoViewSet(
         """
         documento = self.get_object()
         try:
-            with transaction.atomic():
-                documento = self._bloquear(documento)
-                estado = documento.estado.nombre
-                if estado in MENSAJES_NO_EMITIBLE:
-                    raise servicios.ErrorEmision(
-                        MENSAJES_NO_EMITIBLE[estado].format(numero=documento.numero)
-                    )
-                if estado == DocumentoEstado.Nombre.ENVIADO:
-                    respuesta = servicios.actualizar_estado(documento)
-                    accion = ACCION_CONSULTADO
-                else:
-                    accion = ACCION_ENVIADO
-                    if estado != DocumentoEstado.Nombre.FIRMADO:
-                        # Lo que no se puede firmar lo explica el propio servicio.
-                        servicios.generar_y_firmar(documento)
-            if accion == ACCION_ENVIADO:
-                with transaction.atomic():
-                    documento = self._bloquear(documento)
-                    # Entre las dos transacciones otra petición pudo enviarlo.
-                    if documento.estado.nombre != DocumentoEstado.Nombre.FIRMADO:
-                        raise servicios.ErrorEmision(
-                            f"El documento {documento.numero} ya no está firmado y "
-                            f"pendiente de envío: está '{documento.estado.nombre}'."
-                        )
-                    respuesta = servicios.enviar_a_dian(documento)
+            documento, accion, respuesta = servicios.emitir(documento)
         except servicios.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
         except requests.RequestException as exc:

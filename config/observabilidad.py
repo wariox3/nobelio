@@ -68,6 +68,7 @@ def configurar(*, dsn, entorno, traces, release=""):
         return False
 
     import sentry_sdk
+    from sentry_sdk.integrations.celery import CeleryIntegration
     from sentry_sdk.integrations.django import DjangoIntegration
     from sentry_sdk.integrations.logging import LoggingIntegration
     from sentry_sdk.scrubber import DEFAULT_DENYLIST, EventScrubber
@@ -78,6 +79,9 @@ def configurar(*, dsn, entorno, traces, release=""):
         release=release or None,
         integrations=[
             DjangoIntegration(),
+            # Las tareas corren fuera de cualquier petición: sin esto, un fallo
+            # en el worker (una emisión, un aviso) no llega a Sentry.
+            CeleryIntegration(),
             LoggingIntegration(
                 level=logging.INFO,          # de INFO para arriba, migas de pan
                 event_level=logging.ERROR,   # de ERROR para arriba, eventos

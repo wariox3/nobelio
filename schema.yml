@@ -1361,6 +1361,12 @@ paths:
       description: |-
         Crea el documento, o responde 409 si ese número ya existe.
 
+        El 201 sale en `borrador`, y al confirmarse se encola su emisión: un
+        worker de Celery lo firma y lo envía a la DIAN (`emitir_documento`). El
+        resultado se lee en el documento, o llega por el webhook de validación.
+        La creación no espera a la DIAN ni depende del broker: si no responde,
+        el documento se queda en `borrador` y se emite con `emitir/`.
+
         El orden es **estructura → duplicado → datos**. La estructura va
         primero, como en toda la recepción. El duplicado va antes que los datos
         porque es la respuesta que necesita un reintento: el ERP que perdió la

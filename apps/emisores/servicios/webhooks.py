@@ -3,17 +3,18 @@
 El contrato es el de torio, que es quien los recibe:
 `torio/docs/webhook_rededoc.md`. Lo que no esté allí no forma parte de él.
 
-El aviso no puede tumbar lo que lo dispara. El envío va en ``on_commit``,
-después de confirmado el cambio, y ningún error suyo sale de aquí: si torio no
-responde, el documento queda validado igual y el aviso, `fallido`, con el
-motivo.
+El aviso no puede tumbar lo que lo dispara. El envío va en una tarea de Celery
+(``apps/emisores/tareas.py``) que se encola al confirmarse el cambio, y ningún
+error suyo sale de aquí: si torio no responde, el documento queda validado
+igual y el aviso, `fallido`, con el motivo.
 
 - **Notificación**: los avisos se crean `pendiente` en la transacción del
-  cambio y se mandan al confirmarla (``avisar``).
-- **Validación**: al confirmarse, ``responder_validado`` los crea, los manda y,
-  con un 200 —o si no hay a quién avisar—, marca el documento con
-  `respuesta_validado`. Lo que se quede sin marcar se recupera con el endpoint
-  `respuesta-validado` del documento, que llama a la misma función.
+  cambio y la tarea los manda (``avisar``).
+- **Validación**: la tarea llama a ``responder_validado``, que los crea, los
+  manda y, con un 200 —o si no hay a quién avisar—, marca el documento con
+  `respuesta_validado`. Lo que se quede sin marcar —el broker no respondió, el
+  receptor tampoco— se recupera con el endpoint `respuesta-validado` del
+  documento, que llama a la misma función en la petición.
 
 Cada aviso sale **una sola vez**, sin reintentos (ver ``WebhookAviso``).
 """
@@ -24,18 +25,18 @@ import logging
 import time
 
 import requests
-from django.db import transaction
 from django.utils import timezone
 
 from apps.documentos.models import Documento, DocumentoEstado
 from apps.emisores.models import WebhookAviso
+from apps.nucleo.colas import encolar
 from apps.nucleo.registro import campos
 
 logger = logging.getLogger(__name__)
 
-# Lo que espera cada aviso. Corto porque el envío corre dentro de la petición
-# que validó o notificó el documento, justo después de confirmarla: un receptor
-# lento hace esperar a quien emitió.
+# Lo que espera cada aviso. Corto porque `respuesta-validado/` lo manda dentro
+# de la petición, y un receptor lento haría esperar a quien lo llamó; en el
+# worker ocupa un proceso mientras tanto.
 TIMEOUT_SEGUNDOS = 5
 
 # Los que el contrato da por entregados. El 409 es "ya estaba validado": si
@@ -127,15 +128,17 @@ def _crear_avisos(documento, tipo):
 
 
 def avisar(documento, tipo):
-    """Deja los avisos del cambio y los envía cuando se confirme la transacción.
+    """Deja los avisos del cambio y encola su envío para cuando se confirme.
 
     Va dentro de la transacción del cambio, si la hay: los avisos se crean con
-    él y se deshacen con él.
+    él y se deshacen con él. Si el broker no responde se quedan `pendiente`.
     """
+    from apps.emisores import tareas
+
     avisos = _crear_avisos(documento, tipo)
     pendientes = [a.pk for a in avisos if a.estado == WebhookAviso.Estado.PENDIENTE]
     if pendientes:
-        transaction.on_commit(lambda: enviar_pendientes(pendientes))
+        encolar(tareas.enviar_avisos, pendientes)
     return avisos
 
 
@@ -174,20 +177,23 @@ def responder_validado(documento):
 
 
 def responder_validado_al_confirmar(documento):
-    """Programa ``responder_validado`` para cuando se confirme la aceptación.
+    """Encola ``responder_validado`` para cuando se confirme la aceptación.
 
-    Después y no dentro: el envío espera al receptor, y no puede ni retener la
-    transacción de la emisión ni avisar de algo que luego se deshaga.
+    En el worker y no en la petición: el envío espera al receptor, y no puede
+    ni retener la transacción de la emisión ni avisar de algo que luego se
+    deshaga.
     """
-    pk = documento.pk
-    transaction.on_commit(lambda: _responder_validado_sin_fallar(pk))
+    from apps.emisores import tareas
+
+    encolar(tareas.responder_validado, str(documento.pk))
 
 
-def _responder_validado_sin_fallar(pk):
-    """``responder_validado`` desde ``on_commit``. Nunca lanza.
+def responder_validado_sin_fallar(pk):
+    """``responder_validado`` desde la tarea. Nunca lanza.
 
     Relee el documento: entre la aceptación y este momento otra petición pudo
-    marcarlo, y avisar dos veces no sirve de nada.
+    marcarlo, y avisar dos veces no sirve de nada. Sin reintentos: lo que falle
+    queda en el log y en los avisos.
     """
     try:
         documento = Documento.objects.select_related("estado", "emisor").get(pk=pk)
@@ -204,8 +210,8 @@ def _responder_validado_sin_fallar(pk):
 def enviar_pendientes(ids):
     """Envía los avisos ``ids`` que sigan pendientes. Nunca lanza.
 
-    Corre en ``on_commit``, después de que la transacción ya se confirmó: una
-    excepción aquí saldría como un 500 de una emisión que sí se hizo.
+    Corre en la tarea de Celery. Que no lance es para que un aviso roto no
+    impida mandar los siguientes.
     """
     for aviso in WebhookAviso.objects.filter(
         pk__in=ids, estado=WebhookAviso.Estado.PENDIENTE,

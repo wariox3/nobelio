@@ -46,6 +46,9 @@ la nómina que la DIAN aceptó.
 - **Cliente SOAP** de los Web Services DIAN con WS-Security (Set de Pruebas y producción).
 - **Representación gráfica PDF** con código QR.
 - **API REST** (DRF) que orquesta todo el ciclo de vida.
+- **Emisión en segundo plano** con Celery y RabbitMQ: crear un documento lo
+  encola para firmarlo y enviarlo, y al aceptarse se avisa a los webhooks del
+  emisor.
 
 ---
 
@@ -55,6 +58,8 @@ la nómina que la DIAN aceptó.
 - Dependencias en `requirements.txt` (Django 5.1, DRF, lxml, cryptography,
   reportlab, qrcode, requests, …).
 - Un certificado digital `.p12` emitido por una entidad autorizada (para firmar).
+- Un broker RabbitMQ para las tareas en segundo plano (en el servidor, CloudAMQP).
+  En desarrollo se puede prescindir de él con `CELERY_TASK_ALWAYS_EAGER=True`.
 
 ---
 
@@ -105,6 +110,9 @@ Variables principales (`config/settings/base.py` las lee con `django-environ`):
 | `THROTTLE_ANONIMO` | Tope de peticiones sin credencial, donde la ruta no trae el suyo propio | `30/hour` |
 | `SENTRY_DSN` | Errores a Sentry; vacío lo desactiva | *(vacío)* |
 | `SENTRY_ENTORNO` | Entorno con el que se etiquetan los eventos | `desarrollo` |
+| `CELERY_BROKER_URL` | Broker RabbitMQ; en el servidor, la `amqps://` de CloudAMQP | `amqp://guest:guest@localhost:5672//` |
+| `CELERY_TASK_ALWAYS_EAGER` | Corre las tareas en el acto, sin broker. Solo desarrollo | `False` |
+| `DOCUMENTOS_EMITIR_AL_CREAR` | Crear un documento lo encola para emitir | `True` |
 
 > Los settings se dividen en `config/settings/{base,dev,prod}.py`.
 > Por defecto se usa `config.settings.dev`.
@@ -125,7 +133,16 @@ python manage.py createsuperuser
 
 # Levantar el servidor de desarrollo
 python manage.py runserver
+
+# Y, en otra terminal, el worker que emite y avisa a los webhooks
+.venv/bin/celery -A config worker -l info -Q emitir_documento,avisos_webhook,celery \
+    --without-gossip --without-mingle --without-heartbeat
 ```
+
+Sin el worker, los documentos que se crean se quedan en `borrador` esperando en
+la cola. Sin broker, la creación funciona igual pero no encola nada (queda en el
+log): se emiten con `emitir/`. Para desarrollar sin RabbitMQ,
+`CELERY_TASK_ALWAYS_EAGER=True` corre las tareas dentro de la petición.
 
 - API: `http://localhost:8000/api/`
 - Estado: `http://localhost:8000/estado/`
@@ -322,7 +339,14 @@ curl -X POST http://localhost:8000/api/documentos/documento/ \
 
 ### 4. Emitir (firma y envía a la DIAN)
 
-Una sola llamada: genera el XML UBL, calcula el CUFE, firma y envía. Se usa
+**Crear el documento ya lo emite**: el 201 sale en `borrador` y un worker de
+Celery lo firma y lo envía (`DOCUMENTOS_EMITIR_AL_CREAR`). El resultado se lee
+en el documento (`GET …/documento/<id>/`, o filtrando la lista por `estado`), y
+si el emisor tiene webhooks, llega por el aviso de validación. La tarea no
+reintenta: lo que se quede a medias —la DIAN no respondió, el broker estaba
+caído— se termina con `emitir/`, que hace exactamente lo mismo en la petición.
+
+`emitir/` es una sola llamada: genera el XML UBL, calcula el CUFE, firma y envía. Se usa
 `SendTestSetAsync` (con el `test_set_id` del software) solo mientras se está en
 habilitación (`DIAN_ENVIRONMENT=2`) **y** el Set de Pruebas todavía no ha sido
 aceptado. En cuanto la DIAN lo acepta hay que marcar

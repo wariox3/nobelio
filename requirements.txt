@@ -21,6 +21,10 @@ cryptography==49.0.0
 # Cliente HTTP / Web Services DIAN
 requests==2.34.2
 
+# Tareas en segundo plano: emitir al crear y avisar a los webhooks. Broker
+# RabbitMQ (CloudAMQP); ver config/celery.py y docs/despliegue.md.
+celery==5.6.3
+
 # Almacenamiento de archivos en Backblaze B2 (S3-compatible)
 django-storages==1.14.6
 boto3==1.43.36

@@ -31,6 +31,13 @@ WEBHOOK_ENCRYPTION_KEY = "0S9tlxVKvKdnKnc_6uUHYd1cA0QMyMFL3-kbAtWd8zU="
 # justamente que la línea se escribe.
 LOGGING["loggers"]["apps"]["level"] = "CRITICAL"  # noqa: F405
 
+# Las tareas corren en el acto, sin broker: la suite no depende de RabbitMQ.
+CELERY_TASK_ALWAYS_EAGER = True
+# Y crear un documento no lo emite: con las tareas en el acto, cada prueba que
+# crea uno lo firmaría y lo mandaría a la DIAN. Las que prueban el encolado lo
+# encienden con `override_settings`.
+DOCUMENTOS_EMITIR_AL_CREAR = False
+
 # Y los 400/500 que Django registra en `django.request`: en la suite hay
 # pruebas que provocan errores a propósito, así que su traza es ruido que
 # confunde al leer un fallo de verdad.

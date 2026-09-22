@@ -268,6 +268,14 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
 
 ## 8. Ciclo de vida DIAN
 
+- [ ] **Crear por la API ya emite** (desde el 2026-09-22): `POST /documento/`
+      responde 201 en `borrador` y encola `emitir_documento`, que un worker de
+      Celery firma y envía. Hace falta el worker corriendo (o
+      `CELERY_TASK_ALWAYS_EAGER=True` en desarrollo); apágalo con
+      `DOCUMENTOS_EMITIR_AL_CREAR=False` para emitir solo a mano. Los documentos
+      que siembran los comandos de habilitación no pasan por la API y **no** se
+      emiten solos. La tarea no reintenta: lo que quede a medias se termina con
+      `emitir/`.
 - [ ] `POST /api/documentos/documento/{id}/emitir/` → genera XML UBL 2.1, calcula
       **CUFE/CUDE**, **firma XAdES-EPES** (requiere el certificado del emisor,
       vigente) y **envía a la DIAN** por WS, todo en una llamada; devuelve

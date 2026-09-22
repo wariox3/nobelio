@@ -204,6 +204,10 @@ BASE_FRONTEND=https://rededoc.co
 ZINC_URL_BASE=https://zinc.semantica.com.co
 ZINC_NOMBRE_REMITENTE=RedEDoc
 
+# --- Cola de tareas (Celery + RabbitMQ en CloudAMQP) ---
+# La amqps:// de la instancia de producción. Ver el paso 6.1.
+CELERY_BROKER_URL=amqps://<usuario>:<clave>@<host>.cloudamqp.com/<vhost>
+
 # --- Caché y topes de peticiones ---
 # CRÍTICA con varios workers: la de por-proceso da a cada uno su propia cuenta y
 # los topes se multiplican por tres. La tabla la crea la migración del paso 5.
@@ -451,6 +455,123 @@ archivo, no hay conflicto entre ambas vías.
 
 ---
 
+## 6.1 Cola de tareas: RabbitMQ y worker de Celery
+
+Lo que no tiene que esperar a una petición va por Celery, con RabbitMQ de broker.
+Son dos colas:
+
+| Cola | Tarea | Qué hace |
+|---|---|---|
+| `emitir_documento` | `apps.documentos.tareas.emitir_documento` | Firma y envía a la DIAN el documento recién creado. La encola la creación. |
+| `avisos_webhook` | `apps.emisores.tareas.responder_validado`, `enviar_avisos` | Avisa a los webhooks del emisor cuando la DIAN acepta un documento (y marca `respuesta_validado`) o cuando se notifica. |
+
+Ninguna reintenta, por decisión: lo que no terminó se recupera a mano con
+`emitir/` o con `respuesta-validado/` del documento.
+
+Sin el worker corriendo, **crear sigue funcionando** pero los documentos se
+quedan en `borrador`, esperando en la cola hasta que arranque. Si el broker no
+responde, la creación responde bien, deja el error en el log y ese documento
+**no** queda encolado: hay que emitirlo con `emitir/`.
+
+### RabbitMQ en CloudAMQP
+
+El broker no se instala en el servidor: es una instancia de RabbitMQ en
+[CloudAMQP](https://www.cloudamqp.com). En su consola:
+
+1. Crear una instancia **para producción**, en la región más cercana al servidor.
+   Habilitación y desarrollo usan **otra instancia cada uno**, nunca la misma: con
+   el mismo vhost, un worker de desarrollo tomaría las emisiones de producción,
+   las correría contra su base —donde ese documento no existe—, las confirmaría
+   y se perderían. Tampoco se comparte con torio: cada proyecto, su instancia.
+2. Copiar la URL **`amqps://`** (con *s*, puerto 5671) de los detalles de la instancia.
+
+En el `.env` (paso 4):
+
+```ini
+CELERY_BROKER_URL=amqps://<usuario>:<clave>@<host>.cloudamqp.com/<vhost>
+```
+
+- La URL lleva la clave: es una credencial. Si se filtra, se rota desde la consola
+  de CloudAMQP y se reinician `nobelio` y `nobelio-celery`.
+- Con `amqps://` los settings verifican el certificado **y el nombre** del servidor
+  (`CELERY_BROKER_USE_SSL`). No uses la URL `amqp://`: el broker está en internet,
+  y por ella viajarían la clave y el contenido de las tareas sin cifrar.
+- No hay puerto que abrir: el servidor sale hacia CloudAMQP, nadie entra.
+- Revisa los límites del plan (conexiones simultáneas y mensajes al mes). Para no
+  gastarlos en tráfico de control, cada proceso publica por una sola conexión
+  (`CELERY_BROKER_POOL_LIMIT = 1`) y el worker arranca sin gossip, mingle ni
+  heartbeat. Con gunicorn a 3 procesos y el worker a 2, son unas 6 conexiones.
+- `CELERY_TASK_ALWAYS_EAGER` **nunca** en el servidor: correría la emisión dentro
+  de la petición que crea el documento.
+
+### Worker como servicio systemd
+
+```bash
+tee /etc/systemd/system/nobelio-celery.service > /dev/null <<'EOF'
+[Unit]
+Description=Nobelio — worker de Celery (emisión y webhooks)
+# El broker es externo (CloudAMQP) y la base también: solo dependemos de la red.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=nobelio
+Group=nobelio
+WorkingDirectory=/opt/nobelio
+Environment=DJANGO_SETTINGS_MODULE=config.settings.prod
+Environment=PYTHONUNBUFFERED=1
+
+# Dos procesos: las tareas esperan a la DIAN o a un webhook, no gastan CPU.
+# `-O fair` reparte de a una, junto con el prefetch de 1 de los settings.
+# Sin gossip, mingle ni heartbeat: con un solo worker no hay con quién
+# coordinarse, y en CloudAMQP ese tráfico cuenta contra los mensajes del plan.
+# `-Q`: las colas que atiende (`CELERY_TASK_ROUTES`), más `celery`, la de las
+# tareas sin ruta. Una cola que no esté aquí no la atiende nadie.
+ExecStart=/opt/nobelio/.venv/bin/celery -A config worker \
+    --loglevel=info --concurrency=2 -O fair \
+    -Q emitir_documento,avisos_webhook,celery \
+    --without-gossip --without-mingle --without-heartbeat
+
+Restart=always
+RestartSec=5
+# Deja terminar la tarea en curso antes de matar el proceso: un envío a la DIAN
+# puede tardar decenas de segundos. Si se corta igual, no se pierde: las tareas
+# se confirman al terminar (`acks_late`), RabbitMQ la vuelve a entregar, y la
+# emisión sigue desde el estado en que quedó el documento.
+TimeoutStopSec=150
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/nobelio/media
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable --now nobelio-celery
+systemctl status nobelio-celery
+```
+
+Para ver qué está haciendo:
+
+```bash
+journalctl -u nobelio-celery -f
+```
+
+Cuántas tareas esperan en cada cola se ve en la consola de CloudAMQP
+(*RabbitMQ Manager* → *Queues*). Una cola que crece sin bajar es un worker caído
+o que no la escucha.
+
+> **El worker firma**, así que necesita lo mismo que gunicorn: el `.env` completo
+> (base, B2, `CERT_ENCRYPTION_KEY`, `WEBHOOK_ENCRYPTION_KEY`) y el mismo
+> `ReadWritePaths`. Lee el mismo `/opt/nobelio/.env`; tras editarlo, reinicia los
+> dos servicios.
+
+---
+
 ## 7. nginx como proxy
 
 ```bash
@@ -564,6 +685,10 @@ curl https://api.rededoc.co/estado/
 curl -o /dev/null -w '%{http_code}\n' https://api.rededoc.co/api/docs/
 
 journalctl -u nobelio -f
+
+# El worker: activo, conectado al broker y escuchando las colas.
+systemctl is-active nobelio-celery
+journalctl -u nobelio-celery -n 30 --no-pager   # "Connected to amqps://…" y "celery@… ready."
 ```
 
 Contra `127.0.0.1` hacen falta dos cabeceras, y sin ellas parecen fallos del
@@ -702,6 +827,12 @@ mientras migra— y comprueba al final que `/estado/` responda:
 sudo /opt/nobelio/actualizar.sh
 ```
 
+> **Servidores anteriores a la cola de tareas.** La primera vez que se actualiza
+> a una versión con Celery, antes de correr `actualizar.sh`: poner
+> `CELERY_BROKER_URL` en el `.env` y crear la unidad `nobelio-celery` (paso 6.1).
+> El script para y levanta los dos servicios, y sin la unidad aborta en el
+> primer `systemctl stop`, con el trap volviendo a levantar la API.
+
 A mano:
 
 ```bash
@@ -713,8 +844,11 @@ git pull
 
 # Los archivos nuevos los crea root; el servicio los lee por grupo.
 chmod -R g+rX /opt/nobelio
-systemctl restart nobelio
+systemctl restart nobelio nobelio-celery
 ```
+
+El worker carga el código al arrancar: **si no se reinicia, sigue corriendo las
+tareas con el código viejo**. `actualizar.sh` lo para y lo levanta con gunicorn.
 
 Cada proceso guarda los catálogos DIAN en memoria durante
 `CATALOGOS_EN_MEMORIA_SEGUNDOS` (5 minutos por defecto). Un
@@ -780,4 +914,5 @@ Repasa también los puntos de
   emitir contra producción un documento de pruebas.
 - **Reconciliación de estados**: cuando la DIAN deja un documento en `enviado`,
   avanza cuando el ERP vuelve a llamar a `emitir/`, que con un documento en
-  `enviado` consulta y aplica el resultado. Nada lo hace solo.
+  `enviado` consulta y aplica el resultado. La tarea de Celery que emite al
+  crear no reintenta ni consulta después: nada lo hace solo.

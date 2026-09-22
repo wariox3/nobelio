@@ -597,7 +597,7 @@ HMAC con `SECRET_KEY`) y comparar con `secrets.compare_digest`. Es compatible co
 el diseño actual —el secreto ya no se puede recuperar— y no obliga a rotar las
 llaves si se hace con migración perezosa.
 
-### D3 · El envío a la DIAN ocurre dentro de la petición HTTP — **abierto, a la espera de datos**
+### D3 · El envío a la DIAN ocurre dentro de la petición HTTP — **resuelto** (2026-09-22, Celery)
 
 `POST /emitir/` —antes `/enviar/`; desde el 2026-09-16 firma y envía en una
 sola acción— llama a `enviar_a_dian`, que hace el `requests.post` con
@@ -612,6 +612,14 @@ natural es una cola (`emitir/` firma, encola y responde 202, un worker envía y 
 estado), reutilizando `actualizar_estado`, que ya está escrito para eso. Es la
 única incidencia de este informe que es un cambio de arquitectura y no un
 arreglo, y por eso va en la última fase.
+
+> **Resuelto el 2026-09-22, con otra forma.** No es `emitir/` quien encola, sino
+> la creación: el 201 sale en `borrador` y la tarea `emitir_documento` (Celery,
+> broker RabbitMQ en CloudAMQP) lo firma y lo envía con la misma función que
+> `emitir/` (`apps.dian.servicios.emitir`), bajo el mismo `FOR UPDATE`. `emitir/`
+> se queda síncrono para recuperar lo que la tarea no terminó: por decisión, la
+> tarea no reintenta. La recepción sigue siendo síncrona (Fase 5). Despliegue en
+> `docs/despliegue.md` §6.1.
 
 ### D4 · El orden por defecto del listado no tiene índice — **resuelto**
 
@@ -772,7 +780,8 @@ no existen. 274 pruebas en verde.
 2. ~~Índice del listado.~~ `(emisor, -fecha, -consecutivo)` en documentos y en
    nóminas. Con 20 filas no mide nada; se crea ahora precisamente porque hacerlo
    sobre una tabla con volumen bloquea las escrituras. **(D4)**
-3. **D3 sigue abierto**, y es el único. Antes de elegir entre la cola y subir
+3. **D3 — resuelto el 2026-09-22 con Celery** (ver D3). Lo que sigue era el
+   análisis previo. Antes de elegir entre la cola y subir
    hilos de gunicorn hay que medir, y ya se puede: el logging de D1 deja una
    línea por envío. Lo que hace falta saber es **cuánto tarda un envío real**
    (percentil 95) y **cuántos concurrentes** hay en hora punta. Con eso, si la

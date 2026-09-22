@@ -15,6 +15,7 @@ import re
 
 from django.conf import settings
 from django.core.files.base import ContentFile
+from django.db import transaction
 from django.utils import timezone
 
 from apps.dian import firma, identificadores as ident, soap, ubl
@@ -816,6 +817,80 @@ def actualizar_estado(documento, *, cliente=None, ambiente=None, **cred):
         envio=documento.envio,
     ))
     return respuesta
+
+
+# ---------------------------------------------------------------------------
+# Emitir: de donde esté hasta el estado final
+# ---------------------------------------------------------------------------
+ACCION_ENVIADO = "enviado"
+ACCION_CONSULTADO = "consultado"
+
+MENSAJES_NO_EMITIBLE = {
+    DocumentoEstado.Nombre.ACEPTADO: "El documento {numero} ya fue aceptado por la DIAN.",
+    DocumentoEstado.Nombre.RECHAZADO: (
+        "El documento {numero} fue rechazado por la DIAN y no se vuelve a "
+        "emitir: su detalle se consulta con consultar/, y se borra y se crea "
+        "de nuevo corregido."
+    ),
+}
+
+
+def _bloquear(documento):
+    """Relee el documento con ``FOR UPDATE``. Hay que estar en transacción.
+
+    Sin esto, dos emisiones simultáneas del mismo documento —la tarea que se
+    encola al crearlo y una llamada a `emitir/`, o dos llamadas— hacen el
+    trabajo dos veces: gastan dos veces el consecutivo, dejan dos XML firmados
+    con CUFE distinto o mandan el mismo documento dos veces a la DIAN.
+    """
+    return Documento.objects.select_for_update().get(pk=documento.pk)
+
+
+def emitir(documento):
+    """Lleva el documento a su estado final ante la DIAN.
+
+    La usan `emitir/` y la tarea que se encola al crear el documento, así que
+    las dos se comportan igual y se excluyen por el mismo bloqueo. Devuelve
+    ``(documento, accion, respuesta)``, con el documento releído.
+
+    **Son dos transacciones, y a propósito.** La firma se confirma antes de
+    enviar: si el envío falla por red —o la DIAN recibe el documento y la
+    respuesta se pierde—, el documento queda `firmado` con su CUFE, y el
+    reintento manda **ese mismo** CUFE. En una sola transacción la firma se
+    desharía con el fallo, el reintento firmaría con otra hora y otro CUFE para
+    el mismo número, y la DIAN, que ya tenía el primero, lo rechazaría.
+
+    Según el estado:
+
+    - `borrador`: se firma y se envía.
+    - `firmado` —un intento anterior que no llegó a enviar—: solo se envía.
+    - `enviado` —sin veredicto, como en el Set de Pruebas—: se consulta y se
+      aplica el resultado, sin reenviar.
+    - `aceptado` y `rechazado`: ``ErrorEmision``. El rechazado no se reemite.
+
+    Lanza ``ErrorEmision`` por lo que no se puede emitir y
+    ``requests.RequestException`` si la DIAN no responde.
+    """
+    with transaction.atomic():
+        documento = _bloquear(documento)
+        estado = documento.estado.nombre
+        if estado in MENSAJES_NO_EMITIBLE:
+            raise ErrorEmision(MENSAJES_NO_EMITIBLE[estado].format(numero=documento.numero))
+        if estado == DocumentoEstado.Nombre.ENVIADO:
+            return documento, ACCION_CONSULTADO, actualizar_estado(documento)
+        if estado != DocumentoEstado.Nombre.FIRMADO:
+            # Lo que no se puede firmar lo explica el propio servicio.
+            generar_y_firmar(documento)
+
+    with transaction.atomic():
+        documento = _bloquear(documento)
+        # Entre las dos transacciones otra emisión pudo enviarlo.
+        if documento.estado.nombre != DocumentoEstado.Nombre.FIRMADO:
+            raise ErrorEmision(
+                f"El documento {documento.numero} ya no está firmado y "
+                f"pendiente de envío: está '{documento.estado.nombre}'."
+            )
+        return documento, ACCION_ENVIADO, enviar_a_dian(documento)
 
 
 # ---------------------------------------------------------------------------

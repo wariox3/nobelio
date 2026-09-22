@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Actualiza Nobelio en el servidor: para el servicio, trae el código, migra,
-# recarga catálogos, lo levanta y comprueba que responda.
+# Actualiza Nobelio en el servidor: para la API y el worker de Celery, trae el
+# código, migra, recarga catálogos, los levanta y comprueba que respondan.
+# Exige que exista la unidad nobelio-celery (docs/despliegue.md §6.1).
 #   sudo /opt/nobelio/actualizar.sh
 set -euo pipefail
 
@@ -12,12 +13,13 @@ fi
 cd /opt/nobelio
 export DJANGO_SETTINGS_MODULE=config.settings.prod
 
-# Se para antes de tocar nada: así el código viejo no atiende peticiones
-# contra una base a medio migrar.
-systemctl stop nobelio
-# Si algo falla entre el stop y el start, el servicio se quedaría abajo en
-# silencio; se levanta igual y el fallo se ve en la salida.
-trap 'echo "Falló la actualización; levantando el servicio." >&2; systemctl start nobelio' ERR
+# Se paran antes de tocar nada: así el código viejo no atiende peticiones ni
+# corre tareas contra una base a medio migrar. El worker deja terminar la tarea
+# en curso (TimeoutStopSec); lo que quede en la cola espera a que vuelva.
+systemctl stop nobelio nobelio-celery
+# Si algo falla entre el stop y el start, los servicios se quedarían abajo en
+# silencio; se levantan igual y el fallo se ve en la salida.
+trap 'echo "Falló la actualización; levantando los servicios." >&2; systemctl start nobelio nobelio-celery' ERR
 
 git pull
 # Antes de migrar: un pull que suba una dependencia deja el venv corto y la
@@ -39,9 +41,18 @@ chown nobelio:nobelio /opt/nobelio/media
 
 # Limpia el contador de reinicios de un fallo anterior, para que el `status` de
 # más abajo hable de este arranque y no del último bucle.
-systemctl reset-failed nobelio || true
-systemctl start nobelio
+systemctl reset-failed nobelio nobelio-celery || true
+systemctl start nobelio nobelio-celery
 trap - ERR
+
+# El worker no tiene /estado/: basta con que siga vivo pasados unos segundos.
+# Si el broker o el .env están mal, systemd lo reinicia en bucle y aquí se ve.
+sleep 5
+if ! systemctl is-active --quiet nobelio-celery; then
+    echo "El worker de Celery no arrancó." >&2
+    systemctl status nobelio-celery --no-pager --lines 20 >&2
+    exit 1
+fi
 
 # Que systemd lance el proceso no significa que la app responda.
 # Contra 127.0.0.1 hacen falta las dos cabeceras: sin Host da 400 y sin
