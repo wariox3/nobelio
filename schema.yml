@@ -1522,6 +1522,101 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/documentos/documento-notificacion/:
+    get:
+      operationId: documentos_documento_notificacion_list
+      description: |-
+        Los envíos de los documentos al adquiriente por correo.
+
+        Uno por cada intento que llegó a la pasarela, haya salido o no: a quién se
+        mandó, qué llevaba el zip, el código con el que se rastrea en Zinc y, si
+        falló, por qué. De solo lectura: las escribe la acción `notificar`.
+
+        Filtros: ``?documento=<uuid>`` y ``?estado=enviado|fallido``.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un número de página dentro del conjunto de resultados paginado.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - documentos
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDocumentoNotificacionList'
+          description: ''
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/documentos/documento-notificacion/{id}/:
+    get:
+      operationId: documentos_documento_notificacion_retrieve
+      description: |-
+        Los envíos de los documentos al adquiriente por correo.
+
+        Uno por cada intento que llegó a la pasarela, haya salido o no: a quién se
+        mandó, qué llevaba el zip, el código con el que se rastrea en Zinc y, si
+        falló, por qué. De solo lectura: las escribe la acción `notificar`.
+
+        Filtros: ``?documento=<uuid>`` y ``?estado=enviado|fallido``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este notificación de
+          documento.
+        required: true
+      tags:
+      - documentos
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentoNotificacion'
+          description: ''
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/documentos/documento/{id}/:
     get:
       operationId: documentos_documento_retrieve
@@ -1833,6 +1928,9 @@ paths:
 
         Con ``?descargar=1`` **no envía**: devuelve el zip para revisarlo. Es la
         forma de ver qué se le va a mandar al cliente sin mandárselo.
+
+        Cada envío que llega a la pasarela, salga o falle, queda registrado en
+        ``/api/documentos/documento-notificacion/``; la descarga no.
       parameters:
       - in: query
         name: descargar
@@ -6255,6 +6353,67 @@ components:
       - total_impuestos
       - track_id
       - valor_bruto
+    DocumentoNotificacion:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        documento:
+          type: string
+          format: uuid
+          readOnly: true
+        estado:
+          allOf:
+          - $ref: '#/components/schemas/DocumentoNotificacionEstadoEnum'
+          readOnly: true
+        destinatario:
+          type: string
+          readOnly: true
+        copia:
+          type: string
+          readOnly: true
+        archivo:
+          type: string
+          readOnly: true
+        tamano:
+          type: integer
+          readOnly: true
+          title: Tamaño en bytes
+        contenido:
+          readOnly: true
+          title: Archivos del zip
+        codigo_envio:
+          type: string
+          readOnly: true
+          title: Código de envío
+        error:
+          type: string
+          readOnly: true
+        fecha:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - archivo
+      - codigo_envio
+      - contenido
+      - copia
+      - destinatario
+      - documento
+      - error
+      - estado
+      - fecha
+      - id
+      - tamano
+    DocumentoNotificacionEstadoEnum:
+      enum:
+      - enviado
+      - fallido
+      type: string
+      description: |-
+        * `enviado` - Enviado
+        * `fallido` - Fallido
     DocumentoPOS:
       type: object
       description: |-
@@ -7506,16 +7665,6 @@ components:
       required:
       - detail
       - errores
-    EstadoEnum:
-      enum:
-      - pendiente
-      - entregado
-      - fallido
-      type: string
-      description: |-
-        * `pendiente` - Pendiente
-        * `entregado` - Entregado
-        * `fallido` - Fallido
     GrupoEnum:
       enum:
       - devengado
@@ -8758,6 +8907,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DocumentoLista'
+    PaginatedDocumentoNotificacionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentoNotificacion'
     PaginatedElementoCatalogoList:
       type: object
       required:
@@ -9668,7 +9840,7 @@ components:
           readOnly: true
         estado:
           allOf:
-          - $ref: '#/components/schemas/EstadoEnum'
+          - $ref: '#/components/schemas/WebhookAvisoEstadoEnum'
           readOnly: true
         codigo_http:
           type: integer
@@ -9701,6 +9873,16 @@ components:
       - id
       - tipo
       - webhook
+    WebhookAvisoEstadoEnum:
+      enum:
+      - pendiente
+      - entregado
+      - fallido
+      type: string
+      description: |-
+        * `pendiente` - Pendiente
+        * `entregado` - Entregado
+        * `fallido` - Fallido
     WebhookAvisoTipoEnum:
       enum:
       - validacion

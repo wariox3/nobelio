@@ -6,5 +6,6 @@ from apps.documentos import views
 router = SimpleRouter()
 router.register("documento", views.DocumentoViewSet)
 router.register("documento-evento", views.DocumentoEventoViewSet)
+router.register("documento-notificacion", views.DocumentoNotificacionViewSet)
 
 urlpatterns = router.urls

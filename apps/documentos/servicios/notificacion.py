@@ -24,11 +24,11 @@ from django.template.loader import render_to_string
 from django.conf import settings
 
 from apps.dian.identificadores import nombre_archivo_dian
-from apps.documentos.models import DocumentoEstado
+from apps.documentos.models import DocumentoEstado, DocumentoNotificacion
 from apps.emisores.models import WebhookAviso
 from apps.emisores.servicios import webhooks
 from apps.nucleo.registro import campos
-from apps.utilidades.zinc import Zinc
+from apps.utilidades.zinc import Zinc, ZincNoDisponible
 
 # Tope del material adjunto que acepta la notificación. No cuenta el XML, que
 # lo pone el propio sistema y siempre viaja: el límite es para lo que sube el
@@ -289,6 +289,21 @@ def _destinatarios(paquete):
     return [c.strip() for c in paquete.destinatario.split(";") if c.strip()]
 
 
+def _registrar(documento, paquete, estado, *, codigo_envio="", error=""):
+    """Deja la fila del intento en `doc_documento_notificacion`."""
+    return DocumentoNotificacion.objects.create(
+        documento=documento,
+        estado=estado,
+        destinatario=";".join(_destinatarios(paquete)),
+        copia=documento.emisor.correo_copia,
+        archivo=paquete.nombre,
+        tamano=paquete.tamano,
+        contenido=list(paquete.archivos),
+        codigo_envio=codigo_envio or "",
+        error=error,
+    )
+
+
 def enviar_notificacion(documento, *, pdf=None, adjuntos=(), zinc=None):
     """Arma el paquete, lo envía por correo y marca el documento como notificado.
 
@@ -298,10 +313,18 @@ def enviar_notificacion(documento, *, pdf=None, adjuntos=(), zinc=None):
 
     Devuelve ``(paquete, respuesta)``; en la respuesta viene el ``codigoEnvio``
     con el que se rastrea el correo en la pasarela.
+
+    Cada intento que llega a la pasarela deja su fila en
+    ``DocumentoNotificacion``, haya salido o no. Lo que se rechaza al armar el
+    paquete no: ahí no se intentó enviar nada.
     """
     paquete = empaquetar_notificacion(documento, pdf=pdf, adjuntos=adjuntos)
     cliente = zinc or Zinc()
-    respuesta = cliente.correo_html(payload_zinc(documento, paquete))
+    try:
+        respuesta = cliente.correo_html(payload_zinc(documento, paquete))
+    except ZincNoDisponible as exc:
+        _registrar(documento, paquete, DocumentoNotificacion.Estado.FALLIDO, error=str(exc))
+        raise
     if respuesta.get("error"):
         # WARNING y no ERROR: el documento sigue sin notificar y se puede
         # reintentar, que es justo lo que hace falta saber al leerlo.
@@ -311,9 +334,13 @@ def enviar_notificacion(documento, *, pdf=None, adjuntos=(), zinc=None):
             numero=documento.numero,
             motivo=respuesta.get("errorMensaje") or "sin motivo",
         ))
-        raise ErrorEnvioCorreo(
-            respuesta.get("errorMensaje") or "Zinc rechazó el envío sin dar motivo."
-        )
+        motivo = respuesta.get("errorMensaje") or "Zinc rechazó el envío sin dar motivo."
+        _registrar(documento, paquete, DocumentoNotificacion.Estado.FALLIDO, error=motivo)
+        raise ErrorEnvioCorreo(motivo)
+    _registrar(
+        documento, paquete, DocumentoNotificacion.Estado.ENVIADO,
+        codigo_envio=str(respuesta.get("codigoEnvio") or ""),
+    )
     marcar_notificado(documento)
     # Cuántos destinatarios, no cuáles: la dirección del adquiriente es un dato
     # de un tercero y el log se lee con menos cuidado que la base. Para saber a

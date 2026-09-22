@@ -579,6 +579,9 @@ class DocumentoViewSet(
 
         Con ``?descargar=1`` **no envía**: devuelve el zip para revisarlo. Es la
         forma de ver qué se le va a mandar al cliente sin mandárselo.
+
+        Cada envío que llega a la pasarela, salga o falle, queda registrado en
+        ``/api/documentos/documento-notificacion/``; la descarga no.
         """
         documento = self.get_object()
         entrada = serializers.NotificacionSerializer(data=request.data)

@@ -9,6 +9,7 @@ from .documento_detalle import DocumentoDetalleImpuestoSerializer, DocumentoDeta
 from .documento_error import DocumentoErrorSerializer
 from .documento_pos import DocumentoPOSSerializer
 from .documento_evento import DocumentoEventoSerializer
+from .documento_notificacion import DocumentoNotificacionSerializer
 from .notificacion import NotificacionSerializer
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "NotificacionSerializer",
     "DocumentoPOSSerializer",
     "DocumentoEventoSerializer",
+    "DocumentoNotificacionSerializer",
 ]

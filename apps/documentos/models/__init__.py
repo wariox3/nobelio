@@ -12,6 +12,7 @@ from .documento_error import DocumentoError
 from .documento_estado import DocumentoEstado
 from .documento_pos import DocumentoPOS
 from .documento_evento import DocumentoEvento
+from .documento_notificacion import DocumentoNotificacion
 from .documento_tipo import DocumentoTipo
 
 __all__ = [
@@ -25,4 +26,5 @@ __all__ = [
     "DocumentoPOS",
     "ConsecutivoArchivoDocumentoEquivalente",
     "DocumentoEvento",
+    "DocumentoNotificacion",
 ]
