@@ -69,5 +69,6 @@ REST_FRAMEWORK = {  # noqa: F405
         "mfa_gestion": None, "refresco": None,
         "recuperar": None, "recuperar_rafaga": None, "recuperar_correo": None,
         "restablecer": None, "restablecer_rafaga": None,
+        "webhook_prueba": None,
     },
 }

@@ -12,9 +12,12 @@ from unittest import mock
 from zoneinfo import ZoneInfo
 
 import requests
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import TestCase
 from rest_framework.test import APITestCase
+from rest_framework.throttling import SimpleRateThrottle
 
 from apps.dian.servicios import registrar_cambio_de_estado
 from apps.documentos.models import DocumentoEstado
@@ -372,3 +375,148 @@ class WebhookAvisoAPITests(APITestCase):
         resp = self.client.post("/api/emisores/webhook-aviso/", {}, format="json")
 
         self.assertEqual(resp.status_code, 405)
+
+
+class PruebaTests(TestCase):
+    """``probar``: el aviso `prueba` a la URL del webhook, sin dejar rastro."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.emisor = crear_documento_factura()["emisor"]
+        cls.emisor.referencia_externa = "12"
+        cls.emisor.save(update_fields=["referencia_externa"])
+        cls.webhook = Webhook.objects.create(
+            emisor=cls.emisor, nombre="torio", url="https://torio.co/hook", secreto="s3creto",
+        )
+
+    def test_manda_tipo_y_cliente_firmados_a_la_url_del_webhook(self):
+        with mock.patch(POST, return_value=_respuesta(200, "Aviso de prueba recibido.")) as post, \
+                mock.patch("apps.emisores.servicios.webhooks.time.time", return_value=1790000000):
+            resultado = webhooks.probar(self.webhook)
+
+        args, kwargs = post.call_args
+        self.assertEqual(args[0], "https://torio.co/hook")
+        self.assertEqual(kwargs["data"], b'{"tipo": "prueba", "cliente": 12}')
+        esperada = webhooks.firmar("s3creto", "1790000000", kwargs["data"])
+        self.assertEqual(kwargs["headers"]["X-Rededoc-Firma"], esperada)
+        self.assertEqual(kwargs["headers"]["X-Rededoc-Fecha"], "1790000000")
+        self.assertTrue(resultado["entregado"])
+        self.assertEqual(resultado["codigo_http"], 200)
+        self.assertEqual(resultado["detalle"], "Aviso de prueba recibido.")
+        self.assertIsInstance(resultado["duracion_ms"], int)
+
+    def test_no_deja_avisos(self):
+        with mock.patch(POST, return_value=_respuesta(200)):
+            webhooks.probar(self.webhook)
+
+        self.assertFalse(WebhookAviso.objects.exists())
+
+    def test_solo_el_200_cuenta_como_entregado(self):
+        for codigo, detalle in ((401, "Firma inválida."), (404, "El cliente no existe."),
+                                (409, "ya"), (500, "")):
+            with self.subTest(codigo=codigo), \
+                    mock.patch(POST, return_value=_respuesta(codigo, detalle)):
+                resultado = webhooks.probar(self.webhook)
+                self.assertFalse(resultado["entregado"])
+                self.assertEqual(resultado["codigo_http"], codigo)
+                if detalle:
+                    self.assertEqual(resultado["detalle"], detalle)
+
+    def test_sin_conexion_no_hay_codigo_y_va_el_motivo(self):
+        with mock.patch(POST, side_effect=requests.ConnectTimeout("tarde")):
+            resultado = webhooks.probar(self.webhook)
+
+        self.assertFalse(resultado["entregado"])
+        self.assertIsNone(resultado["codigo_http"])
+        self.assertIn("ConnectTimeout", resultado["detalle"])
+
+    def _no_se_manda(self, mensaje):
+        webhook = Webhook.objects.select_related("emisor").get(pk=self.webhook.pk)
+        with mock.patch(POST) as post, \
+                self.assertRaisesMessage(webhooks.PruebaImposible, mensaje):
+            webhooks.probar(webhook)
+        post.assert_not_called()
+
+    def test_sin_secreto_no_se_manda(self):
+        Webhook.objects.filter(pk=self.webhook.pk).update(secreto="")
+
+        self._no_se_manda(webhooks.MENSAJE_SIN_SECRETO)
+
+    def test_sin_referencia_externa_no_se_manda(self):
+        type(self.emisor).objects.filter(pk=self.emisor.pk).update(referencia_externa=" ")
+
+        self._no_se_manda(webhooks.MENSAJE_SIN_REFERENCIA)
+
+
+class WebhookProbarAPITests(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        datos = crear_documento_factura()
+        cls.emisor = datos["emisor"]
+        cls.emisor.referencia_externa = "12"
+        cls.emisor.save(update_fields=["referencia_externa"])
+        cls.webhook = Webhook.objects.create(
+            emisor=cls.emisor, nombre="torio", url="https://torio.co/hook", secreto="s3creto",
+        )
+        cls.ajeno = Webhook.objects.create(
+            emisor=_crear_emisor(datos["catalogos"], nit="800199436"), nombre="ajeno",
+            url="https://ajeno.co/hook", secreto="otro",
+        )
+        cls.usuario = get_user_model().objects.create_user(email="probar@nobelio.co", password="x")
+        cls.usuario.emisores.add(cls.emisor)
+
+    def setUp(self):
+        self.client.force_authenticate(self.usuario)
+
+    def _probar(self, webhook):
+        return self.client.post(f"/api/emisores/webhook/{webhook.pk}/probar/")
+
+    def test_devuelve_lo_que_respondio_el_receptor(self):
+        with mock.patch(POST, return_value=_respuesta(200, "Aviso de prueba recibido.")):
+            resp = self._probar(self.webhook)
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(
+            set(resp.data), {"entregado", "codigo_http", "detalle", "duracion_ms"},
+        )
+        self.assertTrue(resp.data["entregado"])
+
+    def test_un_fallo_del_receptor_sigue_siendo_200(self):
+        with mock.patch(POST, return_value=_respuesta(401, "Firma inválida.")):
+            resp = self._probar(self.webhook)
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertFalse(resp.data["entregado"])
+        self.assertEqual(resp.data["codigo_http"], 401)
+        self.assertEqual(resp.data["detalle"], "Firma inválida.")
+
+    def test_sin_secreto_es_400_y_no_se_manda(self):
+        Webhook.objects.filter(pk=self.webhook.pk).update(secreto="")
+
+        with mock.patch(POST) as post:
+            resp = self._probar(self.webhook)
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertEqual(resp.data["detail"], webhooks.MENSAJE_SIN_SECRETO)
+        post.assert_not_called()
+
+    def test_uno_de_otra_cuenta_responde_como_inexistente(self):
+        with mock.patch(POST) as post:
+            resp = self._probar(self.ajeno)
+
+        self.assertEqual(resp.status_code, 404)
+        post.assert_not_called()
+
+    def test_tiene_tope_propio(self):
+        # Las tasas se parchean en la clase: DRF las lee al importar (ver
+        # apps/seguridad/tests_limites.py).
+        cache.clear()
+        self.addCleanup(cache.clear)
+        tasas = {**settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"], "webhook_prueba": "1/min"}
+        with mock.patch.object(SimpleRateThrottle, "THROTTLE_RATES", tasas), \
+                mock.patch(POST, return_value=_respuesta(200)):
+            primera = self._probar(self.webhook)
+            segunda = self._probar(self.webhook)
+
+        self.assertEqual(primera.status_code, 200)
+        self.assertEqual(segunda.status_code, 429)

@@ -400,6 +400,12 @@ REST_FRAMEWORK = {
         "restablecer": env("THROTTLE_RESTABLECER", default="10/hour"),
         "restablecer_rafaga": env("THROTTLE_RESTABLECER_RAFAGA", default="5/min"),
         "refresco": env("THROTTLE_REFRESCO", default="120/hour"),
+        # --- Rutas autenticadas con tope propio.
+        #
+        # Probar un webhook hace que nobelio le pegue a una URL que puso el
+        # cliente y le devuelva lo que respondió: acotado para que no sirva de
+        # escáner. Unas cuantas seguidas bastan para ir corrigiendo el secreto.
+        "webhook_prueba": env("THROTTLE_WEBHOOK_PRUEBA", default="10/min"),
     },
     # Cuántos proxies hay delante. Sin esto DRF usa la cabecera
     # `X-Forwarded-For` tal cual cuando viene, y como la manda el cliente,

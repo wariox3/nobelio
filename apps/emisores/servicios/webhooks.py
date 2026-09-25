@@ -15,6 +15,8 @@ igual y el aviso, `fallido`, con el motivo.
   `respuesta_validado`. Lo que se quede sin marcar —el broker no respondió, el
   receptor tampoco— se recupera con el endpoint `respuesta-validado` del
   documento, que llama a la misma función en la petición.
+- **Prueba**: ``probar`` manda un aviso `prueba` a un webhook, en el acto y
+  sin dejar rastro en los avisos, para comprobar URL, secreto y cliente.
 
 Cada aviso sale **una sola vez**, sin reintentos (ver ``WebhookAviso``).
 """
@@ -52,6 +54,10 @@ BANDERA_POR_TIPO = {
     WebhookAviso.Tipo.VALIDACION: "estado_validado",
     WebhookAviso.Tipo.NOTIFICACION: "estado_notificado",
 }
+
+# El aviso de `probar`: el receptor comprueba firma y cliente, y no toca nada.
+# Solo el 200 cuenta como éxito; un 409 no tiene sentido aquí.
+TIPO_PRUEBA = "prueba"
 
 MENSAJE_SIN_SECRETO = "El webhook no tiene secreto: sin él no se puede firmar."
 MENSAJE_SIN_REFERENCIA = (
@@ -231,6 +237,25 @@ def _detalle(respuesta):
     return str(detalle)[:MAXIMO_ERROR]
 
 
+def _enviar(webhook, cuerpo: bytes, *, sesion=None):
+    """Firma ``cuerpo`` con la hora de ahora y lo manda a la URL del webhook.
+
+    Lo comparten los avisos y la prueba: si la prueba pasa, un aviso con el
+    mismo webhook se firma y viaja igual. Un fallo de red sale como
+    ``requests.RequestException``.
+    """
+    fecha = str(int(time.time()))
+    cabeceras = {
+        "Content-Type": "application/json",
+        "X-Rededoc-Fecha": fecha,
+        "X-Rededoc-Firma": firmar(webhook.secreto, fecha, cuerpo),
+    }
+    http = sesion or requests
+    # `data=` con los bytes, no `json=`: es lo que garantiza que viaja
+    # exactamente lo que se firmó.
+    return http.post(webhook.url, data=cuerpo, headers=cabeceras, timeout=TIMEOUT_SEGUNDOS)
+
+
 def entregar(aviso, *, sesion=None):
     """Firma el aviso con la hora de ahora y lo manda. Deja el resultado en él.
 
@@ -238,21 +263,9 @@ def entregar(aviso, *, sesion=None):
     secreto, el vigente, para que una rotación valga también para lo que
     estaba por salir.
     """
-    cuerpo = aviso.cuerpo.encode()
-    fecha = str(int(time.time()))
-    cabeceras = {
-        "Content-Type": "application/json",
-        "X-Rededoc-Fecha": fecha,
-        "X-Rededoc-Firma": firmar(aviso.webhook.secreto, fecha, cuerpo),
-    }
-    http = sesion or requests
     aviso.enviado_en = timezone.now()
     try:
-        # `data=` con los bytes, no `json=`: es lo que garantiza que viaja
-        # exactamente lo que se firmó.
-        respuesta = http.post(
-            aviso.webhook.url, data=cuerpo, headers=cabeceras, timeout=TIMEOUT_SEGUNDOS,
-        )
+        respuesta = _enviar(aviso.webhook, aviso.cuerpo.encode(), sesion=sesion)
     except requests.RequestException as exc:
         aviso.estado = WebhookAviso.Estado.FALLIDO
         aviso.codigo_http = None
@@ -276,3 +289,48 @@ def entregar(aviso, *, sesion=None):
         codigo=aviso.codigo_http,
     ))
     return aviso
+
+
+class PruebaImposible(Exception):
+    """El webhook no se puede probar: le falta algo del lado de nobelio."""
+
+
+def probar(webhook, *, sesion=None):
+    """Manda un aviso de ``tipo: prueba`` al webhook y devuelve lo que respondió.
+
+    Va a la misma URL y con la misma firma que los avisos reales; el receptor
+    comprueba la firma y que el `cliente` exista, y responde 200 sin tocar
+    nada. No lleva `documento` ni deja ``WebhookAviso``: el historial es de
+    los avisos de verdad.
+
+    Lanza ``PruebaImposible`` si no hay secreto o el emisor no tiene
+    referencia externa: sin eso ni siquiera un aviso real saldría.
+    """
+    if not webhook.emisor.referencia_externa.strip():
+        raise PruebaImposible(MENSAJE_SIN_REFERENCIA)
+    if not webhook.secreto:
+        raise PruebaImposible(MENSAJE_SIN_SECRETO)
+
+    cuerpo = json.dumps({"tipo": TIPO_PRUEBA, "cliente": _cliente(webhook.emisor)})
+    inicio = time.monotonic()
+    try:
+        respuesta = _enviar(webhook, cuerpo.encode(), sesion=sesion)
+    except requests.RequestException as exc:
+        codigo = None
+        detalle = f"{type(exc).__name__}: {exc}"[:MAXIMO_ERROR]
+    else:
+        codigo = respuesta.status_code
+        detalle = _detalle(respuesta)
+    duracion_ms = round((time.monotonic() - inicio) * 1000)
+
+    entregado = codigo == 200
+    registro = logger.info if entregado else logger.warning
+    registro("webhook.prueba %s", campos(
+        webhook=webhook.pk, codigo=codigo, duracion_ms=duracion_ms,
+    ))
+    return {
+        "entregado": entregado,
+        "codigo_http": codigo,
+        "detalle": detalle,
+        "duracion_ms": duracion_ms,
+    }

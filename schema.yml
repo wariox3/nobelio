@@ -4123,6 +4123,67 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/emisores/webhook/{id}/probar/:
+    post:
+      operationId: emisores_webhook_probar_create
+      description: |-
+        Manda un aviso de prueba al webhook y devuelve lo que respondió.
+
+        ``POST /api/emisores/webhook/{id}/probar/``. Va a la misma URL y con la
+        misma firma que los avisos reales, con ``{"tipo": "prueba", "cliente":
+        <referencia_externa>}``. El receptor comprueba la firma y que el
+        cliente exista, y responde sin tocar nada.
+
+        Responde **200** con el resultado aunque el receptor falle: `entregado`
+        es true solo si contestó 200. Lo habitual: 401 es secreto distinto o
+        reloj desfasado; 404, que el receptor no conoce la
+        `referencia_externa`; `codigo_http` nulo, que la URL no respondió (el
+        motivo va en `detalle`). Es **400** si el webhook no tiene secreto o el
+        emisor no tiene `referencia_externa`: entonces no se manda nada.
+
+        No deja registro en ``/api/emisores/webhook-aviso/``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este webhook.
+        required: true
+      tags:
+      - emisores
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookPruebaRespuesta'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/nomina/empleado/:
     get:
       operationId: nomina_empleado_list
@@ -9897,6 +9958,23 @@ components:
       description: |-
         * `validacion` - Validación de la DIAN
         * `notificacion` - Notificación al adquiriente
+    WebhookPruebaRespuesta:
+      type: object
+      properties:
+        entregado:
+          type: boolean
+        codigo_http:
+          type: integer
+          nullable: true
+        detalle:
+          type: string
+        duracion_ms:
+          type: integer
+      required:
+      - codigo_http
+      - detalle
+      - duracion_ms
+      - entregado
     WebhookRequest:
       type: object
       properties:
