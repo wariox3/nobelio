@@ -1928,12 +1928,17 @@ paths:
         Arma lo que se le entrega al adquiriente y lo deja listo para enviar.
 
         ``POST /api/documentos/documento/{id}/notificar/`` en multipart, con
-        ``pdf`` y ``adjuntos`` opcionales (hasta 10 MB entre todos). El
-        resultado es siempre un zip, y dentro va siempre el AttachedDocument
-        —el documento firmado y el acuse de la DIAN juntos—.
+        ``correo``, ``pdf`` y ``adjuntos`` opcionales (hasta 10 MB entre los
+        archivos). El resultado es siempre un zip, y dentro va siempre el
+        AttachedDocument —el documento firmado y el acuse de la DIAN juntos—.
 
-        Con ``?descargar=1`` **no envía**: devuelve el zip para revisarlo. Es la
-        forma de ver qué se le va a mandar al cliente sin mandárselo.
+        Si viene ``correo``, reemplaza el del adquiriente del documento y el
+        envío va ahí; si no, va al que ya tenía. El cambio se guarda aunque la
+        pasarela falle, para que el reintento lo use.
+
+        Con ``?descargar=1`` **no envía** ni guarda el correo: devuelve el zip
+        para revisarlo. Es la forma de ver qué se le va a mandar al cliente sin
+        mandárselo.
 
         Cada envío que llega a la pasarela, salga o falle, queda registrado en
         ``/api/documentos/documento-notificacion/``; la descarga no.
@@ -8850,11 +8855,18 @@ components:
     NotificacionRequest:
       type: object
       description: |-
-        Lo que el emisor sube para notificar. Todo opcional: sin nada, va el XML.
+        Lo que el emisor sube para notificar. Todo opcional: sin nada, va el XML
+        al correo que ya tiene el adquiriente.
 
         El XML firmado no se recibe aquí —lo pone el sistema desde el storage—, así
         que el tope de 10 MB aplica solo a lo que llega en la petición.
       properties:
+        correo:
+          oneOf:
+          - type: string
+            format: email
+          - type: string
+            maxLength: 0
         pdf:
           type: string
           format: binary

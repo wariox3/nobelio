@@ -532,12 +532,17 @@ class DocumentoViewSet(
         """Arma lo que se le entrega al adquiriente y lo deja listo para enviar.
 
         ``POST /api/documentos/documento/{id}/notificar/`` en multipart, con
-        ``pdf`` y ``adjuntos`` opcionales (hasta 10 MB entre todos). El
-        resultado es siempre un zip, y dentro va siempre el AttachedDocument
-        —el documento firmado y el acuse de la DIAN juntos—.
+        ``correo``, ``pdf`` y ``adjuntos`` opcionales (hasta 10 MB entre los
+        archivos). El resultado es siempre un zip, y dentro va siempre el
+        AttachedDocument —el documento firmado y el acuse de la DIAN juntos—.
 
-        Con ``?descargar=1`` **no envía**: devuelve el zip para revisarlo. Es la
-        forma de ver qué se le va a mandar al cliente sin mandárselo.
+        Si viene ``correo``, reemplaza el del adquiriente del documento y el
+        envío va ahí; si no, va al que ya tenía. El cambio se guarda aunque la
+        pasarela falle, para que el reintento lo use.
+
+        Con ``?descargar=1`` **no envía** ni guarda el correo: devuelve el zip
+        para revisarlo. Es la forma de ver qué se le va a mandar al cliente sin
+        mandárselo.
 
         Cada envío que llega a la pasarela, salga o falle, queda registrado en
         ``/api/documentos/documento-notificacion/``; la descarga no.
@@ -547,10 +552,13 @@ class DocumentoViewSet(
         entrada.is_valid(raise_exception=True)
         pdf = entrada.validated_data.get("pdf")
         adjuntos = entrada.validated_data.get("adjuntos") or []
+        correo = entrada.validated_data.get("correo")
 
         if request.query_params.get("descargar"):
             try:
-                paquete = empaquetar_notificacion(documento, pdf=pdf, adjuntos=adjuntos)
+                paquete = empaquetar_notificacion(
+                    documento, pdf=pdf, adjuntos=adjuntos, correo=correo,
+                )
             except ErrorNotificacion as exc:
                 raise ErrorSolicitud(str(exc))
             respuesta = HttpResponse(paquete.contenido, content_type=paquete.tipo)
@@ -559,7 +567,7 @@ class DocumentoViewSet(
 
         try:
             paquete, respuesta_zinc = enviar_notificacion(
-                documento, pdf=pdf, adjuntos=adjuntos,
+                documento, pdf=pdf, adjuntos=adjuntos, correo=correo,
             )
         except ErrorNotificacion as exc:
             raise ErrorSolicitud(str(exc))

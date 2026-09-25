@@ -6,9 +6,12 @@ from django.test import TestCase
 from rest_framework.test import APITestCase
 
 from apps.documentos.models import DocumentoNotificacion
-from apps.documentos.servicios import ErrorEnvioCorreo, ErrorNotificacion, enviar_notificacion
+from apps.documentos.servicios import (
+    ErrorEnvioCorreo, ErrorNotificacion, empaquetar_notificacion, enviar_notificacion,
+)
 from apps.documentos.servicios.notificacion import Paquete
 from apps.documentos.tests_utils import crear_documento_factura
+from apps.nucleo.tests_utils import errores_por_campo
 from apps.utilidades.zinc import ZincNoDisponible
 
 EMPAQUETAR = "apps.documentos.servicios.notificacion.empaquetar_notificacion"
@@ -103,6 +106,121 @@ class RegistroTests(TestCase):
             list(DocumentoNotificacion.objects.values_list("estado", flat=True)),
             ["fallido", "enviado"],
         )
+
+
+class CorreoTests(TestCase):
+    """El `correo` opcional de la notificación: reemplaza el del adquiriente."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.documento = crear_documento_factura()["documento"]
+        cls.documento.adquiriente.correo = "viejo@cliente.co"
+        cls.documento.adquiriente.save(update_fields=["correo"])
+
+    def _correo(self):
+        self.documento.adquiriente.refresh_from_db()
+        return self.documento.adquiriente.correo
+
+    def _enviar(self, zinc, **kwargs):
+        with mock.patch(EMPAQUETAR, return_value=_paquete()) as empaquetar:
+            try:
+                enviar_notificacion(self.documento, zinc=zinc, **kwargs)
+            finally:
+                self.empaquetar = empaquetar
+
+    def _zinc(self, **kwargs):
+        zinc = mock.Mock()
+        zinc.correo_html.return_value = {"error": False, "codigoEnvio": 1}
+        zinc.correo_html.configure_mock(**kwargs)
+        return zinc
+
+    def test_el_correo_que_viene_reemplaza_al_del_adquiriente(self):
+        self._enviar(self._zinc(), correo="nuevo@cliente.co")
+
+        self.assertEqual(self._correo(), "nuevo@cliente.co")
+        self.assertEqual(self.empaquetar.call_args.kwargs["correo"], "nuevo@cliente.co")
+
+    def test_sin_correo_o_vacio_se_queda_el_que_habia(self):
+        for correo in (None, "", "  "):
+            with self.subTest(correo=correo):
+                self._enviar(self._zinc(), correo=correo)
+
+                self.assertEqual(self._correo(), "viejo@cliente.co")
+
+    def test_se_guarda_aunque_la_pasarela_falle(self):
+        # Es el dato bueno: el reintento tiene que usarlo.
+        with self.assertRaises(ZincNoDisponible):
+            self._enviar(self._zinc(side_effect=ZincNoDisponible("sin red")), correo="nuevo@cliente.co")
+
+        self.assertEqual(self._correo(), "nuevo@cliente.co")
+
+    def test_si_el_paquete_no_se_arma_no_se_guarda(self):
+        with mock.patch(EMPAQUETAR, side_effect=ErrorNotificacion("sin aceptar")), \
+                self.assertRaises(ErrorNotificacion):
+            enviar_notificacion(self.documento, zinc=mock.Mock(), correo="nuevo@cliente.co")
+
+        self.assertEqual(self._correo(), "viejo@cliente.co")
+
+    def test_el_paquete_va_al_correo_que_viene(self):
+        # Sin tocar el zip, que necesita el XML firmado: basta con saltarse las
+        # comprobaciones previas y el contenedor.
+        self.documento.xml_archivo = "x.xml"
+        self.documento.estado_id = None
+        with mock.patch(
+            "apps.documentos.servicios.notificacion._attached_document", return_value=b"<xml/>",
+        ):
+            paquete = empaquetar_notificacion(self.documento, correo=" nuevo@cliente.co ")
+
+        self.assertEqual(paquete.destinatario, "nuevo@cliente.co")
+        # Armar no guarda: eso es de enviar.
+        self.assertEqual(self._correo(), "viejo@cliente.co")
+
+
+class NotificarCorreoAPITests(APITestCase):
+    ENVIAR = "apps.documentos.views.documento.enviar_notificacion"
+
+    @classmethod
+    def setUpTestData(cls):
+        datos = crear_documento_factura()
+        cls.documento = datos["documento"]
+        cls.usuario = get_user_model().objects.create_user(email="correo@nobelio.co", password="x")
+        cls.usuario.emisores.add(datos["emisor"])
+
+    def setUp(self):
+        self.client.force_authenticate(self.usuario)
+
+    def _notificar(self, datos, query=""):
+        return self.client.post(
+            f"/api/documentos/documento/{self.documento.pk}/notificar/{query}",
+            datos, format="multipart",
+        )
+
+    def test_pasa_el_correo_al_envio(self):
+        with mock.patch(self.ENVIAR, return_value=(_paquete(), {"codigoEnvio": 1})) as enviar:
+            resp = self._notificar({"correo": "nuevo@cliente.co"})
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(enviar.call_args.kwargs["correo"], "nuevo@cliente.co")
+
+    def test_un_correo_invalido_es_400_y_no_envia(self):
+        with mock.patch(self.ENVIAR) as enviar:
+            resp = self._notificar({"correo": "no-es-correo"})
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("correo", errores_por_campo(resp))
+        enviar.assert_not_called()
+
+    def test_descargar_no_guarda_el_correo(self):
+        with mock.patch(
+            "apps.documentos.views.documento.empaquetar_notificacion", return_value=_paquete(),
+        ) as empaquetar, mock.patch(self.ENVIAR) as enviar:
+            resp = self._notificar({"correo": "nuevo@cliente.co"}, query="?descargar=1")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(empaquetar.call_args.kwargs["correo"], "nuevo@cliente.co")
+        enviar.assert_not_called()
+        self.documento.adquiriente.refresh_from_db()
+        self.assertNotEqual(self.documento.adquiriente.correo, "nuevo@cliente.co")
 
 
 class DocumentoNotificacionAPITests(APITestCase):

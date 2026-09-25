@@ -148,13 +148,31 @@ def _attached_document(documento):
         raise ErrorNotificacion(str(exc)) from exc
 
 
-def empaquetar_notificacion(documento, *, pdf=None, adjuntos=()):
+def actualizar_correo(documento, correo):
+    """Cambia el correo del adquiriente del documento, si viene uno distinto.
+
+    Es el único correo que guarda el documento —el adquiriente va pegado a él,
+    1:1— y no entra en el XML firmado, así que cambiarlo después de emitir no
+    toca nada de lo que validó la DIAN. Vacío no borra el que había.
+    """
+    correo = (correo or "").strip()
+    adquiriente = documento.adquiriente
+    if not correo or correo == adquiriente.correo:
+        return
+    adquiriente.correo = correo
+    adquiriente.save(update_fields=["correo", "actualizado_en"])
+
+
+def empaquetar_notificacion(documento, *, pdf=None, adjuntos=(), correo=None):
     """Arma el paquete que se le entrega al adquiriente.
 
     Dentro va siempre el AttachedDocument; el PDF y los adjuntos se suman si
     vienen. El zip y los dos archivos que pone el sistema se nombran con la
     convención DIAN (ver ``nombre_dian``); los adjuntos del emisor conservan su
     nombre, que es suyo y significa algo para el receptor.
+
+    ``correo`` manda a otro destinatario sin guardarlo; guardarlo es de
+    ``enviar_notificacion``, que es la que envía.
     """
     if not documento.xml_archivo:
         raise ErrorNotificacion(MENSAJE_SIN_XML)
@@ -163,7 +181,7 @@ def empaquetar_notificacion(documento, *, pdf=None, adjuntos=()):
             f"{MENSAJE_NO_ACEPTADO} El documento está en estado "
             f"'{documento.estado.nombre}'."
         )
-    destinatario = getattr(documento.adquiriente, "correo", "")
+    destinatario = (correo or "").strip() or getattr(documento.adquiriente, "correo", "")
     if not destinatario:
         raise ErrorNotificacion(MENSAJE_SIN_CORREO)
 
@@ -304,8 +322,13 @@ def _registrar(documento, paquete, estado, *, codigo_envio="", error=""):
     )
 
 
-def enviar_notificacion(documento, *, pdf=None, adjuntos=(), zinc=None):
+def enviar_notificacion(documento, *, pdf=None, adjuntos=(), correo=None, zinc=None):
     """Arma el paquete, lo envía por correo y marca el documento como notificado.
+
+    Con ``correo``, primero lo deja como el del adquiriente y envía ahí. Se
+    guarda aunque el envío falle: es el dato bueno, y el reintento lo usa.
+    Si el paquete no se puede armar —documento sin firmar o sin aceptar— no
+    se guarda nada.
 
     La marca va **después** del envío y solo si Zinc lo dio por bueno: si algo
     falla, el documento sigue sin notificar y se puede reintentar. El cliente se
@@ -318,7 +341,8 @@ def enviar_notificacion(documento, *, pdf=None, adjuntos=(), zinc=None):
     ``DocumentoNotificacion``, haya salido o no. Lo que se rechaza al armar el
     paquete no: ahí no se intentó enviar nada.
     """
-    paquete = empaquetar_notificacion(documento, pdf=pdf, adjuntos=adjuntos)
+    paquete = empaquetar_notificacion(documento, pdf=pdf, adjuntos=adjuntos, correo=correo)
+    actualizar_correo(documento, correo)
     cliente = zinc or Zinc()
     try:
         respuesta = cliente.correo_html(payload_zinc(documento, paquete))
