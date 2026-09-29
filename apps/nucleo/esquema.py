@@ -191,7 +191,9 @@ def documentar_errores(result, generator, request, public):
 
     Qué se añade y dónde, que es mecánico a propósito:
 
-    - **401** en todas: el permiso por defecto es `IsAuthenticated`.
+    - **401** en todas las que piden credencial: el permiso por defecto es
+      `IsAuthenticated`. Las públicas —las de catálogos— se reconocen por el
+      `{}` de su `security`, y ahí no hay credencial que pueda fallar.
     - **429** en todas: hay topes de peticiones globales.
     - **400** donde hay cuerpo que validar.
     - **404** en las rutas de detalle, que además es lo que responde un recurso
@@ -249,7 +251,9 @@ def documentar_errores(result, generator, request, public):
             if metodo not in ("get", "post", "put", "patch", "delete"):
                 continue
             respuestas = operacion.setdefault("responses", {})
-            codigos = ["401", "429"]
+            codigos = ["429"]
+            if {} not in operacion.get("security", []):
+                codigos.append("401")
             if "requestBody" in operacion:
                 codigos.append("400")
             if es_detalle:

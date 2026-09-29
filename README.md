@@ -204,8 +204,8 @@ necesita su `@extend_schema`; los de `apps/seguridad/views/` sirven de ejemplo.
 > (`Authorization: Api-Key <prefijo>.<secreto>`). Ver [docs/autenticacion.md](docs/autenticacion.md).
 > Cada credencial alcanza los emisores que posee más los que le hayan asignado;
 > una API Key alcanza exactamente lo mismo que su dueño. Lo ajeno no aparece en
-> los listados y responde 404. Los catálogos (`/api/catalogos/...`) son de solo
-> lectura.
+> los listados y responde 404. Los catálogos (`/api/catalogos/...`) son
+> públicos y de solo lectura: no piden credencial.
 
 ### 0. Obtener una credencial
 
@@ -221,14 +221,22 @@ export API_KEY='<prefijo>.<secreto>'
 
 ### 1. Consultar catálogos (para obtener los IDs)
 
+Son públicos: no llevan credencial.
+
 ```bash
-curl -H "Authorization: Api-Key $API_KEY" \
-  "http://localhost:8000/api/catalogos/tipo-identificacion/"
-curl -H "Authorization: Api-Key $API_KEY" \
-  "http://localhost:8000/api/catalogos/tributo/?search=IVA"
-curl -H "Authorization: Api-Key $API_KEY" \
-  "http://localhost:8000/api/catalogos/municipio/?search=Medell"
+# Qué catálogos hay, de qué anexo técnico salen y qué campos los usan
+curl "http://localhost:8000/api/catalogos/"
+curl "http://localhost:8000/api/catalogos/tipo-identificacion/"
+curl "http://localhost:8000/api/catalogos/tributo/?search=IVA"
+curl "http://localhost:8000/api/catalogos/municipio/?search=Medell"
+# Un catálogo entero, sin paginar
+curl "http://localhost:8000/api/catalogos/municipio/exportar/"
 ```
+
+Cada campo de la API que recibe un catálogo dice cuál en el esquema
+(`x-catalogo`) y si va por `id` o por `codigo` (`x-catalogo-valor`). La ficha de
+cada catálogo está en `apps/catalogos/registro.py`, y `RegistroTests` falla si
+un serializer usa un catálogo que no está ahí.
 
 ### 2. Crear el emisor (OFE)
 

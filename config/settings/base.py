@@ -429,6 +429,13 @@ REST_FRAMEWORK = {
         # cliente y le devuelva lo que respondió: acotado para que no sirva de
         # escáner. Unas cuantas seguidas bastan para ir corrigiendo el secreto.
         "webhook_prueba": env("THROTTLE_WEBHOOK_PRUEBA", default="10/min"),
+        # Catálogos: públicos y de solo lectura, por IP. Holgado porque un
+        # buscador de municipios pide en cada tecla, y detrás de un NAT una
+        # oficina entera cuenta como una IP; la compilación del sitio de
+        # documentación son unas veinte peticiones. La ráfaga frena a quien
+        # los descargue en bucle.
+        "catalogos": env("THROTTLE_CATALOGOS", default="1000/hour"),
+        "catalogos_rafaga": env("THROTTLE_CATALOGOS_RAFAGA", default="120/min"),
     },
     # Cuántos proxies hay delante. Sin esto DRF usa la cabecera
     # `X-Forwarded-For` tal cual cuando viene, y como la manda el cliente,
@@ -656,10 +663,11 @@ SPECTACULAR_SETTINGS = {
         "con los fallos por campo cuando los hay.\n\n"
         "**Límites de peticiones.** Hay un tope por credencial. Al superarlo la "
         "respuesta es 429 con la cabecera `Retry-After`.\n\n"
-        "**Catálogos.** `/api/catalogos/…` es de solo lectura y pide la misma "
-        "llave que el resto, aunque no depende de sus emisores: son las listas "
-        "oficiales de la DIAN, y sus códigos son lo que el resto de la API "
-        "espera recibir."
+        "**Catálogos.** `/api/catalogos/…` es público y de solo lectura: no "
+        "pide credencial. Son las listas oficiales de la DIAN, y sus valores son "
+        "lo que el resto de la API espera recibir. `GET /api/catalogos/` las "
+        "enumera, y cada campo que recibe una lleva `x-catalogo` (su nombre) y "
+        "`x-catalogo-valor` (`id` o `codigo`)."
     ),
     "VERSION": "1.0.0",
     # El esquema no lleva las rutas de la propia documentación: describirse a sí
@@ -693,6 +701,8 @@ SPECTACULAR_SETTINGS = {
         # Los eventos de documento y de nómina tienen la misma lista, y `tipo` es
         # un nombre de campo que usan otros modelos con otras.
         "TipoEventoEnum": "apps.documentos.models.DocumentoEvento.Tipo",
+        # `valor` es un nombre demasiado común para quedarse con el enum.
+        "ValorCatalogoEnum": "apps.catalogos.serializers.resumen.VALORES",
     },
     "COMPONENT_SPLIT_REQUEST": True,
     # Qué NO se publica. `/api/seguridad/` queda fuera del esquema: su

@@ -1,4 +1,5 @@
 """Rutas de la app catálogos. Montadas bajo /api/catalogos/ en config/urls.py."""
+from django.urls import path
 from rest_framework.routers import SimpleRouter
 
 from apps.catalogos import views
@@ -21,4 +22,7 @@ router.register("tipo-contrato", views.TipoContratoViewSet)
 router.register("tipo-trabajador", views.TipoTrabajadorViewSet)
 router.register("subtipo-trabajador", views.SubTipoTrabajadorViewSet)
 
-urlpatterns = router.urls
+urlpatterns = [
+    path("", views.CatalogosView.as_view(), name="catalogos"),
+    *router.urls,
+]

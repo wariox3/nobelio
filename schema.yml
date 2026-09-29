@@ -17,12 +17,54 @@ info:
 
     **Límites de peticiones.** Hay un tope por credencial. Al superarlo la respuesta es 429 con la cabecera `Retry-After`.
 
-    **Catálogos.** `/api/catalogos/…` es de solo lectura y pide la misma llave que el resto, aunque no depende de sus emisores: son las listas oficiales de la DIAN, y sus códigos son lo que el resto de la API espera recibir.
+    **Catálogos.** `/api/catalogos/…` es público y de solo lectura: no pide credencial. Son las listas oficiales de la DIAN, y sus valores son lo que el resto de la API espera recibir. `GET /api/catalogos/` las enumera, y cada campo que recibe una lleva `x-catalogo` (su nombre) y `x-catalogo-valor` (`id` o `codigo`).
 paths:
+  /api/catalogos/:
+    get:
+      operationId: catalogos_list
+      description: 'Todos los catálogos, sin paginar: qué son, de qué lista y anexo
+        técnico DIAN salen, cuántos registros tienen, cuándo cambiaron por última
+        vez y qué campos de la API reciben sus valores.'
+      summary: Listar los catálogos
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CatalogoResumen'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/catalogos/departamento/:
     get:
       operationId: catalogos_departamento_list
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Departamento de Colombia, código DANE de 2 dígitos. El `id` es la posición del código en orden (05 Antioquia = 1 … 99 Vichada = 33) y es el mismo en todos los entornos.
+
+        **Lista DIAN:** `Departamentos`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `adquiriente.departamento` | `id` |
+        | `/api/emisores/emisor/` | `departamento` | `codigo` |
+        | `/api/nomina/empleado/` | `departamento` | `id` |
+        | `/api/nomina/nomina/` | `empleado.departamento` | `id` |
+        | `/api/nomina/nomina/` | `lugar_trabajo_departamento` | `id` |
+
+        Paginado; `search` busca por código y nombre.
+      summary: Listar departamentos
       parameters:
       - name: page
         required: false
@@ -39,7 +81,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -47,12 +89,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedElementoCatalogoList'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -62,7 +98,21 @@ paths:
   /api/catalogos/departamento/{id}/:
     get:
       operationId: catalogos_departamento_retrieve
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Departamento de Colombia, código DANE de 2 dígitos. El `id` es la posición del código en orden (05 Antioquia = 1 … 99 Vichada = 33) y es el mismo en todos los entornos.
+
+        **Lista DIAN:** `Departamentos`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `adquiriente.departamento` | `id` |
+        | `/api/emisores/emisor/` | `departamento` | `codigo` |
+        | `/api/nomina/empleado/` | `departamento` | `id` |
+        | `/api/nomina/nomina/` | `empleado.departamento` | `id` |
+        | `/api/nomina/nomina/` | `lugar_trabajo_departamento` | `id` |
+      summary: Consultar departamento
       parameters:
       - in: path
         name: id
@@ -73,7 +123,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -81,12 +131,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ElementoCatalogo'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -99,10 +143,71 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/catalogos/departamento/exportar/:
+    get:
+      operationId: catalogos_departamento_exportar_list
+      description: |-
+        Departamento de Colombia, código DANE de 2 dígitos. El `id` es la posición del código en orden (05 Antioquia = 1 … 99 Vichada = 33) y es el mismo en todos los entornos.
+
+        **Lista DIAN:** `Departamentos`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `adquiriente.departamento` | `id` |
+        | `/api/emisores/emisor/` | `departamento` | `codigo` |
+        | `/api/nomina/empleado/` | `departamento` | `id` |
+        | `/api/nomina/nomina/` | `empleado.departamento` | `id` |
+        | `/api/nomina/nomina/` | `lugar_trabajo_departamento` | `id` |
+
+        El catálogo entero en una respuesta, sin paginar y con los mismos campos que el detalle. Admite `search`.
+      summary: Exportar departamentos
+      parameters:
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ElementoCatalogo'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/catalogos/forma-pago/:
     get:
       operationId: catalogos_forma_pago_list
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Forma de pago: contado (1) o crédito (2).
+
+        **Lista DIAN:** `FormasPago`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `forma_pago` | `id` |
+        | `/api/nomina/empleado/` | `forma_pago` | `id` |
+        | `/api/nomina/nomina/` | `forma_pago` | `id` |
+        | `/api/nomina/nomina/` | `empleado.forma_pago` | `id` |
+
+        Paginado; `search` busca por código y nombre.
+      summary: Listar formas de pago
       parameters:
       - name: page
         required: false
@@ -119,7 +224,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -127,12 +232,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedElementoCatalogoList'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -142,7 +241,20 @@ paths:
   /api/catalogos/forma-pago/{id}/:
     get:
       operationId: catalogos_forma_pago_retrieve
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Forma de pago: contado (1) o crédito (2).
+
+        **Lista DIAN:** `FormasPago`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `forma_pago` | `id` |
+        | `/api/nomina/empleado/` | `forma_pago` | `id` |
+        | `/api/nomina/nomina/` | `forma_pago` | `id` |
+        | `/api/nomina/nomina/` | `empleado.forma_pago` | `id` |
+      summary: Consultar forma de pago
       parameters:
       - in: path
         name: id
@@ -153,7 +265,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -161,12 +273,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ElementoCatalogo'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -179,10 +285,70 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/catalogos/forma-pago/exportar/:
+    get:
+      operationId: catalogos_forma_pago_exportar_list
+      description: |-
+        Forma de pago: contado (1) o crédito (2).
+
+        **Lista DIAN:** `FormasPago`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `forma_pago` | `id` |
+        | `/api/nomina/empleado/` | `forma_pago` | `id` |
+        | `/api/nomina/nomina/` | `forma_pago` | `id` |
+        | `/api/nomina/nomina/` | `empleado.forma_pago` | `id` |
+
+        El catálogo entero en una respuesta, sin paginar y con los mismos campos que el detalle. Admite `search`.
+      summary: Exportar formas de pago
+      parameters:
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ElementoCatalogo'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/catalogos/medio-pago/:
     get:
       operationId: catalogos_medio_pago_list
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Medio de pago (`cbc:PaymentMeansCode`): efectivo, transferencia, tarjeta, cheque…
+
+        **Lista DIAN:** `MediosPago`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `medio_pago` | `id` |
+        | `/api/nomina/empleado/` | `medio_pago` | `id` |
+        | `/api/nomina/nomina/` | `medio_pago` | `id` |
+        | `/api/nomina/nomina/` | `empleado.medio_pago` | `id` |
+
+        Paginado; `search` busca por código y nombre.
+      summary: Listar medios de pago
       parameters:
       - name: page
         required: false
@@ -199,7 +365,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -207,12 +373,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedElementoCatalogoList'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -222,7 +382,20 @@ paths:
   /api/catalogos/medio-pago/{id}/:
     get:
       operationId: catalogos_medio_pago_retrieve
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Medio de pago (`cbc:PaymentMeansCode`): efectivo, transferencia, tarjeta, cheque…
+
+        **Lista DIAN:** `MediosPago`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `medio_pago` | `id` |
+        | `/api/nomina/empleado/` | `medio_pago` | `id` |
+        | `/api/nomina/nomina/` | `medio_pago` | `id` |
+        | `/api/nomina/nomina/` | `empleado.medio_pago` | `id` |
+      summary: Consultar medio de pago
       parameters:
       - in: path
         name: id
@@ -233,7 +406,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -241,12 +414,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ElementoCatalogo'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -259,10 +426,68 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/catalogos/medio-pago/exportar/:
+    get:
+      operationId: catalogos_medio_pago_exportar_list
+      description: |-
+        Medio de pago (`cbc:PaymentMeansCode`): efectivo, transferencia, tarjeta, cheque…
+
+        **Lista DIAN:** `MediosPago`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `medio_pago` | `id` |
+        | `/api/nomina/empleado/` | `medio_pago` | `id` |
+        | `/api/nomina/nomina/` | `medio_pago` | `id` |
+        | `/api/nomina/nomina/` | `empleado.medio_pago` | `id` |
+
+        El catálogo entero en una respuesta, sin paginar y con los mismos campos que el detalle. Admite `search`.
+      summary: Exportar medios de pago
+      parameters:
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ElementoCatalogo'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/catalogos/moneda/:
     get:
       operationId: catalogos_moneda_list
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Moneda del documento (`cbc:DocumentCurrencyCode`), ISO 4217.
+
+        **Lista DIAN:** `TipoMoneda`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `moneda` | `id` |
+        | `/api/nomina/nomina/` | `moneda` | `id` |
+
+        Paginado; `search` busca por código y nombre.
+      summary: Listar monedas
       parameters:
       - name: page
         required: false
@@ -279,7 +504,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -287,12 +512,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedElementoCatalogoList'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -302,7 +521,18 @@ paths:
   /api/catalogos/moneda/{id}/:
     get:
       operationId: catalogos_moneda_retrieve
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Moneda del documento (`cbc:DocumentCurrencyCode`), ISO 4217.
+
+        **Lista DIAN:** `TipoMoneda`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `moneda` | `id` |
+        | `/api/nomina/nomina/` | `moneda` | `id` |
+      summary: Consultar moneda
       parameters:
       - in: path
         name: id
@@ -313,7 +543,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -321,12 +551,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ElementoCatalogo'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -339,9 +563,69 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/catalogos/moneda/exportar/:
+    get:
+      operationId: catalogos_moneda_exportar_list
+      description: |-
+        Moneda del documento (`cbc:DocumentCurrencyCode`), ISO 4217.
+
+        **Lista DIAN:** `TipoMoneda`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `moneda` | `id` |
+        | `/api/nomina/nomina/` | `moneda` | `id` |
+
+        El catálogo entero en una respuesta, sin paginar y con los mismos campos que el detalle. Admite `search`.
+      summary: Exportar monedas
+      parameters:
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ElementoCatalogo'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/catalogos/municipio/:
     get:
       operationId: catalogos_municipio_list
+      description: |-
+        Municipio de Colombia, código DANE de 5 dígitos, con su departamento. El `id` es la posición del código en orden y es el mismo en todos los entornos. `codigo_postal` no es de la lista DIAN: es el de la cabecera municipal, del dataset de 4-72 en datos.gov.co.
+
+        **Lista DIAN:** `Municipio`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `adquiriente.municipio` | `id` |
+        | `/api/emisores/emisor/` | `municipio` | `codigo` |
+        | `/api/nomina/empleado/` | `municipio` | `id` |
+        | `/api/nomina/nomina/` | `empleado.municipio` | `id` |
+        | `/api/nomina/nomina/` | `lugar_trabajo_municipio` | `id` |
+
+        Paginado; `search` busca por código y nombre.
+      summary: Listar municipios
       parameters:
       - name: page
         required: false
@@ -358,7 +642,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -366,12 +650,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedMunicipioList'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -381,6 +659,21 @@ paths:
   /api/catalogos/municipio/{id}/:
     get:
       operationId: catalogos_municipio_retrieve
+      description: |-
+        Municipio de Colombia, código DANE de 5 dígitos, con su departamento. El `id` es la posición del código en orden y es el mismo en todos los entornos. `codigo_postal` no es de la lista DIAN: es el de la cabecera municipal, del dataset de 4-72 en datos.gov.co.
+
+        **Lista DIAN:** `Municipio`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `adquiriente.municipio` | `id` |
+        | `/api/emisores/emisor/` | `municipio` | `codigo` |
+        | `/api/nomina/empleado/` | `municipio` | `id` |
+        | `/api/nomina/nomina/` | `empleado.municipio` | `id` |
+        | `/api/nomina/nomina/` | `lugar_trabajo_municipio` | `id` |
+      summary: Consultar municipio
       parameters:
       - in: path
         name: id
@@ -391,7 +684,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -399,12 +692,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Municipio'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -417,10 +704,72 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/catalogos/municipio/exportar/:
+    get:
+      operationId: catalogos_municipio_exportar_list
+      description: |-
+        Municipio de Colombia, código DANE de 5 dígitos, con su departamento. El `id` es la posición del código en orden y es el mismo en todos los entornos. `codigo_postal` no es de la lista DIAN: es el de la cabecera municipal, del dataset de 4-72 en datos.gov.co.
+
+        **Lista DIAN:** `Municipio`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `adquiriente.municipio` | `id` |
+        | `/api/emisores/emisor/` | `municipio` | `codigo` |
+        | `/api/nomina/empleado/` | `municipio` | `id` |
+        | `/api/nomina/nomina/` | `empleado.municipio` | `id` |
+        | `/api/nomina/nomina/` | `lugar_trabajo_municipio` | `id` |
+
+        El catálogo entero en una respuesta, sin paginar y con los mismos campos que el detalle. Admite `search`.
+      summary: Exportar municipios
+      parameters:
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Municipio'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/catalogos/pais/:
     get:
       operationId: catalogos_pais_list
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        País (`cac:Country`), ISO 3166-1 alfa-2.
+
+        **Lista DIAN:** `Paises`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `adquiriente.pais` | `id` |
+        | `/api/emisores/emisor/` | `pais` | `codigo` |
+        | `/api/nomina/empleado/` | `pais` | `id` |
+        | `/api/nomina/nomina/` | `empleado.pais` | `id` |
+        | `/api/nomina/nomina/` | `lugar_trabajo_pais` | `id` |
+
+        Paginado; `search` busca por código y nombre.
+      summary: Listar países
       parameters:
       - name: page
         required: false
@@ -437,7 +786,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -445,12 +794,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedElementoCatalogoList'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -460,7 +803,21 @@ paths:
   /api/catalogos/pais/{id}/:
     get:
       operationId: catalogos_pais_retrieve
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        País (`cac:Country`), ISO 3166-1 alfa-2.
+
+        **Lista DIAN:** `Paises`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `adquiriente.pais` | `id` |
+        | `/api/emisores/emisor/` | `pais` | `codigo` |
+        | `/api/nomina/empleado/` | `pais` | `id` |
+        | `/api/nomina/nomina/` | `empleado.pais` | `id` |
+        | `/api/nomina/nomina/` | `lugar_trabajo_pais` | `id` |
+      summary: Consultar país
       parameters:
       - in: path
         name: id
@@ -471,7 +828,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -479,12 +836,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ElementoCatalogo'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -497,10 +848,68 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/catalogos/pais/exportar/:
+    get:
+      operationId: catalogos_pais_exportar_list
+      description: |-
+        País (`cac:Country`), ISO 3166-1 alfa-2.
+
+        **Lista DIAN:** `Paises`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `adquiriente.pais` | `id` |
+        | `/api/emisores/emisor/` | `pais` | `codigo` |
+        | `/api/nomina/empleado/` | `pais` | `id` |
+        | `/api/nomina/nomina/` | `empleado.pais` | `id` |
+        | `/api/nomina/nomina/` | `lugar_trabajo_pais` | `id` |
+
+        El catálogo entero en una respuesta, sin paginar y con los mismos campos que el detalle. Admite `search`.
+      summary: Exportar países
+      parameters:
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ElementoCatalogo'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/catalogos/periodo-nomina/:
     get:
       operationId: catalogos_periodo_nomina_list
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Periodicidad del pago de nómina: semanal, decenal, catorcenal, quincenal, mensual… (anexo de nómina, numeral 5.5.1).
+
+        **Lista DIAN:** `PeriodoNomina`. **Anexo técnico:** Nómina Electrónica v1.0 (Resolución 000013 de 2021).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/nomina/nomina/` | `periodo_nomina` | `id` |
+
+        Paginado; `search` busca por código y nombre.
+      summary: Listar periodos de nómina
       parameters:
       - name: page
         required: false
@@ -517,7 +926,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -525,12 +934,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedElementoCatalogoList'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -540,7 +943,17 @@ paths:
   /api/catalogos/periodo-nomina/{id}/:
     get:
       operationId: catalogos_periodo_nomina_retrieve
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Periodicidad del pago de nómina: semanal, decenal, catorcenal, quincenal, mensual… (anexo de nómina, numeral 5.5.1).
+
+        **Lista DIAN:** `PeriodoNomina`. **Anexo técnico:** Nómina Electrónica v1.0 (Resolución 000013 de 2021).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/nomina/nomina/` | `periodo_nomina` | `id` |
+      summary: Consultar periodo de nómina
       parameters:
       - in: path
         name: id
@@ -551,7 +964,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -559,12 +972,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ElementoCatalogo'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -577,10 +984,65 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/catalogos/periodo-nomina/exportar/:
+    get:
+      operationId: catalogos_periodo_nomina_exportar_list
+      description: |-
+        Periodicidad del pago de nómina: semanal, decenal, catorcenal, quincenal, mensual… (anexo de nómina, numeral 5.5.1).
+
+        **Lista DIAN:** `PeriodoNomina`. **Anexo técnico:** Nómina Electrónica v1.0 (Resolución 000013 de 2021).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/nomina/nomina/` | `periodo_nomina` | `id` |
+
+        El catálogo entero en una respuesta, sin paginar y con los mismos campos que el detalle. Admite `search`.
+      summary: Exportar periodos de nómina
+      parameters:
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ElementoCatalogo'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/catalogos/responsabilidad-fiscal/:
     get:
       operationId: catalogos_responsabilidad_fiscal_list
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Responsabilidad tributaria (`cbc:TaxLevelCode`). Los códigos son alfanuméricos: `O-13`, `O-15`, `O-23`, `O-47`, `R-99-PN`.
+
+        **Lista DIAN:** `TipoResponsabilidad`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `adquiriente.responsabilidades[]` | `id` |
+        | `/api/emisores/emisor/` | `responsabilidades[]` | `codigo` |
+
+        Paginado; `search` busca por código y nombre.
+      summary: Listar responsabilidades fiscales
       parameters:
       - name: page
         required: false
@@ -597,7 +1059,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -605,12 +1067,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedElementoCatalogoList'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -620,7 +1076,18 @@ paths:
   /api/catalogos/responsabilidad-fiscal/{id}/:
     get:
       operationId: catalogos_responsabilidad_fiscal_retrieve
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Responsabilidad tributaria (`cbc:TaxLevelCode`). Los códigos son alfanuméricos: `O-13`, `O-15`, `O-23`, `O-47`, `R-99-PN`.
+
+        **Lista DIAN:** `TipoResponsabilidad`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `adquiriente.responsabilidades[]` | `id` |
+        | `/api/emisores/emisor/` | `responsabilidades[]` | `codigo` |
+      summary: Consultar responsabilidad fiscal
       parameters:
       - in: path
         name: id
@@ -632,7 +1099,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -640,12 +1107,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ElementoCatalogo'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -658,10 +1119,67 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/catalogos/responsabilidad-fiscal/exportar/:
+    get:
+      operationId: catalogos_responsabilidad_fiscal_exportar_list
+      description: |-
+        Responsabilidad tributaria (`cbc:TaxLevelCode`). Los códigos son alfanuméricos: `O-13`, `O-15`, `O-23`, `O-47`, `R-99-PN`.
+
+        **Lista DIAN:** `TipoResponsabilidad`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `adquiriente.responsabilidades[]` | `id` |
+        | `/api/emisores/emisor/` | `responsabilidades[]` | `codigo` |
+
+        El catálogo entero en una respuesta, sin paginar y con los mismos campos que el detalle. Admite `search`.
+      summary: Exportar responsabilidades fiscales
+      parameters:
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ElementoCatalogo'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/catalogos/subtipo-trabajador/:
     get:
       operationId: catalogos_subtipo_trabajador_list
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Subtipo de cotizante; `00` (no aplica) en la mayoría de los casos (anexo de nómina, numeral 5.5.4).
+
+        **Lista DIAN:** `SubTipoTrabajador`. **Anexo técnico:** Nómina Electrónica v1.0 (Resolución 000013 de 2021).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/nomina/empleado/` | `subtipo_trabajador` | `id` |
+        | `/api/nomina/nomina/` | `subtipo_trabajador` | `id` |
+        | `/api/nomina/nomina/` | `empleado.subtipo_trabajador` | `id` |
+
+        Paginado; `search` busca por código y nombre.
+      summary: Listar subtipos de trabajador
       parameters:
       - name: page
         required: false
@@ -678,7 +1196,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -686,12 +1204,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedElementoCatalogoList'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -701,7 +1213,19 @@ paths:
   /api/catalogos/subtipo-trabajador/{id}/:
     get:
       operationId: catalogos_subtipo_trabajador_retrieve
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Subtipo de cotizante; `00` (no aplica) en la mayoría de los casos (anexo de nómina, numeral 5.5.4).
+
+        **Lista DIAN:** `SubTipoTrabajador`. **Anexo técnico:** Nómina Electrónica v1.0 (Resolución 000013 de 2021).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/nomina/empleado/` | `subtipo_trabajador` | `id` |
+        | `/api/nomina/nomina/` | `subtipo_trabajador` | `id` |
+        | `/api/nomina/nomina/` | `empleado.subtipo_trabajador` | `id` |
+      summary: Consultar subtipo de trabajador
       parameters:
       - in: path
         name: id
@@ -712,7 +1236,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -720,12 +1244,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ElementoCatalogo'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -738,10 +1256,68 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/catalogos/subtipo-trabajador/exportar/:
+    get:
+      operationId: catalogos_subtipo_trabajador_exportar_list
+      description: |-
+        Subtipo de cotizante; `00` (no aplica) en la mayoría de los casos (anexo de nómina, numeral 5.5.4).
+
+        **Lista DIAN:** `SubTipoTrabajador`. **Anexo técnico:** Nómina Electrónica v1.0 (Resolución 000013 de 2021).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/nomina/empleado/` | `subtipo_trabajador` | `id` |
+        | `/api/nomina/nomina/` | `subtipo_trabajador` | `id` |
+        | `/api/nomina/nomina/` | `empleado.subtipo_trabajador` | `id` |
+
+        El catálogo entero en una respuesta, sin paginar y con los mismos campos que el detalle. Admite `search`.
+      summary: Exportar subtipos de trabajador
+      parameters:
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ElementoCatalogo'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/catalogos/tipo-contrato/:
     get:
       operationId: catalogos_tipo_contrato_list
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Tipo de contrato del trabajador: término fijo, indefinido, obra o labor, aprendizaje, prácticas (anexo de nómina, numeral 5.5.2).
+
+        **Lista DIAN:** `TipoContrato`. **Anexo técnico:** Nómina Electrónica v1.0 (Resolución 000013 de 2021).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/nomina/empleado/` | `tipo_contrato` | `id` |
+        | `/api/nomina/nomina/` | `tipo_contrato` | `id` |
+        | `/api/nomina/nomina/` | `empleado.tipo_contrato` | `id` |
+
+        Paginado; `search` busca por código y nombre.
+      summary: Listar tipos de contrato
       parameters:
       - name: page
         required: false
@@ -758,7 +1334,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -766,12 +1342,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedElementoCatalogoList'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -781,7 +1351,19 @@ paths:
   /api/catalogos/tipo-contrato/{id}/:
     get:
       operationId: catalogos_tipo_contrato_retrieve
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Tipo de contrato del trabajador: término fijo, indefinido, obra o labor, aprendizaje, prácticas (anexo de nómina, numeral 5.5.2).
+
+        **Lista DIAN:** `TipoContrato`. **Anexo técnico:** Nómina Electrónica v1.0 (Resolución 000013 de 2021).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/nomina/empleado/` | `tipo_contrato` | `id` |
+        | `/api/nomina/nomina/` | `tipo_contrato` | `id` |
+        | `/api/nomina/nomina/` | `empleado.tipo_contrato` | `id` |
+      summary: Consultar tipo de contrato
       parameters:
       - in: path
         name: id
@@ -792,7 +1374,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -800,12 +1382,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ElementoCatalogo'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -818,10 +1394,66 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/catalogos/tipo-contrato/exportar/:
+    get:
+      operationId: catalogos_tipo_contrato_exportar_list
+      description: |-
+        Tipo de contrato del trabajador: término fijo, indefinido, obra o labor, aprendizaje, prácticas (anexo de nómina, numeral 5.5.2).
+
+        **Lista DIAN:** `TipoContrato`. **Anexo técnico:** Nómina Electrónica v1.0 (Resolución 000013 de 2021).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/nomina/empleado/` | `tipo_contrato` | `id` |
+        | `/api/nomina/nomina/` | `tipo_contrato` | `id` |
+        | `/api/nomina/nomina/` | `empleado.tipo_contrato` | `id` |
+
+        El catálogo entero en una respuesta, sin paginar y con los mismos campos que el detalle. Admite `search`.
+      summary: Exportar tipos de contrato
+      parameters:
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ElementoCatalogo'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/catalogos/tipo-factura/:
     get:
       operationId: catalogos_tipo_factura_list
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Tipo de documento electrónico (`cbc:InvoiceTypeCode`): factura de venta, de exportación, de contingencia, notas… Incluye los códigos 05 y 95 del documento soporte y su nota de ajuste, y el 20 del documento equivalente P.O.S.
+
+        **Lista DIAN:** `TipoDocumento`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023), Documento Soporte v1.1 (Resolución 000167 de 2021), Documento Equivalente Electrónico v1.0 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/emisores/resolucion/` | `tipo_factura` | `id` |
+
+        Paginado; `search` busca por código y nombre.
+      summary: Listar tipos de factura
       parameters:
       - name: page
         required: false
@@ -838,7 +1470,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -846,12 +1478,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedElementoCatalogoList'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -861,7 +1487,17 @@ paths:
   /api/catalogos/tipo-factura/{id}/:
     get:
       operationId: catalogos_tipo_factura_retrieve
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Tipo de documento electrónico (`cbc:InvoiceTypeCode`): factura de venta, de exportación, de contingencia, notas… Incluye los códigos 05 y 95 del documento soporte y su nota de ajuste, y el 20 del documento equivalente P.O.S.
+
+        **Lista DIAN:** `TipoDocumento`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023), Documento Soporte v1.1 (Resolución 000167 de 2021), Documento Equivalente Electrónico v1.0 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/emisores/resolucion/` | `tipo_factura` | `id` |
+      summary: Consultar tipo de factura
       parameters:
       - in: path
         name: id
@@ -872,7 +1508,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -880,12 +1516,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ElementoCatalogo'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -898,10 +1528,67 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/catalogos/tipo-factura/exportar/:
+    get:
+      operationId: catalogos_tipo_factura_exportar_list
+      description: |-
+        Tipo de documento electrónico (`cbc:InvoiceTypeCode`): factura de venta, de exportación, de contingencia, notas… Incluye los códigos 05 y 95 del documento soporte y su nota de ajuste, y el 20 del documento equivalente P.O.S.
+
+        **Lista DIAN:** `TipoDocumento`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023), Documento Soporte v1.1 (Resolución 000167 de 2021), Documento Equivalente Electrónico v1.0 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/emisores/resolucion/` | `tipo_factura` | `id` |
+
+        El catálogo entero en una respuesta, sin paginar y con los mismos campos que el detalle. Admite `search`.
+      summary: Exportar tipos de factura
+      parameters:
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ElementoCatalogo'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/catalogos/tipo-identificacion/:
     get:
       operationId: catalogos_tipo_identificacion_list
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Tipo de documento de identificación: cédula, NIT, pasaporte, documento extranjero…
+
+        **Lista DIAN:** `TipoIdentificacion`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `adquiriente.tipo_identificacion` | `id` |
+        | `/api/emisores/emisor/` | `tipo_identificacion` | `id` |
+        | `/api/nomina/empleado/` | `tipo_identificacion` | `id` |
+        | `/api/nomina/nomina/` | `empleado.tipo_identificacion` | `id` |
+
+        Paginado; `search` busca por código y nombre.
+      summary: Listar tipos de identificación
       parameters:
       - name: page
         required: false
@@ -918,7 +1605,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -926,12 +1613,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedElementoCatalogoList'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -941,7 +1622,20 @@ paths:
   /api/catalogos/tipo-identificacion/{id}/:
     get:
       operationId: catalogos_tipo_identificacion_retrieve
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Tipo de documento de identificación: cédula, NIT, pasaporte, documento extranjero…
+
+        **Lista DIAN:** `TipoIdentificacion`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `adquiriente.tipo_identificacion` | `id` |
+        | `/api/emisores/emisor/` | `tipo_identificacion` | `id` |
+        | `/api/nomina/empleado/` | `tipo_identificacion` | `id` |
+        | `/api/nomina/nomina/` | `empleado.tipo_identificacion` | `id` |
+      summary: Consultar tipo de identificación
       parameters:
       - in: path
         name: id
@@ -952,7 +1646,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -960,12 +1654,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ElementoCatalogo'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -978,10 +1666,68 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/catalogos/tipo-identificacion/exportar/:
+    get:
+      operationId: catalogos_tipo_identificacion_exportar_list
+      description: |-
+        Tipo de documento de identificación: cédula, NIT, pasaporte, documento extranjero…
+
+        **Lista DIAN:** `TipoIdentificacion`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `adquiriente.tipo_identificacion` | `id` |
+        | `/api/emisores/emisor/` | `tipo_identificacion` | `id` |
+        | `/api/nomina/empleado/` | `tipo_identificacion` | `id` |
+        | `/api/nomina/nomina/` | `empleado.tipo_identificacion` | `id` |
+
+        El catálogo entero en una respuesta, sin paginar y con los mismos campos que el detalle. Admite `search`.
+      summary: Exportar tipos de identificación
+      parameters:
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ElementoCatalogo'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/catalogos/tipo-organizacion/:
     get:
       operationId: catalogos_tipo_organizacion_list
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Tipo de organización jurídica: persona natural o persona jurídica.
+
+        **Lista DIAN:** `TipoOrganizacion`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `adquiriente.tipo_organizacion` | `id` |
+        | `/api/emisores/emisor/` | `tipo_organizacion` | `id` |
+
+        Paginado; `search` busca por código y nombre.
+      summary: Listar tipos de organización
       parameters:
       - name: page
         required: false
@@ -998,7 +1744,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -1006,12 +1752,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedElementoCatalogoList'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -1021,7 +1761,18 @@ paths:
   /api/catalogos/tipo-organizacion/{id}/:
     get:
       operationId: catalogos_tipo_organizacion_retrieve
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Tipo de organización jurídica: persona natural o persona jurídica.
+
+        **Lista DIAN:** `TipoOrganizacion`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `adquiriente.tipo_organizacion` | `id` |
+        | `/api/emisores/emisor/` | `tipo_organizacion` | `id` |
+      summary: Consultar tipo de organización
       parameters:
       - in: path
         name: id
@@ -1032,7 +1783,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -1040,12 +1791,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ElementoCatalogo'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -1058,10 +1803,67 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/catalogos/tipo-organizacion/exportar/:
+    get:
+      operationId: catalogos_tipo_organizacion_exportar_list
+      description: |-
+        Tipo de organización jurídica: persona natural o persona jurídica.
+
+        **Lista DIAN:** `TipoOrganizacion`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `adquiriente.tipo_organizacion` | `id` |
+        | `/api/emisores/emisor/` | `tipo_organizacion` | `id` |
+
+        El catálogo entero en una respuesta, sin paginar y con los mismos campos que el detalle. Admite `search`.
+      summary: Exportar tipos de organización
+      parameters:
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ElementoCatalogo'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/catalogos/tipo-trabajador/:
     get:
       operationId: catalogos_tipo_trabajador_list
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Tipo de cotizante ante la seguridad social (anexo de nómina, numeral 5.5.3).
+
+        **Lista DIAN:** `TipoTrabajador`. **Anexo técnico:** Nómina Electrónica v1.0 (Resolución 000013 de 2021).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/nomina/empleado/` | `tipo_trabajador` | `id` |
+        | `/api/nomina/nomina/` | `tipo_trabajador` | `id` |
+        | `/api/nomina/nomina/` | `empleado.tipo_trabajador` | `id` |
+
+        Paginado; `search` busca por código y nombre.
+      summary: Listar tipos de trabajador
       parameters:
       - name: page
         required: false
@@ -1078,7 +1880,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -1086,12 +1888,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedElementoCatalogoList'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -1101,7 +1897,19 @@ paths:
   /api/catalogos/tipo-trabajador/{id}/:
     get:
       operationId: catalogos_tipo_trabajador_retrieve
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Tipo de cotizante ante la seguridad social (anexo de nómina, numeral 5.5.3).
+
+        **Lista DIAN:** `TipoTrabajador`. **Anexo técnico:** Nómina Electrónica v1.0 (Resolución 000013 de 2021).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/nomina/empleado/` | `tipo_trabajador` | `id` |
+        | `/api/nomina/nomina/` | `tipo_trabajador` | `id` |
+        | `/api/nomina/nomina/` | `empleado.tipo_trabajador` | `id` |
+      summary: Consultar tipo de trabajador
       parameters:
       - in: path
         name: id
@@ -1112,7 +1920,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -1120,12 +1928,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ElementoCatalogo'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -1138,10 +1940,66 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/catalogos/tipo-trabajador/exportar/:
+    get:
+      operationId: catalogos_tipo_trabajador_exportar_list
+      description: |-
+        Tipo de cotizante ante la seguridad social (anexo de nómina, numeral 5.5.3).
+
+        **Lista DIAN:** `TipoTrabajador`. **Anexo técnico:** Nómina Electrónica v1.0 (Resolución 000013 de 2021).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/nomina/empleado/` | `tipo_trabajador` | `id` |
+        | `/api/nomina/nomina/` | `tipo_trabajador` | `id` |
+        | `/api/nomina/nomina/` | `empleado.tipo_trabajador` | `id` |
+
+        El catálogo entero en una respuesta, sin paginar y con los mismos campos que el detalle. Admite `search`.
+      summary: Exportar tipos de trabajador
+      parameters:
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ElementoCatalogo'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/catalogos/tributo/:
     get:
       operationId: catalogos_tributo_list
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Tributo o impuesto (`cac:TaxScheme`): IVA (01), ICA (03), INC (04)… Los códigos 05 a 08 son retenciones (ReteIVA, ReteFuente, ReteICA, ReteCREE): no suman al total a pagar.
+
+        **Lista DIAN:** `TipoImpuesto`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `detalles[].impuestos[].tributo` | `id` |
+
+        Paginado; `search` busca por código y nombre.
+      summary: Listar tributos
       parameters:
       - name: page
         required: false
@@ -1158,7 +2016,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -1166,12 +2024,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedElementoCatalogoList'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -1181,7 +2033,17 @@ paths:
   /api/catalogos/tributo/{id}/:
     get:
       operationId: catalogos_tributo_retrieve
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Tributo o impuesto (`cac:TaxScheme`): IVA (01), ICA (03), INC (04)… Los códigos 05 a 08 son retenciones (ReteIVA, ReteFuente, ReteICA, ReteCREE): no suman al total a pagar.
+
+        **Lista DIAN:** `TipoImpuesto`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `detalles[].impuestos[].tributo` | `id` |
+      summary: Consultar tributo
       parameters:
       - in: path
         name: id
@@ -1192,7 +2054,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -1200,12 +2062,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ElementoCatalogo'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -1218,10 +2074,64 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/catalogos/tributo/exportar/:
+    get:
+      operationId: catalogos_tributo_exportar_list
+      description: |-
+        Tributo o impuesto (`cac:TaxScheme`): IVA (01), ICA (03), INC (04)… Los códigos 05 a 08 son retenciones (ReteIVA, ReteFuente, ReteICA, ReteCREE): no suman al total a pagar.
+
+        **Lista DIAN:** `TipoImpuesto`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `detalles[].impuestos[].tributo` | `id` |
+
+        El catálogo entero en una respuesta, sin paginar y con los mismos campos que el detalle. Admite `search`.
+      summary: Exportar tributos
+      parameters:
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ElementoCatalogo'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/catalogos/unidad-medida/:
     get:
       operationId: catalogos_unidad_medida_list
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Unidad de medida de cada línea (`cbc:unitCode`), del estándar UN/ECE Rec 20: `94` unidad, `KGM` kilogramo, `HUR` hora…
+
+        **Lista DIAN:** `UnidadesMedida`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `detalles[].unidad_medida` | `id` |
+
+        Paginado; `search` busca por código y nombre.
+      summary: Listar unidades de medida
       parameters:
       - name: page
         required: false
@@ -1238,7 +2148,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -1246,12 +2156,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedElementoCatalogoList'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -1261,7 +2165,17 @@ paths:
   /api/catalogos/unidad-medida/{id}/:
     get:
       operationId: catalogos_unidad_medida_retrieve
-      description: Base de solo lectura para catálogos simples (código + nombre).
+      description: |-
+        Unidad de medida de cada línea (`cbc:unitCode`), del estándar UN/ECE Rec 20: `94` unidad, `KGM` kilogramo, `HUR` hora…
+
+        **Lista DIAN:** `UnidadesMedida`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `detalles[].unidad_medida` | `id` |
+      summary: Consultar unidad de medida
       parameters:
       - in: path
         name: id
@@ -1272,7 +2186,7 @@ paths:
       tags:
       - catalogos
       security:
-      - LlaveApi: []
+      - {}
       responses:
         '200':
           content:
@@ -1280,12 +2194,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ElementoCatalogo'
           description: ''
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         '429':
           description: Error
           content:
@@ -1293,6 +2201,48 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/catalogos/unidad-medida/exportar/:
+    get:
+      operationId: catalogos_unidad_medida_exportar_list
+      description: |-
+        Unidad de medida de cada línea (`cbc:unitCode`), del estándar UN/ECE Rec 20: `94` unidad, `KGM` kilogramo, `HUR` hora…
+
+        **Lista DIAN:** `UnidadesMedida`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `detalles[].unidad_medida` | `id` |
+
+        El catálogo entero en una respuesta, sin paginar y con los mismos campos que el detalle. Admite `search`.
+      summary: Exportar unidades de medida
+      parameters:
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ElementoCatalogo'
+          description: ''
+        '429':
           description: Error
           content:
             application/json:
@@ -1344,13 +2294,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedDocumentoListaList'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -1416,13 +2366,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -1469,13 +2419,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedDocumentoEventoList'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -1510,13 +2460,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/DocumentoEvento'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -1563,13 +2513,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedDocumentoNotificacionList'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -1605,13 +2555,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/DocumentoNotificacion'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -1658,13 +2608,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Documento'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -1706,13 +2656,13 @@ paths:
       responses:
         '204':
           description: No response body
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -1762,13 +2712,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -1824,13 +2774,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -1903,13 +2853,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -1988,13 +2938,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -2036,13 +2986,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -2105,13 +3055,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -2153,13 +3103,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -2218,13 +3168,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedCertificadoList'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -2271,13 +3221,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Certificado'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -2325,13 +3275,13 @@ paths:
       responses:
         '204':
           description: No response body
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -2389,13 +3339,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Certificado'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -2442,13 +3392,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedEmisorListaList'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -2487,13 +3437,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Emisor'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -2534,13 +3484,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Emisor'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -2592,13 +3542,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Emisor'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -2655,13 +3605,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Emisor'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -2703,13 +3653,13 @@ paths:
       responses:
         '204':
           description: No response body
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -2745,13 +3695,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Emisor'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -2792,13 +3742,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedResolucionList'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -2837,13 +3787,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Resolucion'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -2884,13 +3834,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Resolucion'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -2942,13 +3892,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Resolucion'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -3005,13 +3955,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Resolucion'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -3053,13 +4003,13 @@ paths:
       responses:
         '204':
           description: No response body
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -3125,13 +4075,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Resolucion'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -3171,13 +4121,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Resolucion'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -3221,13 +4171,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Resolucion'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -3274,13 +4224,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedSoftwareDianList'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -3319,13 +4269,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/SoftwareDian'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -3366,13 +4316,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/SoftwareDian'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -3424,13 +4374,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/SoftwareDian'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -3487,13 +4437,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/SoftwareDian'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -3535,13 +4485,13 @@ paths:
       responses:
         '204':
           description: No response body
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -3605,13 +4555,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/SoftwareDian'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -3676,13 +4626,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/SoftwareDian'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -3738,13 +4688,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedWebhookList'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -3786,13 +4736,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Webhook'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -3840,13 +4790,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedWebhookAvisoList'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -3882,13 +4832,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/WebhookAviso'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -3932,13 +4882,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Webhook'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -3993,13 +4943,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Webhook'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -4059,13 +5009,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Webhook'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -4110,13 +5060,13 @@ paths:
       responses:
         '204':
           description: No response body
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -4171,13 +5121,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -4223,13 +5173,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedEmpleadoList'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -4261,13 +5211,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Empleado'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -4301,13 +5251,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Empleado'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -4352,13 +5302,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Empleado'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -4408,13 +5358,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Empleado'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -4449,13 +5399,13 @@ paths:
       responses:
         '204':
           description: No response body
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -4516,13 +5466,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedNominaListaList'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -4569,13 +5519,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/NominaCrear'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -4622,13 +5572,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedNominaEventoList'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -4663,13 +5613,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/NominaEvento'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -4719,13 +5669,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Nomina'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -4759,13 +5709,13 @@ paths:
       responses:
         '204':
           description: No response body
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -4822,13 +5772,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -4906,13 +5856,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -4954,13 +5904,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: ''
-        '401':
+        '429':
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-        '429':
+        '401':
           description: Error
           content:
             application/json:
@@ -4997,6 +5947,8 @@ components:
         tipo_identificacion:
           type: integer
           title: Tipo de identificación
+          x-catalogo: tipo-identificacion
+          x-catalogo-valor: id
         numero_identificacion:
           type: string
           title: Número de identificación
@@ -5009,21 +5961,31 @@ components:
         tipo_organizacion:
           type: integer
           title: Tipo de organización
+          x-catalogo: tipo-organizacion
+          x-catalogo-valor: id
         responsabilidades:
           type: array
           items:
             type: integer
             title: Responsabilidades fiscales
+            x-catalogo: responsabilidad-fiscal
+            x-catalogo-valor: id
           title: Responsabilidades fiscales
         pais:
           type: integer
           title: País
+          x-catalogo: pais
+          x-catalogo-valor: id
         departamento:
           type: integer
           nullable: true
+          x-catalogo: departamento
+          x-catalogo-valor: id
         municipio:
           type: integer
           nullable: true
+          x-catalogo: municipio
+          x-catalogo-valor: id
         direccion:
           type: string
           title: Dirección
@@ -5076,6 +6038,8 @@ components:
         tipo_identificacion:
           type: integer
           title: Tipo de identificación
+          x-catalogo: tipo-identificacion
+          x-catalogo-valor: id
         numero_identificacion:
           type: string
           minLength: 1
@@ -5085,21 +6049,31 @@ components:
         tipo_organizacion:
           type: integer
           title: Tipo de organización
+          x-catalogo: tipo-organizacion
+          x-catalogo-valor: id
         responsabilidades:
           type: array
           items:
             type: integer
             title: Responsabilidades fiscales
+            x-catalogo: responsabilidad-fiscal
+            x-catalogo-valor: id
           title: Responsabilidades fiscales
         pais:
           type: integer
           title: País
+          x-catalogo: pais
+          x-catalogo-valor: id
         departamento:
           type: integer
           nullable: true
+          x-catalogo: departamento
+          x-catalogo-valor: id
         municipio:
           type: integer
           nullable: true
+          x-catalogo: municipio
+          x-catalogo-valor: id
         direccion:
           type: string
           title: Dirección
@@ -5137,9 +6111,72 @@ components:
       description: |-
         * `1` - Producción
         * `2` - Habilitación
+    Anexo:
+      type: object
+      properties:
+        documento:
+          type: string
+          description: Documento electrónico del anexo.
+        version:
+          type: string
+          description: Versión del anexo técnico, p. ej. `1.9`.
+        resolucion:
+          type: string
+          description: Resolución DIAN que lo adopta.
+      required:
+      - documento
+      - resolucion
+      - version
     BlankEnum:
       enum:
       - ''
+    CatalogoResumen:
+      type: object
+      properties:
+        nombre:
+          type: string
+          description: 'El de la ruta: `/api/catalogos/<nombre>/`.'
+        titulo:
+          type: string
+        descripcion:
+          type: string
+        lista_dian:
+          type: string
+          description: Nombre de la lista de valores en el anexo técnico.
+        anexos_tecnicos:
+          type: array
+          items:
+            $ref: '#/components/schemas/Anexo'
+        registros:
+          type: integer
+        ultima_modificacion:
+          type: string
+          format: date-time
+          nullable: true
+          description: La fila modificada más recientemente. Cada carga de catálogos
+            vuelve a guardar las filas, así que marca la última carga.
+        url:
+          type: string
+          format: uri
+        url_exportar:
+          type: string
+          format: uri
+          description: El catálogo entero, sin paginar.
+        usos:
+          type: array
+          items:
+            $ref: '#/components/schemas/Uso'
+      required:
+      - anexos_tecnicos
+      - descripcion
+      - lista_dian
+      - nombre
+      - registros
+      - titulo
+      - ultima_modificacion
+      - url
+      - url_exportar
+      - usos
     Certificado:
       type: object
       properties:
@@ -5637,12 +6674,18 @@ components:
             es la única con la que se puede firmar (regla FAD09).
         moneda:
           type: integer
+          x-catalogo: moneda
+          x-catalogo-valor: id
         forma_pago:
           type: integer
           title: Forma de pago
+          x-catalogo: forma-pago
+          x-catalogo-valor: id
         medio_pago:
           type: integer
           title: Medio de pago
+          x-catalogo: medio-pago
+          x-catalogo-valor: id
         total_descuentos:
           type: string
           format: decimal
@@ -5775,12 +6818,18 @@ components:
             es la única con la que se puede firmar (regla FAD09).
         moneda:
           type: integer
+          x-catalogo: moneda
+          x-catalogo-valor: id
         forma_pago:
           type: integer
           title: Forma de pago
+          x-catalogo: forma-pago
+          x-catalogo-valor: id
         medio_pago:
           type: integer
           title: Medio de pago
+          x-catalogo: medio-pago
+          x-catalogo-valor: id
         total_descuentos:
           type: string
           format: decimal
@@ -5888,6 +6937,8 @@ components:
         unidad_medida:
           type: integer
           title: Unidad de medida
+          x-catalogo: unidad-medida
+          x-catalogo-valor: id
         valor_unitario:
           type: string
           format: decimal
@@ -5973,6 +7024,8 @@ components:
           readOnly: true
         tributo:
           type: integer
+          x-catalogo: tributo
+          x-catalogo-valor: id
         tributo_codigo:
           type: string
           readOnly: true
@@ -6002,6 +7055,8 @@ components:
       properties:
         tributo:
           type: integer
+          x-catalogo: tributo
+          x-catalogo-valor: id
         base_gravable:
           type: string
           format: decimal
@@ -6046,6 +7101,8 @@ components:
         unidad_medida:
           type: integer
           title: Unidad de medida
+          x-catalogo: unidad-medida
+          x-catalogo-valor: id
         valor_unitario:
           type: string
           format: decimal
@@ -6797,15 +7854,23 @@ components:
           items:
             type: string
             title: Código
+            x-catalogo: responsabilidad-fiscal
+            x-catalogo-valor: codigo
         pais:
           type: string
           title: Código
+          x-catalogo: pais
+          x-catalogo-valor: codigo
         departamento:
           type: string
           title: Código
+          x-catalogo: departamento
+          x-catalogo-valor: codigo
         municipio:
           type: string
           title: Código
+          x-catalogo: municipio
+          x-catalogo-valor: codigo
         direccion:
           type: string
           title: Dirección
@@ -6961,6 +8026,8 @@ components:
           items:
             type: string
             title: Código
+            x-catalogo: responsabilidad-fiscal
+            x-catalogo-valor: codigo
         direccion:
           type: string
           title: Dirección
@@ -7109,18 +8176,26 @@ components:
             type: string
             minLength: 1
             title: Código
+            x-catalogo: responsabilidad-fiscal
+            x-catalogo-valor: codigo
         pais:
           type: string
           minLength: 1
           title: Código
+          x-catalogo: pais
+          x-catalogo-valor: codigo
         departamento:
           type: string
           minLength: 1
           title: Código
+          x-catalogo: departamento
+          x-catalogo-valor: codigo
         municipio:
           type: string
           minLength: 1
           title: Código
+          x-catalogo: municipio
+          x-catalogo-valor: codigo
         direccion:
           type: string
           minLength: 1
@@ -7216,6 +8291,8 @@ components:
         tipo_identificacion:
           type: integer
           title: Tipo de identificación
+          x-catalogo: tipo-identificacion
+          x-catalogo-valor: id
         tipo_identificacion_codigo:
           type: string
           readOnly: true
@@ -7247,12 +8324,18 @@ components:
         tipo_trabajador:
           type: integer
           title: Tipo de trabajador
+          x-catalogo: tipo-trabajador
+          x-catalogo-valor: id
         subtipo_trabajador:
           type: integer
           title: Subtipo de trabajador
+          x-catalogo: subtipo-trabajador
+          x-catalogo-valor: id
         tipo_contrato:
           type: integer
           title: Tipo de contrato
+          x-catalogo: tipo-contrato
+          x-catalogo-valor: id
         alto_riesgo_pension:
           type: boolean
           title: Alto riesgo de pensión
@@ -7269,12 +8352,18 @@ components:
         pais:
           type: integer
           title: País del lugar de trabajo
+          x-catalogo: pais
+          x-catalogo-valor: id
         departamento:
           type: integer
           title: Departamento del lugar de trabajo
+          x-catalogo: departamento
+          x-catalogo-valor: id
         municipio:
           type: integer
           title: Municipio del lugar de trabajo
+          x-catalogo: municipio
+          x-catalogo-valor: id
         direccion:
           type: string
           title: Dirección del lugar de trabajo
@@ -7282,9 +8371,13 @@ components:
         forma_pago:
           type: integer
           title: Forma de pago
+          x-catalogo: forma-pago
+          x-catalogo-valor: id
         medio_pago:
           type: integer
           title: Medio de pago
+          x-catalogo: medio-pago
+          x-catalogo-valor: id
         banco:
           type: string
           maxLength: 100
@@ -7352,6 +8445,8 @@ components:
         tipo_identificacion:
           type: integer
           title: Tipo de identificación
+          x-catalogo: tipo-identificacion
+          x-catalogo-valor: id
         tipo_identificacion_codigo:
           type: string
           readOnly: true
@@ -7383,12 +8478,18 @@ components:
         tipo_trabajador:
           type: integer
           title: Tipo de trabajador
+          x-catalogo: tipo-trabajador
+          x-catalogo-valor: id
         subtipo_trabajador:
           type: integer
           title: Subtipo de trabajador
+          x-catalogo: subtipo-trabajador
+          x-catalogo-valor: id
         tipo_contrato:
           type: integer
           title: Tipo de contrato
+          x-catalogo: tipo-contrato
+          x-catalogo-valor: id
         alto_riesgo_pension:
           type: boolean
           title: Alto riesgo de pensión
@@ -7405,12 +8506,18 @@ components:
         pais:
           type: integer
           title: País del lugar de trabajo
+          x-catalogo: pais
+          x-catalogo-valor: id
         departamento:
           type: integer
           title: Departamento del lugar de trabajo
+          x-catalogo: departamento
+          x-catalogo-valor: id
         municipio:
           type: integer
           title: Municipio del lugar de trabajo
+          x-catalogo: municipio
+          x-catalogo-valor: id
         direccion:
           type: string
           title: Dirección del lugar de trabajo
@@ -7418,9 +8525,13 @@ components:
         forma_pago:
           type: integer
           title: Forma de pago
+          x-catalogo: forma-pago
+          x-catalogo-valor: id
         medio_pago:
           type: integer
           title: Medio de pago
+          x-catalogo: medio-pago
+          x-catalogo-valor: id
         banco:
           type: string
           maxLength: 100
@@ -7484,6 +8595,8 @@ components:
         tipo_identificacion:
           type: integer
           title: Tipo de identificación
+          x-catalogo: tipo-identificacion
+          x-catalogo-valor: id
         numero_documento:
           type: string
           minLength: 1
@@ -7512,12 +8625,18 @@ components:
         tipo_trabajador:
           type: integer
           title: Tipo de trabajador
+          x-catalogo: tipo-trabajador
+          x-catalogo-valor: id
         subtipo_trabajador:
           type: integer
           title: Subtipo de trabajador
+          x-catalogo: subtipo-trabajador
+          x-catalogo-valor: id
         tipo_contrato:
           type: integer
           title: Tipo de contrato
+          x-catalogo: tipo-contrato
+          x-catalogo-valor: id
         alto_riesgo_pension:
           type: boolean
           title: Alto riesgo de pensión
@@ -7534,12 +8653,18 @@ components:
         pais:
           type: integer
           title: País del lugar de trabajo
+          x-catalogo: pais
+          x-catalogo-valor: id
         departamento:
           type: integer
           title: Departamento del lugar de trabajo
+          x-catalogo: departamento
+          x-catalogo-valor: id
         municipio:
           type: integer
           title: Municipio del lugar de trabajo
+          x-catalogo: municipio
+          x-catalogo-valor: id
         direccion:
           type: string
           minLength: 1
@@ -7548,9 +8673,13 @@ components:
         forma_pago:
           type: integer
           title: Forma de pago
+          x-catalogo: forma-pago
+          x-catalogo-valor: id
         medio_pago:
           type: integer
           title: Medio de pago
+          x-catalogo: medio-pago
+          x-catalogo-valor: id
         banco:
           type: string
           maxLength: 100
@@ -7593,6 +8722,8 @@ components:
         tipo_identificacion:
           type: integer
           title: Tipo de identificación
+          x-catalogo: tipo-identificacion
+          x-catalogo-valor: id
         numero_documento:
           type: string
           minLength: 1
@@ -7621,12 +8752,18 @@ components:
         tipo_trabajador:
           type: integer
           title: Tipo de trabajador
+          x-catalogo: tipo-trabajador
+          x-catalogo-valor: id
         subtipo_trabajador:
           type: integer
           title: Subtipo de trabajador
+          x-catalogo: subtipo-trabajador
+          x-catalogo-valor: id
         tipo_contrato:
           type: integer
           title: Tipo de contrato
+          x-catalogo: tipo-contrato
+          x-catalogo-valor: id
         alto_riesgo_pension:
           type: boolean
           title: Alto riesgo de pensión
@@ -7643,12 +8780,18 @@ components:
         pais:
           type: integer
           title: País del lugar de trabajo
+          x-catalogo: pais
+          x-catalogo-valor: id
         departamento:
           type: integer
           title: Departamento del lugar de trabajo
+          x-catalogo: departamento
+          x-catalogo-valor: id
         municipio:
           type: integer
           title: Municipio del lugar de trabajo
+          x-catalogo: municipio
+          x-catalogo-valor: id
         direccion:
           type: string
           minLength: 1
@@ -7657,9 +8800,13 @@ components:
         forma_pago:
           type: integer
           title: Forma de pago
+          x-catalogo: forma-pago
+          x-catalogo-valor: id
         medio_pago:
           type: integer
           title: Medio de pago
+          x-catalogo: medio-pago
+          x-catalogo-valor: id
         banco:
           type: string
           maxLength: 100
@@ -8241,6 +9388,8 @@ components:
         periodo_nomina:
           type: integer
           title: Periodo de nómina
+          x-catalogo: periodo-nomina
+          x-catalogo-valor: id
         fecha_liquidacion_inicio:
           type: string
           format: date
@@ -8268,6 +9417,8 @@ components:
           title: Fecha de pago
         moneda:
           type: integer
+          x-catalogo: moneda
+          x-catalogo-valor: id
         trm:
           type: string
           format: decimal
@@ -8322,21 +9473,33 @@ components:
         tipo_trabajador:
           type: integer
           title: Tipo de trabajador
+          x-catalogo: tipo-trabajador
+          x-catalogo-valor: id
         subtipo_trabajador:
           type: integer
           title: Subtipo de trabajador
+          x-catalogo: subtipo-trabajador
+          x-catalogo-valor: id
         tipo_contrato:
           type: integer
           title: Tipo de contrato
+          x-catalogo: tipo-contrato
+          x-catalogo-valor: id
         lugar_trabajo_pais:
           type: integer
           title: País del lugar de trabajo
+          x-catalogo: pais
+          x-catalogo-valor: id
         lugar_trabajo_departamento:
           type: integer
           title: Departamento del lugar de trabajo
+          x-catalogo: departamento
+          x-catalogo-valor: id
         lugar_trabajo_municipio:
           type: integer
           title: Municipio del lugar de trabajo
+          x-catalogo: municipio
+          x-catalogo-valor: id
         lugar_trabajo_direccion:
           type: string
           title: Dirección del lugar de trabajo
@@ -8344,9 +9507,13 @@ components:
         forma_pago:
           type: integer
           title: Forma de pago
+          x-catalogo: forma-pago
+          x-catalogo-valor: id
         medio_pago:
           type: integer
           title: Medio de pago
+          x-catalogo: medio-pago
+          x-catalogo-valor: id
         banco:
           type: string
           maxLength: 100
@@ -8427,6 +9594,8 @@ components:
         periodo_nomina:
           type: integer
           title: Periodo de nómina
+          x-catalogo: periodo-nomina
+          x-catalogo-valor: id
         fecha_liquidacion_inicio:
           type: string
           format: date
@@ -8454,6 +9623,8 @@ components:
           title: Fecha de pago
         moneda:
           type: integer
+          x-catalogo: moneda
+          x-catalogo-valor: id
         trm:
           type: string
           format: decimal
@@ -8508,21 +9679,33 @@ components:
         tipo_trabajador:
           type: integer
           title: Tipo de trabajador
+          x-catalogo: tipo-trabajador
+          x-catalogo-valor: id
         subtipo_trabajador:
           type: integer
           title: Subtipo de trabajador
+          x-catalogo: subtipo-trabajador
+          x-catalogo-valor: id
         tipo_contrato:
           type: integer
           title: Tipo de contrato
+          x-catalogo: tipo-contrato
+          x-catalogo-valor: id
         lugar_trabajo_pais:
           type: integer
           title: País del lugar de trabajo
+          x-catalogo: pais
+          x-catalogo-valor: id
         lugar_trabajo_departamento:
           type: integer
           title: Departamento del lugar de trabajo
+          x-catalogo: departamento
+          x-catalogo-valor: id
         lugar_trabajo_municipio:
           type: integer
           title: Municipio del lugar de trabajo
+          x-catalogo: municipio
+          x-catalogo-valor: id
         lugar_trabajo_direccion:
           type: string
           minLength: 1
@@ -8531,9 +9714,13 @@ components:
         forma_pago:
           type: integer
           title: Forma de pago
+          x-catalogo: forma-pago
+          x-catalogo-valor: id
         medio_pago:
           type: integer
           title: Medio de pago
+          x-catalogo: medio-pago
+          x-catalogo-valor: id
         banco:
           type: string
           maxLength: 100
@@ -9269,18 +10456,26 @@ components:
             type: string
             minLength: 1
             title: Código
+            x-catalogo: responsabilidad-fiscal
+            x-catalogo-valor: codigo
         pais:
           type: string
           minLength: 1
           title: Código
+          x-catalogo: pais
+          x-catalogo-valor: codigo
         departamento:
           type: string
           minLength: 1
           title: Código
+          x-catalogo: departamento
+          x-catalogo-valor: codigo
         municipio:
           type: string
           minLength: 1
           title: Código
+          x-catalogo: municipio
+          x-catalogo-valor: codigo
         direccion:
           type: string
           minLength: 1
@@ -9364,6 +10559,8 @@ components:
         tipo_identificacion:
           type: integer
           title: Tipo de identificación
+          x-catalogo: tipo-identificacion
+          x-catalogo-valor: id
         numero_documento:
           type: string
           minLength: 1
@@ -9392,12 +10589,18 @@ components:
         tipo_trabajador:
           type: integer
           title: Tipo de trabajador
+          x-catalogo: tipo-trabajador
+          x-catalogo-valor: id
         subtipo_trabajador:
           type: integer
           title: Subtipo de trabajador
+          x-catalogo: subtipo-trabajador
+          x-catalogo-valor: id
         tipo_contrato:
           type: integer
           title: Tipo de contrato
+          x-catalogo: tipo-contrato
+          x-catalogo-valor: id
         alto_riesgo_pension:
           type: boolean
           title: Alto riesgo de pensión
@@ -9414,12 +10617,18 @@ components:
         pais:
           type: integer
           title: País del lugar de trabajo
+          x-catalogo: pais
+          x-catalogo-valor: id
         departamento:
           type: integer
           title: Departamento del lugar de trabajo
+          x-catalogo: departamento
+          x-catalogo-valor: id
         municipio:
           type: integer
           title: Municipio del lugar de trabajo
+          x-catalogo: municipio
+          x-catalogo-valor: id
         direccion:
           type: string
           minLength: 1
@@ -9428,9 +10637,13 @@ components:
         forma_pago:
           type: integer
           title: Forma de pago
+          x-catalogo: forma-pago
+          x-catalogo-valor: id
         medio_pago:
           type: integer
           title: Medio de pago
+          x-catalogo: medio-pago
+          x-catalogo-valor: id
         banco:
           type: string
           maxLength: 100
@@ -9864,6 +11077,35 @@ components:
       description: |-
         * `102` - Documento soporte de pago de nómina electrónica
         * `103` - Nota de ajuste de documento soporte de pago de nómina
+    Uso:
+      type: object
+      properties:
+        ruta:
+          type: string
+          description: Ruta del recurso que recibe el campo.
+        campo:
+          type: string
+          description: Ruta del campo en el cuerpo; `[]` marca una lista.
+        valor:
+          allOf:
+          - $ref: '#/components/schemas/ValorCatalogoEnum'
+          description: |-
+            Qué se manda: el `id` de la fila o su `codigo` DIAN.
+
+            * `id` - id
+            * `codigo` - codigo
+      required:
+      - campo
+      - ruta
+      - valor
+    ValorCatalogoEnum:
+      enum:
+      - id
+      - codigo
+      type: string
+      description: |-
+        * `id` - id
+        * `codigo` - codigo
     Webhook:
       type: object
       properties:

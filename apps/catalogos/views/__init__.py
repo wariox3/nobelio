@@ -1,7 +1,10 @@
 """API de catálogos DIAN (solo lectura)."""
+from apps.catalogos.esquema import documentar
+
 from .base import _CatalogoViewSet
 from .departamento import DepartamentoViewSet
 from .forma_pago import FormaPagoViewSet
+from .indice import CatalogosView
 from .medio_pago import MedioPagoViewSet
 from .moneda import MonedaViewSet
 from .municipio import MunicipioViewSet
@@ -17,7 +20,18 @@ from .tipo_trabajador import TipoTrabajadorViewSet
 from .tributo import TributoViewSet
 from .unidad_medida import UnidadMedidaViewSet
 
+# Cada ViewSet se describe en el esquema con la ficha de su catálogo.
+for _vista in (
+    DepartamentoViewSet, FormaPagoViewSet, MedioPagoViewSet, MonedaViewSet,
+    MunicipioViewSet, PaisViewSet, PeriodoNominaViewSet,
+    ResponsabilidadFiscalViewSet, SubTipoTrabajadorViewSet, TipoContratoViewSet,
+    TipoFacturaViewSet, TipoIdentificacionViewSet, TipoOrganizacionViewSet,
+    TipoTrabajadorViewSet, TributoViewSet, UnidadMedidaViewSet,
+):
+    documentar(_vista)
+
 __all__ = [
+    "CatalogosView",
     "TipoFacturaViewSet",
     "TipoIdentificacionViewSet",
     "TipoOrganizacionViewSet",
