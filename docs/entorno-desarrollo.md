@@ -10,11 +10,12 @@ esta guía cubre justo lo anterior.
 
 - **Python 3.12+**
 - **PostgreSQL** (servidor corriendo localmente, o accesible por red)
+- **Redis** (local; la caché de los topes de peticiones, ver el paso 4)
 
 En Debian/Ubuntu:
 
 ```bash
-sudo apt install python3-venv postgresql postgresql-client
+sudo apt install python3-venv postgresql postgresql-client redis-server
 ```
 
 ---
@@ -90,6 +91,18 @@ Las de **Celery** deciden qué pasa al crear un documento (ver el paso 6.1):
   documento lo firma y lo envía a la DIAN de habilitación**, con broker o en modo
   eager. Si solo quieres crear documentos para probar la API, ponla en `False`: se
   quedan en `borrador` y se emiten con `emitir/` cuando tú decidas.
+
+La caché de los topes de peticiones va contra el **Redis local**
+(`sudo apt install redis-server`):
+
+- `REDIS_URL=redis://localhost:6379/0` — si la dejas vacía usa la de memoria del
+  proceso, que para `runserver` también vale.
+- `REDIS_KEY_PREFIX=nobelio:dev` — el prefijo de las claves (por defecto
+  `nobelio`), para no pisarte con otros proyectos que usen el mismo Redis.
+
+La suite de pruebas no usa Redis aunque esté en el `.env`: fuerza la caché en
+memoria (`config/settings/test.py`), porque sus `cache.clear()` vaciarían la base
+de Redis entera.
 
 ---
 

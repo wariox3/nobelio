@@ -261,7 +261,7 @@ los demás clientes de esa integración.
   falsa en cada petición— o meten a todo el mundo en el mismo cubo. Con nginx es
   1; con Cloudflare delante, 2.
 - Los contadores de los topes viven en la caché, así que en producción tiene que
-  ser compartida (`CACHE_URL`): con la de por-proceso, cada worker lleva su
+  ser compartida (Redis, `REDIS_URL`): con la de por-proceso, cada worker lleva su
   propia cuenta y los topes se multiplican por el número de workers.
 
 ## Pendiente (siguiente iteración)

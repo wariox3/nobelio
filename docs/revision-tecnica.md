@@ -890,10 +890,11 @@ va en la firma y el envío (**D3**), y puede leer la propia tabla de documentos.
    el de `generar_y_firmar` («Actualice la fecha de emisión») y los de
    `docs/checklist-emision.md` (§5 y §7). Y los `update()` que ya no usa nadie en
    los dos serializers de creación.
-5. **Caché de los límites.** `dbcache` sin `MAX_ENTRIES` se queda en 300 claves y
-   al pasarlas borra un tercio —con muchos emisores los contadores se reinician
-   solos—, y cada petición hace un `SELECT COUNT(*)` contra la base remota. Redis
-   o, como mínimo, subir `MAX_ENTRIES`.
+5. ~~**Caché de los límites.**~~ `dbcache` sin `MAX_ENTRIES` se queda en 300
+   claves y al pasarlas borra un tercio —con muchos emisores los contadores se
+   reinician solos—, y cada petición hace un `SELECT COUNT(*)` contra la base
+   remota. Hecho: `MAX_ENTRIES` subió a 5 000 y luego la caché pasó a Redis
+   (`REDIS_URL`, obligatoria en producción).
 6. ~~Cuerpo de error plano.~~ Por decisión de MarioA, en **toda** la API:
    `{"detail", "errores": [{"codigo", "mensaje"}]}`, sin campo aparte. Antes
    `errores` era un objeto con la forma de la petición, que un cliente generado

@@ -183,15 +183,38 @@ CORREO_AVISO_USUARIO_NUEVO = env(
 # La usa solo el throttling, y por eso importa más de lo que parece: los
 # contadores de LocMemCache viven en la memoria de cada worker, así que con N
 # workers de Gunicorn un tope de 5/hora se convierte en 5·N/hora, y se reinicia
-# en cada despliegue. En producción tiene que ser un backend compartido.
-# `CACHE_URL` acepta también redis:// el día que haga falta.
-#
-# Vacía cuenta como no definida: `env.cache` solo aplica el default cuando la
-# variable no existe, y con `CACHE_URL=` —como viene en `.env.example`— la app no
-# arrancaba (`Invalid cache schema`).
-CACHES = {
-    "default": env.cache_url_config(env("CACHE_URL", default="") or "locmemcache://")
-}
+# en cada despliegue. En producción tiene que ser un backend compartido: Redis
+# (`REDIS_URL=redis://host:6379/0`, o `rediss://` con TLS).
+
+
+def configurar_cache(url):
+    """La caché de `url`, con los ajustes que su backend no trae por defecto.
+
+    Con Redis va el backend de Django (`django-redis` no está instalado, así que
+    django-environ elige ese), y le faltan dos cosas:
+    - Prefijo propio (`REDIS_KEY_PREFIX`): el Redis puede ser compartido con
+      otros proyectos o entornos, y sin él nuestras claves (`throttle_login_…`)
+      se mezclarían con las suyas.
+    - Tiempos de espera: sin ellos, un Redis que no contesta deja colgado al
+      worker en cada petición que cuenta un tope, en vez de fallar.
+      `health_check_interval` revisa antes de usarla una conexión que lleva
+      rato quieta: el servicio administrado cierra las inactivas.
+
+    Lo que venga en la URL (`?key_prefix=`, `?socket_timeout=`) manda sobre esto.
+    """
+    cache = env.cache_url_config(url)
+    if cache["BACKEND"].endswith(".RedisCache"):
+        cache.setdefault("KEY_PREFIX", env("REDIS_KEY_PREFIX", default="nobelio"))
+        opciones = cache.setdefault("OPTIONS", {})
+        opciones.setdefault("socket_connect_timeout", 2)
+        opciones.setdefault("socket_timeout", 2)
+        opciones.setdefault("health_check_interval", 30)
+    return cache
+
+
+# Sin `REDIS_URL`, la de memoria del proceso: vale para `runserver`, no para
+# varios workers. Vacía cuenta como no definida, igual que si no existiera.
+CACHES = {"default": configurar_cache(env("REDIS_URL", default="") or "locmemcache://")}
 
 # --- Páginas del frontend ---------------------------------------------------
 # Raíz del sitio que abre la persona en el navegador, no de esta API. De aquí

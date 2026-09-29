@@ -31,6 +31,12 @@ WEBHOOK_ENCRYPTION_KEY = "0S9tlxVKvKdnKnc_6uUHYd1cA0QMyMFL3-kbAtWd8zU="
 # justamente que la línea se escribe.
 LOGGING["loggers"]["apps"]["level"] = "CRITICAL"  # noqa: F405
 
+# Caché en memoria, aunque el .env apunte a Redis: la suite hace `cache.clear()`,
+# que en Redis vacía la base entera —también lo que no es nuestro si está
+# compartida—, y no debe depender de un servicio levantado. Con esto la CI
+# tampoco necesita Redis.
+CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+
 # Las tareas corren en el acto, sin broker: la suite no depende de RabbitMQ.
 CELERY_TASK_ALWAYS_EAGER = True
 # Y crear un documento no lo emite: con las tareas en el acto, cada prueba que

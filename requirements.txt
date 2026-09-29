@@ -25,6 +25,10 @@ requests==2.34.2
 # RabbitMQ (CloudAMQP); ver config/celery.py y docs/despliegue.md.
 celery==5.6.3
 
+# Caché compartida de los topes de peticiones (`REDIS_URL`). Usa el
+# backend de Redis que trae Django; ver config/settings/base.py.
+redis==8.1.0
+
 # Almacenamiento de archivos en Backblaze B2 (S3-compatible)
 django-storages==1.14.6
 boto3==1.43.36

@@ -108,6 +108,34 @@ La conexión ya no es local, y eso trae tres cosas que antes no existían:
 
 ---
 
+## 2.1 Redis (fuera de este servidor)
+
+Lo usa solo la caché de los topes de peticiones (login, registro, MFA,
+recuperación, límites por API Key): los contadores de todos los workers de
+gunicorn tienen que vivir en el mismo sitio. Es un servicio administrado en el
+**mismo segmento de red** que el VPS, igual que la base: aquí no se instala.
+
+- **Red privada.** Que solo acepte conexiones desde la red interna, y con clave.
+- **Una base propia, o al menos compartida con cuidado.** Las claves llevan el
+  prefijo de `REDIS_KEY_PREFIX`, así que convive con otros proyectos y con el
+  entorno de pruebas (cada uno con su prefijo); pero no uses la misma base
+  (`/0`, `/1`…) que otro proyecto que haga `FLUSHDB`.
+- **Política de memoria.** Todas nuestras claves tienen vencimiento, así que
+  `volatile-lru` o `allkeys-lru` las expulsan cuando se llena, y un contador
+  expulsado es un tope que vuelve a cero. Con unos pocos MB sobra, pero si el
+  Redis es compartido, que tenga holgura.
+- **Si Redis se cae, las rutas con tope responden 500** (no se abren sin tope).
+  Los tiempos de espera están en 2 s (`config/settings/base.py`), así que falla
+  rápido en vez de colgar los workers.
+
+Compruébalo desde el VPS antes de seguir (`apt install redis-tools`):
+
+```bash
+redis-cli -u 'redis://:<clave>@<host-de-redis>:6379/0' ping   # PONG
+```
+
+---
+
 ## 3. Código y entorno virtual
 
 ```bash
@@ -210,10 +238,11 @@ CELERY_BROKER_URL=amqps://<usuario>:<clave>@<host>.cloudamqp.com/<vhost>
 
 # --- Caché y topes de peticiones ---
 # CRÍTICA con varios workers: la de por-proceso da a cada uno su propia cuenta y
-# los topes se multiplican por tres. La tabla la crea la migración del paso 5.
-# Con la base fuera del servidor, cada comprobación de tope es un viaje por la
-# red; si pesa, aquí es donde entra un `redis://host:6379/0`.
-CACHE_URL=dbcache://cache_general
+# los topes se multiplican por tres. Es el Redis administrado de la misma red
+# (ver el paso 2.1); sin él la app no arranca. `rediss://` si va con TLS.
+REDIS_URL=redis://:<clave>@<host-de-redis>:6379/0
+# Distinto por entorno si pruebas y producción comparten el Redis.
+REDIS_KEY_PREFIX=nobelio:prod
 # Cuántos proxies hay delante. Con nginx (paso 7) es 1; con nginx + Cloudflare,
 # 2. Dejarlo en 0 mete a todo el mundo en el cubo del proxy y los topes por IP
 # dejan de proteger nada.
@@ -322,9 +351,9 @@ export DJANGO_SETTINGS_MODULE=config.settings.prod
 .venv/bin/python manage.py createsuperuser
 ```
 
-`migrate` crea también la tabla `cache_general` que pide `CACHE_URL`
-(`apps/nucleo/migrations/0001_tabla_de_cache.py`): no hace falta
-`createcachetable` a mano.
+`migrate` crea también la tabla `cache_general`
+(`apps/nucleo/migrations/0001_tabla_de_cache.py`), de cuando la caché iba en
+PostgreSQL; hoy no se usa.
 
 > **El superusuario recién creado no puede iniciar sesión.** `create_superuser`
 > no marca `is_verified`, y `POST /token/` responde **403 "Tienes que confirmar
