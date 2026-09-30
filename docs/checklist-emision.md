@@ -208,8 +208,10 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
   a partir del NIT, y mandarlo responde 400 con `campo_solo_lectura`.
   Si el `adquiriente` es persona natural (`tipo_organizacion` 2), `primer_nombre` y
   `primer_apellido` son obligatorios; los segundos, opcionales. Si es persona
-  jurídica (1), los nombres que vengan se descartan. Vale también en el
-  documento soporte.
+  jurídica (1), los nombres que vengan se descartan. Los cuatro admiten `null`,
+  que se guarda como vacío. Una persona jurídica solo se identifica con NIT
+  (31), documento de identificación extranjero (42) o NIT de otro país (50);
+  otro tipo responde 400. Vale también en el documento soporte.
   `responsabilidades` del `adquiriente` es obligatoria como clave; admite `[]`,
   que el XML emite como `R-99-PN`.
   El `correo` del `adquiriente` es obligatorio y no admite vacío, en todos los
