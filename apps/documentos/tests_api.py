@@ -24,7 +24,7 @@ from rest_framework.utils.encoders import JSONEncoder
 from apps.catalogos import memoria as memoria_de_catalogos
 from apps.catalogos.models import (
     Departamento, FormaPago, Municipio, Pais, ResponsabilidadFiscal,
-    TipoOrganizacion, Tributo,
+    TipoIdentificacion, TipoOrganizacion, Tributo,
 )
 from apps.dian import soap
 from apps.dian.tests_firma import _generar_certificado
@@ -41,6 +41,7 @@ from apps.documentos.serializers.adquiriente import (
     CODIGO_PERSONA_NATURAL,
     mensaje_falta_en_colombia,
     mensaje_falta_en_persona_natural,
+    mensaje_identificacion_de_persona,
     mensaje_municipio_de_otro_departamento,
 )
 from apps.documentos.serializers.documento import (
@@ -1435,6 +1436,43 @@ class DocumentoAPITests(APITestCase):
         adquiriente = Documento.objects.get(pk=resp.data["id"]).adquiriente
         self.assertEqual(adquiriente.segundo_nombre, "")
         self.assertEqual(adquiriente.segundo_apellido, "")
+
+    # --- Tipo de identificación según el tipo de organización --------------
+
+    def _tipo_identificacion(self, codigo, nombre):
+        tipo, _ = TipoIdentificacion.objects.get_or_create(
+            codigo=codigo, defaults={"nombre": nombre},
+        )
+        return tipo
+
+    def test_persona_juridica_con_pasaporte_no_se_crea(self):
+        pasaporte = self._tipo_identificacion("41", "Pasaporte")
+        payload = self._payload_documento()
+        payload["adquiriente"]["tipo_identificacion"] = pasaporte.id
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(errores_por_campo(resp), {
+            "adquiriente.tipo_identificacion": [mensaje_identificacion_de_persona(pasaporte)],
+        })
+
+    def test_persona_juridica_con_nit_de_otro_pais_se_crea(self):
+        payload = self._payload_documento()
+        payload["adquiriente"]["tipo_identificacion"] = self._tipo_identificacion(
+            "50", "NIT de otro país",
+        ).id
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+    def test_persona_natural_con_cedula_se_crea(self):
+        payload = self._payload_persona_natural(primer_nombre="Ana", primer_apellido="Pérez")
+        payload["adquiriente"]["tipo_identificacion"] = self._tipo_identificacion(
+            "13", "Cédula de ciudadanía",
+        ).id
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
 
     # --- Correo y ubicación del adquiriente ---------------------------------
 

@@ -10,7 +10,15 @@ CODIGO_PERSONA_JURIDICA = "1"
 CODIGO_PERSONA_NATURAL = "2"
 CODIGO_PAIS_COLOMBIA = "CO"
 
-CAMPOS_NOMBRE = ("primer_nombre", "segundo_nombre", "primer_apellido", "segundo_apellido")
+# Lista TipoIdentificacion: lo que puede identificar a una empresa. El resto
+# (cédulas, pasaporte, PEP, registro civil…) son documentos de una persona.
+IDENTIFICACIONES_PERSONA_JURIDICA = {
+    "31": "NIT",
+    "42": "documento de identificación extranjero",
+    "50": "NIT de otro país",
+}
+
+CAMPOS_NOMBRE =("primer_nombre", "segundo_nombre", "primer_apellido", "segundo_apellido")
 # Los segundos no: no todo el mundo tiene segundo nombre o segundo apellido.
 OBLIGATORIOS_PERSONA_NATURAL = {
     "primer_nombre": "su primer nombre",
@@ -30,6 +38,19 @@ SOLO_EN_COLOMBIA = ("departamento", "municipio")
 def mensaje_falta_en_persona_natural(campo):
     """Mensaje para una persona natural a la que le falta parte del nombre."""
     return f"Una persona natural debe informar {OBLIGATORIOS_PERSONA_NATURAL[campo]}."
+
+
+def mensaje_identificacion_de_persona(tipo_identificacion):
+    """Mensaje para una persona jurídica identificada con un documento personal."""
+    return (
+        f"Una persona jurídica no se identifica con {tipo_identificacion.nombre} "
+        f"({tipo_identificacion.codigo}); debe usar "
+        + ", ".join(
+            f"{nombre} ({codigo})"
+            for codigo, nombre in IDENTIFICACIONES_PERSONA_JURIDICA.items()
+        )
+        + "."
+    )
 
 
 def mensaje_falta_en_colombia(campo):
@@ -109,7 +130,11 @@ class AdquirienteSerializer(EstructuraEstricta, serializers.ModelSerializer):
         valen igual en todos los tipos de documento, el soporte incluido. Los
         errores de las dos se informan juntos.
         """
-        errores = {**self._validar_nombre(attrs), **self._validar_ubicacion(attrs)}
+        errores = {
+            **self._validar_nombre(attrs),
+            **self._validar_identificacion(attrs),
+            **self._validar_ubicacion(attrs),
+        }
         if errores:
             raise serializers.ValidationError(errores)
         return attrs
@@ -140,6 +165,23 @@ class AdquirienteSerializer(EstructuraEstricta, serializers.ModelSerializer):
         if codigo == CODIGO_PERSONA_JURIDICA:
             for campo in CAMPOS_NOMBRE:
                 attrs[campo] = ""
+        return {}
+
+    def _validar_identificacion(self, attrs):
+        """El tipo de identificación de una persona jurídica.
+
+        Solo NIT, documento extranjero o NIT de otro país: con un pasaporte o
+        una cédula el XML salía con ``AdditionalAccountID`` 1 y un documento
+        personal en ``CompanyID``. La persona natural admite cualquiera, NIT
+        incluido.
+        """
+        codigo = getattr(attrs.get("tipo_organizacion"), "codigo", None)
+        tipo = attrs.get("tipo_identificacion")
+        if (
+            codigo == CODIGO_PERSONA_JURIDICA and tipo is not None
+            and tipo.codigo not in IDENTIFICACIONES_PERSONA_JURIDICA
+        ):
+            return {"tipo_identificacion": mensaje_identificacion_de_persona(tipo)}
         return {}
 
     def _validar_ubicacion(self, attrs):
