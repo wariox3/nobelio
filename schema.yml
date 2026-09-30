@@ -5934,15 +5934,19 @@ components:
           maxLength: 450
         primer_nombre:
           type: string
+          nullable: true
           maxLength: 100
         segundo_nombre:
           type: string
+          nullable: true
           maxLength: 100
         primer_apellido:
           type: string
+          nullable: true
           maxLength: 100
         segundo_apellido:
           type: string
+          nullable: true
           maxLength: 100
         tipo_identificacion:
           type: integer
@@ -6025,15 +6029,19 @@ components:
           maxLength: 450
         primer_nombre:
           type: string
+          nullable: true
           maxLength: 100
         segundo_nombre:
           type: string
+          nullable: true
           maxLength: 100
         primer_apellido:
           type: string
+          nullable: true
           maxLength: 100
         segundo_apellido:
           type: string
+          nullable: true
           maxLength: 100
         tipo_identificacion:
           type: integer

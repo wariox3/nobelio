@@ -90,7 +90,12 @@ class AdquirienteSerializer(EstructuraEstricta, serializers.ModelSerializer):
         # El correo también, y con valor, en todos los tipos de documento: es a
         # donde `notificar` entrega el documento, y sin él el fallo aparecía
         # después, al notificar, con el documento ya emitido.
+        #
+        # Los nombres admiten `null`: hay ERPs que mandan así los vacíos, y una
+        # empresa llegaba rechazada por unos campos que igual se descartan. La
+        # columna no admite nulos: `_validar_nombre` los guarda como "".
         extra_kwargs = {
+            **{campo: {"allow_null": True} for campo in CAMPOS_NOMBRE},
             "codigo_postal": {"required": True, "allow_blank": False},
             "digito_verificacion": {"read_only": True},
             "responsabilidades": {"required": True},
@@ -119,7 +124,12 @@ class AdquirienteSerializer(EstructuraEstricta, serializers.ModelSerializer):
         - **Persona natural:** primer nombre y primer apellido obligatorios.
         - **Persona jurídica:** los nombres se descartan, por decisión de
           MarioA, en vez de rechazar el documento.
+
+        Un nombre en ``null`` cuenta como vacío, en cualquier tipo.
         """
+        for campo in CAMPOS_NOMBRE:
+            if campo in attrs and attrs[campo] is None:
+                attrs[campo] = ""
         codigo = getattr(attrs.get("tipo_organizacion"), "codigo", None)
         if codigo == CODIGO_PERSONA_NATURAL:
             return {

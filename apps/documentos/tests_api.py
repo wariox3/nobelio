@@ -1398,6 +1398,44 @@ class DocumentoAPITests(APITestCase):
         for campo in ("primer_nombre", "segundo_nombre", "primer_apellido", "segundo_apellido"):
             self.assertEqual(getattr(adquiriente, campo), "", campo)
 
+    def test_persona_juridica_con_nombres_en_null_se_crea_sin_ellos(self):
+        """Hay ERPs que mandan los vacíos como null."""
+        payload = self._payload_documento()
+        payload["adquiriente"].update({
+            "primer_nombre": None, "segundo_nombre": None,
+            "primer_apellido": None, "segundo_apellido": None,
+        })
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        adquiriente = Documento.objects.get(pk=resp.data["id"]).adquiriente
+        for campo in ("primer_nombre", "segundo_nombre", "primer_apellido", "segundo_apellido"):
+            self.assertEqual(getattr(adquiriente, campo), "", campo)
+
+    def test_persona_natural_con_nombres_en_null_no_se_crea(self):
+        payload = self._payload_persona_natural(primer_nombre=None, primer_apellido=None)
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(errores_por_campo(resp), {
+            "adquiriente.primer_nombre": [mensaje_falta_en_persona_natural("primer_nombre")],
+            "adquiriente.primer_apellido": [
+                mensaje_falta_en_persona_natural("primer_apellido")
+            ],
+        })
+
+    def test_persona_natural_con_segundos_en_null_se_crea(self):
+        payload = self._payload_persona_natural(
+            primer_nombre="Ana", segundo_nombre=None,
+            primer_apellido="Pérez", segundo_apellido=None,
+        )
+
+        resp = self._crear_con(payload)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        adquiriente = Documento.objects.get(pk=resp.data["id"]).adquiriente
+        self.assertEqual(adquiriente.segundo_nombre, "")
+        self.assertEqual(adquiriente.segundo_apellido, "")
+
     # --- Correo y ubicación del adquiriente ---------------------------------
 
     def test_el_correo_del_adquiriente_es_obligatorio(self):
