@@ -60,8 +60,8 @@ RESOLUCION_SET_PRUEBAS_POS = {
 #   no otro: es el `codigo_dian` del P.O.S., y como el número de resolución es
 #   el mismo que el de facturación, al crear un documento es el tipo lo que
 #   desempata entre las dos. El catálogo de la DIAN del que carga
-#   `cargar_catalogos` no trae ese código, así que se crea al sembrar
-#   (`nombre_tipo_factura`) en vez de dejar al emisor sin resolución.
+#   `cargar_catalogos` no trae ese código; lo siembra la migración
+#   `catalogos/0001_initial`, con su id fijo.
 RESOLUCION_POR_TIPO_DE_SOFTWARE = {
     "facturacion": {
         "codigo_tipo_factura": "01",
@@ -70,7 +70,6 @@ RESOLUCION_POR_TIPO_DE_SOFTWARE = {
     },
     "documento_equivalente": {
         "codigo_tipo_factura": "20",
-        "nombre_tipo_factura": "Documento equivalente P.O.S.",
         "campo_ambiente": "ambiente_documento_equivalente",
         "datos": RESOLUCION_SET_PRUEBAS_POS,
     },
@@ -106,16 +105,9 @@ def sembrar_resolucion_de_pruebas(emisor, tipo_software):
         return None, False
 
     try:
-        if receta.get("nombre_tipo_factura"):
-            # Un código que el catálogo de la DIAN no trae: se crea aquí.
-            tipo_factura, _ = TipoFactura.objects.get_or_create(
-                codigo=receta["codigo_tipo_factura"],
-                defaults={"nombre": receta["nombre_tipo_factura"]},
-            )
-        else:
-            tipo_factura = TipoFactura.objects.get(
-                codigo=receta["codigo_tipo_factura"]
-            )
+        tipo_factura = TipoFactura.objects.get(
+            codigo=receta["codigo_tipo_factura"]
+        )
     except TipoFactura.DoesNotExist:
         # El catálogo no está cargado (`manage.py cargar_catalogos`). Registrar
         # el software sí tiene sentido sin él, así que no se revienta el alta;

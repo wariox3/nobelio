@@ -1,10 +1,15 @@
 """Pruebas del parser de listas de valores DIAN (Genericode)."""
 from io import StringIO
+from unittest import mock
 
+from django.core.management import call_command
+from django.core.management.base import CommandError
+from django.db import IntegrityError, transaction
 from django.test import SimpleTestCase, TestCase
 
 from apps.catalogos import genericode as gc
-from apps.catalogos.management.commands.cargar_catalogos import Command
+from apps.catalogos import models
+from apps.catalogos.carga import LISTAS, cargar
 from apps.catalogos.models import Municipio
 
 
@@ -105,7 +110,124 @@ class CargaDeCodigosPostalesTests(TestCase):
     """La carga de catálogos deja a cada municipio con su código postal."""
 
     def test_la_carga_rellena_el_municipio(self):
-        Command(stdout=StringIO())._cargar({"Municipio": Municipio})
+        cargar([Municipio])
         self.assertEqual(
             Municipio.objects.get(codigo="05001").codigo_postal, "050001"
         )
+
+
+def _tabla_de_ids():
+    """``{modelo: {código: id}}`` de todos los `.gc` que se cargan."""
+    tabla = {}
+    for lista in LISTAS:
+        ids = tabla.setdefault(lista.modelo.__name__, {})
+        for id_fijo, campos in lista.filas().items():
+            ids[campos["codigo"]] = id_fijo
+    return tabla
+
+
+class IdsFijosTests(SimpleTestCase):
+    """Todo catálogo viene de un `.gc` y cada código trae su id fijo."""
+
+    def test_el_id_no_es_autoincremental(self):
+        self.assertEqual(
+            models.Moneda._meta.pk.get_internal_type(), "BigIntegerField"
+        )
+
+    def test_todo_catalogo_viene_de_un_gc(self):
+        catalogos = {
+            nombre for nombre in models.__all__ if nombre != "ElementoCatalogo"
+        }
+        self.assertEqual(set(_tabla_de_ids()), catalogos)
+
+    def test_ids_sin_repetir(self):
+        for nombre, ids in _tabla_de_ids().items():
+            with self.subTest(catalogo=nombre):
+                self.assertEqual(len(set(ids.values())), len(ids))
+
+    def test_un_solo_id_por_codigo(self):
+        """Una lista puede repetir un código (UnidadesMedida lo hace), no su id."""
+        for lista in LISTAS:
+            with self.subTest(lista=lista.etiqueta):
+                codigos = [c["codigo"] for c in lista.filas().values()]
+                self.assertEqual(len(codigos), len(set(codigos)))
+
+    def test_codigos_que_no_publica_la_dian(self):
+        """Añadidos a mano: el PEP, el P.O.S. y las listas de nómina."""
+        tabla = _tabla_de_ids()
+        self.assertEqual(tabla["TipoIdentificacion"]["47"], 47)
+        self.assertEqual(tabla["TipoFactura"]["20"], 9)
+        self.assertEqual(len(tabla["PeriodoNomina"]), 6)
+        self.assertEqual(len(tabla["TipoContrato"]), 5)
+        self.assertEqual(len(tabla["TipoTrabajador"]), 16)
+        self.assertEqual(len(tabla["SubTipoTrabajador"]), 2)
+
+    def test_en_tipo_de_identificacion_el_id_es_el_codigo(self):
+        for codigo, id_fijo in _tabla_de_ids()["TipoIdentificacion"].items():
+            with self.subTest(codigo=codigo):
+                self.assertEqual(id_fijo, int(codigo))
+
+    def test_ids_que_torio_manda(self):
+        """torio envía estos ids fijos o los de su propio catálogo."""
+        tabla = _tabla_de_ids()
+        self.assertEqual(tabla["Moneda"]["COP"], 35)
+        self.assertEqual(tabla["UnidadMedida"]["94"], 70)
+        self.assertEqual(tabla["Pais"]["CO"], 46)
+        self.assertEqual(tabla["TipoOrganizacion"]["1"], 1)
+        self.assertEqual(tabla["Departamento"]["05"], 1)
+        self.assertEqual(tabla["Departamento"]["99"], 33)
+        self.assertEqual(tabla["Municipio"]["05001"], 1)
+
+
+class CargaTests(TestCase):
+    """La carga deja cada código con su id fijo, y se puede repetir."""
+
+    def test_las_migraciones_no_siembran_catalogos(self):
+        for lista in LISTAS:
+            with self.subTest(catalogo=lista.etiqueta):
+                self.assertFalse(lista.modelo.objects.exists())
+
+    def test_carga_todo_con_el_id_del_gc(self):
+        salida = StringIO()
+        call_command("cargar_catalogos", stdout=salida)
+
+        self.assertIn("Catálogos cargados.", salida.getvalue())
+        for modelo, ids in _tabla_de_ids().items():
+            with self.subTest(catalogo=modelo):
+                self.assertEqual(
+                    dict(getattr(models, modelo).objects.values_list("codigo", "id")),
+                    ids,
+                )
+
+    def test_enlaza_el_municipio_a_su_departamento(self):
+        cargar([models.Departamento, Municipio])
+        self.assertEqual(Municipio.objects.get(codigo="05001").departamento.codigo, "05")
+
+    def test_repetir_actualiza_sin_duplicar(self):
+        cargar([models.Moneda])
+        models.Moneda.objects.filter(codigo="COP").update(nombre="Otro")
+
+        (_, creados, actualizados), = cargar([models.Moneda])
+
+        self.assertEqual(creados, 0)
+        self.assertEqual(actualizados, models.Moneda.objects.count())
+        self.assertEqual(models.Moneda.objects.get(id=35).nombre, "Peso colombiano")
+
+    def test_solo_lo_que_se_pide(self):
+        resultado = cargar([models.TipoFactura])
+        # La de factura y la del documento soporte.
+        self.assertEqual(len(resultado), 2)
+        self.assertEqual(models.TipoFactura.objects.get(codigo="05").id, 7)
+        self.assertFalse(models.Moneda.objects.exists())
+
+    def test_crear_sin_id_falla(self):
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            models.Moneda.objects.create(codigo="ZZZ", nombre="Prueba")
+
+    def test_codigo_sin_id_detiene_la_carga(self):
+        lista = gc.cargar("FormasPago")
+        del lista.filas[1]["id"]
+        with mock.patch.object(gc, "cargar", return_value=lista):
+            with self.assertRaisesMessage(CommandError, "el código 2 no tiene"):
+                call_command("cargar_catalogos", stdout=StringIO())
+        self.assertFalse(models.FormaPago.objects.exists())

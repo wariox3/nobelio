@@ -59,7 +59,7 @@ class FirmaXAdESTests(TestCase):
         cls.software = SoftwareDian.objects.create(
             emisor=emisor, identificador="id-sw-demo", pin="12345",
         )
-        tipo = TipoFactura.objects.create(codigo="01", nombre="Factura de Venta")
+        tipo = TipoFactura.objects.create(id=1, codigo="01", nombre="Factura de Venta")
         cls.resolucion = Resolucion.objects.create(
             emisor=emisor, tipo_factura=tipo, numero_resolucion="18760000001",
             fecha_resolucion=date(2019, 1, 19), prefijo="SETP",

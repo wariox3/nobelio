@@ -39,7 +39,7 @@ class GeneracionUBLTests(TestCase):
         )
         from apps.catalogos.models import TipoFactura
 
-        tipo_factura = TipoFactura.objects.create(codigo="01", nombre="Factura de Venta")
+        tipo_factura = TipoFactura.objects.create(id=1, codigo="01", nombre="Factura de Venta")
         cls.resolucion = Resolucion.objects.create(
             emisor=cls.emisor,
             tipo_factura=tipo_factura,

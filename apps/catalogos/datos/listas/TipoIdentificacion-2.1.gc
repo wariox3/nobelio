@@ -24,6 +24,11 @@
 			<LongName xml:lang="es">Nombre</LongName>
 			<Data Type="string"/>
 		</Column>
+		<Column Id="id" Use="optional">
+			<ShortName>Id</ShortName>
+			<LongName xml:lang="es">Id fijo del código en nobelio</LongName>
+			<Data Type="nonNegativeInteger"/>
+		</Column>
 		<Key Id="codeKey">
 			<ShortName>CodeKey</ShortName>
 			<ColumnRef Ref="code"/>
@@ -34,12 +39,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>11</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>11</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Registro civil </SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>12</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>12</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -50,12 +61,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>13</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>13</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Cédula de ciudadanía </SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>21</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>21</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -66,12 +83,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>22</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>22</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Cédula de extranjería </SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>31</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>31</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -82,12 +105,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>41</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>41</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Pasaporte </SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>42</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>42</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -98,6 +127,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>50</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>50</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>NIT de otro país</SimpleValue>
 			</Value>
@@ -106,8 +138,22 @@
 			<Value ColumnRef="code">
 				<SimpleValue>91</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>91</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>NUIP * </SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>47</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>47</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>PEP</SimpleValue>
 			</Value>
 		</Row>
 	</SimpleCodeList>

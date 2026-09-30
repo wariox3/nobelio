@@ -7,28 +7,28 @@ el endpoint de habilitación. Probar contra él tiene la ventaja de que si la
 nómina de habilitación deja de armarse bien, estas pruebas lo dicen.
 
 Los catálogos propios de nómina (tipo de trabajador, periodo, tipo de contrato…)
-no se crean aquí: los siembra la migración `catalogos.0006_datos_nomina`, así
-que en la base de pruebas ya están.
+y los de pago se cargan de sus `.gc`, como en el servidor.
 """
 from apps.documentos.tests_utils import crear_catalogos_minimos, crear_certificado
 
 
-def crear_catalogos_de_pago():
-    """Forma y medio de pago, que la nómina necesita y las pruebas no tienen.
+def cargar_catalogos_de_nomina():
+    """Los catálogos que la nómina necesita y los mínimos de documentos no traen.
 
-    Los catálogos propios de nómina los siembra `catalogos.0006_datos_nomina`,
-    pero estos dos vienen del Genericode de facturación, que se carga con un
-    comando de gestión y no por migración: en la base de pruebas no están.
+    Los de nómina y los de forma y medio de pago, cargados de sus `.gc`.
+    Devuelve la forma de pago contado y el medio efectivo.
     """
-    from apps.catalogos.models import FormaPago, MedioPago
+    from apps.catalogos import models
+    from apps.catalogos.carga import cargar
 
-    forma, _ = FormaPago.objects.get_or_create(
-        codigo="1", defaults={"nombre": "Contado"}
+    cargar([
+        models.PeriodoNomina, models.TipoContrato, models.TipoTrabajador,
+        models.SubTipoTrabajador, models.FormaPago, models.MedioPago,
+    ])
+    return (
+        models.FormaPago.objects.get(codigo="1"),
+        models.MedioPago.objects.get(codigo="10"),
     )
-    medio, _ = MedioPago.objects.get_or_create(
-        codigo="10", defaults={"nombre": "Efectivo"}
-    )
-    return forma, medio
 
 
 def crear_emisor_de_nomina(catalogos=None, *, nit="901192048"):
@@ -56,7 +56,7 @@ def crear_emisor_de_nomina(catalogos=None, *, nit="901192048"):
         pin="12345", test_set_id="set-de-pruebas-nomina",
     )
     certificado = crear_certificado(emisor)
-    crear_catalogos_de_pago()
+    cargar_catalogos_de_nomina()
     return {
         "catalogos": c,
         "emisor": emisor,

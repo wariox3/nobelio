@@ -24,6 +24,11 @@
 			<LongName xml:lang="es">Nombre</LongName>
 			<Data Type="string"/>
 		</Column>
+		<Column Id="id" Use="optional">
+			<ShortName>Id</ShortName>
+			<LongName xml:lang="es">Id fijo del código en nobelio</LongName>
+			<Data Type="nonNegativeInteger"/>
+		</Column>
 		<Key Id="codeKey">
 			<ShortName>CodeKey</ShortName>
 			<ColumnRef Ref="code"/>
@@ -34,12 +39,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>1</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>1</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Persona Jurídica</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>2</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>2</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">

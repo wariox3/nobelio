@@ -26,12 +26,12 @@ Usuario = get_user_model()
 def crear_emisor():
     """Crea un emisor mínimo (con su cuenta y catálogos) para las pruebas."""
     usuario = crear_usuario(nombre="Cuenta de Prueba")
-    tipo_id = TipoIdentificacion.objects.create(codigo="31", nombre="NIT")
-    tipo_org = TipoOrganizacion.objects.create(codigo="1", nombre="Jurídica")
-    pais = Pais.objects.create(codigo="CO", nombre="Colombia")
-    depto = Departamento.objects.create(codigo="11", nombre="Bogotá D.C.")
+    tipo_id = TipoIdentificacion.objects.create(id=31, codigo="31", nombre="NIT")
+    tipo_org = TipoOrganizacion.objects.create(id=1, codigo="1", nombre="Jurídica")
+    pais = Pais.objects.create(id=46, codigo="CO", nombre="Colombia")
+    depto = Departamento.objects.create(id=3, codigo="11", nombre="Bogotá D.C.")
     municipio = Municipio.objects.create(
-        codigo="11001", nombre="Bogotá", departamento=depto
+        id=149, codigo="11001", nombre="Bogotá", departamento=depto
     )
     return Emisor.objects.create(
         usuario=usuario,

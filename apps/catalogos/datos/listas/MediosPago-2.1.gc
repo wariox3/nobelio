@@ -24,6 +24,11 @@
 			<LongName xml:lang="es">Nombre</LongName>
 			<Data Type="string"/>
 		</Column>
+		<Column Id="id" Use="optional">
+			<ShortName>Id</ShortName>
+			<LongName xml:lang="es">Id fijo del código en nobelio</LongName>
+			<Data Type="nonNegativeInteger"/>
+		</Column>
 		<Key Id="codeKey">
 			<ShortName>CodeKey</ShortName>
 			<ColumnRef Ref="code"/>
@@ -34,12 +39,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>1</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>1</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Instrumento no definido</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>2</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>2</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -50,12 +61,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>3</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>3</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Débito ACH</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>4</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>4</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -66,12 +83,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>5</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>5</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Reversión crédito de demanda ACH </SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>6</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>6</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -82,12 +105,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>7</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>7</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Débito de demanda ACH</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>8</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>8</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -98,12 +127,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>9</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>9</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Clearing Nacional o Regional</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>10</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>10</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -114,12 +149,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>11</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>11</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Reversión Crédito Ahorro</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>12</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>12</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -130,12 +171,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>13</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>13</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Crédito Ahorro</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>14</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>14</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -146,12 +193,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>15</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>15</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Bookentry Crédito</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>16</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>16</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -162,12 +215,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>17</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>17</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Concentración de la demanda en efectivo /Desembolso Crédito (CCD)</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>18</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>18</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -178,12 +237,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>19</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>19</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Crédito Pago negocio corporativo (CTP)</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>20</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>20</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -194,12 +259,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>21</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>21</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Poyecto bancario</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>22</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>22</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -210,12 +281,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>23</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>23</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Cheque bancario</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>24</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>24</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -226,12 +303,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>25</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>25</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Cheque certificado</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>26</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>26</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -242,12 +325,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>27</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>27</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Débito Pago Neogcio Corporativo (CTP)</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>28</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>28</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -258,12 +347,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>29</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>29</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Débito Negocio Intercambio Corporativo (CTX)</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>30</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>30</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -274,12 +369,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>31</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>31</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Transferencia Débito</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>32</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>32</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -290,12 +391,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>33</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>33</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Concentración Efectivo / Desembolso Débito plus (CCD+)</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>34</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>34</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -306,12 +413,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>35</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>35</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Concentración efectivo ahorros / Desembolso Crédito (CCD)</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>36</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>36</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -322,12 +435,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>37</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>37</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Pago Negocio Corporativo Ahorros Crédito (CTP)</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>38</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>38</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -338,12 +457,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>39</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>39</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Crédito Negocio Intercambio Corporativo (CTX)</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>40</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>40</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -354,12 +479,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>41</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>41</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Concentración efectivo/Desembolso Crédito plus (CCD+) </SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>42</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>42</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -370,12 +501,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>43</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>43</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Concentración efectivo / Desembolso Débito plus (CCD+)</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>44</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>44</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -386,12 +523,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>45</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>45</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Transferencia Crédito Bancario</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>46</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>46</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -402,12 +545,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>47</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>47</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Transferencia Débito Bancaria</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>48</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>48</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -418,12 +567,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>49</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>49</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Tarjeta Débito</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>50</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>50</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -434,12 +589,18 @@
 			<Value ColumnRef="code">
 				<SimpleValue>51</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>51</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Telex estándar bancario francés</SimpleValue>
 			</Value>
 		</Row>
 		<Row>
 			<Value ColumnRef="code">
+				<SimpleValue>52</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
 				<SimpleValue>52</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
@@ -450,6 +611,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>53</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>53</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Pago Tesorería Urgente</SimpleValue>
 			</Value>
@@ -457,6 +621,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>60</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>54</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Nota promisoria</SimpleValue>
@@ -466,6 +633,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>61</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>55</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Nota promisoria firmada por el acreedor</SimpleValue>
 			</Value>
@@ -473,6 +643,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>62</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>56</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Nota promisoria firmada por el acreedor, avalada por el banco</SimpleValue>
@@ -482,6 +655,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>63</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>57</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Nota promisoria firmada por el acreedor, avalada por un tercero</SimpleValue>
 			</Value>
@@ -489,6 +665,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>64</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>58</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Nota promisoria firmada pro el banco</SimpleValue>
@@ -498,6 +677,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>65</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>59</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Nota promisoria firmada por un banco avalada por otro banco</SimpleValue>
 			</Value>
@@ -505,6 +687,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>66</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>60</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Nota promisoria firmada </SimpleValue>
@@ -514,6 +699,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>67</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>61</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Nota promisoria firmada por un tercero avalada por un banco</SimpleValue>
 			</Value>
@@ -521,6 +709,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>70</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>62</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Retiro de nota por el por el acreedor</SimpleValue>
@@ -530,6 +721,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>74</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>63</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Retiro de nota por el por el acreedor sobre un banco</SimpleValue>
 			</Value>
@@ -537,6 +731,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>75</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>64</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Retiro de nota por el acreedor, avalada por otro banco</SimpleValue>
@@ -546,6 +743,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>76</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>65</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Retiro de nota por el acreedor, sobre un banco avalada por un tercero</SimpleValue>
 			</Value>
@@ -553,6 +753,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>77</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>66</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Retiro de una nota por el acreedor sobre un tercero</SimpleValue>
@@ -562,6 +765,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>78</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>67</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Retiro de una nota por el acreedor sobre un tercero avalada por un banco</SimpleValue>
 			</Value>
@@ -569,6 +775,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>91</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>68</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Nota bancaria tranferible</SimpleValue>
@@ -578,6 +787,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>92</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>69</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Cheque local traferible</SimpleValue>
 			</Value>
@@ -585,6 +797,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>93</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>70</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Giro referenciado</SimpleValue>
@@ -594,6 +809,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>94</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>71</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Giro urgente</SimpleValue>
 			</Value>
@@ -601,6 +819,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>95</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>72</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Giro formato abierto</SimpleValue>
@@ -610,6 +831,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>96</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>73</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Método de pago solicitado no usuado</SimpleValue>
 			</Value>
@@ -618,6 +842,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>97</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>74</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Clearing entre partners</SimpleValue>
 			</Value>
@@ -625,6 +852,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>ZZZ</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>75</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Acuerdo mutuo</SimpleValue>

@@ -1,10 +1,44 @@
-# Listas de valores DIAN (Genericode `.gc`)
+# Listas de valores (Genericode `.gc`)
 
 Copia de las listas de valores oficiales de la DIAN incluidas en la
 *Caja de herramientas FE V19 (v2026)*. Se versionan en el repo para que el
 proyecto sea autocontenido y la carga de catálogos sea reproducible.
 
 Se leen con `apps/catalogos/genericode.py`.
+
+## Cómo se cargan los catálogos
+
+**Todo catálogo sale de un `.gc`.** Ninguno se siembra por migración ni se crea
+a mano: las migraciones solo crean las tablas. Qué lista va a qué modelo lo
+dice un único registro, `LISTAS` en `apps/catalogos/carga.py`:
+
+| Carpeta | Listas |
+|---------|--------|
+| esta | las 14 de factura: tipo de documento, identificación, organización, responsabilidad, tributo, unidad de medida, forma y medio de pago, moneda, país, departamento, municipio, conceptos de nota crédito y débito |
+| `documento-soporte/` | `TipoDocumento` (el `05` y el `95`), que se suman a los tipos de factura |
+| `nomina/` | `PeriodoNomina`, `TipoContrato`, `TipoTrabajador`, `SubTipoTrabajador` |
+
+```bash
+python manage.py cargar_catalogos
+```
+
+Carga y actualiza a la vez: por cada lista hace un único *upsert* por id, que
+crea los códigos que faltan y pone al día el nombre (y las columnas extra) de
+los que ya están. Se repite sin miedo tras cambiar una lista; no borra nada.
+Los municipios se enlazan a su departamento por los dos primeros dígitos del
+código DANE. Las pruebas cargan solo lo que usan: `cargar([Moneda])`.
+
+**Id fijo.** La columna `id` de las tablas no es autoincremental
+(`ElementoCatalogo.id` es un `BigIntegerField`): el id de cada código es el de
+la columna `id` de su `.gc`, y crear una fila sin id falla. Hay quien manda el
+id y no el código —torio envía la moneda, la unidad de medida, el tipo de
+identificación, el país, el departamento y el municipio por id—, así que no
+puede depender del orden de carga de cada base.
+
+**Añadir un código o una lista.** Un código nuevo lleva su `id` a mano, el
+siguiente libre de esa lista, y `cargar_catalogos` se niega a cargar una fila
+sin él. Un id puesto no se cambia nunca. Un catálogo nuevo es un `.gc` (con su
+columna `id`) y una línea en `LISTAS`.
 
 ## Correcciones aplicadas sobre los archivos oficiales
 
@@ -17,6 +51,25 @@ Se leen con `apps/catalogos/genericode.py`.
 > corrección si el archivo sigue viniendo con el mismo defecto.
 
 ## Añadidos sobre los archivos oficiales
+
+> Al reemplazar una lista por una versión nueva de la caja de herramientas hay
+> que volver a poner todo lo de este apartado, con los mismos ids.
+
+- **Columna `id`** en las 15 listas oficiales que se cargan (las 14 de aquí y
+  `documento-soporte/TipoDocumento-2.1.gc`), declarada `Use="optional"` y
+  colocada en cada fila justo después de `code`. Los valores son los ids que ya
+  circulaban, los de la base con la que torio está integrado: no se deducen de
+  nada.
+
+  **Caso particular: `TipoIdentificacion-2.1.gc`.** Ahí el id es el propio
+  código (`13` cédula → id 13, `31` NIT → id 31), porque todos sus códigos son
+  numéricos y así quien integra puede mandar el código DIAN como id. Un código
+  nuevo en esa lista lleva como id su código, no el siguiente libre.
+
+- **Filas que la DIAN no publica en ninguna lista:**
+  - `TipoDocumento-2.1.gc`: `20` Documento equivalente P.O.S. (id 9).
+  - `TipoIdentificacion-2.1.gc`: `47` PEP (id 47), que el anexo de nómina
+    (numeral 5.2.1) usa y solo traía la lista del documento soporte.
 
 - **`Municipio-2.1.gc`**: se le agregó la columna `codigo_postal` (declarada
   `Use="optional"`, para no tocar el contrato de las dos oficiales) con el

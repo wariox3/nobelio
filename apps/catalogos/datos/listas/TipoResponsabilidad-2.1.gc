@@ -24,6 +24,11 @@
 			<LongName xml:lang="es">Nombre</LongName>
 			<Data Type="string"/>
 		</Column>
+		<Column Id="id" Use="optional">
+			<ShortName>Id</ShortName>
+			<LongName xml:lang="es">Id fijo del código en nobelio</LongName>
+			<Data Type="nonNegativeInteger"/>
+		</Column>
 		<Key Id="codeKey">
 			<ShortName>CodeKey</ShortName>
 			<ColumnRef Ref="code"/>
@@ -34,6 +39,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>O-13</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>1</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Gran contribuyente</SimpleValue>
 			</Value>
@@ -41,6 +49,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>O-15</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>2</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Autorretenedor</SimpleValue>
@@ -50,6 +61,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>O-23</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>3</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Agente de retención IVA</SimpleValue>
 			</Value>
@@ -58,6 +72,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>O-47</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>4</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Régimen simple de tributación</SimpleValue>
 			</Value>
@@ -65,6 +82,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>R-99-PN</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>5</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>No responsable</SimpleValue>

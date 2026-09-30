@@ -75,7 +75,7 @@ from apps.nucleo.serializers import (
     MENSAJE_CAMPO_DESCONOCIDO,
     MENSAJE_CAMPO_SOLO_LECTURA,
 )
-from apps.nomina.tests_utils import crear_catalogos_de_pago
+from apps.nomina.tests_utils import cargar_catalogos_de_nomina
 from apps.nucleo.tests_utils import codigos, errores_por_campo
 
 MEDIA_TEMP = tempfile.mkdtemp()
@@ -90,9 +90,9 @@ class DocumentoAPITests(APITestCase):
         cls.documento = datos["documento"]
         cls.emisor = datos["emisor"]
         cls.cat = datos["catalogos"]
-        cls.contado, cls.efectivo = crear_catalogos_de_pago()
+        cls.contado, cls.efectivo = cargar_catalogos_de_nomina()
         cls.credito, _ = FormaPago.objects.get_or_create(
-            codigo=CODIGO_FORMA_PAGO_CREDITO, defaults={"nombre": "Crédito"},
+            codigo=CODIGO_FORMA_PAGO_CREDITO, defaults={"id": 2, "nombre": "Crédito"},
         )
         # El documento del helper lleva la fecha del ejemplo oficial de la DIAN,
         # con la que se comprueba el CUFE en otras pruebas. Aquí se emite de
@@ -572,12 +572,12 @@ class DocumentoAPITests(APITestCase):
         Es lo que puede delatar una respuesta armada en memoria que no respete
         el orden que daría la base.
         """
-        inc, _ = Tributo.objects.get_or_create(codigo="04", defaults={"nombre": "INC"})
+        inc, _ = Tributo.objects.get_or_create(codigo="04", defaults={"id": 4, "nombre": "INC"})
         r_mayor, _ = ResponsabilidadFiscal.objects.get_or_create(
-            codigo="R-99-PN", defaults={"nombre": "No aplica"},
+            codigo="R-99-PN", defaults={"id": 5, "nombre": "No aplica"},
         )
         r_menor, _ = ResponsabilidadFiscal.objects.get_or_create(
-            codigo="O-13", defaults={"nombre": "Gran contribuyente"},
+            codigo="O-13", defaults={"id": 1, "nombre": "Gran contribuyente"},
         )
         payload = self._payload_documento()
         payload["consecutivo"] = consecutivo
@@ -980,7 +980,7 @@ class DocumentoAPITests(APITestCase):
     def _con_retencion(self, payload):
         """Añade una ReteFuente a la primera línea, con la aritmética correcta."""
         retefuente, _ = Tributo.objects.get_or_create(
-            codigo="06", defaults={"nombre": "ReteFuente"},
+            codigo="06", defaults={"id": 6, "nombre": "ReteFuente"},
         )
         payload["detalles"][0]["impuestos"].append({
             "tributo": retefuente.id, "base_gravable": "2000.00",
@@ -1026,7 +1026,7 @@ class DocumentoAPITests(APITestCase):
     def test_el_documento_soporte_si_admite_retenciones(self):
         """Allí van en WithholdingTaxTotal y no suman al total a pagar."""
         retefuente, _ = Tributo.objects.get_or_create(
-            codigo="06", defaults={"nombre": "ReteFuente"},
+            codigo="06", defaults={"id": 6, "nombre": "ReteFuente"},
         )
         iva = self.cat["iva"]
         attrs = {"detalles": [{"impuestos": [{"tributo": iva}, {"tributo": retefuente}]}]}
@@ -1045,7 +1045,7 @@ class DocumentoAPITests(APITestCase):
         solo la suma.
         """
         retefuente, _ = Tributo.objects.get_or_create(
-            codigo="06", defaults={"nombre": "ReteFuente"},
+            codigo="06", defaults={"id": 6, "nombre": "ReteFuente"},
         )
         soporte = DocumentoTipo.objects.get(codigo=DocumentoTipo.Codigo.DOCUMENTO_SOPORTE)
         serializer = DocumentoCrearSerializer(data=self._payload_documento())
@@ -1342,7 +1342,7 @@ class DocumentoAPITests(APITestCase):
 
     def _payload_persona_natural(self, **nombres):
         natural, _ = TipoOrganizacion.objects.get_or_create(
-            codigo=CODIGO_PERSONA_NATURAL, defaults={"nombre": "Persona Natural"},
+            codigo=CODIGO_PERSONA_NATURAL, defaults={"id": 2, "nombre": "Persona Natural"},
         )
         payload = self._payload_documento()
         payload["adquiriente"].update(
@@ -1440,8 +1440,9 @@ class DocumentoAPITests(APITestCase):
     # --- Tipo de identificación según el tipo de organización --------------
 
     def _tipo_identificacion(self, codigo, nombre):
+        # En este catálogo el id es el propio código.
         tipo, _ = TipoIdentificacion.objects.get_or_create(
-            codigo=codigo, defaults={"nombre": nombre},
+            codigo=codigo, defaults={"id": int(codigo), "nombre": nombre},
         )
         return tipo
 
@@ -1511,7 +1512,7 @@ class DocumentoAPITests(APITestCase):
     def test_el_municipio_tiene_que_ser_del_departamento(self):
         """Antes Medellín con Cundinamarca pasaba."""
         cundinamarca, _ = Departamento.objects.get_or_create(
-            codigo="25", defaults={"nombre": "Cundinamarca"},
+            codigo="25", defaults={"id": 11, "nombre": "Cundinamarca"},
         )
         payload = self._payload_documento()
         payload["adquiriente"]["departamento"] = cundinamarca.id
@@ -1527,10 +1528,10 @@ class DocumentoAPITests(APITestCase):
     def test_sin_departamento_en_el_catalogo_se_compara_por_el_codigo(self):
         """La relación del catálogo es nullable; sin ella mandan los dos dígitos."""
         bogota_dc, _ = Departamento.objects.get_or_create(
-            codigo="11", defaults={"nombre": "Bogotá D.C."},
+            codigo="11", defaults={"id": 3, "nombre": "Bogotá D.C."},
         )
         bogota, _ = Municipio.objects.get_or_create(
-            codigo="11001", defaults={"nombre": "Bogotá"},
+            codigo="11001", defaults={"id": 149, "nombre": "Bogotá"},
         )
         self.assertIsNone(bogota.departamento_id)
         payload = self._payload_documento()
@@ -1547,7 +1548,7 @@ class DocumentoAPITests(APITestCase):
     def test_adquiriente_extranjero_se_crea_sin_departamento_ni_municipio(self):
         """Son catálogos colombianos: se descartan. La dirección se conserva."""
         extranjero, _ = Pais.objects.get_or_create(
-            codigo="US", defaults={"nombre": "Estados Unidos"},
+            codigo="US", defaults={"id": 65, "nombre": "Estados Unidos"},
         )
         payload = self._payload_documento()
         payload["adquiriente"]["pais"] = extranjero.id
@@ -1561,7 +1562,7 @@ class DocumentoAPITests(APITestCase):
 
     def test_adquiriente_extranjero_no_necesita_ubicacion(self):
         extranjero, _ = Pais.objects.get_or_create(
-            codigo="US", defaults={"nombre": "Estados Unidos"},
+            codigo="US", defaults={"id": 65, "nombre": "Estados Unidos"},
         )
         payload = self._payload_documento()
         payload["adquiriente"]["pais"] = extranjero.id

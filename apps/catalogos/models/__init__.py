@@ -41,7 +41,7 @@ __all__ = [
     "Municipio",
     "ConceptoNotaCredito",
     "ConceptoNotaDebito",
-    # Nómina electrónica (sin `.gc`: se siembran por migración).
+    # Nómina electrónica (`.gc` transcritos del anexo, en `datos/listas/nomina/`).
     "PeriodoNomina",
     "TipoContrato",
     "TipoTrabajador",

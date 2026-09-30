@@ -19,7 +19,7 @@ class CatalogosEnMemoriaTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.unidad = UnidadMedida.objects.create(codigo="94", nombre="Unidad")
+        cls.unidad = UnidadMedida.objects.create(id=70, codigo="94", nombre="Unidad")
 
     def setUp(self):
         memoria.olvidar()
@@ -45,7 +45,7 @@ class CatalogosEnMemoriaTests(TestCase):
 
     def test_una_fila_cargada_despues_se_encuentra_en_la_base(self):
         self._campo().to_internal_value(self.unidad.pk)
-        nueva = UnidadMedida.objects.create(codigo="KGM", nombre="Kilogramo")
+        nueva = UnidadMedida.objects.create(id=767, codigo="KGM", nombre="Kilogramo")
 
         self.assertEqual(self._campo().to_internal_value(nueva.pk), nueva)
 
@@ -62,7 +62,9 @@ class CatalogosEnMemoriaTests(TestCase):
 
     def test_un_queryset_acotado_no_usa_la_memoria(self):
         """La memoria guarda la tabla entera y aceptaría lo que el campo excluye."""
-        inactiva = UnidadMedida.objects.create(codigo="X1", nombre="Vieja", activo=False)
+        inactiva = UnidadMedida.objects.create(
+            id=9001, codigo="X1", nombre="Vieja", activo=False
+        )
         memoria.buscar(UnidadMedida, inactiva.pk)  # ya está en memoria
 
         with self.assertRaises(ValidationError):

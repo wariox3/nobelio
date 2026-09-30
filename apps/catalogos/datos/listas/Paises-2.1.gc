@@ -24,6 +24,11 @@
 			<LongName xml:lang="es">Nombre</LongName>
 			<Data Type="string"/>
 		</Column>
+		<Column Id="id" Use="optional">
+			<ShortName>Id</ShortName>
+			<LongName xml:lang="es">Id fijo del código en nobelio</LongName>
+			<Data Type="nonNegativeInteger"/>
+		</Column>
 		<Key Id="codeKey">
 			<ShortName>CodeKey</ShortName>
 			<ColumnRef Ref="code"/>
@@ -34,6 +39,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>AF</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>1</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Afganistán</SimpleValue>
 			</Value>
@@ -41,6 +49,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>AX</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>2</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Åland</SimpleValue>
@@ -50,6 +61,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>AL</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>3</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Albania</SimpleValue>
 			</Value>
@@ -57,6 +71,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>DE</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>4</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Alemania</SimpleValue>
@@ -66,6 +83,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>AD</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>5</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Andorra</SimpleValue>
 			</Value>
@@ -73,6 +93,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>AO</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>6</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Angola</SimpleValue>
@@ -82,6 +105,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>AI</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>7</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Anguila</SimpleValue>
 			</Value>
@@ -89,6 +115,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>AQ</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>8</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Antártida</SimpleValue>
@@ -98,6 +127,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>AG</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>9</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Antigua y Barbuda</SimpleValue>
 			</Value>
@@ -105,6 +137,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>SA</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>10</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Arabia Saudita</SimpleValue>
@@ -114,6 +149,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>DZ</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>11</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Argelia</SimpleValue>
 			</Value>
@@ -121,6 +159,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>AR</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>12</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Argentina</SimpleValue>
@@ -130,6 +171,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>AM</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>13</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Armenia</SimpleValue>
 			</Value>
@@ -137,6 +181,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>AW</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>14</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Aruba</SimpleValue>
@@ -146,6 +193,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>AU</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>15</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Australia</SimpleValue>
 			</Value>
@@ -153,6 +203,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>AT</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>16</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Austria</SimpleValue>
@@ -162,6 +215,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>AZ</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>17</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Azerbaiyán</SimpleValue>
 			</Value>
@@ -169,6 +225,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>BS</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>18</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Bahamas</SimpleValue>
@@ -178,6 +237,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>BD</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>19</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Bangladés</SimpleValue>
 			</Value>
@@ -185,6 +247,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>BB</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Barbados</SimpleValue>
@@ -194,6 +259,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>BH</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>21</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Baréin</SimpleValue>
 			</Value>
@@ -201,6 +269,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>BE</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>22</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Bélgica</SimpleValue>
@@ -210,6 +281,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>BZ</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>23</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Belice</SimpleValue>
 			</Value>
@@ -217,6 +291,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>BJ</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>24</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Benín</SimpleValue>
@@ -226,6 +303,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>BM</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>25</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Bermudas</SimpleValue>
 			</Value>
@@ -233,6 +313,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>BY</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>26</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Bielorrusia</SimpleValue>
@@ -242,6 +325,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>BO</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>27</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Bolivia</SimpleValue>
 			</Value>
@@ -249,6 +335,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>BQ</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>28</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Bonaire, San Eustaquio y Saba</SimpleValue>
@@ -258,6 +347,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>BA</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>29</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Bosnia y Herzegovina</SimpleValue>
 			</Value>
@@ -265,6 +357,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>BW</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>30</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Botsuana</SimpleValue>
@@ -274,6 +369,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>BR</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>31</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Brasil</SimpleValue>
 			</Value>
@@ -281,6 +379,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>BN</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>32</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Brunéi</SimpleValue>
@@ -290,6 +391,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>BG</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>33</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Bulgaria</SimpleValue>
 			</Value>
@@ -297,6 +401,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>BF</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>34</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Burkina Faso</SimpleValue>
@@ -306,6 +413,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>BI</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>35</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Burundi</SimpleValue>
 			</Value>
@@ -313,6 +423,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>BT</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>36</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Bután</SimpleValue>
@@ -322,6 +435,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>CV</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>37</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Cabo Verde</SimpleValue>
 			</Value>
@@ -329,6 +445,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>KH</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>38</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Camboya</SimpleValue>
@@ -338,6 +457,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>CM</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>39</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Camerún</SimpleValue>
 			</Value>
@@ -345,6 +467,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>CA</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>40</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Canadá</SimpleValue>
@@ -354,6 +479,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>QA</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>41</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Catar</SimpleValue>
 			</Value>
@@ -361,6 +489,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>TD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>42</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Chad</SimpleValue>
@@ -370,6 +501,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>CL</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>43</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Chile</SimpleValue>
 			</Value>
@@ -377,6 +511,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>CN</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>44</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>China</SimpleValue>
@@ -386,6 +523,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>CY</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>45</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Chipre</SimpleValue>
 			</Value>
@@ -393,6 +533,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>CO</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>46</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Colombia</SimpleValue>
@@ -402,6 +545,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>KM</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>47</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Comoras</SimpleValue>
 			</Value>
@@ -409,6 +555,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>KP</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>48</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Corea del Norte</SimpleValue>
@@ -418,6 +567,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>KR</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>49</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Corea del Sur</SimpleValue>
 			</Value>
@@ -425,6 +577,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>CI</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>50</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Costa de Marfil</SimpleValue>
@@ -434,6 +589,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>CR</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>51</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Costa Rica</SimpleValue>
 			</Value>
@@ -441,6 +599,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>HR</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>52</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Croacia</SimpleValue>
@@ -450,6 +611,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>CU</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>53</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Cuba</SimpleValue>
 			</Value>
@@ -457,6 +621,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>CW</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>54</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Curazao</SimpleValue>
@@ -466,6 +633,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>DK</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>55</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dinamarca</SimpleValue>
 			</Value>
@@ -473,6 +643,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>DM</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>56</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dominica</SimpleValue>
@@ -482,6 +655,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>EC</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>57</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Ecuador</SimpleValue>
 			</Value>
@@ -489,6 +665,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>EG</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>58</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Egipto</SimpleValue>
@@ -498,6 +677,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>SV</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>59</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>El Salvador</SimpleValue>
 			</Value>
@@ -505,6 +687,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>AE</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>60</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Emiratos Árabes Unidos</SimpleValue>
@@ -514,6 +699,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>ER</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>61</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Eritrea</SimpleValue>
 			</Value>
@@ -521,6 +709,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>SK</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>62</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Eslovaquia</SimpleValue>
@@ -530,6 +721,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>SI</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>63</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Eslovenia</SimpleValue>
 			</Value>
@@ -537,6 +731,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>ES</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>64</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>España</SimpleValue>
@@ -546,6 +743,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>US</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>65</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Estados Unidos</SimpleValue>
 			</Value>
@@ -553,6 +753,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>EE</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>66</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Estonia</SimpleValue>
@@ -562,6 +765,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>ET</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>67</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Etiopía</SimpleValue>
 			</Value>
@@ -569,6 +775,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>PH</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>68</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Filipinas</SimpleValue>
@@ -578,6 +787,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>FI</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>69</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Finlandia</SimpleValue>
 			</Value>
@@ -585,6 +797,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>FJ</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>70</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Fiyi</SimpleValue>
@@ -594,6 +809,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>FR</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>71</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Francia</SimpleValue>
 			</Value>
@@ -601,6 +819,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>GA</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>72</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Gabón</SimpleValue>
@@ -610,6 +831,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>GM</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>73</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Gambia</SimpleValue>
 			</Value>
@@ -617,6 +841,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>GE</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>74</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Georgia</SimpleValue>
@@ -626,6 +853,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>GH</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>75</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Ghana</SimpleValue>
 			</Value>
@@ -633,6 +863,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>GI</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>76</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Gibraltar</SimpleValue>
@@ -642,6 +875,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>GD</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>77</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Granada</SimpleValue>
 			</Value>
@@ -649,6 +885,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>GR</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>78</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Grecia</SimpleValue>
@@ -658,6 +897,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>GL</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>79</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Groenlandia</SimpleValue>
 			</Value>
@@ -665,6 +907,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>GP</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>80</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Guadalupe</SimpleValue>
@@ -674,6 +919,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>GU</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>81</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Guam</SimpleValue>
 			</Value>
@@ -681,6 +929,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>GT</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>82</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Guatemala</SimpleValue>
@@ -690,6 +941,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>GF</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>83</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Guayana Francesa</SimpleValue>
 			</Value>
@@ -697,6 +951,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>GG</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>84</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Guernsey</SimpleValue>
@@ -706,6 +963,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>GN</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>85</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Guinea</SimpleValue>
 			</Value>
@@ -713,6 +973,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>GW</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>86</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Guinea-Bisáu</SimpleValue>
@@ -722,6 +985,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>GQ</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>87</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Guinea Ecuatorial</SimpleValue>
 			</Value>
@@ -729,6 +995,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>GY</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>88</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Guyana</SimpleValue>
@@ -738,6 +1007,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>HT</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>89</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Haití</SimpleValue>
 			</Value>
@@ -745,6 +1017,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>HN</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>90</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Honduras</SimpleValue>
@@ -754,6 +1029,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>HK</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>91</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Hong Kong</SimpleValue>
 			</Value>
@@ -761,6 +1039,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>HU</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>92</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Hungría</SimpleValue>
@@ -770,6 +1051,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>IN</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>93</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>India</SimpleValue>
 			</Value>
@@ -777,6 +1061,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>ID</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>94</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Indonesia</SimpleValue>
@@ -786,6 +1073,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>IQ</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>95</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Irak</SimpleValue>
 			</Value>
@@ -793,6 +1083,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>IR</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>96</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Irán</SimpleValue>
@@ -802,6 +1095,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>IE</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>97</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Irlanda</SimpleValue>
 			</Value>
@@ -809,6 +1105,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>BV</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>98</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Isla Bouvet</SimpleValue>
@@ -818,6 +1117,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>IM</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>99</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Isla de Man</SimpleValue>
 			</Value>
@@ -825,6 +1127,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>CX</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>100</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Isla de Navidad</SimpleValue>
@@ -834,6 +1139,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>IS</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>101</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Islandia</SimpleValue>
 			</Value>
@@ -841,6 +1149,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>KY</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>102</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Islas Caimán</SimpleValue>
@@ -850,6 +1161,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>CC</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>103</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Islas Cocos</SimpleValue>
 			</Value>
@@ -857,6 +1171,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>CK</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>104</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Islas Cook</SimpleValue>
@@ -866,6 +1183,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>FO</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>105</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Islas Feroe</SimpleValue>
 			</Value>
@@ -873,6 +1193,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>GS</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>106</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Islas Georgias del Sur y Sandwich del Sur</SimpleValue>
@@ -882,6 +1205,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>HM</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>107</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Islas Heard y McDonald</SimpleValue>
 			</Value>
@@ -889,6 +1215,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>FK</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>108</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Islas Malvinas</SimpleValue>
@@ -898,6 +1227,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>MP</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>109</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Islas Marianas del Norte</SimpleValue>
 			</Value>
@@ -905,6 +1237,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>MH</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>110</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Islas Marshall</SimpleValue>
@@ -914,6 +1249,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>PN</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>111</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Islas Pitcairn</SimpleValue>
 			</Value>
@@ -921,6 +1259,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>SB</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>112</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Islas Salomón</SimpleValue>
@@ -930,6 +1271,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>TC</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>113</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Islas Turcas y Caicos</SimpleValue>
 			</Value>
@@ -937,6 +1281,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>UM</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>114</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Islas ultramarinas de Estados Unidos</SimpleValue>
@@ -946,6 +1293,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>VG</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>115</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Islas Vírgenes Británicas</SimpleValue>
 			</Value>
@@ -953,6 +1303,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>VI</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>116</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Islas Vírgenes de los Estados Unidos</SimpleValue>
@@ -962,6 +1315,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>IL</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>117</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Israel</SimpleValue>
 			</Value>
@@ -969,6 +1325,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>IT</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>118</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Italia</SimpleValue>
@@ -978,6 +1337,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>JM</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>119</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Jamaica</SimpleValue>
 			</Value>
@@ -985,6 +1347,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>JP</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>120</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Japón</SimpleValue>
@@ -994,6 +1359,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>JE</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>121</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Jersey</SimpleValue>
 			</Value>
@@ -1001,6 +1369,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>JO</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>122</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Jordania</SimpleValue>
@@ -1010,6 +1381,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>KZ</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>123</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Kazajistán</SimpleValue>
 			</Value>
@@ -1017,6 +1391,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>KE</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>124</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Kenia</SimpleValue>
@@ -1026,6 +1403,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>KG</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>125</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Kirguistán</SimpleValue>
 			</Value>
@@ -1033,6 +1413,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>KI</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>126</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Kiribati</SimpleValue>
@@ -1042,6 +1425,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>KW</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>127</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Kuwait</SimpleValue>
 			</Value>
@@ -1049,6 +1435,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>LA</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>128</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Laos</SimpleValue>
@@ -1058,6 +1447,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>LS</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>129</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Lesoto</SimpleValue>
 			</Value>
@@ -1065,6 +1457,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>LV</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>130</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Letonia</SimpleValue>
@@ -1074,6 +1469,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>LB</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>131</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Líbano</SimpleValue>
 			</Value>
@@ -1081,6 +1479,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>LR</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>132</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Liberia</SimpleValue>
@@ -1090,6 +1491,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>LY</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>133</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Libia</SimpleValue>
 			</Value>
@@ -1097,6 +1501,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>LI</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>134</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Liechtenstein</SimpleValue>
@@ -1106,6 +1513,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>LT</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>135</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Lituania</SimpleValue>
 			</Value>
@@ -1113,6 +1523,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>LU</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>136</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Luxemburgo</SimpleValue>
@@ -1122,6 +1535,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>MO</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>137</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Macao</SimpleValue>
 			</Value>
@@ -1129,6 +1545,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>MK</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>138</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Macedonia</SimpleValue>
@@ -1138,6 +1557,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>MG</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>139</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Madagascar</SimpleValue>
 			</Value>
@@ -1145,6 +1567,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>MY</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>140</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Malasia</SimpleValue>
@@ -1154,6 +1579,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>MW</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>141</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Malaui</SimpleValue>
 			</Value>
@@ -1161,6 +1589,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>MV</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>142</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Maldivas</SimpleValue>
@@ -1170,6 +1601,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>ML</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>143</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Malí</SimpleValue>
 			</Value>
@@ -1177,6 +1611,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>MT</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>144</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Malta</SimpleValue>
@@ -1186,6 +1623,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>MA</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>145</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Marruecos</SimpleValue>
 			</Value>
@@ -1193,6 +1633,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>MQ</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>146</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Martinica</SimpleValue>
@@ -1202,6 +1645,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>MU</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>147</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Mauricio</SimpleValue>
 			</Value>
@@ -1209,6 +1655,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>MR</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>148</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Mauritania</SimpleValue>
@@ -1218,6 +1667,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>YT</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>149</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Mayotte</SimpleValue>
 			</Value>
@@ -1225,6 +1677,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>MX</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>150</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>México</SimpleValue>
@@ -1234,6 +1689,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>FM</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>151</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Micronesia</SimpleValue>
 			</Value>
@@ -1241,6 +1699,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>MD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>152</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Moldavia</SimpleValue>
@@ -1250,6 +1711,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>MC</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>153</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Mónaco</SimpleValue>
 			</Value>
@@ -1257,6 +1721,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>MN</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>154</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Mongolia</SimpleValue>
@@ -1266,6 +1733,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>ME</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>155</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Montenegro</SimpleValue>
 			</Value>
@@ -1273,6 +1743,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>MS</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>156</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Montserrat</SimpleValue>
@@ -1282,6 +1755,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>MZ</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>157</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Mozambique</SimpleValue>
 			</Value>
@@ -1289,6 +1765,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>MM</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>158</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Myanmar</SimpleValue>
@@ -1298,6 +1777,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>NA</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>159</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Namibia</SimpleValue>
 			</Value>
@@ -1305,6 +1787,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>NR</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>160</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Nauru</SimpleValue>
@@ -1314,6 +1799,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>NP</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>161</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Nepal</SimpleValue>
 			</Value>
@@ -1321,6 +1809,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>NI</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>162</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Nicaragua</SimpleValue>
@@ -1330,6 +1821,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>NE</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>163</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Níger</SimpleValue>
 			</Value>
@@ -1337,6 +1831,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>NG</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>164</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Nigeria</SimpleValue>
@@ -1346,6 +1843,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>UN</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>165</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Niue</SimpleValue>
 			</Value>
@@ -1353,6 +1853,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>NF</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>166</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Norfolk</SimpleValue>
@@ -1362,6 +1865,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>NO</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>167</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Noruega</SimpleValue>
 			</Value>
@@ -1369,6 +1875,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>NC</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>168</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Nueva Caledonia</SimpleValue>
@@ -1378,6 +1887,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>NZ</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>169</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Nueva Zelanda</SimpleValue>
 			</Value>
@@ -1385,6 +1897,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>OM</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>170</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Omán</SimpleValue>
@@ -1394,6 +1909,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>NL</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>171</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Países Bajos</SimpleValue>
 			</Value>
@@ -1401,6 +1919,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>PK</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>172</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Pakistán</SimpleValue>
@@ -1410,6 +1931,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>PW</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>173</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Palaos</SimpleValue>
 			</Value>
@@ -1417,6 +1941,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>PS</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>174</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Palestina</SimpleValue>
@@ -1426,6 +1953,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>PA</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>175</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Panamá</SimpleValue>
 			</Value>
@@ -1433,6 +1963,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>PG</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>176</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Papúa Nueva Guinea</SimpleValue>
@@ -1442,6 +1975,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>PY</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>177</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Paraguay</SimpleValue>
 			</Value>
@@ -1449,6 +1985,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>PE</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>178</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Perú</SimpleValue>
@@ -1458,6 +1997,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>PF</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>179</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Polinesia Francesa</SimpleValue>
 			</Value>
@@ -1465,6 +2007,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>PL</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>180</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Polonia</SimpleValue>
@@ -1474,6 +2019,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>PT</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>181</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Portugal</SimpleValue>
 			</Value>
@@ -1481,6 +2029,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>PR</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>182</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Puerto Rico</SimpleValue>
@@ -1490,6 +2041,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>GB</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>183</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Reino Unido</SimpleValue>
 			</Value>
@@ -1497,6 +2051,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>EH</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>184</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>República Árabe Saharaui Democrática</SimpleValue>
@@ -1506,6 +2063,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>CF</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>185</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>República Centroafricana</SimpleValue>
 			</Value>
@@ -1513,6 +2073,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>CZ</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>186</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>República Checa</SimpleValue>
@@ -1522,6 +2085,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>CG</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>187</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>República del Congo</SimpleValue>
 			</Value>
@@ -1529,6 +2095,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>CD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>188</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>República Democrática del Congo</SimpleValue>
@@ -1538,6 +2107,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>DO</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>189</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>República Dominicana</SimpleValue>
 			</Value>
@@ -1545,6 +2117,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>RE</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>190</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Reunión</SimpleValue>
@@ -1554,6 +2129,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>RW</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>191</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Ruanda</SimpleValue>
 			</Value>
@@ -1561,6 +2139,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>RO</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>192</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Rumania</SimpleValue>
@@ -1570,6 +2151,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>RU</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>193</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Rusia</SimpleValue>
 			</Value>
@@ -1577,6 +2161,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>WS</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>194</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Samoa</SimpleValue>
@@ -1586,6 +2173,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>AS</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>195</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Samoa Americana</SimpleValue>
 			</Value>
@@ -1593,6 +2183,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>BL</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>196</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>San Bartolomé</SimpleValue>
@@ -1602,6 +2195,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>KN</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>197</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>San Cristóbal y Nieves</SimpleValue>
 			</Value>
@@ -1609,6 +2205,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>SM</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>198</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>San Marino</SimpleValue>
@@ -1618,6 +2217,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>MF</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>199</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>San Martín</SimpleValue>
 			</Value>
@@ -1625,6 +2227,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>PM</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>200</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>San Pedro y Miquelón</SimpleValue>
@@ -1634,6 +2239,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>VC</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>201</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>San Vicente y las Granadinas</SimpleValue>
 			</Value>
@@ -1641,6 +2249,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>SH</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>202</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Santa Elena, Ascensión y Tristán de Acuña</SimpleValue>
@@ -1650,6 +2261,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>LC</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>203</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Santa Lucía</SimpleValue>
 			</Value>
@@ -1657,6 +2271,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>ST</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>204</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Santo Tomé y Príncipe</SimpleValue>
@@ -1666,6 +2283,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>SN</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>205</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Senegal</SimpleValue>
 			</Value>
@@ -1673,6 +2293,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>RS</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>206</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Serbia</SimpleValue>
@@ -1682,6 +2305,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>SC</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>207</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Seychelles</SimpleValue>
 			</Value>
@@ -1689,6 +2315,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>SL</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>208</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Sierra Leona</SimpleValue>
@@ -1698,6 +2327,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>SG</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>209</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Singapur</SimpleValue>
 			</Value>
@@ -1705,6 +2337,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>SX</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>210</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Sint Maarten</SimpleValue>
@@ -1714,6 +2349,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>SY</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>211</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Siria</SimpleValue>
 			</Value>
@@ -1721,6 +2359,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>SO</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>212</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Somalia</SimpleValue>
@@ -1730,6 +2371,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>LK</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>213</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Sri Lanka</SimpleValue>
 			</Value>
@@ -1737,6 +2381,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>SZ</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>214</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Suazilandia</SimpleValue>
@@ -1746,6 +2393,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>ZA</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>215</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Sudáfrica</SimpleValue>
 			</Value>
@@ -1753,6 +2403,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>SD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>216</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Sudán</SimpleValue>
@@ -1762,6 +2415,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>SS</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>217</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Sudán del Sur</SimpleValue>
 			</Value>
@@ -1769,6 +2425,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>SE</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>218</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Suecia</SimpleValue>
@@ -1778,6 +2437,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>CH</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>219</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Suiza</SimpleValue>
 			</Value>
@@ -1785,6 +2447,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>SR</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>220</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Surinam</SimpleValue>
@@ -1794,6 +2459,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>SJ</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>221</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Svalbard y Jan Mayen</SimpleValue>
 			</Value>
@@ -1801,6 +2469,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>TH</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>222</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Tailandia</SimpleValue>
@@ -1810,6 +2481,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>TW</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>223</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Taiwán (República de China)</SimpleValue>
 			</Value>
@@ -1817,6 +2491,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>TZ</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>224</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Tanzania</SimpleValue>
@@ -1826,6 +2503,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>TJ</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>225</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Tayikistán</SimpleValue>
 			</Value>
@@ -1833,6 +2513,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>IO</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>226</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Territorio Británico del Océano Índico</SimpleValue>
@@ -1842,6 +2525,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>TF</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>227</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Tierras Australes y Antárticas Francesas</SimpleValue>
 			</Value>
@@ -1849,6 +2535,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>TL</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>228</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Timor Oriental</SimpleValue>
@@ -1858,6 +2547,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>TG</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>229</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Togo</SimpleValue>
 			</Value>
@@ -1865,6 +2557,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>TK</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>230</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Tokelau</SimpleValue>
@@ -1874,6 +2569,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>TO</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>231</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Tonga</SimpleValue>
 			</Value>
@@ -1881,6 +2579,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>TT</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>232</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Trinidad y Tobago</SimpleValue>
@@ -1890,6 +2591,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>TN</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>233</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Túnez</SimpleValue>
 			</Value>
@@ -1897,6 +2601,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>TM</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>234</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Turkmenistán</SimpleValue>
@@ -1906,6 +2613,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>TR</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>235</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Turquía</SimpleValue>
 			</Value>
@@ -1913,6 +2623,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>TV</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>236</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Tuvalu</SimpleValue>
@@ -1922,6 +2635,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>UA</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>237</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Ucrania</SimpleValue>
 			</Value>
@@ -1929,6 +2645,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>UG</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>238</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Uganda</SimpleValue>
@@ -1938,6 +2657,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>UY</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>239</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Uruguay</SimpleValue>
 			</Value>
@@ -1945,6 +2667,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>UZ</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>240</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Uzbekistán</SimpleValue>
@@ -1954,6 +2679,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>VU</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>241</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Vanuatu</SimpleValue>
 			</Value>
@@ -1961,6 +2689,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>VA</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>242</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Vaticano, Ciudad del</SimpleValue>
@@ -1970,6 +2701,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>VE</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>243</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Venezuela</SimpleValue>
 			</Value>
@@ -1977,6 +2711,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>VN</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>244</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Vietnam</SimpleValue>
@@ -1986,6 +2723,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>WF</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>245</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Wallis y Futuna</SimpleValue>
 			</Value>
@@ -1993,6 +2733,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>YE</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>246</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Yemen</SimpleValue>
@@ -2002,6 +2745,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>DJ</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>247</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Yibuti</SimpleValue>
 			</Value>
@@ -2010,6 +2756,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>ZM</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>248</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Zambia</SimpleValue>
 			</Value>
@@ -2017,6 +2766,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>ZW</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>249</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Zimbabue</SimpleValue>

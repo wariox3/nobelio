@@ -15,3 +15,6 @@ class MunicipioSerializer(serializers.ModelSerializer):
             "id", "codigo", "nombre", "codigo_postal",
             "departamento", "departamento_codigo", "activo",
         ]
+        # El id ya no es autoincremental (es fijo por código), así que
+        # ModelSerializer lo daría por escribible.
+        read_only_fields = ["id"]

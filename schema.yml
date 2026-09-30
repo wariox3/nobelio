@@ -118,7 +118,10 @@ paths:
         name: id
         schema:
           type: integer
-        description: Un valor de entero único que identifique este departamento.
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        description: Un valor único que identifique este departamento.
         required: true
       tags:
       - catalogos
@@ -260,7 +263,10 @@ paths:
         name: id
         schema:
           type: integer
-        description: Un valor de entero único que identifique este forma de pago.
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        description: Un valor único que identifique este forma de pago.
         required: true
       tags:
       - catalogos
@@ -401,7 +407,10 @@ paths:
         name: id
         schema:
           type: integer
-        description: Un valor de entero único que identifique este medio de pago.
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        description: Un valor único que identifique este medio de pago.
         required: true
       tags:
       - catalogos
@@ -538,7 +547,10 @@ paths:
         name: id
         schema:
           type: integer
-        description: Un valor de entero único que identifique este moneda.
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        description: Un valor único que identifique este moneda.
         required: true
       tags:
       - catalogos
@@ -679,7 +691,10 @@ paths:
         name: id
         schema:
           type: integer
-        description: Un valor de entero único que identifique este municipio.
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        description: Un valor único que identifique este municipio.
         required: true
       tags:
       - catalogos
@@ -823,7 +838,10 @@ paths:
         name: id
         schema:
           type: integer
-        description: Un valor de entero único que identifique este país.
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        description: Un valor único que identifique este país.
         required: true
       tags:
       - catalogos
@@ -959,7 +977,10 @@ paths:
         name: id
         schema:
           type: integer
-        description: Un valor de entero único que identifique este periodo de nómina.
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        description: Un valor único que identifique este periodo de nómina.
         required: true
       tags:
       - catalogos
@@ -1093,8 +1114,10 @@ paths:
         name: id
         schema:
           type: integer
-        description: Un valor de entero único que identifique este responsabilidad
-          fiscal.
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        description: Un valor único que identifique este responsabilidad fiscal.
         required: true
       tags:
       - catalogos
@@ -1231,7 +1254,10 @@ paths:
         name: id
         schema:
           type: integer
-        description: Un valor de entero único que identifique este subtipo de trabajador.
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        description: Un valor único que identifique este subtipo de trabajador.
         required: true
       tags:
       - catalogos
@@ -1369,7 +1395,10 @@ paths:
         name: id
         schema:
           type: integer
-        description: Un valor de entero único que identifique este tipo de contrato.
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        description: Un valor único que identifique este tipo de contrato.
         required: true
       tags:
       - catalogos
@@ -1503,7 +1532,10 @@ paths:
         name: id
         schema:
           type: integer
-        description: Un valor de entero único que identifique este tipo de factura.
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        description: Un valor único que identifique este tipo de factura.
         required: true
       tags:
       - catalogos
@@ -1641,7 +1673,10 @@ paths:
         name: id
         schema:
           type: integer
-        description: Un valor de entero único que identifique este tipo de identificación.
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        description: Un valor único que identifique este tipo de identificación.
         required: true
       tags:
       - catalogos
@@ -1778,7 +1813,10 @@ paths:
         name: id
         schema:
           type: integer
-        description: Un valor de entero único que identifique este tipo de organización.
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        description: Un valor único que identifique este tipo de organización.
         required: true
       tags:
       - catalogos
@@ -1915,7 +1953,10 @@ paths:
         name: id
         schema:
           type: integer
-        description: Un valor de entero único que identifique este tipo de trabajador.
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        description: Un valor único que identifique este tipo de trabajador.
         required: true
       tags:
       - catalogos
@@ -2049,7 +2090,10 @@ paths:
         name: id
         schema:
           type: integer
-        description: Un valor de entero único que identifique este tributo.
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        description: Un valor único que identifique este tributo.
         required: true
       tags:
       - catalogos
@@ -2181,7 +2225,10 @@ paths:
         name: id
         schema:
           type: integer
-        description: Un valor de entero único que identifique este unidad de medida.
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        description: Un valor único que identifique este unidad de medida.
         required: true
       tags:
       - catalogos
@@ -5950,6 +5997,9 @@ components:
           maxLength: 100
         tipo_identificacion:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de identificación
           x-catalogo: tipo-identificacion
           x-catalogo-valor: id
@@ -5964,6 +6014,9 @@ components:
           title: Dígito de verificación
         tipo_organizacion:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de organización
           x-catalogo: tipo-organizacion
           x-catalogo-valor: id
@@ -5971,22 +6024,34 @@ components:
           type: array
           items:
             type: integer
+            maximum: 9223372036854775807
+            minimum: -9223372036854775808
+            format: int64
             title: Responsabilidades fiscales
             x-catalogo: responsabilidad-fiscal
             x-catalogo-valor: id
           title: Responsabilidades fiscales
         pais:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: País
           x-catalogo: pais
           x-catalogo-valor: id
         departamento:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           nullable: true
           x-catalogo: departamento
           x-catalogo-valor: id
         municipio:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           nullable: true
           x-catalogo: municipio
           x-catalogo-valor: id
@@ -6045,6 +6110,9 @@ components:
           maxLength: 100
         tipo_identificacion:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de identificación
           x-catalogo: tipo-identificacion
           x-catalogo-valor: id
@@ -6056,6 +6124,9 @@ components:
           maxLength: 20
         tipo_organizacion:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de organización
           x-catalogo: tipo-organizacion
           x-catalogo-valor: id
@@ -6063,22 +6134,34 @@ components:
           type: array
           items:
             type: integer
+            maximum: 9223372036854775807
+            minimum: -9223372036854775808
+            format: int64
             title: Responsabilidades fiscales
             x-catalogo: responsabilidad-fiscal
             x-catalogo-valor: id
           title: Responsabilidades fiscales
         pais:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: País
           x-catalogo: pais
           x-catalogo-valor: id
         departamento:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           nullable: true
           x-catalogo: departamento
           x-catalogo-valor: id
         municipio:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           nullable: true
           x-catalogo: municipio
           x-catalogo-valor: id
@@ -6533,12 +6616,21 @@ components:
             firmar se reescribe con la hora de la firma.
         moneda:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
         forma_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           nullable: true
           title: Forma de pago
         medio_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           nullable: true
           title: Medio de pago
         valor_bruto:
@@ -6682,15 +6774,24 @@ components:
             es la única con la que se puede firmar (regla FAD09).
         moneda:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           x-catalogo: moneda
           x-catalogo-valor: id
         forma_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Forma de pago
           x-catalogo: forma-pago
           x-catalogo-valor: id
         medio_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Medio de pago
           x-catalogo: medio-pago
           x-catalogo-valor: id
@@ -6826,15 +6927,24 @@ components:
             es la única con la que se puede firmar (regla FAD09).
         moneda:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           x-catalogo: moneda
           x-catalogo-valor: id
         forma_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Forma de pago
           x-catalogo: forma-pago
           x-catalogo-valor: id
         medio_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Medio de pago
           x-catalogo: medio-pago
           x-catalogo-valor: id
@@ -6944,6 +7054,9 @@ components:
           pattern: ^-?\d{0,12}(?:\.\d{0,6})?$
         unidad_medida:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Unidad de medida
           x-catalogo: unidad-medida
           x-catalogo-valor: id
@@ -7032,6 +7145,9 @@ components:
           readOnly: true
         tributo:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           x-catalogo: tributo
           x-catalogo-valor: id
         tributo_codigo:
@@ -7063,6 +7179,9 @@ components:
       properties:
         tributo:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           x-catalogo: tributo
           x-catalogo-valor: id
         base_gravable:
@@ -7108,6 +7227,9 @@ components:
           pattern: ^-?\d{0,12}(?:\.\d{0,6})?$
         unidad_medida:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Unidad de medida
           x-catalogo: unidad-medida
           x-catalogo-valor: id
@@ -7396,12 +7518,21 @@ components:
             firmar se reescribe con la hora de la firma.
         moneda:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
         forma_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           nullable: true
           title: Forma de pago
         medio_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           nullable: true
           title: Medio de pago
         valor_bruto:
@@ -7844,6 +7975,9 @@ components:
           maxLength: 450
         tipo_identificacion:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de identificación
         numero_identificacion:
           type: string
@@ -7856,6 +7990,9 @@ components:
           maxLength: 1
         tipo_organizacion:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de organización
         responsabilidades:
           type: array
@@ -8016,6 +8153,9 @@ components:
           maxLength: 450
         tipo_identificacion:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de identificación
         numero_identificacion:
           type: string
@@ -8028,6 +8168,9 @@ components:
           maxLength: 1
         tipo_organizacion:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de organización
         responsabilidades:
           type: array
@@ -8164,6 +8307,9 @@ components:
           maxLength: 450
         tipo_identificacion:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de identificación
         numero_identificacion:
           type: string
@@ -8177,6 +8323,9 @@ components:
           maxLength: 1
         tipo_organizacion:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de organización
         responsabilidades:
           type: array
@@ -8298,6 +8447,9 @@ components:
           type: integer
         tipo_identificacion:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de identificación
           x-catalogo: tipo-identificacion
           x-catalogo-valor: id
@@ -8331,16 +8483,25 @@ components:
           maxLength: 20
         tipo_trabajador:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de trabajador
           x-catalogo: tipo-trabajador
           x-catalogo-valor: id
         subtipo_trabajador:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Subtipo de trabajador
           x-catalogo: subtipo-trabajador
           x-catalogo-valor: id
         tipo_contrato:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de contrato
           x-catalogo: tipo-contrato
           x-catalogo-valor: id
@@ -8359,16 +8520,25 @@ components:
           title: Fecha de ingreso
         pais:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: País del lugar de trabajo
           x-catalogo: pais
           x-catalogo-valor: id
         departamento:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Departamento del lugar de trabajo
           x-catalogo: departamento
           x-catalogo-valor: id
         municipio:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Municipio del lugar de trabajo
           x-catalogo: municipio
           x-catalogo-valor: id
@@ -8378,11 +8548,17 @@ components:
           maxLength: 255
         forma_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Forma de pago
           x-catalogo: forma-pago
           x-catalogo-valor: id
         medio_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Medio de pago
           x-catalogo: medio-pago
           x-catalogo-valor: id
@@ -8452,6 +8628,9 @@ components:
           readOnly: true
         tipo_identificacion:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de identificación
           x-catalogo: tipo-identificacion
           x-catalogo-valor: id
@@ -8485,16 +8664,25 @@ components:
           maxLength: 20
         tipo_trabajador:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de trabajador
           x-catalogo: tipo-trabajador
           x-catalogo-valor: id
         subtipo_trabajador:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Subtipo de trabajador
           x-catalogo: subtipo-trabajador
           x-catalogo-valor: id
         tipo_contrato:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de contrato
           x-catalogo: tipo-contrato
           x-catalogo-valor: id
@@ -8513,16 +8701,25 @@ components:
           title: Fecha de ingreso
         pais:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: País del lugar de trabajo
           x-catalogo: pais
           x-catalogo-valor: id
         departamento:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Departamento del lugar de trabajo
           x-catalogo: departamento
           x-catalogo-valor: id
         municipio:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Municipio del lugar de trabajo
           x-catalogo: municipio
           x-catalogo-valor: id
@@ -8532,11 +8729,17 @@ components:
           maxLength: 255
         forma_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Forma de pago
           x-catalogo: forma-pago
           x-catalogo-valor: id
         medio_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Medio de pago
           x-catalogo: medio-pago
           x-catalogo-valor: id
@@ -8602,6 +8805,9 @@ components:
       properties:
         tipo_identificacion:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de identificación
           x-catalogo: tipo-identificacion
           x-catalogo-valor: id
@@ -8632,16 +8838,25 @@ components:
           maxLength: 20
         tipo_trabajador:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de trabajador
           x-catalogo: tipo-trabajador
           x-catalogo-valor: id
         subtipo_trabajador:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Subtipo de trabajador
           x-catalogo: subtipo-trabajador
           x-catalogo-valor: id
         tipo_contrato:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de contrato
           x-catalogo: tipo-contrato
           x-catalogo-valor: id
@@ -8660,16 +8875,25 @@ components:
           title: Fecha de ingreso
         pais:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: País del lugar de trabajo
           x-catalogo: pais
           x-catalogo-valor: id
         departamento:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Departamento del lugar de trabajo
           x-catalogo: departamento
           x-catalogo-valor: id
         municipio:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Municipio del lugar de trabajo
           x-catalogo: municipio
           x-catalogo-valor: id
@@ -8680,11 +8904,17 @@ components:
           maxLength: 255
         forma_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Forma de pago
           x-catalogo: forma-pago
           x-catalogo-valor: id
         medio_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Medio de pago
           x-catalogo: medio-pago
           x-catalogo-valor: id
@@ -8729,6 +8959,9 @@ components:
           type: integer
         tipo_identificacion:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de identificación
           x-catalogo: tipo-identificacion
           x-catalogo-valor: id
@@ -8759,16 +8992,25 @@ components:
           maxLength: 20
         tipo_trabajador:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de trabajador
           x-catalogo: tipo-trabajador
           x-catalogo-valor: id
         subtipo_trabajador:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Subtipo de trabajador
           x-catalogo: subtipo-trabajador
           x-catalogo-valor: id
         tipo_contrato:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de contrato
           x-catalogo: tipo-contrato
           x-catalogo-valor: id
@@ -8787,16 +9029,25 @@ components:
           title: Fecha de ingreso
         pais:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: País del lugar de trabajo
           x-catalogo: pais
           x-catalogo-valor: id
         departamento:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Departamento del lugar de trabajo
           x-catalogo: departamento
           x-catalogo-valor: id
         municipio:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Municipio del lugar de trabajo
           x-catalogo: municipio
           x-catalogo-valor: id
@@ -8807,11 +9058,17 @@ components:
           maxLength: 255
         forma_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Forma de pago
           x-catalogo: forma-pago
           x-catalogo-valor: id
         medio_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Medio de pago
           x-catalogo: medio-pago
           x-catalogo-valor: id
@@ -8921,6 +9178,9 @@ components:
           maxLength: 6
         departamento:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           nullable: true
         departamento_codigo:
           type: string
@@ -8989,6 +9249,9 @@ components:
           maxLength: 30
         periodo_nomina:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Periodo de nómina
         fecha_liquidacion_inicio:
           type: string
@@ -9017,6 +9280,9 @@ components:
           title: Fecha de pago
         moneda:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
         trm:
           type: string
           format: decimal
@@ -9115,21 +9381,39 @@ components:
           pattern: ^-?\d{0,13}(?:\.\d{0,2})?$
         tipo_trabajador:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de trabajador
         subtipo_trabajador:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Subtipo de trabajador
         tipo_contrato:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de contrato
         lugar_trabajo_pais:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: País del lugar de trabajo
         lugar_trabajo_departamento:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Departamento del lugar de trabajo
         lugar_trabajo_municipio:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Municipio del lugar de trabajo
         lugar_trabajo_direccion:
           type: string
@@ -9137,9 +9421,15 @@ components:
           maxLength: 255
         forma_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Forma de pago
         medio_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Medio de pago
         banco:
           type: string
@@ -9395,6 +9685,9 @@ components:
           nullable: true
         periodo_nomina:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Periodo de nómina
           x-catalogo: periodo-nomina
           x-catalogo-valor: id
@@ -9425,6 +9718,9 @@ components:
           title: Fecha de pago
         moneda:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           x-catalogo: moneda
           x-catalogo-valor: id
         trm:
@@ -9480,31 +9776,49 @@ components:
           pattern: ^-?\d{0,13}(?:\.\d{0,2})?$
         tipo_trabajador:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de trabajador
           x-catalogo: tipo-trabajador
           x-catalogo-valor: id
         subtipo_trabajador:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Subtipo de trabajador
           x-catalogo: subtipo-trabajador
           x-catalogo-valor: id
         tipo_contrato:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de contrato
           x-catalogo: tipo-contrato
           x-catalogo-valor: id
         lugar_trabajo_pais:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: País del lugar de trabajo
           x-catalogo: pais
           x-catalogo-valor: id
         lugar_trabajo_departamento:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Departamento del lugar de trabajo
           x-catalogo: departamento
           x-catalogo-valor: id
         lugar_trabajo_municipio:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Municipio del lugar de trabajo
           x-catalogo: municipio
           x-catalogo-valor: id
@@ -9514,11 +9828,17 @@ components:
           maxLength: 255
         forma_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Forma de pago
           x-catalogo: forma-pago
           x-catalogo-valor: id
         medio_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Medio de pago
           x-catalogo: medio-pago
           x-catalogo-valor: id
@@ -9601,6 +9921,9 @@ components:
           nullable: true
         periodo_nomina:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Periodo de nómina
           x-catalogo: periodo-nomina
           x-catalogo-valor: id
@@ -9631,6 +9954,9 @@ components:
           title: Fecha de pago
         moneda:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           x-catalogo: moneda
           x-catalogo-valor: id
         trm:
@@ -9686,31 +10012,49 @@ components:
           pattern: ^-?\d{0,13}(?:\.\d{0,2})?$
         tipo_trabajador:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de trabajador
           x-catalogo: tipo-trabajador
           x-catalogo-valor: id
         subtipo_trabajador:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Subtipo de trabajador
           x-catalogo: subtipo-trabajador
           x-catalogo-valor: id
         tipo_contrato:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de contrato
           x-catalogo: tipo-contrato
           x-catalogo-valor: id
         lugar_trabajo_pais:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: País del lugar de trabajo
           x-catalogo: pais
           x-catalogo-valor: id
         lugar_trabajo_departamento:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Departamento del lugar de trabajo
           x-catalogo: departamento
           x-catalogo-valor: id
         lugar_trabajo_municipio:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Municipio del lugar de trabajo
           x-catalogo: municipio
           x-catalogo-valor: id
@@ -9721,11 +10065,17 @@ components:
           maxLength: 255
         forma_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Forma de pago
           x-catalogo: forma-pago
           x-catalogo-valor: id
         medio_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Medio de pago
           x-catalogo: medio-pago
           x-catalogo-valor: id
@@ -9846,6 +10196,9 @@ components:
           maxLength: 30
         periodo_nomina:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Periodo de nómina
         fecha_liquidacion_inicio:
           type: string
@@ -9874,6 +10227,9 @@ components:
           title: Fecha de pago
         moneda:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
         trm:
           type: string
           format: decimal
@@ -9961,21 +10317,39 @@ components:
           pattern: ^-?\d{0,13}(?:\.\d{0,2})?$
         tipo_trabajador:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de trabajador
         subtipo_trabajador:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Subtipo de trabajador
         tipo_contrato:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de contrato
         lugar_trabajo_pais:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: País del lugar de trabajo
         lugar_trabajo_departamento:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Departamento del lugar de trabajo
         lugar_trabajo_municipio:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Municipio del lugar de trabajo
         lugar_trabajo_direccion:
           type: string
@@ -9983,9 +10357,15 @@ components:
           maxLength: 255
         forma_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Forma de pago
         medio_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Medio de pago
         banco:
           type: string
@@ -10444,6 +10824,9 @@ components:
           maxLength: 450
         tipo_identificacion:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de identificación
         numero_identificacion:
           type: string
@@ -10457,6 +10840,9 @@ components:
           maxLength: 1
         tipo_organizacion:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de organización
         responsabilidades:
           type: array
@@ -10566,6 +10952,9 @@ components:
           type: integer
         tipo_identificacion:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de identificación
           x-catalogo: tipo-identificacion
           x-catalogo-valor: id
@@ -10596,16 +10985,25 @@ components:
           maxLength: 20
         tipo_trabajador:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de trabajador
           x-catalogo: tipo-trabajador
           x-catalogo-valor: id
         subtipo_trabajador:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Subtipo de trabajador
           x-catalogo: subtipo-trabajador
           x-catalogo-valor: id
         tipo_contrato:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de contrato
           x-catalogo: tipo-contrato
           x-catalogo-valor: id
@@ -10624,16 +11022,25 @@ components:
           title: Fecha de ingreso
         pais:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: País del lugar de trabajo
           x-catalogo: pais
           x-catalogo-valor: id
         departamento:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Departamento del lugar de trabajo
           x-catalogo: departamento
           x-catalogo-valor: id
         municipio:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Municipio del lugar de trabajo
           x-catalogo: municipio
           x-catalogo-valor: id
@@ -10644,11 +11051,17 @@ components:
           maxLength: 255
         forma_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Forma de pago
           x-catalogo: forma-pago
           x-catalogo-valor: id
         medio_pago:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Medio de pago
           x-catalogo: medio-pago
           x-catalogo-valor: id
@@ -10671,6 +11084,9 @@ components:
           type: integer
         tipo_factura:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de factura
         numero_resolucion:
           type: string
@@ -10799,6 +11215,9 @@ components:
           type: integer
         tipo_factura:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de factura
         numero_resolucion:
           type: string
@@ -10847,6 +11266,9 @@ components:
           type: integer
         tipo_factura:
           type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           title: Tipo de factura
         numero_resolucion:
           type: string

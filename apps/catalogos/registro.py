@@ -27,8 +27,9 @@ class Anexo:
 class Uso:
     """Un campo de la API que recibe valores del catálogo.
 
-    ``valor`` es ``"id"`` —el `id` de la fila en este catálogo— o ``"codigo"``
-    —el código DIAN, que es estable entre entornos—.
+    ``valor`` es ``"id"`` —el `id` de la fila en este catálogo, fijo por
+    código en todos los entornos (columna `id` del `.gc`)— o ``"codigo"``
+    —el código DIAN—.
     """
 
     ruta: str

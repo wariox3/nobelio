@@ -58,16 +58,16 @@ def crear_catalogos_minimos():
     sea un catálogo en sentido estricto.
     """
     usuario = crear_usuario()
-    nit = cat.TipoIdentificacion.objects.create(codigo="31", nombre="NIT")
-    juridica = cat.TipoOrganizacion.objects.create(codigo="1", nombre="Persona Jurídica")
-    colombia = cat.Pais.objects.create(codigo="CO", nombre="Colombia")
-    antioquia = cat.Departamento.objects.create(codigo="05", nombre="Antioquia")
+    nit = cat.TipoIdentificacion.objects.create(id=31, codigo="31", nombre="NIT")
+    juridica = cat.TipoOrganizacion.objects.create(id=1, codigo="1", nombre="Persona Jurídica")
+    colombia = cat.Pais.objects.create(id=46, codigo="CO", nombre="Colombia")
+    antioquia = cat.Departamento.objects.create(id=1, codigo="05", nombre="Antioquia")
     medellin = cat.Municipio.objects.create(
-        codigo="05001", nombre="Medellín", departamento=antioquia
+        id=1, codigo="05001", nombre="Medellín", departamento=antioquia
     )
-    cop = cat.Moneda.objects.create(codigo="COP", nombre="Peso colombiano")
-    unidad = cat.UnidadMedida.objects.create(codigo="94", nombre="Unidad")
-    iva = cat.Tributo.objects.create(codigo="01", nombre="IVA")
+    cop = cat.Moneda.objects.create(id=35, codigo="COP", nombre="Peso colombiano")
+    unidad = cat.UnidadMedida.objects.create(id=70, codigo="94", nombre="Unidad")
+    iva = cat.Tributo.objects.create(id=1, codigo="01", nombre="IVA")
     return {
         "usuario": usuario,
         "nit": nit,
@@ -142,7 +142,7 @@ def crear_documento_factura(catalogos=None):
         pin="12345",
     )
     tipo_factura, _ = TipoFactura.objects.get_or_create(
-        codigo="01", defaults={"nombre": "Factura de Venta"}
+        codigo="01", defaults={"id": 1, "nombre": "Factura de Venta"}
     )
     resolucion = Resolucion.objects.create(
         emisor=emisor, tipo_factura=tipo_factura, numero_resolucion="18760000001",

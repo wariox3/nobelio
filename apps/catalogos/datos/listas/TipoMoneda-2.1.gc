@@ -24,6 +24,11 @@
 			<LongName xml:lang="es">Nombre</LongName>
 			<Data Type="string"/>
 		</Column>
+		<Column Id="id" Use="optional">
+			<ShortName>Id</ShortName>
+			<LongName xml:lang="es">Id fijo del código en nobelio</LongName>
+			<Data Type="nonNegativeInteger"/>
+		</Column>
 		<Key Id="codeKey">
 			<ShortName>CodeKey</ShortName>
 			<ColumnRef Ref="code"/>
@@ -34,6 +39,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>AED</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>1</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dírham de los Emiratos Árabes Unidos</SimpleValue>
 			</Value>
@@ -41,6 +49,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>AFN</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>2</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Afgani</SimpleValue>
@@ -50,6 +61,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>ALL</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>3</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Lek</SimpleValue>
 			</Value>
@@ -57,6 +71,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>AMD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>4</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dram armenio</SimpleValue>
@@ -66,6 +83,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>ANG</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>5</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Florín antillano neerlandés</SimpleValue>
 			</Value>
@@ -73,6 +93,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>AOA</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>6</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Kwanza</SimpleValue>
@@ -82,6 +105,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>ARS</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>7</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Peso argentino</SimpleValue>
 			</Value>
@@ -89,6 +115,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>AUD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>8</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dólar australiano</SimpleValue>
@@ -98,6 +127,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>AWG</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>9</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Florín arubeño</SimpleValue>
 			</Value>
@@ -105,6 +137,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>AZN</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>10</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Manat azerbaiyano</SimpleValue>
@@ -114,6 +149,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>BAM</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>11</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Marco convertible</SimpleValue>
 			</Value>
@@ -121,6 +159,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>BBD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>12</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dólar de Barbados</SimpleValue>
@@ -130,6 +171,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>BDT</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>13</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Taka</SimpleValue>
 			</Value>
@@ -137,6 +181,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>BGN</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>14</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Lev búlgaro</SimpleValue>
@@ -146,6 +193,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>BHD</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>15</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dinar bareiní</SimpleValue>
 			</Value>
@@ -153,6 +203,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>BIF</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>16</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Franco de Burundi</SimpleValue>
@@ -162,6 +215,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>BMD</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>17</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dólar bermudeño</SimpleValue>
 			</Value>
@@ -169,6 +225,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>BND</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>18</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dólar de Brunéi</SimpleValue>
@@ -178,6 +237,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>BOB</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>19</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Boliviano</SimpleValue>
 			</Value>
@@ -185,6 +247,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>BOV</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>MVDOL</SimpleValue>
@@ -194,6 +259,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>BRL</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>21</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Real brasileño</SimpleValue>
 			</Value>
@@ -201,6 +269,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>BSD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>22</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dólar bahameño</SimpleValue>
@@ -210,6 +281,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>BTN</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>23</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Ngultrum</SimpleValue>
 			</Value>
@@ -217,6 +291,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>BWP</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>24</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Pula</SimpleValue>
@@ -226,6 +303,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>BYR</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>25</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Rublo bielorruso</SimpleValue>
 			</Value>
@@ -233,6 +313,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>BZD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>26</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dólar beliceño</SimpleValue>
@@ -242,6 +325,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>CAD</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>27</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dólar canadiense</SimpleValue>
 			</Value>
@@ -249,6 +335,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>CDF</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>28</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Franco congoleño</SimpleValue>
@@ -258,6 +347,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>CHE</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>29</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Euro WIR</SimpleValue>
 			</Value>
@@ -265,6 +357,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>CHF</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>30</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Franco suizo</SimpleValue>
@@ -274,6 +369,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>CHW</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>31</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Franco WIR</SimpleValue>
 			</Value>
@@ -281,6 +379,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>CLF</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>32</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Unidad de fomento</SimpleValue>
@@ -290,6 +391,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>CLP</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>33</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Peso chileno</SimpleValue>
 			</Value>
@@ -297,6 +401,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>CNY</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>34</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Yuan chino</SimpleValue>
@@ -306,6 +413,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>COP</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>35</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Peso colombiano</SimpleValue>
 			</Value>
@@ -313,6 +423,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>COU</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>36</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Unidad de valor real</SimpleValue>
@@ -322,6 +435,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>CRC</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>37</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Colón costarricense</SimpleValue>
 			</Value>
@@ -329,6 +445,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>CUC</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>38</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Peso convertible</SimpleValue>
@@ -338,6 +457,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>CUP</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>39</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Peso cubano</SimpleValue>
 			</Value>
@@ -345,6 +467,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>CVE</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>40</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Escudo caboverdiano</SimpleValue>
@@ -354,6 +479,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>CZK</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>41</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Corona checa</SimpleValue>
 			</Value>
@@ -361,6 +489,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>DJF</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>42</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Franco yibutiano</SimpleValue>
@@ -370,6 +501,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>DKK</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>43</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Corona danesa</SimpleValue>
 			</Value>
@@ -377,6 +511,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>DOP</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>44</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Peso dominicano</SimpleValue>
@@ -386,6 +523,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>DZD</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>45</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dinar argelino</SimpleValue>
 			</Value>
@@ -393,6 +533,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>EGP</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>46</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Libra egipcia</SimpleValue>
@@ -402,6 +545,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>ERN</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>47</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Nakfa</SimpleValue>
 			</Value>
@@ -409,6 +555,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>ETB</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>48</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Birr etíope</SimpleValue>
@@ -418,6 +567,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>EUR</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>49</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Euro</SimpleValue>
 			</Value>
@@ -425,6 +577,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>FJD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>50</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dólar fiyiano</SimpleValue>
@@ -434,6 +589,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>FKP</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>51</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Libra malvinense</SimpleValue>
 			</Value>
@@ -441,6 +599,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>GBP</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>52</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Libra esterlina</SimpleValue>
@@ -450,6 +611,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>GEL</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>53</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Lari</SimpleValue>
 			</Value>
@@ -457,6 +621,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>GHS</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>54</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Cedi ghanés</SimpleValue>
@@ -466,6 +633,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>GIP</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>55</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Libra de Gibraltar</SimpleValue>
 			</Value>
@@ -473,6 +643,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>GMD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>56</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dalasi</SimpleValue>
@@ -482,6 +655,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>GNF</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>57</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Franco guineano</SimpleValue>
 			</Value>
@@ -489,6 +665,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>GTQ</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>58</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Quetzal</SimpleValue>
@@ -498,6 +677,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>GYD</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>59</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dólar guyanés</SimpleValue>
 			</Value>
@@ -505,6 +687,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>HKD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>60</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dólar de Hong Kong</SimpleValue>
@@ -514,6 +699,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>HNL</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>61</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Lempira</SimpleValue>
 			</Value>
@@ -521,6 +709,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>HRK</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>62</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Kuna</SimpleValue>
@@ -530,6 +721,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>HTG</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>63</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Gourde</SimpleValue>
 			</Value>
@@ -537,6 +731,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>HUF</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>64</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Forinto</SimpleValue>
@@ -546,6 +743,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>IDR</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>65</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Rupia indonesia</SimpleValue>
 			</Value>
@@ -553,6 +753,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>ILS</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>66</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Nuevo shéquel israelí</SimpleValue>
@@ -562,6 +765,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>INR</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>67</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Rupia india</SimpleValue>
 			</Value>
@@ -569,6 +775,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>IQD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>68</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dinar iraquí</SimpleValue>
@@ -578,6 +787,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>IRR</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>69</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Rial iraní</SimpleValue>
 			</Value>
@@ -585,6 +797,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>ISK</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>70</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Corona islandesa</SimpleValue>
@@ -594,6 +809,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>JMD</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>71</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dólar jamaiquino</SimpleValue>
 			</Value>
@@ -601,6 +819,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>JOD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>72</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dinar jordano</SimpleValue>
@@ -610,6 +831,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>JPY</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>73</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Yen</SimpleValue>
 			</Value>
@@ -617,6 +841,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>KES</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>74</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Chelín keniano</SimpleValue>
@@ -626,6 +853,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>KGS</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>75</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Som</SimpleValue>
 			</Value>
@@ -633,6 +863,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>KHR</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>76</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Riel</SimpleValue>
@@ -642,6 +875,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>KMF</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>77</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Franco comorense</SimpleValue>
 			</Value>
@@ -649,6 +885,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>KPW</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>78</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Won norcoreano</SimpleValue>
@@ -658,6 +897,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>KRW</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>79</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Won</SimpleValue>
 			</Value>
@@ -665,6 +907,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>KWD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>80</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dinar kuwaití</SimpleValue>
@@ -674,6 +919,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>KYD</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>81</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dólar de las Islas Caimán</SimpleValue>
 			</Value>
@@ -681,6 +929,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>KZT</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>82</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Tenge</SimpleValue>
@@ -690,6 +941,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>LAK</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>83</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Kip</SimpleValue>
 			</Value>
@@ -697,6 +951,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>LBP</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>84</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Libra libanesa</SimpleValue>
@@ -706,6 +963,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>LKR</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>85</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Rupia de Sri Lanka</SimpleValue>
 			</Value>
@@ -713,6 +973,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>LRD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>86</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dólar liberiano</SimpleValue>
@@ -722,6 +985,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>LSL</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>87</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Loti</SimpleValue>
 			</Value>
@@ -729,6 +995,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>LYD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>88</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dinar libio</SimpleValue>
@@ -738,6 +1007,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>MAD</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>89</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dírham marroquí</SimpleValue>
 			</Value>
@@ -745,6 +1017,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>MDL</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>90</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Leu moldavo</SimpleValue>
@@ -754,6 +1029,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>MGA</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>91</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Ariary malgache</SimpleValue>
 			</Value>
@@ -761,6 +1039,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>MKD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>92</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Denar</SimpleValue>
@@ -770,6 +1051,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>MMK</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>93</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Kyat</SimpleValue>
 			</Value>
@@ -777,6 +1061,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>MNT</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>94</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Tugrik</SimpleValue>
@@ -786,6 +1073,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>MOP</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>95</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Pataca</SimpleValue>
 			</Value>
@@ -793,6 +1083,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>MRO</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>96</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Uguiya</SimpleValue>
@@ -802,6 +1095,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>MUR</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>97</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Rupia de Mauricio</SimpleValue>
 			</Value>
@@ -809,6 +1105,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>MVR</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>98</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Rufiyaa</SimpleValue>
@@ -818,6 +1117,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>MWK</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>99</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Kwacha</SimpleValue>
 			</Value>
@@ -825,6 +1127,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>MXN</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>100</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Peso mexicano</SimpleValue>
@@ -834,6 +1139,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>MXV</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>101</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Unidad de Inversión (UDI) mexicana</SimpleValue>
 			</Value>
@@ -841,6 +1149,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>MYR</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>102</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Ringgit malayo</SimpleValue>
@@ -850,6 +1161,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>MZN</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>103</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Metical mozambiqueño</SimpleValue>
 			</Value>
@@ -857,6 +1171,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>NAD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>104</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dólar namibio</SimpleValue>
@@ -866,6 +1183,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>NGN</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>105</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Naira</SimpleValue>
 			</Value>
@@ -873,6 +1193,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>NIO</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>106</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Córdoba</SimpleValue>
@@ -882,6 +1205,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>NOK</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>107</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Corona noruega</SimpleValue>
 			</Value>
@@ -889,6 +1215,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>NPR</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>108</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Rupia nepalí</SimpleValue>
@@ -898,6 +1227,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>NZD</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>109</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dólar neozelandés</SimpleValue>
 			</Value>
@@ -905,6 +1237,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>OMR</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>110</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Rial omaní</SimpleValue>
@@ -914,6 +1249,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>PAB</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>111</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Balboa</SimpleValue>
 			</Value>
@@ -921,6 +1259,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>PEN</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>112</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Sol</SimpleValue>
@@ -930,6 +1271,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>PGK</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>113</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Kina</SimpleValue>
 			</Value>
@@ -937,6 +1281,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>PHP</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>114</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Peso filipino</SimpleValue>
@@ -946,6 +1293,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>PKR</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>115</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Rupia pakistaní</SimpleValue>
 			</Value>
@@ -953,6 +1303,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>PLN</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>116</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Złoty</SimpleValue>
@@ -962,6 +1315,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>PYG</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>117</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Guaraní</SimpleValue>
 			</Value>
@@ -969,6 +1325,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>QAR</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>118</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Riyal qatarí</SimpleValue>
@@ -978,6 +1337,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>RON</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>119</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Leu rumano</SimpleValue>
 			</Value>
@@ -985,6 +1347,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>RSD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>120</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dinar serbio</SimpleValue>
@@ -994,6 +1359,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>RUB</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>121</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Rublo ruso</SimpleValue>
 			</Value>
@@ -1001,6 +1369,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>RWF</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>122</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Franco ruandés</SimpleValue>
@@ -1010,6 +1381,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>SAR</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>123</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Riyal saudí</SimpleValue>
 			</Value>
@@ -1017,6 +1391,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>SBD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>124</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dólar de las Islas Salomón</SimpleValue>
@@ -1026,6 +1403,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>SCR</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>125</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Rupia seychelense</SimpleValue>
 			</Value>
@@ -1033,6 +1413,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>SDG</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>126</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dinar sudanés</SimpleValue>
@@ -1042,6 +1425,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>SEK</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>127</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Corona sueca</SimpleValue>
 			</Value>
@@ -1049,6 +1435,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>SGD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>128</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dólar de Singapur</SimpleValue>
@@ -1058,6 +1447,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>SHP</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>129</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Libra de Santa Elena</SimpleValue>
 			</Value>
@@ -1065,6 +1457,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>SLL</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>130</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Leone</SimpleValue>
@@ -1074,6 +1469,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>SOS</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>131</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Chelín somalí</SimpleValue>
 			</Value>
@@ -1081,6 +1479,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>SRD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>132</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dólar surinamés</SimpleValue>
@@ -1090,6 +1491,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>SSP</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>133</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Libra sursudanesa</SimpleValue>
 			</Value>
@@ -1097,6 +1501,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>STD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>134</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dobra</SimpleValue>
@@ -1106,6 +1513,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>SVC</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>135</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Colon Salvadoreño</SimpleValue>
 			</Value>
@@ -1113,6 +1523,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>SYP</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>136</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Libra siria</SimpleValue>
@@ -1122,6 +1535,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>SZL</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>137</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Lilangeni</SimpleValue>
 			</Value>
@@ -1129,6 +1545,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>THB</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>138</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Baht</SimpleValue>
@@ -1138,6 +1557,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>TJS</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>139</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Somoni tayiko</SimpleValue>
 			</Value>
@@ -1145,6 +1567,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>TMT</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>140</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Manat turcomano</SimpleValue>
@@ -1154,6 +1579,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>TND</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>141</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dinar tunecino</SimpleValue>
 			</Value>
@@ -1161,6 +1589,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>TOP</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>142</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Paʻanga</SimpleValue>
@@ -1170,6 +1601,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>TRY</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>143</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Lira turca</SimpleValue>
 			</Value>
@@ -1177,6 +1611,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>TTD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>144</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dólar de Trinidad y Tobago</SimpleValue>
@@ -1186,6 +1623,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>TWD</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>145</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Nuevo dólar taiwanés</SimpleValue>
 			</Value>
@@ -1193,6 +1633,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>TZS</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>146</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Chelín tanzano</SimpleValue>
@@ -1202,6 +1645,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>UAH</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>147</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Grivna</SimpleValue>
 			</Value>
@@ -1209,6 +1655,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>UGX</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>148</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Chelín ugandés</SimpleValue>
@@ -1218,6 +1667,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>USD</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>149</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dólar estadounidense</SimpleValue>
 			</Value>
@@ -1225,6 +1677,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>USN</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>150</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dólar estadounidense (Siguiente día)</SimpleValue>
@@ -1234,6 +1689,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>UYI</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>151</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Peso en Unidades Indexadas (Uruguay)</SimpleValue>
 			</Value>
@@ -1241,6 +1699,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>UYU</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>152</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Peso uruguayo</SimpleValue>
@@ -1250,6 +1711,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>UZS</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>153</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Som uzbeko</SimpleValue>
 			</Value>
@@ -1257,6 +1721,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>VEF</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>154</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Bolívar</SimpleValue>
@@ -1266,6 +1733,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>VES7</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>155</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Bolívar soberano</SimpleValue>
 			</Value>
@@ -1273,6 +1743,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>VND</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>156</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dong vietnamita</SimpleValue>
@@ -1282,6 +1755,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>VUV</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>157</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Vatu</SimpleValue>
 			</Value>
@@ -1289,6 +1765,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>WST</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>158</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Tala</SimpleValue>
@@ -1298,6 +1777,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>XAF</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>159</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Franco CFA de África Central</SimpleValue>
 			</Value>
@@ -1305,6 +1787,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>XAG</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>160</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Plata (una onza troy)</SimpleValue>
@@ -1314,6 +1799,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>XAU</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>161</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Oro (una onza troy)</SimpleValue>
 			</Value>
@@ -1321,6 +1809,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>XBA</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>162</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Unidad compuesta europea (EURCO) (Unidad del mercado de bonos)</SimpleValue>
@@ -1330,6 +1821,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>XBB</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>163</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Unidad Monetaria europea (E.M.U.-6) (Unidad del mercado de bonos)</SimpleValue>
 			</Value>
@@ -1337,6 +1831,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>XBC</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>164</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Unidad europea de cuenta 9 (E.U.A.-9) (Unidad del mercado de bonos)</SimpleValue>
@@ -1346,6 +1843,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>XBD</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>165</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Unidad europea de cuenta 17 (E.U.A.-17) (Unidad del mercado de bonos)</SimpleValue>
 			</Value>
@@ -1353,6 +1853,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>XCD</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>166</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dólar del Caribe Oriental</SimpleValue>
@@ -1362,6 +1865,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>XDR</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>167</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Derechos especiales de giro</SimpleValue>
 			</Value>
@@ -1369,6 +1875,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>XOF</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>168</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Franco CFA de África Occidental</SimpleValue>
@@ -1378,6 +1887,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>XPD</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>169</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Paladio (una onza troy)</SimpleValue>
 			</Value>
@@ -1385,6 +1897,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>XPF</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>170</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Franco CFP</SimpleValue>
@@ -1394,6 +1909,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>XPT</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>171</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Platino (una onza troy)</SimpleValue>
 			</Value>
@@ -1401,6 +1919,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>XSU</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>172</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>SUCRE</SimpleValue>
@@ -1410,6 +1931,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>XTS</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>173</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Reservado para pruebas</SimpleValue>
 			</Value>
@@ -1417,6 +1941,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>XUA</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>174</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Unidad de cuenta BAD</SimpleValue>
@@ -1426,6 +1953,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>XXX</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>175</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Sin divisa</SimpleValue>
 			</Value>
@@ -1433,6 +1963,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>YER</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>176</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Rial yemení</SimpleValue>
@@ -1442,6 +1975,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>ZAR</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>177</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Rand</SimpleValue>
 			</Value>
@@ -1450,6 +1986,9 @@
 			<Value ColumnRef="code">
 				<SimpleValue>ZMW</SimpleValue>
 			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>178</SimpleValue>
+			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Kwacha zambiano</SimpleValue>
 			</Value>
@@ -1457,6 +1996,9 @@
 		<Row>
 			<Value ColumnRef="code">
 				<SimpleValue>ZWL</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>179</SimpleValue>
 			</Value>
 			<Value ColumnRef="name">
 				<SimpleValue>Dólar zimbabuense</SimpleValue>

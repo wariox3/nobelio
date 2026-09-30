@@ -5,10 +5,11 @@ from rest_framework.test import APITestCase
 
 from apps.documentos.models import Documento, DocumentoEstado, DocumentoTipo
 from apps.documentos.tests_utils import crear_catalogos_minimos, crear_certificado
+from apps.catalogos.carga import cargar
 from apps.catalogos.models import TipoFactura
 from apps.emisores.models import Emisor, Resolucion, SoftwareDian
 from apps.emisores.servicios import RESOLUCION_SET_PRUEBAS
-from apps.nomina.tests_utils import crear_catalogos_de_pago
+from apps.nomina.tests_utils import cargar_catalogos_de_nomina
 from apps.nucleo.models import Ambiente
 from apps.nucleo.tests_utils import errores_por_campo
 
@@ -36,16 +37,11 @@ class SoftwareDianAPITests(APITestCase):
         self.usuario.emisores.add(self.emisor)
         self.client.force_authenticate(self.usuario)
         self.url = "/api/emisores/software/"
-        # `crear_catalogos_minimos` no trae tipos de factura y el sembrado de
-        # la resolución de pruebas necesita el 01. En el servidor lo carga
-        # `manage.py cargar_catalogos`.
-        TipoFactura.objects.get_or_create(
-            codigo="01", defaults={"nombre": "Factura electrónica de Venta"},
-        )
-        # La nómina de prueba necesita forma y medio de pago, que no vienen en
-        # los catálogos mínimos de documentos. En el servidor los carga
-        # `manage.py cargar_catalogos`.
-        crear_catalogos_de_pago()
+        # `crear_catalogos_minimos` no trae tipos de factura, y el sembrado de
+        # la resolución de pruebas necesita el 01 y el 20 (P.O.S.); ni los de
+        # nómina, que necesita la nómina de prueba.
+        cargar([TipoFactura])
+        cargar_catalogos_de_nomina()
 
     def _payload(self):
         return {

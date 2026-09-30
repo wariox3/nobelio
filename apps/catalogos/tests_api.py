@@ -30,7 +30,7 @@ class PermisosTests(APITestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.iva = Tributo.objects.create(codigo="01", nombre="IVA")
+        cls.iva = Tributo.objects.create(id=1, codigo="01", nombre="IVA")
 
     def test_sin_credencial_responden(self):
         for ruta in (*RUTAS, f"/api/catalogos/tributo/{self.iva.pk}/"):
@@ -97,14 +97,15 @@ class ExportarTests(APITestCase):
         # Más filas que una página, para que se note si pagina.
         cls.total = settings.REST_FRAMEWORK["PAGE_SIZE"] * 2 + 3
         Tributo.objects.bulk_create(
-            Tributo(codigo=f"{i:02}", nombre=f"Tributo {i}") for i in range(cls.total)
+            Tributo(id=i + 1, codigo=f"{i:02}", nombre=f"Tributo {i}")
+            for i in range(cls.total)
         )
-        cls.antioquia = Departamento.objects.create(codigo="05", nombre="Antioquia")
+        cls.antioquia = Departamento.objects.create(id=1, codigo="05", nombre="Antioquia")
         Municipio.objects.create(
-            codigo="05001", nombre="Medellín", codigo_postal="050001",
+            id=1, codigo="05001", nombre="Medellín", codigo_postal="050001",
             departamento=cls.antioquia,
         )
-        Municipio.objects.create(codigo="99999", nombre="Sin departamento")
+        Municipio.objects.create(id=9999, codigo="99999", nombre="Sin departamento")
 
     def test_devuelve_el_catalogo_entero_sin_paginar(self):
         resp = self.client.get("/api/catalogos/tributo/exportar/")
@@ -150,8 +151,8 @@ class ExportarTests(APITestCase):
 class IndiceTests(APITestCase):
     @classmethod
     def setUpTestData(cls):
-        Tributo.objects.create(codigo="01", nombre="IVA")
-        cls.ultimo = Tributo.objects.create(codigo="04", nombre="INC")
+        Tributo.objects.create(id=1, codigo="01", nombre="IVA")
+        cls.ultimo = Tributo.objects.create(id=4, codigo="04", nombre="INC")
 
     def test_enumera_todos_los_catalogos(self):
         resp = self.client.get("/api/catalogos/")

@@ -9,9 +9,9 @@ distintos) y la caja del DS es de **2022**, mientras que las listas de factura
 del directorio padre vienen de la *Caja de herramientas FE V19 (v2026)*. Mezclarlas
 sería degradar las de factura a una versión anterior.
 
-`cargar_catalogos` **no lee esta carpeta**: `genericode.listar_archivos()` hace
-`glob("*.gc")` sin recursión sobre el directorio configurado. Cuando se implemente
-la emisión de documento soporte habrá que decidir explícitamente qué se carga.
+`cargar_catalogos` solo carga de esta carpeta `TipoDocumento-2.1.gc` (el `05` y
+el `95`, con su columna `id`), declarado en `apps/catalogos/carga.py`. El resto
+espera a que existan los modelos que las consuman.
 
 Ver [docs/anexo-documento-soporte.md](../../../../../docs/anexo-documento-soporte.md)
 para qué significa cada lista.

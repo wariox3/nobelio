@@ -88,7 +88,7 @@ class PDFPorTipoTests(TestCase):
         # `es_retencion` no es un campo sino una propiedad del código: el 06
         # (ReteFuente) ya lo es por serlo.
         retencion, _ = Tributo.objects.get_or_create(
-            codigo="06", defaults={"nombre": "ReteFuente"},
+            codigo="06", defaults={"id": 6, "nombre": "ReteFuente"},
         )
         doc.DocumentoDetalleImpuesto.objects.create(
             detalle=detalle, tributo=retencion,

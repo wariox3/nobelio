@@ -241,9 +241,10 @@ que ya usa la factura, y la identificación del trabajador reutiliza
 `catalogos.TipoIdentificacion`: de los once códigos del numeral 5.2.1 solo
 faltaba el `47` (PEP), porque el `91` (NUIP) ya venía en la lista de factura.
 
-Las cuatro listas propias y ese `47` los siembra la migración
-`catalogos/0006_datos_nomina`; `cargar_catalogos` no interviene porque no hay
-`.gc` que leer. Todas quedan expuestas en `/api/catalogos/` como los demás
+La DIAN no publica las cuatro listas propias en Genericode, así que se
+transcribieron a `.gc` en `apps/catalogos/datos/listas/nomina/`, y el `47` se
+añadió como fila a `TipoIdentificacion-2.1.gc`: `cargar_catalogos` las carga
+como a las demás. Todas quedan expuestas en `/api/catalogos/` como los demás
 catálogos (`periodo-nomina`, `tipo-contrato`, `tipo-trabajador`,
 `subtipo-trabajador`).
 

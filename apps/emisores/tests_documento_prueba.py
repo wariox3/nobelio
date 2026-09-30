@@ -31,7 +31,7 @@ class CrearDocumentoPruebaTests(APITestCase):
         self.usuario.emisores.add(self.emisor)
         self.client.force_authenticate(self.usuario)
         self.tipo_01, _ = TipoFactura.objects.get_or_create(
-            codigo="01", defaults={"nombre": "Factura electrónica de Venta"},
+            codigo="01", defaults={"id": 1, "nombre": "Factura electrónica de Venta"},
         )
         self.resolucion = self._resolucion(self.tipo_01)
 
@@ -90,7 +90,7 @@ class CrearDocumentoPruebaTests(APITestCase):
     def test_el_tipo_sale_de_la_resolucion(self):
         """Una resolución de documento soporte da un documento soporte."""
         tipo_05, _ = TipoFactura.objects.get_or_create(
-            codigo="05", defaults={"nombre": "Documento soporte"},
+            codigo="05", defaults={"id": 7, "nombre": "Documento soporte"},
         )
         soporte = self._resolucion(
             tipo_05, numero_resolucion="18760000002", prefijo="DS",
@@ -153,7 +153,7 @@ class CrearDocumentoPruebaTests(APITestCase):
     def test_rechaza_una_numeracion_que_no_lleva_documento_propio(self):
         """Las notas heredan el número del documento que corrigen."""
         tipo_91, _ = TipoFactura.objects.get_or_create(
-            codigo="91", defaults={"nombre": "Nota Crédito"},
+            codigo="91", defaults={"id": 5, "nombre": "Nota Crédito"},
         )
         notas = self._resolucion(
             tipo_91, numero_resolucion="18760000003", prefijo="NC",

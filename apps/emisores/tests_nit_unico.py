@@ -31,7 +31,7 @@ URL_EMISORES = "/api/emisores/emisor/"
 class NitUnicoTests(APITestCase):
     def setUp(self):
         self.cat = crear_catalogos_minimos()
-        self.tipo_factura = TipoFactura.objects.create(codigo="01", nombre="Factura")
+        self.tipo_factura = TipoFactura.objects.create(id=1, codigo="01", nombre="Factura")
 
         self.dueno = crear_usuario(nombre="Semantica")
         self.otro = crear_usuario(nombre="Otra persona")

@@ -21,7 +21,7 @@ from apps.documentos.tests_utils import (
 )
 from apps.emisores.models import Emisor
 from apps.seguridad.models import LlaveApi
-from apps.nomina.tests_utils import crear_catalogos_de_pago
+from apps.nomina.tests_utils import cargar_catalogos_de_nomina
 from apps.nucleo.tests_utils import errores_por_campo
 
 Usuario = get_user_model()
@@ -248,8 +248,8 @@ class AlcanceDeDocumentosTests(AlcanceBase):
             },
             "prefijo": "SETP", "consecutivo": 1, "numero": "SETP1",
             "fecha_emision": "2024-01-10",
-            "forma_pago": crear_catalogos_de_pago()[0].id,
-            "medio_pago": crear_catalogos_de_pago()[1].id,
+            "forma_pago": cargar_catalogos_de_nomina()[0].id,
+            "medio_pago": cargar_catalogos_de_nomina()[1].id,
             "fecha_vencimiento": None,
             "moneda": c["cop"].id,
             "detalles": [
