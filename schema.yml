@@ -1606,7 +1606,7 @@ paths:
     get:
       operationId: catalogos_tipo_identificacion_list
       description: |-
-        Tipo de documento de identificación: cédula, NIT, pasaporte, documento extranjero…
+        Tipo de documento de identificación: cédula, NIT, pasaporte, documento extranjero… El `id` es el propio código DIAN (13 cédula = 13, 31 NIT = 31).
 
         **Lista DIAN:** `TipoIdentificacion`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
 
@@ -1655,7 +1655,7 @@ paths:
     get:
       operationId: catalogos_tipo_identificacion_retrieve
       description: |-
-        Tipo de documento de identificación: cédula, NIT, pasaporte, documento extranjero…
+        Tipo de documento de identificación: cédula, NIT, pasaporte, documento extranjero… El `id` es el propio código DIAN (13 cédula = 13, 31 NIT = 31).
 
         **Lista DIAN:** `TipoIdentificacion`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
 
@@ -1705,7 +1705,7 @@ paths:
     get:
       operationId: catalogos_tipo_identificacion_exportar_list
       description: |-
-        Tipo de documento de identificación: cédula, NIT, pasaporte, documento extranjero…
+        Tipo de documento de identificación: cédula, NIT, pasaporte, documento extranjero… El `id` es el propio código DIAN (13 cédula = 13, 31 NIT = 31).
 
         **Lista DIAN:** `TipoIdentificacion`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
 

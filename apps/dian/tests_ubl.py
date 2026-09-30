@@ -6,6 +6,7 @@ from django.conf import settings
 from django.test import TestCase
 from lxml import etree
 
+from apps.catalogos.models import Tributo
 from apps.dian import ubl
 from apps.documentos import models as doc
 from apps.documentos.tests_utils import crear_catalogos_minimos
@@ -209,3 +210,41 @@ class GeneracionUBLTests(TestCase):
         total = arbol.find(f"{cac}InvoiceLine/{cac}TaxTotal")
         self.assertEqual(len(total.findall(f"{cac}TaxSubtotal")), 1)
         self.assertEqual(total.findtext(f"{cac}TaxSubtotal/{cac}TaxCategory/{cbc}Percent"), "19.00")
+
+    # --- Base imponible del total (TaxExclusiveAmount, regla FAU04) ---------
+
+    def _base_imponible(self):
+        arbol = etree.fromstring(self._generar())
+        return arbol.findtext(
+            f"{{{ubl.NS['cac']}}}LegalMonetaryTotal/{{{ubl.NS['cbc']}}}TaxExclusiveAmount"
+        )
+
+    def _linea(self, numero, valor):
+        return doc.DocumentoDetalle.objects.create(
+            documento=self.documento, numero_linea=numero,
+            descripcion=f"Producto {numero}", codigo_producto=f"DEMO-{numero}",
+            cantidad=Decimal("1"), unidad_medida=self.cat["unidad"],
+            valor_unitario=valor, valor_total=valor,
+        )
+
+    def test_la_linea_sin_impuestos_no_suma_a_la_base(self):
+        """FAU04: la base es la de las líneas gravadas, no el valor bruto."""
+        self._linea(2, Decimal("64500.00"))
+        self.assertEqual(self._base_imponible(), "1500000.00")
+
+    def test_sin_impuestos_la_base_es_cero(self):
+        """El caso que la DIAN rechazó: una factura sin impuestos salía con base
+        igual al bruto."""
+        doc.DocumentoDetalleImpuesto.objects.filter(
+            detalle__documento=self.documento
+        ).delete()
+        self.assertEqual(self._base_imponible(), "0.00")
+
+    def test_dos_tributos_sobre_la_misma_linea_cuentan_una_vez(self):
+        inc = Tributo.objects.create(id=4, codigo="04", nombre="INC")
+        linea = self.documento.detalles.get()
+        doc.DocumentoDetalleImpuesto.objects.create(
+            detalle=linea, tributo=inc, base_gravable=Decimal("1500000.00"),
+            tarifa=Decimal("8.00"), valor=Decimal("120000.00"),
+        )
+        self.assertEqual(self._base_imponible(), "1500000.00")

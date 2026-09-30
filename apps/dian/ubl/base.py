@@ -594,7 +594,8 @@ class ConstructorUBL:
         bruto = self.doc.valor_bruto
         impuestos = self.doc.total_impuestos
         _sub(total, "cbc", "LineExtensionAmount", _valor(bruto), currencyID=self.moneda)
-        _sub(total, "cbc", "TaxExclusiveAmount", _valor(bruto), currencyID=self.moneda)
+        _sub(total, "cbc", "TaxExclusiveAmount", _valor(self._base_imponible()),
+             currencyID=self.moneda)
         _sub(total, "cbc", "TaxInclusiveAmount", _valor(bruto + impuestos), currencyID=self.moneda)
         # Los cuatro se emiten siempre, aunque vayan en cero: es lo que hacen
         # los proveedores tecnológicos, y así el receptor lee todos los sumandos
@@ -609,6 +610,24 @@ class ConstructorUBL:
         _sub(total, "cbc", "PrepaidAmount", _valor(0), currencyID=self.moneda)
         _sub(total, "cbc", "PayableRoundingAmount", _valor(0), currencyID=self.moneda)
         _sub(total, "cbc", "PayableAmount", _valor(self.doc.total_a_pagar), currencyID=self.moneda)
+
+    def _base_imponible(self):
+        """La suma de las bases imponibles de las líneas (regla FAU04).
+
+        No es el valor bruto: una línea sin impuestos —excluida o no gravada—
+        no tiene base imponible y no suma. Cada línea cuenta una vez aunque
+        lleve dos tributos sobre la misma base (IVA e INC), y las retenciones
+        no cuentan: no son un TaxTotal de la línea.
+        """
+        total = Decimal("0")
+        for linea in self.doc.detalles.all():
+            bases = [
+                imp.base_gravable for imp in linea.impuestos.all()
+                if self._etiqueta_impuesto(imp.tributo.codigo) == "TaxTotal"
+            ]
+            if bases:
+                total += max(bases)
+        return total
 
     def _lineas(self, raiz):
         for linea in self.doc.detalles.all():

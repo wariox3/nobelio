@@ -85,7 +85,8 @@ CATALOGOS = (
     Catalogo(
         "tipo-identificacion", models.TipoIdentificacion,
         "Tipo de documento de identificación: cédula, NIT, pasaporte, "
-        "documento extranjero…",
+        "documento extranjero… El `id` es el propio código DIAN (13 cédula = "
+        "13, 31 NIT = 31).",
         "TipoIdentificacion", (FACTURA,),
         _id(DOCUMENTO, "adquiriente.tipo_identificacion")
         + _id(EMISOR, "tipo_identificacion")

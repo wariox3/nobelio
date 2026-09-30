@@ -102,11 +102,8 @@ MENSAJE_RESPUESTA_SIN_200 = (
 
 
 def mensaje_documento_duplicado(documento):
-    """Mensaje del 409: la ruta no va aquí sino en la cabecera `Location`."""
-    return (
-        f"El documento {documento.numero} ya fue creado; su ruta va en la "
-        "cabecera Location."
-    )
+    """Mensaje del 409, para quien lo lee: la ruta va en la cabecera `Location`."""
+    return f"El documento {documento.numero} ya fue creado."
 
 
 class DocumentoViewSet(
