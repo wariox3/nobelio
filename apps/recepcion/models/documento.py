@@ -2,16 +2,6 @@
 from django.db import models
 
 from apps.nucleo.models import ModeloConFechas, ModeloUUID
-from apps.utilidades.almacenamiento import almacenamiento_backblaze
-
-
-def _ruta_archivo(instance, filename):
-    """Ruta en el bucket: ``<emisor_id>/recepcion/<aaaa>/<mm>/<archivo>``.
-
-    La misma forma que los artefactos de la emisión, en otra carpeta: aislado
-    por emisor y agrupado por mes.
-    """
-    return f"{instance.emisor_id}/recepcion/{instance.fecha_emision:%Y/%m}/{filename}"
 
 
 class Documento(ModeloUUID, ModeloConFechas):
@@ -24,6 +14,9 @@ class Documento(ModeloUUID, ModeloConFechas):
 
     El CUFE es único: si el proveedor manda la misma factura dos veces, la
     segunda se ignora. Las filas solo las crea el procesamiento del correo.
+
+    Sus archivos (el XML recibido, el XML del documento y el PDF) son
+    ``Adjunto`` del correo con ``documento`` apuntando aquí.
     """
 
     # Identificación
@@ -69,20 +62,6 @@ class Documento(ModeloUUID, ModeloConFechas):
         help_text="ValidationResultCode del AttachedDocument (02 = validado).",
     )
     fecha_validacion = models.DateTimeField("fecha de validación DIAN", null=True, blank=True)
-
-    # Archivos en B2
-    xml_archivo = models.FileField(
-        "XML recibido", upload_to=_ruta_archivo, storage=almacenamiento_backblaze,
-        help_text="El XML tal como llegó: el AttachedDocument o el documento suelto.",
-    )
-    xml_factura_archivo = models.FileField(
-        "XML del documento", upload_to=_ruta_archivo,
-        storage=almacenamiento_backblaze, blank=True,
-        help_text="El documento extraído del AttachedDocument. Vacío si llegó suelto.",
-    )
-    pdf_archivo = models.FileField(
-        "PDF", upload_to=_ruta_archivo, storage=almacenamiento_backblaze, blank=True,
-    )
 
     # Relaciones
     documento_tipo = models.ForeignKey(

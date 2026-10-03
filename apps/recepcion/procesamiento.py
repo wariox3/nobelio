@@ -2,7 +2,7 @@
 
 Descarga el MIME de R2, guarda el asunto y el Message-ID, reconoce la
 confirmación de reenvío de Gmail y registra los documentos electrónicos que
-trae (``extraccion``):
+trae (``extraccion``), con todos sus archivos como ``Adjunto``:
 
 - Cada documento va al emisor del **NIT receptor del XML**, aunque el correo
   haya llegado al buzón de otro. Si ese NIT no es de ningún emisor, no se guarda.
@@ -18,7 +18,6 @@ from email.parser import BytesParser
 from email.utils import parseaddr
 
 from botocore.exceptions import BotoCoreError, ClientError
-from django.core.files.base import ContentFile
 from django.db import IntegrityError, transaction
 from django.db.models import F
 
@@ -26,8 +25,8 @@ from apps.catalogos.models import Moneda
 from apps.documentos.models import DocumentoTipo
 from apps.emisores.models import Emisor
 from apps.nucleo.registro import campos
-from apps.recepcion import extraccion, r2
-from apps.recepcion.models import Correo, Documento
+from apps.recepcion import adjuntos, extraccion, r2
+from apps.recepcion.models import Adjunto, Correo, Documento
 
 logger = logging.getLogger(__name__)
 
@@ -117,13 +116,49 @@ def _aplicar_cabeceras(correo, mensaje):
 
 
 def _registrar_documentos(correo, mensaje):
-    """Guarda los documentos del correo y deja su estado."""
+    """Guarda los documentos y todos los adjuntos del correo, y deja su estado.
+
+    Todo o nada: documentos y adjuntos van en una transacción, y si algo falla
+    se borra de B2 lo que alcanzó a subir. Así un reintento empieza limpio y no
+    duplica adjuntos.
+    """
     try:
-        documentos = extraccion.documentos_del_correo(mensaje)
+        extraido = extraccion.extraer(mensaje)
     except extraccion.ContenidoExcesivo as error:
         raise ErrorPermanente(str(error))
+    subidos = []
+    try:
+        with transaction.atomic():
+            conteo = _guardar_todo(correo, extraido, subidos)
+    except (BotoCoreError, ClientError) as error:
+        adjuntos.borrar_subidos(subidos)
+        raise ErrorTransitorio(f"No se pudieron guardar los adjuntos en B2: {error}.")
+    except Exception:
+        adjuntos.borrar_subidos(subidos)
+        raise
+    nuevos, repetidos, desconocidos = conteo
+    if not extraido.documentos:
+        correo.estado = Correo.Estado.SIN_DOCUMENTOS
+    elif nuevos or repetidos:
+        correo.estado = Correo.Estado.PROCESADO
+    else:
+        correo.estado = Correo.Estado.EMPRESA_DESCONOCIDA
+    logger.info("recepcion.documentos %s", campos(
+        correo=correo.pk, nuevos=nuevos, repetidos=repetidos,
+        desconocidos=desconocidos, adjuntos=len(extraido.archivos),
+    ))
+
+
+def _guardar_todo(correo, extraido, subidos):
+    """Crea los documentos nuevos y un ``Adjunto`` por cada archivo del correo.
+
+    Los archivos de un documento nuevo quedan con su rol (``xml``, ``pdf``) y
+    el documento; los demás —también los de un documento repetido o de un
+    receptor desconocido— como ``otro``.
+    """
     nuevos = repetidos = desconocidos = 0
-    for datos in documentos:
+    roles = {}  # id(archivo) -> (rol, documento)
+    for datos in extraido.documentos:
         emisor = Emisor.objects.filter(
             numero_identificacion=datos.receptor_numero_identificacion,
         ).first()
@@ -134,85 +169,65 @@ def _registrar_documentos(correo, mensaje):
             # Llegó a un buzón que no es un NIT registrado, pero el XML dice
             # de quién es.
             correo.emisor = emisor
-        if _guardar(datos, emisor, correo):
-            nuevos += 1
-        else:
+        documento = _crear_documento(datos, emisor, correo)
+        if documento is None:
             repetidos += 1
-    if not documentos:
-        correo.estado = Correo.Estado.SIN_DOCUMENTOS
-    elif nuevos or repetidos:
-        correo.estado = Correo.Estado.PROCESADO
-    else:
-        correo.estado = Correo.Estado.EMPRESA_DESCONOCIDA
-    logger.info("recepcion.documentos %s", campos(
-        correo=correo.pk, nuevos=nuevos, repetidos=repetidos, desconocidos=desconocidos,
-    ))
-
-
-def _guardar(datos, emisor, correo):
-    """Crea el documento con sus archivos en B2. ``False`` si el CUFE ya existía.
-
-    Los archivos se suben antes de crear la fila (el ``upload_to`` necesita el
-    emisor y la fecha), y si la fila no se crea se borran: un CUFE repetido no
-    deja archivos sueltos en el bucket.
-    """
-    if Documento.objects.filter(cufe_cude=datos.cufe_cude).exists():
-        return False
-    documento = Documento(
-        numero=datos.numero,
-        cufe_cude=datos.cufe_cude,
-        fecha_emision=datos.fecha_emision,
-        hora_emision=datos.hora_emision,
-        tipo_codigo_dian=datos.tipo_codigo_dian,
-        proveedor_numero_identificacion=datos.proveedor_numero_identificacion,
-        proveedor_digito_verificacion=datos.proveedor_digito_verificacion,
-        proveedor_razon_social=datos.proveedor_razon_social,
-        receptor_numero_identificacion=datos.receptor_numero_identificacion,
-        valor_bruto=datos.valor_bruto,
-        total_impuestos=datos.total_impuestos,
-        total_a_pagar=datos.total_a_pagar,
-        validacion_codigo=datos.validacion_codigo,
-        fecha_validacion=datos.fecha_validacion,
-        documento_tipo=DocumentoTipo.objects.get(codigo=datos.tipo),
-        moneda=Moneda.objects.filter(codigo=datos.moneda).first() if datos.moneda else None,
-        emisor=emisor,
-        correo=correo,
-    )
-    base = _nombre_archivo(datos)
-    try:
-        documento.xml_archivo.save(f"{base}.xml", ContentFile(datos.xml.contenido), save=False)
-        if datos.xml_documento:
-            documento.xml_factura_archivo.save(
-                f"{base}-documento.xml", ContentFile(datos.xml_documento), save=False,
-            )
+            continue
+        nuevos += 1
+        roles[id(datos.xml)] = (Adjunto.Rol.XML, documento)
         if datos.pdf is not None:
-            documento.pdf_archivo.save(f"{base}.pdf", ContentFile(datos.pdf.contenido), save=False)
-    except (BotoCoreError, ClientError) as error:
-        _borrar_archivos(documento)
-        raise ErrorTransitorio(f"No se pudo guardar el documento en B2: {error}.")
+            roles[id(datos.pdf)] = (Adjunto.Rol.PDF, documento)
+        if datos.xml_documento:
+            adjuntos.crear(
+                correo, datos.xml_documento, nombre=_nombre_documento(datos),
+                rol=Adjunto.Rol.XML_DOCUMENTO, documento=documento, subidos=subidos,
+            )
+    for archivo in extraido.archivos:
+        rol, documento = roles.get(id(archivo), (Adjunto.Rol.OTRO, None))
+        adjuntos.crear(
+            correo, archivo.contenido, nombre=archivo.nombre, rol=rol,
+            documento=documento, subidos=subidos,
+        )
+    return nuevos, repetidos, desconocidos
+
+
+def _crear_documento(datos, emisor, correo):
+    """El documento nuevo, o ``None`` si el CUFE ya existía (se ignora)."""
+    if Documento.objects.filter(cufe_cude=datos.cufe_cude).exists():
+        return None
     try:
         with transaction.atomic():
-            documento.save()
+            return Documento.objects.create(
+                numero=datos.numero,
+                cufe_cude=datos.cufe_cude,
+                fecha_emision=datos.fecha_emision,
+                hora_emision=datos.hora_emision,
+                tipo_codigo_dian=datos.tipo_codigo_dian,
+                proveedor_numero_identificacion=datos.proveedor_numero_identificacion,
+                proveedor_digito_verificacion=datos.proveedor_digito_verificacion,
+                proveedor_razon_social=datos.proveedor_razon_social,
+                receptor_numero_identificacion=datos.receptor_numero_identificacion,
+                valor_bruto=datos.valor_bruto,
+                total_impuestos=datos.total_impuestos,
+                total_a_pagar=datos.total_a_pagar,
+                validacion_codigo=datos.validacion_codigo,
+                fecha_validacion=datos.fecha_validacion,
+                documento_tipo=DocumentoTipo.objects.get(codigo=datos.tipo),
+                moneda=(
+                    Moneda.objects.filter(codigo=datos.moneda).first() if datos.moneda else None
+                ),
+                emisor=emisor,
+                correo=correo,
+            )
     except IntegrityError:
         # Otro proceso guardó el mismo CUFE entre la consulta y aquí.
-        _borrar_archivos(documento)
-        return False
-    return True
+        return None
 
 
-def _nombre_archivo(datos):
-    """``<número>-<8 del CUFE>``, solo con caracteres seguros para el bucket."""
+def _nombre_documento(datos):
+    """El nombre del XML extraído del AttachedDocument: no traía uno propio."""
     numero = re.sub(r"[^A-Za-z0-9_-]", "", datos.numero) or "documento"
-    return f"{numero}-{datos.cufe_cude[:8]}"
-
-
-def _borrar_archivos(documento):
-    for campo in (documento.xml_archivo, documento.xml_factura_archivo, documento.pdf_archivo):
-        if campo:
-            try:
-                campo.delete(save=False)
-            except Exception:
-                logger.exception("recepcion.archivo_no_borrado %s", campos(nombre=campo.name))
+    return f"{numero}.xml"
 
 
 def _cabecera(mensaje, nombre):

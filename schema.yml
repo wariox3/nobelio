@@ -5969,6 +5969,145 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/recepcion/adjunto/:
+    get:
+      operationId: recepcion_adjunto_list
+      description: |-
+        Los archivos de los correos de recepción: todo lo que trajeron, ya fuera
+        de sus ZIP.
+
+        De solo lectura: los crea el procesamiento del correo y se borran con él.
+
+        Filtros: ``?correo=<id>``, ``?documento=<uuid>`` y
+        ``?rol=xml|xml_documento|pdf|otro``. ``?search=`` busca en el nombre
+        original. El contenido se baja con ``descargar/``.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un número de página dentro del conjunto de resultados paginado.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAdjuntoList'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/recepcion/adjunto/{id}/:
+    get:
+      operationId: recepcion_adjunto_retrieve
+      description: |-
+        Los archivos de los correos de recepción: todo lo que trajeron, ya fuera
+        de sus ZIP.
+
+        De solo lectura: los crea el procesamiento del correo y se borran con él.
+
+        Filtros: ``?correo=<id>``, ``?documento=<uuid>`` y
+        ``?rol=xml|xml_documento|pdf|otro``. ``?search=`` busca en el nombre
+        original. El contenido se baja con ``descargar/``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este adjunto.
+        required: true
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Adjunto'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/recepcion/adjunto/{id}/descargar/:
+    get:
+      operationId: recepcion_adjunto_descargar_retrieve
+      description: El archivo, con su nombre original.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este adjunto.
+        required: true
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/recepcion/correo/:
     get:
       operationId: recepcion_correo_list
@@ -6088,15 +6227,14 @@ paths:
     delete:
       operationId: recepcion_correo_destroy
       description: |-
-        Borra la fila y el MIME en R2, o ninguno de los dos.
+        Borra el correo sin emisor, sus adjuntos en B2 y su MIME en R2.
 
         Solo los correos sin emisor: los de un emisor son información fiscal
-        suya, y de ellos colgarán sus documentos.
+        suya (para esos está ``eliminar-admin/``). Un correo sin emisor nunca
+        tiene documentos, pero sí puede tener adjuntos.
 
-        R2 se borra dentro de la transacción, después de la fila: si R2 falla,
-        la fila vuelve y el correo sigue completo (el error de botocore lo
-        traduce a 502 el ``exception_handler``). Borrar una clave inexistente
-        no es error en R2, así que reintentar es seguro.
+        Si B2 o R2 fallan, las filas vuelven y responde 502 (lo traduce el
+        ``exception_handler``); repetir termina el trabajo.
       parameters:
       - in: path
         name: id
@@ -6129,21 +6267,77 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/recepcion/correo/{id}/adjuntos/:
+    get:
+      operationId: recepcion_correo_adjuntos_list
+      description: |-
+        Todos los archivos que trajo el correo, ya fuera de sus ZIP.
+
+        Los de un documento de otro emisor (el NIT receptor del XML manda) solo
+        los ve quien alcanza ese emisor. Se bajan con
+        ``/api/recepcion/adjunto/<id>/descargar/``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este correo recibido.
+        required: true
+      - name: ordering
+        required: false
+        in: query
+        description: Qué campo usar para ordenar los resultados.
+        schema:
+          type: string
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Adjunto'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/recepcion/correo/{id}/eliminar-admin/:
     delete:
       operationId: recepcion_correo_eliminar_admin_destroy
       description: |-
         Elimina el correo aunque tenga emisor, con todo lo que cuelga de él.
 
-        Borra los documentos que salieron del correo (de cualquier emisor), sus
-        archivos en B2 y el MIME en R2. Solo el staff o una llave de alcance
+        Borra los documentos que salieron del correo (de cualquier emisor), todos
+        sus adjuntos en B2 y el MIME en R2. Solo el staff o una llave de alcance
         global: son documentos fiscales, y el ERP puede haberlos procesado ya.
 
-        Las filas se borran en una transacción y los archivos dentro de ella,
-        después: si B2 o R2 fallan, las filas vuelven y responde 502. Los
-        archivos que ya se borraron no vuelven, pero repetir la petición
-        termina el trabajo, porque borrar lo que ya no existe no es error. Así
-        nunca quedan archivos sin dueño en los buckets.
+        Si B2 o R2 fallan, las filas vuelven y responde 502; repetir la petición
+        termina el trabajo (ver ``adjuntos.eliminar_correo``).
       parameters:
       - in: path
         name: id
@@ -6214,7 +6408,8 @@ paths:
         ``fecha_emision``, ``numero``, ``total_a_pagar`` o ``creado_en``.
 
         Los archivos se bajan con ``xml/`` (el XML tal como llegó), ``xml-factura/``
-        (el documento, sin el AttachedDocument) y ``pdf/``.
+        (el documento, sin el AttachedDocument) y ``pdf/``. Son ``Adjunto`` del
+        correo; también salen en ``/api/recepcion/adjunto/?documento=<uuid>``.
       parameters:
       - name: ordering
         required: false
@@ -6273,7 +6468,8 @@ paths:
         ``fecha_emision``, ``numero``, ``total_a_pagar`` o ``creado_en``.
 
         Los archivos se bajan con ``xml/`` (el XML tal como llegó), ``xml-factura/``
-        (el documento, sin el AttachedDocument) y ``pdf/``.
+        (el documento, sin el AttachedDocument) y ``pdf/``. Son ``Adjunto`` del
+        correo; también salen en ``/api/recepcion/adjunto/?documento=<uuid>``.
       parameters:
       - in: path
         name: id
@@ -6460,6 +6656,56 @@ paths:
                 $ref: '#/components/schemas/Error'
 components:
   schemas:
+    Adjunto:
+      type: object
+      description: 'Un archivo del correo. El contenido no va aquí: se baja con ``descargar/``.'
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        correo:
+          type: integer
+          readOnly: true
+        documento:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        rol:
+          allOf:
+          - $ref: '#/components/schemas/RolEnum'
+          readOnly: true
+        nombre:
+          type: string
+          readOnly: true
+          title: Nombre original
+        tipo_contenido:
+          type: string
+          readOnly: true
+          title: Tipo de contenido
+        tamano:
+          type: integer
+          readOnly: true
+          title: Tamaño en bytes
+        sha256:
+          type: string
+          readOnly: true
+          title: SHA-256
+        creado_en:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - correo
+      - creado_en
+      - documento
+      - id
+      - nombre
+      - rol
+      - sha256
+      - tamano
+      - tipo_contenido
     Adquiriente:
       type: object
       description: 'Datos del receptor. No tiene endpoint propio: se piden en el documento.'
@@ -11321,6 +11567,29 @@ components:
       - respuesta
       - tamano
       - tipo
+    PaginatedAdjuntoList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Adjunto'
     PaginatedCertificadoList:
       type: object
       required:
@@ -12200,6 +12469,18 @@ components:
       required:
       - avisos
       - respuesta_validado
+    RolEnum:
+      enum:
+      - xml
+      - xml_documento
+      - pdf
+      - otro
+      type: string
+      description: |-
+        * `xml` - XML recibido
+        * `xml_documento` - XML del documento
+        * `pdf` - PDF del documento
+        * `otro` - Otro adjunto
     SoftwareDian:
       type: object
       properties:

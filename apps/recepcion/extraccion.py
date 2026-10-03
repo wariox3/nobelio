@@ -121,23 +121,48 @@ class _Conteo:
 
 @dataclass
 class _Grupo:
-    """Los XML y PDF de un mismo contenedor (el correo o un ZIP): un PDF se
+    """Los archivos de un mismo contenedor (el correo o un ZIP): un PDF se
     empareja con un XML del mismo grupo."""
 
     xml: list = field(default_factory=list)
     pdf: list = field(default_factory=list)
+    otros: list = field(default_factory=list)
+
+
+@dataclass
+class Extraccion:
+    """Lo que trae el correo: sus documentos y **todos** sus archivos finales.
+
+    ``archivos`` son los XML, PDF y demás adjuntos ya fuera de sus ZIP y
+    correos adjuntos (los contenedores no van: su contenido sí). Los de cada
+    documento están también aquí, como el mismo objeto.
+    """
+
+    documentos: list
+    archivos: list
 
 
 # --- Recorrido de adjuntos ----------------------------------------------------
 
-def documentos_del_correo(mensaje: EmailMessage) -> list[DatosDocumento]:
-    """Los documentos electrónicos del correo, con su PDF si se encontró.
+def extraer(mensaje: EmailMessage) -> Extraccion:
+    """Los documentos electrónicos del correo, con su PDF si se encontró, y
+    todos sus archivos.
 
-    Lanza ``ContenidoExcesivo`` si el correo pasa los topes. Un adjunto que no
-    se puede leer (ZIP dañado, XML que no es un documento) se salta.
+    Lanza ``ContenidoExcesivo`` si el correo pasa los topes. Un XML que no es un
+    documento sigue siendo un archivo del correo; un ZIP dañado, también.
     """
     grupos = []
     _recorrer_mensaje(mensaje, grupos, _Conteo(), profundidad=0)
+    archivos = [a for g in grupos for a in (*g.xml, *g.pdf, *g.otros)]
+    return Extraccion(documentos=_documentos(grupos), archivos=archivos)
+
+
+def documentos_del_correo(mensaje: EmailMessage) -> list[DatosDocumento]:
+    """Solo los documentos de :func:`extraer`."""
+    return extraer(mensaje).documentos
+
+
+def _documentos(grupos):
     documentos = []
     pdfs_sueltos = []
     for grupo in grupos:
@@ -181,23 +206,28 @@ def _agregar(archivo, grupo, grupos, conteo, profundidad):
     # Por la firma solo si no trae extensión: un .docx o un .xlsx también son
     # ZIP por dentro, y no hay facturas ahí.
     if extension == ".zip" or (not extension and archivo.contenido[:4] == b"PK\x03\x04"):
-        _recorrer_zip(archivo, grupos, conteo, profundidad + 1)
+        if not _recorrer_zip(archivo, grupos, conteo, profundidad + 1):
+            # Dañado: no se abre, pero se guarda tal cual.
+            grupo.otros.append(archivo)
     elif extension == ".eml":
         _recorrer_eml(archivo, grupos, conteo, profundidad + 1)
     elif extension == ".xml":
         grupo.xml.append(archivo)
     elif extension == ".pdf":
         grupo.pdf.append(archivo)
+    else:
+        grupo.otros.append(archivo)
 
 
 def _recorrer_zip(archivo, grupos, conteo, profundidad):
+    """Recorre el ZIP; ``False`` si está dañado y no se pudo abrir."""
     if profundidad > MAXIMA_PROFUNDIDAD:
         raise ContenidoExcesivo("El correo anida demasiados ZIP o correos adjuntos.")
     try:
         zip_ = zipfile.ZipFile(io.BytesIO(archivo.contenido))
     except zipfile.BadZipFile:
         logger.info("recepcion.zip_danado nombre=%s", archivo.nombre)
-        return
+        return False
     grupo = _Grupo()
     grupos.append(grupo)
     with zip_:
@@ -214,6 +244,7 @@ def _recorrer_zip(archivo, grupos, conteo, profundidad):
                 continue
             nombre = PurePosixPath(info.filename).name
             _agregar(Archivo(nombre, contenido), grupo, grupos, conteo, profundidad)
+    return True
 
 
 def _recorrer_eml(archivo, grupos, conteo, profundidad):

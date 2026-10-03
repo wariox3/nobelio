@@ -1,15 +1,19 @@
 """La tarea ``procesar_correo``: cabeceras del MIME, confirmación de Gmail,
 reintentos ante fallos de R2 y registro de los documentos."""
+import hashlib
 from decimal import Decimal
+from pathlib import Path
 from unittest import mock
 
 from botocore.exceptions import ClientError, EndpointConnectionError
+from django.conf import settings
+from django.db.models.fields.files import FieldFile
 from django.test import TestCase, override_settings
 
 from apps.documentos.tests_utils import crear_catalogos_minimos
 from apps.emisores.models import Emisor
 from apps.recepcion import extraccion, r2
-from apps.recepcion.models import Correo, Documento
+from apps.recepcion.models import Adjunto, Correo, Documento
 from apps.recepcion.tareas import procesar_correo
 from apps.recepcion.tests_utils import (
     CUFE, PDF, correo_con, xml_attached, xml_documento, zip_con,
@@ -191,10 +195,20 @@ class RegistrarDocumentosTests(TestCase):
         self.assertEqual(doc.moneda, self.cat["cop"])
         self.assertEqual(doc.total_a_pagar, Decimal("119800.00"))
         self.assertEqual(doc.validacion_codigo, "02")
-        self.assertTrue(doc.xml_archivo.name.startswith(f"{self.emisor.pk}/recepcion/2026/10/FE-100-"))
-        self.assertEqual(doc.xml_archivo.read(), xml_attached())
-        self.assertTrue(doc.xml_factura_archivo.read().startswith(b"<?xml"))
-        self.assertEqual(doc.pdf_archivo.read(), PDF)
+        por_rol = {a.rol: a for a in doc.adjuntos.all()}
+        self.assertEqual(set(por_rol), {"xml", "xml_documento", "pdf"})
+        xml = por_rol["xml"]
+        self.assertEqual(xml.correo, correo)
+        self.assertEqual(xml.nombre, "fe.xml")
+        self.assertEqual(xml.tipo_contenido, "application/xml")
+        self.assertEqual(xml.tamano, len(xml_attached()))
+        self.assertEqual(xml.sha256, hashlib.sha256(xml_attached()).hexdigest())
+        self.assertRegex(xml.archivo.name, rf"^{self.emisor.pk}/recepcion/\d{{4}}/\d{{2}}/[0-9a-f-]{{36}}\.xml$")
+        self.assertEqual(xml.archivo.read(), xml_attached())
+        self.assertTrue(por_rol["xml_documento"].archivo.read().startswith(b"<?xml"))
+        self.assertEqual(por_rol["xml_documento"].nombre, "FE-100.xml")
+        self.assertEqual(por_rol["pdf"].archivo.read(), PDF)
+        self.assertEqual(por_rol["pdf"].tipo_contenido, "application/pdf")
 
     def test_el_emisor_lo_decide_el_nit_receptor_del_xml(self):
         mime = correo_con(("fe.xml", xml_attached(xml_documento(nit_receptor="900555666")), "text/xml"))
@@ -211,7 +225,7 @@ class RegistrarDocumentosTests(TestCase):
         self.assertEqual(correo.emisor, self.emisor)
         self.assertEqual(correo.estado, Correo.Estado.PROCESADO)
 
-    def test_receptor_desconocido_no_guarda_nada(self):
+    def test_receptor_desconocido_no_guarda_el_documento(self):
         mime = correo_con(("fe.xml", xml_attached(xml_documento(nit_receptor="811000111")), "text/xml"))
 
         correo = self.procesar(mime)
@@ -219,6 +233,39 @@ class RegistrarDocumentosTests(TestCase):
         self.assertEqual(correo.estado, Correo.Estado.EMPRESA_DESCONOCIDA)
         self.assertIsNone(correo.emisor)
         self.assertFalse(Documento.objects.exists())
+        # El archivo sí se guarda, como "otro", en la carpeta sin emisor.
+        [adjunto] = correo.adjuntos.all()
+        self.assertEqual(adjunto.rol, "otro")
+        self.assertTrue(adjunto.archivo.name.startswith("sin-emisor/recepcion/"))
+
+    def test_guarda_todos_los_adjuntos_del_correo(self):
+        mime = correo_con(
+            ("fe.zip", zip_con(fe__xml=xml_attached(), fe__pdf=PDF), "application/zip"),
+            ("logo.png", b"\x89PNG imagen", "image/png"),
+            ("detalle.xlsx", b"PK\x03\x04 libro", "application/octet-stream"),
+            ("../../malicioso.html", b"<script>", "text/html"),
+        )
+
+        correo = self.procesar(mime, emisor=self.emisor)
+
+        roles = sorted((a.nombre, a.rol) for a in correo.adjuntos.all())
+        self.assertEqual(roles, [
+            ("FE-100.xml", "xml_documento"), ("detalle.xlsx", "otro"),
+            ("fe.pdf", "pdf"), ("fe.xml", "xml"), ("logo.png", "otro"),
+            ("malicioso.html", "otro"),
+        ])
+        # El nombre del proveedor no llega al bucket.
+        for adjunto in correo.adjuntos.all():
+            self.assertNotIn("..", adjunto.archivo.name)
+            self.assertNotIn("malicioso", adjunto.archivo.name)
+
+    def test_un_correo_sin_documentos_guarda_sus_adjuntos(self):
+        correo = self.procesar(
+            correo_con(("foto.jpg", b"jpeg", "image/jpeg")), emisor=self.emisor,
+        )
+
+        self.assertEqual(correo.estado, Correo.Estado.SIN_DOCUMENTOS)
+        self.assertEqual([a.rol for a in correo.adjuntos.all()], ["otro"])
 
     def test_un_cufe_repetido_se_ignora(self):
         mime = correo_con(("fe.xml", xml_attached(), "text/xml"))
@@ -229,6 +276,8 @@ class RegistrarDocumentosTests(TestCase):
         self.assertEqual(segundo.estado, Correo.Estado.PROCESADO)
         self.assertEqual(Documento.objects.count(), 1)
         self.assertFalse(segundo.documentos.exists())
+        # Sus archivos quedan en el segundo correo, como "otro".
+        self.assertEqual([a.rol for a in segundo.adjuntos.all()], ["otro"])
 
     def test_el_mismo_documento_dos_veces_en_un_correo_se_guarda_una(self):
         mime = correo_con(
@@ -255,7 +304,33 @@ class RegistrarDocumentosTests(TestCase):
         with mock.patch("django.db.models.fields.files.FieldFile.save", side_effect=falla):
             correo = self.procesar(mime, emisor=self.emisor)
 
-        # Agotados los reintentos queda en error, sin documentos ni archivos.
+        # Agotados los reintentos queda en error, sin documentos ni adjuntos.
         self.assertEqual(correo.estado, Correo.Estado.ERROR)
         self.assertIn("B2", correo.error_detalle)
         self.assertFalse(Documento.objects.exists())
+        self.assertFalse(Adjunto.objects.exists())
+
+    def test_si_falla_a_mitad_borra_lo_que_subio_y_el_reintento_no_duplica(self):
+        mime = correo_con(("fe.zip", zip_con(fe__xml=xml_attached(), fe__pdf=PDF), "application/zip"))
+        guardar = FieldFile.save
+        llamadas = []
+
+        def falla_la_tercera(campo, *args, **kwargs):
+            llamadas.append(1)
+            if len(llamadas) == 3:
+                raise EndpointConnectionError(endpoint_url="b2")
+            return guardar(campo, *args, **kwargs)
+
+        with mock.patch.object(FieldFile, "save", falla_la_tercera):
+            correo = self.procesar(mime, emisor=self.emisor)
+
+        self.assertEqual(correo.estado, Correo.Estado.PROCESADO)
+        self.assertEqual(Documento.objects.count(), 1)
+        self.assertEqual(correo.adjuntos.count(), 3)
+        # Los dos que subió el intento fallido se borraron del almacenamiento.
+        guardados = {a.archivo.name for a in Adjunto.objects.all()}
+        carpeta = Path(settings.MEDIA_ROOT) / str(self.emisor.pk) / "recepcion"
+        en_disco = {
+            str(p.relative_to(settings.MEDIA_ROOT)) for p in carpeta.rglob("*") if p.is_file()
+        }
+        self.assertEqual(en_disco, guardados)

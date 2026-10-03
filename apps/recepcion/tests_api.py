@@ -1,19 +1,18 @@
 """La API de consulta de los correos recibidos."""
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from unittest import mock
 from zoneinfo import ZoneInfo
 
 from botocore.exceptions import EndpointConnectionError
 from django.contrib.auth import get_user_model
-from django.core.files.base import ContentFile
 from django.test import override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
 
-from apps.documentos.models import DocumentoTipo
 from apps.documentos.tests_utils import crear_catalogos_minimos, crear_usuario
 from apps.emisores.models import Emisor
-from apps.recepcion.models import Correo, Documento
+from apps.recepcion.models import Adjunto, Correo, Documento
+from apps.recepcion.tests_utils import crear_documento_recibido
 from apps.seguridad.models import LlaveApi
 
 Usuario = get_user_model()
@@ -97,17 +96,8 @@ class CorreoApiTests(CorreosBase):
         self.assertEqual(self.client.get(f"{URL}{self.ajeno.pk}/").status_code, 404)
 
     def test_muestra_solo_los_documentos_de_sus_emisores(self):
-        def documento(emisor, cufe):
-            return Documento.objects.create(
-                numero="FE-1", cufe_cude=cufe, fecha_emision="2026-10-01",
-                proveedor_numero_identificacion="800123456",
-                receptor_numero_identificacion=emisor.numero_identificacion,
-                xml_archivo="x.xml", emisor=emisor, correo=self.primero,
-                documento_tipo=DocumentoTipo.objects.get(codigo="factura_venta"),
-            )
-
-        propio = documento(self.emisor, "1" * 96)
-        documento(self.emisor_ajeno, "2" * 96)
+        propio = crear_documento_recibido(self.primero, self.emisor, "1")
+        crear_documento_recibido(self.primero, self.emisor_ajeno, "2")
 
         fila = self.client.get(f"{URL}{self.primero.pk}/").json()
 
@@ -245,17 +235,7 @@ class EliminarAdminTests(CorreosBase):
         self.documento_ajeno = self.crear_documento(self.primero, self.emisor_ajeno, "2")
 
     def crear_documento(self, correo, emisor, cufe):
-        documento = Documento(
-            numero=f"FE-{cufe}", cufe_cude=cufe * 96, fecha_emision=date(2026, 10, 1),
-            proveedor_numero_identificacion="800123456",
-            receptor_numero_identificacion=emisor.numero_identificacion,
-            emisor=emisor, correo=correo,
-            documento_tipo=DocumentoTipo.objects.get(codigo="factura_venta"),
-        )
-        documento.xml_archivo.save("ad.xml", ContentFile(b"<AttachedDocument/>"), save=False)
-        documento.pdf_archivo.save("fe.pdf", ContentFile(b"%PDF"), save=False)
-        documento.save()
-        return documento
+        return crear_documento_recibido(correo, emisor, cufe, pdf=b"%PDF")
 
     def eliminar(self, correo, **cabeceras):
         # Con credencial en la cabecera, un cliente sin la sesión forzada del setUp.
@@ -263,10 +243,7 @@ class EliminarAdminTests(CorreosBase):
         return cliente.delete(f"{URL}{correo.pk}/eliminar-admin/", **cabeceras)
 
     def test_la_llave_global_elimina_el_correo_con_todo(self):
-        archivos = [
-            (d.xml_archivo.storage, d.xml_archivo.name, d.pdf_archivo.name)
-            for d in (self.documento, self.documento_ajeno)
-        ]
+        archivos = [a.archivo for a in Adjunto.objects.filter(correo=self.primero)]
         respuesta = self.eliminar(self.primero, **self.llave_global)
 
         self.assertEqual(respuesta.status_code, 200, respuesta.content)
@@ -275,9 +252,9 @@ class EliminarAdminTests(CorreosBase):
         )
         self.assertFalse(Correo.objects.filter(pk=self.primero.pk).exists())
         self.assertFalse(Documento.objects.exists())
-        for storage, xml, pdf in archivos:
-            self.assertFalse(storage.exists(xml))
-            self.assertFalse(storage.exists(pdf))
+        self.assertFalse(Adjunto.objects.exists())
+        for archivo in archivos:
+            self.assertFalse(archivo.storage.exists(archivo.name))
         self.r2.delete_object.assert_called_once_with(
             Bucket="nobelio-inbound-raw", Key="2026-10-02/1.eml",
         )
@@ -313,7 +290,8 @@ class EliminarAdminTests(CorreosBase):
 
         self.assertEqual(respuesta.status_code, 503)
         self.assertEqual(Documento.objects.count(), 2)
-        self.assertTrue(self.documento.xml_archivo.storage.exists(self.documento.xml_archivo.name))
+        archivo = Adjunto.objects.filter(correo=self.primero).first().archivo
+        self.assertTrue(archivo.storage.exists(archivo.name))
 
     def test_si_r2_falla_las_filas_vuelven(self):
         self.r2.delete_object.side_effect = EndpointConnectionError(endpoint_url="r2")

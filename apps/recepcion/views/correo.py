@@ -1,7 +1,6 @@
 """API de los correos recibidos en el buzón de recepción."""
 import logging
 
-from django.db import transaction
 from django.db.models import Prefetch
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import filters, mixins, serializers as drf_serializers, status, viewsets
@@ -13,8 +12,9 @@ from rest_framework.response import Response
 from apps.nucleo.api import ErrorSolicitud, entero_de_query, fecha_de_query
 from apps.nucleo.esquema import ErrorSerializer
 from apps.nucleo.registro import campos
-from apps.recepcion import r2, serializers
+from apps.recepcion import adjuntos, r2, serializers
 from apps.recepcion.models import Correo, Documento
+from apps.recepcion.views.adjunto import adjuntos_visibles
 from apps.seguridad.alcance import AlcanceEmisorMixin, AlcanceTotal, emisores_permitidos
 
 logger = logging.getLogger(__name__)
@@ -82,31 +82,24 @@ class CorreoViewSet(
         return qs
 
     def destroy(self, request, *args, **kwargs):
-        """Borra la fila y el MIME en R2, o ninguno de los dos.
+        """Borra el correo sin emisor, sus adjuntos en B2 y su MIME en R2.
 
         Solo los correos sin emisor: los de un emisor son información fiscal
-        suya, y de ellos colgarán sus documentos.
+        suya (para esos está ``eliminar-admin/``). Un correo sin emisor nunca
+        tiene documentos, pero sí puede tener adjuntos.
 
-        R2 se borra dentro de la transacción, después de la fila: si R2 falla,
-        la fila vuelve y el correo sigue completo (el error de botocore lo
-        traduce a 502 el ``exception_handler``). Borrar una clave inexistente
-        no es error en R2, así que reintentar es seguro.
+        Si B2 o R2 fallan, las filas vuelven y responde 502 (lo traduce el
+        ``exception_handler``); repetir termina el trabajo.
         """
         correo = self.get_object()
         if correo.emisor_id is not None:
             raise ErrorSolicitud(
                 "Solo se eliminan correos sin emisor; este pertenece a un emisor."
             )
-        try:
-            with transaction.atomic():
-                correo.delete()
-                r2.borrar_mime(correo.raw_key)
-        except r2.R2NoConfigurado:
-            logger.error("recepcion.r2_no_configurado R2_* no está configurado")
-            raise R2NoDisponible
+        _, archivos = _eliminar(correo)
         logger.info("recepcion.correo_eliminado %s", campos(
-            correo=kwargs["pk"], alias=correo.alias, raw_key=correo.raw_key,
-            por=request.user,
+            correo=kwargs["pk"], alias=correo.alias, adjuntos=archivos,
+            raw_key=correo.raw_key, por=request.user,
         ))
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -128,43 +121,40 @@ class CorreoViewSet(
     def eliminar_admin(self, request, pk=None):
         """Elimina el correo aunque tenga emisor, con todo lo que cuelga de él.
 
-        Borra los documentos que salieron del correo (de cualquier emisor), sus
-        archivos en B2 y el MIME en R2. Solo el staff o una llave de alcance
+        Borra los documentos que salieron del correo (de cualquier emisor), todos
+        sus adjuntos en B2 y el MIME en R2. Solo el staff o una llave de alcance
         global: son documentos fiscales, y el ERP puede haberlos procesado ya.
 
-        Las filas se borran en una transacción y los archivos dentro de ella,
-        después: si B2 o R2 fallan, las filas vuelven y responde 502. Los
-        archivos que ya se borraron no vuelven, pero repetir la petición
-        termina el trabajo, porque borrar lo que ya no existe no es error. Así
-        nunca quedan archivos sin dueño en los buckets.
+        Si B2 o R2 fallan, las filas vuelven y responde 502; repetir la petición
+        termina el trabajo (ver ``adjuntos.eliminar_correo``).
         """
         correo = self.get_object()
-        if not r2.r2_habilitado():
-            # Antes de tocar nada: sin R2 el MIME quedaría huérfano.
-            logger.error("recepcion.r2_no_configurado R2_* no está configurado")
-            raise R2NoDisponible
-        with transaction.atomic():
-            correo = Correo.objects.select_for_update().get(pk=correo.pk)
-            documentos = list(Documento.objects.filter(correo=correo))
-            archivos = [
-                campo
-                for documento in documentos
-                for campo in (
-                    documento.xml_archivo, documento.xml_factura_archivo,
-                    documento.pdf_archivo,
-                )
-                if campo
-            ]
-            Documento.objects.filter(correo=correo).delete()
-            correo.delete()
-            for archivo in archivos:
-                archivo.storage.delete(archivo.name)
-            r2.borrar_mime(correo.raw_key)
+        documentos, archivos = _eliminar(correo)
         logger.info("recepcion.correo_eliminado_admin %s", campos(
             correo=pk, alias=correo.alias, emisor=correo.emisor_id,
-            documentos=len(documentos), archivos=len(archivos),
+            documentos=documentos, archivos=archivos,
             raw_key=correo.raw_key, por=request.user,
         ))
-        return Response({
-            "correo": int(pk), "documentos": len(documentos), "archivos": len(archivos),
-        })
+        return Response({"correo": int(pk), "documentos": documentos, "archivos": archivos})
+
+    @extend_schema(responses=serializers.AdjuntoSerializer(many=True))
+    @action(detail=True, methods=["get"], url_path="adjuntos", pagination_class=None)
+    def adjuntos(self, request, pk=None):
+        """Todos los archivos que trajo el correo, ya fuera de sus ZIP.
+
+        Los de un documento de otro emisor (el NIT receptor del XML manda) solo
+        los ve quien alcanza ese emisor. Se bajan con
+        ``/api/recepcion/adjunto/<id>/descargar/``.
+        """
+        correo = self.get_object()
+        visibles = adjuntos_visibles(request).filter(correo=correo)
+        return Response(serializers.AdjuntoSerializer(visibles, many=True).data)
+
+
+def _eliminar(correo):
+    """``adjuntos.eliminar_correo``, con el 503 si falta R2."""
+    try:
+        return adjuntos.eliminar_correo(correo)
+    except r2.R2NoConfigurado:
+        logger.error("recepcion.r2_no_configurado R2_* no está configurado")
+        raise R2NoDisponible

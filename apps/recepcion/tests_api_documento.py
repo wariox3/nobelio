@@ -1,15 +1,12 @@
 """La API de consulta de los documentos recibidos."""
-from datetime import date
-
 from django.contrib.auth import get_user_model
-from django.core.files.base import ContentFile
 from django.urls import reverse
 from rest_framework.test import APIClient, APITestCase
 
-from apps.documentos.models import DocumentoTipo
 from apps.documentos.tests_utils import crear_catalogos_minimos, crear_usuario
 from apps.emisores.models import Emisor
-from apps.recepcion.models import Correo, Documento
+from apps.recepcion.models import Correo
+from apps.recepcion.tests_utils import crear_documento_recibido
 
 Usuario = get_user_model()
 
@@ -48,23 +45,13 @@ class DocumentoRecibidoApiTests(APITestCase):
         )
 
     def crear_documento(
-        self, emisor, cufe, *, tipo="factura_venta", fecha, proveedor="800999999",
-        razon_social="Proveedor", xml_factura=False, pdf=False,
+        self, emisor, cufe, *, xml_factura=False, pdf=False, **datos,
     ):
-        documento = Documento(
-            numero=f"FE-{cufe}", cufe_cude=cufe * 96, fecha_emision=date.fromisoformat(fecha),
-            proveedor_numero_identificacion=proveedor, proveedor_razon_social=razon_social,
-            receptor_numero_identificacion=emisor.numero_identificacion,
-            total_a_pagar="1000.00", emisor=emisor, correo=self.correo,
-            documento_tipo=DocumentoTipo.objects.get(codigo=tipo), moneda=self.cat["cop"],
+        return crear_documento_recibido(
+            self.correo, emisor, cufe, moneda=self.cat["cop"],
+            xml_documento=b"<Invoice/>" if xml_factura else None,
+            pdf=b"%PDF" if pdf else None, **datos,
         )
-        documento.xml_archivo.save("ad.xml", ContentFile(b"<AttachedDocument/>"), save=False)
-        if xml_factura:
-            documento.xml_factura_archivo.save("fe.xml", ContentFile(b"<Invoice/>"), save=False)
-        if pdf:
-            documento.pdf_archivo.save("fe.pdf", ContentFile(b"%PDF"), save=False)
-        documento.save()
-        return documento
 
     def ids(self, **filtros):
         respuesta = self.client.get(URL, filtros)
@@ -93,7 +80,7 @@ class DocumentoRecibidoApiTests(APITestCase):
         self.assertEqual(fila["correo"], self.correo.pk)
         self.assertTrue(fila["tiene_pdf"])
         self.assertTrue(fila["tiene_xml_factura"])
-        self.assertNotIn("xml_archivo", fila)
+        self.assertNotIn("adjuntos", fila)
 
     def test_el_ajeno_es_404(self):
         self.assertEqual(self.client.get(f"{URL}{self.ajeno.pk}/").status_code, 404)
@@ -118,7 +105,7 @@ class DocumentoRecibidoApiTests(APITestCase):
 
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(respuesta["Content-Type"], "application/xml")
-        self.assertIn('filename="FE-1.xml"', respuesta["Content-Disposition"])
+        self.assertIn('filename="ad-FE-1.xml"', respuesta["Content-Disposition"])
         self.assertEqual(contenido, b"<AttachedDocument/>")
 
     def test_descarga_el_xml_de_la_factura(self):

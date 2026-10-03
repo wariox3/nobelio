@@ -95,3 +95,39 @@ def correo_con(*adjuntos, asunto="Factura FE-100"):
             contenido, maintype=principal, subtype=secundario, filename=nombre,
         )
     return bytes(mensaje)
+
+
+def crear_documento_recibido(
+    correo, emisor, cufe, *, tipo="factura_venta", fecha="2026-10-01",
+    proveedor="800999999", razon_social="Proveedor", moneda=None,
+    xml=b"<AttachedDocument/>", xml_documento=None, pdf=None,
+):
+    """Un ``Documento`` con sus archivos como ``Adjunto`` del correo.
+
+    ``cufe`` es un carácter: se repite hasta los 96 del CUFE.
+    """
+    from datetime import date
+
+    from apps.documentos.models import DocumentoTipo
+    from apps.recepcion import adjuntos
+    from apps.recepcion.models import Adjunto, Documento
+
+    documento = Documento.objects.create(
+        numero=f"FE-{cufe}", cufe_cude=cufe * 96, fecha_emision=date.fromisoformat(fecha),
+        proveedor_numero_identificacion=proveedor, proveedor_razon_social=razon_social,
+        receptor_numero_identificacion=emisor.numero_identificacion,
+        total_a_pagar="1000.00", emisor=emisor, correo=correo, moneda=moneda,
+        documento_tipo=DocumentoTipo.objects.get(codigo=tipo),
+    )
+    subidos = []
+    for contenido, nombre, rol in (
+        (xml, f"ad-FE-{cufe}.xml", Adjunto.Rol.XML),
+        (xml_documento, f"FE-{cufe}.xml", Adjunto.Rol.XML_DOCUMENTO),
+        (pdf, f"FE-{cufe}.pdf", Adjunto.Rol.PDF),
+    ):
+        if contenido is not None:
+            adjuntos.crear(
+                correo, contenido, nombre=nombre, rol=rol, documento=documento,
+                subidos=subidos,
+            )
+    return documento

@@ -42,7 +42,12 @@ class DocumentoRecibidoSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_tiene_xml_factura(self, obj) -> bool:
-        return bool(obj.xml_factura_archivo)
+        return _tiene(obj, "xml_documento")
 
     def get_tiene_pdf(self, obj) -> bool:
-        return bool(obj.pdf_archivo)
+        return _tiene(obj, "pdf")
+
+
+def _tiene(documento, rol):
+    # Sobre `adjuntos.all()` y no con un filtro: así usa el prefetch de la vista.
+    return any(adjunto.rol == rol for adjunto in documento.adjuntos.all())

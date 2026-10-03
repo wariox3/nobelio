@@ -1,5 +1,4 @@
 """API de los documentos recibidos de proveedores."""
-from django.http import FileResponse
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework import filters, viewsets
@@ -8,7 +7,8 @@ from rest_framework.decorators import action
 from apps.nucleo.api import ErrorSolicitud, entero_de_query, fecha_de_query
 from apps.nucleo.esquema import ErrorSerializer
 from apps.recepcion import serializers
-from apps.recepcion.models import Documento
+from apps.recepcion.models import Adjunto, Documento
+from apps.recepcion.views.adjunto import descarga
 from apps.seguridad.alcance import AlcanceEmisorMixin
 
 RESPUESTA_XML = {(200, "application/xml"): OpenApiTypes.BINARY, 400: ErrorSerializer}
@@ -28,11 +28,14 @@ class DocumentoRecibidoViewSet(AlcanceEmisorMixin, viewsets.ReadOnlyModelViewSet
     ``fecha_emision``, ``numero``, ``total_a_pagar`` o ``creado_en``.
 
     Los archivos se bajan con ``xml/`` (el XML tal como llegó), ``xml-factura/``
-    (el documento, sin el AttachedDocument) y ``pdf/``.
+    (el documento, sin el AttachedDocument) y ``pdf/``. Son ``Adjunto`` del
+    correo; también salen en ``/api/recepcion/adjunto/?documento=<uuid>``.
     """
 
     serializer_class = serializers.DocumentoRecibidoSerializer
-    queryset = Documento.objects.select_related("documento_tipo", "moneda")
+    queryset = Documento.objects.select_related(
+        "documento_tipo", "moneda",
+    ).prefetch_related("adjuntos")
 
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = [
@@ -63,8 +66,7 @@ class DocumentoRecibidoViewSet(AlcanceEmisorMixin, viewsets.ReadOnlyModelViewSet
     @action(detail=True, methods=["get"])
     def xml(self, request, pk=None):
         """El XML tal como llegó: el AttachedDocument o el documento suelto."""
-        documento = self.get_object()
-        return _descarga(documento.xml_archivo, f"{documento.numero}.xml", "application/xml")
+        return descarga(self._adjunto(Adjunto.Rol.XML))
 
     @extend_schema(responses=RESPUESTA_XML)
     @action(detail=True, methods=["get"], url_path="xml-factura")
@@ -74,21 +76,25 @@ class DocumentoRecibidoViewSet(AlcanceEmisorMixin, viewsets.ReadOnlyModelViewSet
         Si llegó suelto, es el mismo XML de ``xml/``.
         """
         documento = self.get_object()
-        archivo = documento.xml_factura_archivo or documento.xml_archivo
-        return _descarga(archivo, f"{documento.numero}-documento.xml", "application/xml")
+        adjunto = _de(documento, Adjunto.Rol.XML_DOCUMENTO) or _de(documento, Adjunto.Rol.XML)
+        if adjunto is None:
+            raise ErrorSolicitud("El documento no tiene XML.")
+        return descarga(adjunto)
 
     @extend_schema(responses=RESPUESTA_PDF)
     @action(detail=True, methods=["get"])
     def pdf(self, request, pk=None):
         """La representación gráfica que mandó el proveedor."""
-        documento = self.get_object()
-        if not documento.pdf_archivo:
-            raise ErrorSolicitud("El proveedor no mandó el PDF de este documento.")
-        return _descarga(documento.pdf_archivo, f"{documento.numero}.pdf", "application/pdf")
+        return descarga(self._adjunto(
+            Adjunto.Rol.PDF, "El proveedor no mandó el PDF de este documento.",
+        ))
+
+    def _adjunto(self, rol, mensaje="El documento no tiene XML."):
+        adjunto = _de(self.get_object(), rol)
+        if adjunto is None:
+            raise ErrorSolicitud(mensaje)
+        return adjunto
 
 
-def _descarga(archivo, nombre, tipo):
-    """Stream desde el almacenamiento, sin cargar el archivo en memoria."""
-    return FileResponse(
-        archivo.open("rb"), content_type=tipo, as_attachment=True, filename=nombre,
-    )
+def _de(documento, rol):
+    return next((a for a in documento.adjuntos.all() if a.rol == rol), None)

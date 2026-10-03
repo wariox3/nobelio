@@ -73,14 +73,14 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
   - `?search=` en remitente, asunto y Message-ID; `?ordering=recibido_en|estado`.
   - Expone `raw_key` (la clave del MIME en R2) pero no `sha256`. Tests en `apps/recepcion/tests_api.py`.
   - `DELETE /api/recepcion/correo/<id>/` elimina un correo **sin emisor** (el de
-    una empresa que no está ni va a estar en la plataforma): la fila y su MIME
-    en R2 (`apps/recepcion/r2.py`), o ninguno de los dos. Un correo con emisor
+    una empresa que no está ni va a estar en la plataforma): la fila, sus
+    adjuntos en B2 y su MIME en R2 (`apps/recepcion/r2.py`), o nada. Un correo con emisor
     responde 400; sin las variables `R2_*`, 503, y si R2 falla, 502 y la fila
     se queda. Como los correos sin emisor solo los ve el staff o una llave de
     alcance global, en la práctica solo ellos pueden eliminarlos.
   - `DELETE /api/recepcion/correo/<id>/eliminar-admin/` fuerza la eliminación
-    de **cualquier** correo: sus documentos (de cualquier emisor), sus archivos
-    en B2 y el MIME en R2. Solo el staff o una llave de alcance global (permiso
+    de **cualquier** correo: sus documentos (de cualquier emisor), todos sus
+    adjuntos en B2 y el MIME en R2. Solo el staff o una llave de alcance global (permiso
     `AlcanceTotal` de `apps/seguridad/alcance.py`); el resto, 403. Responde 200
     con `{correo, documentos, archivos}`. Filas en una transacción y archivos
     dentro de ella: si B2 o R2 fallan, las filas vuelven (502) y repetir la
@@ -113,9 +113,29 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
   - El PDF va con el XML de su mismo nombre en el mismo contenedor; si hay un
     solo documento y un solo PDF, van juntos aunque estén en sitios distintos.
   - Modelo `Documento` (`rec_documento`), aparte de `doc_documento` (allá el
-    emisor factura; aquí recibe). Reusa `DocumentoTipo` y `Moneda`. XML
-    recibido, XML del documento y PDF en B2, en
-    `<emisor>/recepcion/<aaaa>/<mm>/`.
+    emisor factura; aquí recibe). Reusa `DocumentoTipo` y `Moneda`. No tiene
+    archivos propios: son `Adjunto` con `documento` apuntándole.
+- **Adjuntos** (`rec_adjunto`, `apps/recepcion/adjuntos.py`): **todos** los
+  archivos del correo, ya fuera de sus ZIP (los ZIP no se guardan; su
+  contenido sí, y un ZIP dañado se guarda tal cual).
+  - Campos: `correo` (siempre), `documento` (si es de uno), `rol`
+    (`xml`, `xml_documento`, `pdf`, `otro`), `archivo` en B2, `nombre`
+    original (sin rutas), `tipo_contenido`, `tamano`, `sha256`, `creado_en`.
+  - La base de datos garantiza un solo archivo por rol y documento, y que un
+    adjunto sin documento sea `otro`.
+  - En B2: `<emisor del documento, o del correo, o sin-emisor>/recepcion/<aaaa>/<mm>/<uuid>.<ext>`.
+    El nombre del proveedor nunca llega al bucket.
+  - Los archivos de un documento repetido o de un receptor desconocido quedan
+    como `otro`. No se deduplica por hash.
+  - El registro de documentos y adjuntos es todo o nada: si B2 falla a mitad,
+    se deshace y se borra lo que alcanzó a subir; el reintento no duplica.
+  - `PROTECT` hacia correo y documento: se borran solo con
+    `adjuntos.eliminar_correo`, que borra también B2 y R2.
+  - API: `GET /api/recepcion/adjunto/` (filtros `?correo`, `?documento`,
+    `?rol`, `?search` en el nombre), su detalle y `descargar/` (siempre como
+    descarga, con el nombre original). `GET /api/recepcion/correo/<id>/adjuntos/`
+    los lista por correo. Cada quien ve los del documento si alcanza su emisor,
+    y los demás si alcanza el del correo.
   - El emisor del documento es el del **NIT receptor del XML**, aunque el
     correo llegara a otro buzón. Si el correo no tenía emisor, toma ese.
   - CUFE único: un repetido se ignora (sin fila ni archivos).
@@ -171,6 +191,8 @@ UUID y CUFE; los eventos irán en una tabla aparte con FK al documento.
 | Nombres de tablas | `rec_correo`, `rec_documento` y `rec_aviso` (modelos `Correo`, `Documento` y `Aviso`) |
 | `rec_documento` aparte de `doc_documento` | Los roles están invertidos (allá el emisor factura, aquí recibe) y las acciones de emisión no aplican. Se reusan los catálogos `DocumentoTipo` y `Moneda` |
 | Emisor del documento | El del NIT receptor del XML, no el del buzón |
+| Archivos | Todos en `rec_adjunto` (también el XML y el PDF del documento), con `correo` siempre y `documento` opcional. Se descartó una tabla de archivos genérica (`arc_archivo`) |
+| Adjuntos guardados | Los archivos finales, no los ZIP que los envolvían. Sin deduplicar por hash |
 | Tests | `django.test.TestCase` con `manage.py test`, como el resto. Sin pytest |
 | Idempotencia del endpoint | SHA-256 del body. `X-Raw-Key` no sirve porque cambia en cada entrega |
 | CUFE repetido | Se ignora: CUFE único en `rec_documento` y, si ya existe, no se crea nada ni se marca (decidido 2026-10-03) |
