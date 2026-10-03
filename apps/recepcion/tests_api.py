@@ -1,8 +1,12 @@
 """La API de consulta de los correos recibidos."""
 from datetime import datetime
+from unittest import mock
 from zoneinfo import ZoneInfo
 
+from botocore.exceptions import EndpointConnectionError
+
 from django.contrib.auth import get_user_model
+from django.test import override_settings
 from rest_framework.test import APIClient, APITestCase
 
 from apps.documentos.tests_utils import crear_catalogos_minimos, crear_usuario
@@ -15,7 +19,9 @@ URL = "/api/recepcion/correo/"
 BOGOTA = ZoneInfo("America/Bogota")
 
 
-class CorreoApiTests(APITestCase):
+class CorreosBase(APITestCase):
+    """Cuatro correos: dos de emisores del usuario, uno ajeno y uno sin emisor."""
+
     def setUp(self):
         self.cat = crear_catalogos_minimos()
         self.usuario = crear_usuario(nombre="Dueño")
@@ -60,6 +66,9 @@ class CorreoApiTests(APITestCase):
             **extra,
         )
 
+
+
+class CorreoApiTests(CorreosBase):
     def ids(self, respuesta):
         self.assertEqual(respuesta.status_code, 200, respuesta.content)
         return {fila["id"] for fila in respuesta.json()["results"]}
@@ -125,9 +134,70 @@ class CorreoApiTests(APITestCase):
     def test_emisor_invalido_es_400(self):
         self.assertEqual(self.client.get(URL, {"emisor": "abc"}).status_code, 400)
 
-    def test_es_de_solo_lectura(self):
+    def test_no_se_crea_ni_edita_por_la_api(self):
         self.assertEqual(self.client.post(URL, {}).status_code, 405)
-        self.assertEqual(self.client.delete(f"{URL}{self.primero.pk}/").status_code, 405)
+        self.assertEqual(self.client.patch(f"{URL}{self.primero.pk}/", {}).status_code, 405)
 
     def test_sin_autenticar_es_401(self):
         self.assertEqual(APIClient().get(URL).status_code, 401)
+
+
+R2_CONFIGURADO = dict(
+    R2_HABILITADO=True, R2_BUCKET="nobelio-inbound-raw",
+    R2_ACCOUNT_ID="cuenta", R2_ACCESS_KEY_ID="id", R2_SECRET_ACCESS_KEY="secreto",
+)
+
+
+@override_settings(**R2_CONFIGURADO)
+class EliminarCorreoTests(CorreosBase):
+    """``DELETE`` de un correo sin emisor: la fila y su MIME en R2, o nada."""
+
+    def setUp(self):
+        super().setUp()
+        self.admin = Usuario.objects.create_superuser(
+            email="admin@nobelio.co", password="Clave123456",
+        )
+        self.client.force_authenticate(self.admin)
+        parche = mock.patch("apps.recepcion.r2._cliente")
+        self.r2 = parche.start()()
+        self.addCleanup(parche.stop)
+
+    def eliminar(self, correo):
+        return self.client.delete(f"{URL}{correo.pk}/")
+
+    def test_borra_la_fila_y_el_mime(self):
+        respuesta = self.eliminar(self.sin_emisor)
+
+        self.assertEqual(respuesta.status_code, 204)
+        self.assertFalse(Correo.objects.filter(pk=self.sin_emisor.pk).exists())
+        self.r2.delete_object.assert_called_once_with(
+            Bucket="nobelio-inbound-raw", Key="2026-10-02/4.eml",
+        )
+
+    def test_un_correo_con_emisor_no_se_borra(self):
+        respuesta = self.eliminar(self.primero)
+
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertTrue(Correo.objects.filter(pk=self.primero.pk).exists())
+        self.r2.delete_object.assert_not_called()
+
+    def test_si_r2_falla_la_fila_se_queda(self):
+        self.r2.delete_object.side_effect = EndpointConnectionError(endpoint_url="r2")
+
+        respuesta = self.eliminar(self.sin_emisor)
+
+        self.assertEqual(respuesta.status_code, 502)
+        self.assertTrue(Correo.objects.filter(pk=self.sin_emisor.pk).exists())
+
+    @override_settings(R2_HABILITADO=False)
+    def test_sin_r2_configurado_no_borra_nada(self):
+        respuesta = self.eliminar(self.sin_emisor)
+
+        self.assertEqual(respuesta.status_code, 503)
+        self.assertTrue(Correo.objects.filter(pk=self.sin_emisor.pk).exists())
+
+    def test_quien_no_es_staff_no_alcanza_los_correos_sin_emisor(self):
+        self.client.force_authenticate(self.usuario)
+
+        self.assertEqual(self.eliminar(self.sin_emisor).status_code, 404)
+        self.assertEqual(self.eliminar(self.primero).status_code, 400)

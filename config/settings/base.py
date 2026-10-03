@@ -509,6 +509,17 @@ WEBHOOK_ENCRYPTION_KEY = clave_fernet(
 #   python -c "import secrets; print(secrets.token_urlsafe(32))"
 INBOUND_TOKEN = env("INBOUND_TOKEN", default="")
 
+# Bucket R2 donde el Email Worker guarda el MIME crudo de cada correo
+# (`Correo.raw_key`). Token de API de R2 con lectura y escritura sobre ese
+# bucket: nobelio lo lee para procesar y lo borra al eliminar el correo. Sin
+# estas variables no se puede eliminar un correo, para no dejar su MIME
+# huérfano en R2.
+R2_ACCOUNT_ID = env("R2_ACCOUNT_ID", default="")
+R2_ACCESS_KEY_ID = env("R2_ACCESS_KEY_ID", default="")
+R2_SECRET_ACCESS_KEY = env("R2_SECRET_ACCESS_KEY", default="")
+R2_BUCKET = env("R2_BUCKET", default="nobelio-inbound-raw")
+R2_HABILITADO = bool(R2_ACCOUNT_ID and R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY and R2_BUCKET)
+
 # --- Celery (tareas en segundo plano) ----------------------------------------
 # Broker RabbitMQ, gestionado (CloudAMQP): la URL es `amqps://`, porque está en
 # internet. Ver config/celery.py y docs/despliegue.md.

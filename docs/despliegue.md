@@ -200,6 +200,12 @@ WEBHOOK_ENCRYPTION_KEY=<la tercera clave Fernet>
 # /recepcion/inbound. El mismo valor va como secreto INBOUND_TOKEN del Worker.
 # Vacía, el endpoint responde 401 a todo.
 INBOUND_TOKEN=<python3 -c "import secrets; print(secrets.token_urlsafe(32))">
+# Bucket R2 con el MIME crudo de los correos. Token de API de R2 con
+# "Object Read & Write" sobre el bucket (R2 > Manage R2 API Tokens).
+R2_ACCOUNT_ID=<id de la cuenta de Cloudflare>
+R2_ACCESS_KEY_ID=<access key del token de R2>
+R2_SECRET_ACCESS_KEY=<secret del token de R2>
+R2_BUCKET=nobelio-inbound-raw
 DEBUG=False
 ALLOWED_HOSTS=api.rededoc.co
 

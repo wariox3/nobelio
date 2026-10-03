@@ -72,6 +72,12 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
     `?hasta=AAAA-MM-DD` (sobre `recibido_en`, en hora de Colombia, inclusive).
   - `?search=` en remitente, asunto y Message-ID; `?ordering=recibido_en|estado`.
   - No expone `sha256` ni `raw_key`. Tests en `apps/recepcion/tests_api.py`.
+  - `DELETE /api/recepcion/correo/<id>/` elimina un correo **sin emisor** (el de
+    una empresa que no está ni va a estar en la plataforma): la fila y su MIME
+    en R2 (`apps/recepcion/r2.py`), o ninguno de los dos. Un correo con emisor
+    responde 400; sin las variables `R2_*`, 503, y si R2 falla, 502 y la fila
+    se queda. Como los correos sin emisor solo los ve el staff o una llave de
+    alcance global, en la práctica solo ellos pueden eliminarlos.
 - **nginx**: bloque `location = /recepcion/inbound` con `client_max_body_size
   30M` (`docs/despliegue.md`).
 - **Cloudflare (pruebas, `rededoc.uk`)**, funcionando de punta a punta:
@@ -97,8 +103,8 @@ empezar el siguiente.
    - Detecta la confirmación de reenvío de Gmail (`forwarding-noreply@google.com`)
      y guarda el código o enlace en `confirmacion_reenvio`.
    - Reintenta los errores transitorios con backoff, máximo 5 (`intentos`).
-   - Variables nuevas: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
-     `R2_SECRET_ACCESS_KEY` y `R2_BUCKET`.
+   - Usa las variables `R2_*` y el cliente de `apps/recepcion/r2.py`, que ya
+     existen para el borrado.
 2. **Adjuntos y documentos.**
    - Extraer XML sueltos, ZIP (también anidados) y `.eml` o `message/rfc822`
      adjuntos.
@@ -134,6 +140,7 @@ UUID y CUFE; los eventos irán en una tabla aparte con FK al documento.
 | Nombres de tablas | `rec_correo`, `rec_documento` y `rec_aviso` (modelos `Correo`, `Documento` y `Aviso`) |
 | Tests | `django.test.TestCase` con `manage.py test`, como el resto. Sin pytest |
 | Idempotencia del endpoint | SHA-256 del body. `X-Raw-Key` no sirve porque cambia en cada entrega |
+| Carpeta en R2 | Fecha en UTC (`AAAA-MM-DD/<uuid>.eml`): un correo después de las 19:00 de Colombia cae en la del día siguiente. Solo organiza; la fecha que cuenta es `recibido_en` |
 | MIME crudo | En R2 (vinculación nativa del Worker), no en B2. Se evaluó B2 vía API S3 desde el Worker y se descartó (2026-10-03) |
 | Token | Obligatorio y falla cerrado. La primera versión fue abierta, a propósito, para probar el flujo |
 | Asociación con la empresa | El buzón es el NIT del emisor sin DV (`901192048@recepcion.rededoc.co`). Se asocia en el endpoint; sin campo ni tabla aparte |

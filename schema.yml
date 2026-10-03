@@ -5975,14 +5975,17 @@ paths:
       description: |-
         Los correos que llegaron a ``<nit>@recepcion.rededoc.co``.
 
-        De solo lectura: los registra el Email Worker de Cloudflare en
-        ``POST /recepcion/inbound``. Un correo cuyo alias no es el NIT de ningún
-        emisor no tiene emisor, así que fuera del staff no lo ve nadie.
+        Los registra el Email Worker de Cloudflare en ``POST /recepcion/inbound``.
+        Un correo cuyo alias no es el NIT de ningún emisor no tiene emisor, así que
+        fuera del staff (o de una llave de alcance global) no lo ve nadie.
 
         Filtros: ``?emisor=<id>``, ``?estado=pendiente|procesado|...`` y
         ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD`` sobre ``recibido_en``, ambos
         inclusive. ``?search=`` busca en remitente, asunto y Message-ID, y
         ``?ordering=`` ordena por ``recibido_en`` o ``estado``.
+
+        ``DELETE`` elimina un correo **sin emisor** (el de una empresa que no está
+        ni va a estar en la plataforma), junto con su MIME en R2.
       parameters:
       - name: ordering
         required: false
@@ -6031,14 +6034,17 @@ paths:
       description: |-
         Los correos que llegaron a ``<nit>@recepcion.rededoc.co``.
 
-        De solo lectura: los registra el Email Worker de Cloudflare en
-        ``POST /recepcion/inbound``. Un correo cuyo alias no es el NIT de ningún
-        emisor no tiene emisor, así que fuera del staff no lo ve nadie.
+        Los registra el Email Worker de Cloudflare en ``POST /recepcion/inbound``.
+        Un correo cuyo alias no es el NIT de ningún emisor no tiene emisor, así que
+        fuera del staff (o de una llave de alcance global) no lo ve nadie.
 
         Filtros: ``?emisor=<id>``, ``?estado=pendiente|procesado|...`` y
         ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD`` sobre ``recibido_en``, ambos
         inclusive. ``?search=`` busca en remitente, asunto y Message-ID, y
         ``?ordering=`` ordena por ``recibido_en`` o ``estado``.
+
+        ``DELETE`` elimina un correo **sin emisor** (el de una empresa que no está
+        ni va a estar en la plataforma), junto con su MIME en R2.
       parameters:
       - in: path
         name: id
@@ -6057,6 +6063,50 @@ paths:
               schema:
                 $ref: '#/components/schemas/Correo'
           description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: recepcion_correo_destroy
+      description: |-
+        Borra la fila y el MIME en R2, o ninguno de los dos.
+
+        Solo los correos sin emisor: los de un emisor son información fiscal
+        suya, y de ellos colgarán sus documentos.
+
+        R2 se borra dentro de la transacción, después de la fila: si R2 falla,
+        la fila vuelve y el correo sigue completo (el error de botocore lo
+        traduce a 502 el ``exception_handler``). Borrar una clave inexistente
+        no es error en R2, así que reintentar es seguro.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este correo recibido.
+        required: true
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '204':
+          description: No response body
         '429':
           description: Error
           content:
