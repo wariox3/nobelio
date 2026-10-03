@@ -82,13 +82,13 @@ class CorreoApiTests(CorreosBase):
 
         self.assertEqual(len(self.ids(self.client.get(URL))), 4)
 
-    def test_no_expone_la_huella_ni_la_clave_de_r2(self):
+    def test_expone_la_clave_de_r2_pero_no_la_huella(self):
         fila = self.client.get(f"{URL}{self.primero.pk}/").json()
 
         self.assertEqual(fila["emisor"], self.emisor.pk)
         self.assertEqual(fila["asunto"], "Factura FE-1")
         self.assertNotIn("sha256", fila)
-        self.assertNotIn("raw_key", fila)
+        self.assertEqual(fila["raw_key"], "2026-10-02/1.eml")
 
     def test_el_correo_ajeno_es_404(self):
         self.assertEqual(self.client.get(f"{URL}{self.ajeno.pk}/").status_code, 404)

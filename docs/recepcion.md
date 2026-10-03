@@ -71,7 +71,7 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
   - Filtros: `?emisor=<id>`, `?estado=<estado>`, `?desde=AAAA-MM-DD` y
     `?hasta=AAAA-MM-DD` (sobre `recibido_en`, en hora de Colombia, inclusive).
   - `?search=` en remitente, asunto y Message-ID; `?ordering=recibido_en|estado`.
-  - No expone `sha256` ni `raw_key`. Tests en `apps/recepcion/tests_api.py`.
+  - Expone `raw_key` (la clave del MIME en R2) pero no `sha256`. Tests en `apps/recepcion/tests_api.py`.
   - `DELETE /api/recepcion/correo/<id>/` elimina un correo **sin emisor** (el de
     una empresa que no está ni va a estar en la plataforma): la fila y su MIME
     en R2 (`apps/recepcion/r2.py`), o ninguno de los dos. Un correo con emisor

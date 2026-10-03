@@ -6890,6 +6890,10 @@ components:
         alias:
           type: string
           readOnly: true
+        raw_key:
+          type: string
+          readOnly: true
+          title: Clave en R2
         envelope_from:
           type: string
           readOnly: true
@@ -6941,6 +6945,7 @@ components:
       - id
       - intentos
       - message_id
+      - raw_key
       - recibido_en
     CorreoEstadoEnum:
       enum:
