@@ -5,6 +5,8 @@ concentra la única pregunta que hay que responder en cada petición: *¿qué
 emisores alcanza este solicitante?*
 
 - **Staff de la plataforma**: todos (``None`` = sin restricción).
+- **Llave de alcance global**: todos también, pero sin ser staff: no entra a
+  la administración de usuarios ni de llaves.
 - **Cualquier otro**: los que posee, más los que le hayan asignado uno a uno.
 
 Una integración (API Key) no tiene alcance propio: **actúa en nombre de su
@@ -33,6 +35,16 @@ def es_staff(request):
     )
 
 
+def es_llave_global(request):
+    """¿La petición viene con una llave de alcance global?
+
+    No pasa por ``es_staff`` a propósito: la llave alcanza todos los datos,
+    pero no la administración (``IsAdminUser``, gestión de llaves).
+    """
+    llave = getattr(getattr(request, "user", None), "llave", None)
+    return bool(llave is not None and llave.alcance_global)
+
+
 def usuario_del_request(request):
     """La persona en cuyo nombre se actúa, o ``None`` si no hay ninguna.
 
@@ -55,7 +67,7 @@ def emisores_permitidos(request):
     Devuelve un ``QuerySet`` de :class:`~apps.emisores.models.Emisor`, o ``None``
     cuando no hay restricción alguna (staff de la plataforma).
     """
-    if es_staff(request):
+    if es_staff(request) or es_llave_global(request):
         return None
     usuario = usuario_del_request(request)
     if usuario is None:

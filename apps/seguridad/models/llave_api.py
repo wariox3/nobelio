@@ -10,6 +10,13 @@ los mismos emisores que él, ni más ni menos. Así el alcance se define una sol
 vez en el proyecto (``apps.seguridad.alcance``) en vez de tener una regla para
 personas y otra para integraciones, que es como acaban divergiendo.
 
+La excepción es la llave de **alcance global** (``alcance_global``): alcanza
+todos los emisores, como el staff. Es para un servidor de la plataforma —la
+aplicación administrativa— que no se autentica contra nobelio con personas.
+Solo se crea por CLI, su dueño tiene que ser staff y vence en 90 días como
+mucho; ver :meth:`LlaveApi.problema_alcance_global`. No da administración:
+usuarios y llaves siguen exigiendo a una persona staff.
+
 Un ERP que factura para varios clientes opera con una sola credencial sobre
 todos los emisores de su dueño. Un mismo usuario puede tener varias llaves vivas
 a la vez: producción y habilitación, o la nueva y la vieja mientras dura una
@@ -47,6 +54,10 @@ PREFIJO_HASH = "sha256$"
 # integración sigue viva, no una auditoría: al minuto sobra.
 INTERVALO_REGISTRO_USO = timedelta(minutes=5)
 
+# Vida máxima de una llave de alcance global. Una credencial que lo ve todo no
+# puede quedarse viva para siempre en la configuración de un servidor.
+DIAS_MAXIMOS_ALCANCE_GLOBAL = 90
+
 
 def _hash_secreto(secreto: str) -> str:
     return PREFIJO_HASH + hashlib.sha256(secreto.encode("utf-8")).hexdigest()
@@ -69,6 +80,13 @@ class LlaveApi(ModeloConFechas):
     activa = models.BooleanField("activa", default=True)
     expira_en = models.DateTimeField("expira en", null=True, blank=True)
     ultimo_uso_en = models.DateTimeField("último uso en", null=True, blank=True)
+    # Solo se enciende por CLI (`crear_llave_api --alcance-global`): la API lo
+    # tiene de solo lectura, para que ninguna credencial pueda ascenderse.
+    alcance_global = models.BooleanField(
+        "alcance global", default=False,
+        help_text="Alcanza todos los emisores, como el staff. Exige dueño "
+        "staff y vencimiento de 90 días como máximo.",
+    )
 
     # --- Relaciones ---
     # La llave actúa en nombre de una persona: alcanza exactamente lo que esa
@@ -92,15 +110,22 @@ class LlaveApi(ModeloConFechas):
         return f"{self.nombre} ({self.prefijo})"
 
     @classmethod
-    def generar(cls, *, usuario, nombre, activa=True, expira_en=None):
+    def generar(cls, *, usuario, nombre, activa=True, expira_en=None, alcance_global=False):
         """Crea una llave y devuelve ``(llave, clave_completa)``.
 
         ``clave_completa`` (``<prefijo>.<secreto>``) es lo único que sirve para
         autenticar y solo se conoce en este momento; guárdala donde el ERP la
         pueda leer, porque después no se puede recuperar.
 
-        La llave alcanza exactamente lo mismo que ``usuario``.
+        La llave alcanza exactamente lo mismo que ``usuario``, salvo con
+        ``alcance_global``, que alcanza todo y lanza ``ValueError`` si no
+        cumple sus condiciones.
         """
+        problema = cls(
+            usuario=usuario, expira_en=expira_en, alcance_global=alcance_global,
+        ).problema_alcance_global()
+        if problema:
+            raise ValueError(problema)
         prefijo = get_random_string(LONGITUD_PREFIJO)
         while cls.objects.filter(prefijo=prefijo).exists():
             prefijo = get_random_string(LONGITUD_PREFIJO)
@@ -112,6 +137,7 @@ class LlaveApi(ModeloConFechas):
             clave_hash=_hash_secreto(secreto),
             activa=activa,
             expira_en=expira_en,
+            alcance_global=alcance_global,
         )
         return llave, f"{prefijo}.{secreto}"
 
@@ -122,6 +148,29 @@ class LlaveApi(ModeloConFechas):
         if self.expira_en and self.expira_en <= timezone.now():
             return False
         return True
+
+    def problema_alcance_global(self, expira_en=None):
+        """Por qué esta llave no puede tener alcance global, o ``None``.
+
+        Se pregunta al crearla, al cambiarle el vencimiento y en **cada**
+        petición: si el dueño deja de ser staff, la llave deja de servir al
+        instante, sin depender de que alguien se acuerde de revocarla.
+        ``expira_en`` permite validar un vencimiento nuevo antes de guardarlo.
+        """
+        if not self.alcance_global:
+            return None
+        if not self.usuario.is_staff:
+            return "El dueño de una llave de alcance global tiene que ser staff."
+        expira_en = expira_en or self.expira_en
+        if expira_en is None:
+            return "Una llave de alcance global tiene que tener vencimiento."
+        tope = timezone.now() + timedelta(days=DIAS_MAXIMOS_ALCANCE_GLOBAL)
+        if expira_en > tope:
+            return (
+                "Una llave de alcance global vence en "
+                f"{DIAS_MAXIMOS_ALCANCE_GLOBAL} días como máximo."
+            )
+        return None
 
     def verificar_secreto(self, secreto):
         """Comprueba el secreto contra el hash almacenado.

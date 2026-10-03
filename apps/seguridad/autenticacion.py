@@ -9,12 +9,23 @@ ERP no es una persona: se autentica como un :class:`PrincipalLlaveApi`, que
 expone la llave (y con ella su usuario) para que ``apps.seguridad.alcance`` le
 dé exactamente el mismo alcance que a esa persona.
 """
+import logging
+
 from rest_framework import authentication, exceptions
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
+from apps.nucleo.registro import campos
 from apps.seguridad.models import LlaveApi
 
+logger = logging.getLogger(__name__)
+
 PALABRA_CLAVE = "Api-Key"
+
+# Quién, dentro de la aplicación que usa una llave de alcance global, hizo la
+# petición. Es solo informativo: va al registro y no da ni quita permisos,
+# porque lo escribe quien tiene la llave.
+CABECERA_ACTOR = "X-Actor"
+LARGO_MAXIMO_ACTOR = 150
 
 # Nombres de las cookies de sesión. Viven aquí porque los usan tanto quien las
 # lee (esta autenticación) como quien las escribe (las vistas de sesión).
@@ -70,7 +81,21 @@ class LlaveApiAuthentication(authentication.BaseAuthentication):
             raise exceptions.AuthenticationFailed(
                 "Cabecera Api-Key inválida: codificación incorrecta."
             )
-        return self._autenticar(credencial)
+        principal, llave = self._autenticar(credencial)
+        if llave.alcance_global:
+            self._registrar_uso_global(request, llave)
+        return principal, llave
+
+    @staticmethod
+    def _registrar_uso_global(request, llave):
+        """Una línea por petición: una llave que lo ve todo se audita entera."""
+        actor = request.headers.get(CABECERA_ACTOR, "")
+        # Sin caracteres de control, para que no pueda falsear líneas del log.
+        actor = "".join(c for c in actor if c.isprintable())[:LARGO_MAXIMO_ACTOR]
+        logger.info("seguridad.llave_global %s", campos(
+            llave=llave.prefijo, alcance_global=1, metodo=request.method,
+            ruta=request.path, actor=actor,
+        ))
 
     def _autenticar(self, credencial):
         prefijo, separador, secreto = credencial.partition(".")
@@ -88,6 +113,8 @@ class LlaveApiAuthentication(authentication.BaseAuthentication):
         # sin tener que revocarlas una a una.
         if not llave.usuario.is_active:
             raise exceptions.AuthenticationFailed("El usuario está inactivo.")
+        if problema := llave.problema_alcance_global():
+            raise exceptions.AuthenticationFailed(problema)
         llave.registrar_uso()
         return (PrincipalLlaveApi(llave), llave)
 

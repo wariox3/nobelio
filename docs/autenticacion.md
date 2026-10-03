@@ -177,6 +177,7 @@ junto con credenciales, así que los orígenes se enumeran uno a uno.
 |---|---|
 | Staff de la plataforma | Todos (sin restricción) |
 | API Key | Lo mismo que la persona dueña de la llave |
+| API Key de alcance global | Todos, pero sin administración (ver abajo) |
 | Persona | Los emisores **suyos** más los que le hayan **asignado** |
 
 Las dos vías de una persona se suman en `emisores_permitidos`: los emisores que
@@ -194,6 +195,35 @@ emisor merecería su propia acción y su propia comprobación.
 (lo ajeno responde 404, no 403, para no revelar que existe) y valida el emisor
 recibido en escritura (403). Lo usan documentos, nómina, emisores, resoluciones,
 software y certificados.
+
+### Llave de alcance global
+
+Para un servidor de la plataforma que no se autentica contra nobelio con
+personas, como la aplicación administrativa, que tiene su propio login. Alcanza
+todos los emisores, incluidos los correos de recepción sin emisor, con estas
+condiciones:
+
+- **Solo por CLI.** En la API `alcance_global` es de solo lectura, así que
+  ninguna credencial puede ascenderse a sí misma ni a otra:
+  ```bash
+  python manage.py crear_llave_api --usuario admin-app@rededoc.co \
+      --nombre "App administrativa" --alcance-global --dias 90
+  ```
+- **El dueño tiene que ser staff**, y se comprueba en cada petición: si deja de
+  serlo, o se desactiva, la llave responde 401 al instante.
+- **Vence en 90 días como máximo** (`DIAS_MAXIMOS_ALCANCE_GLOBAL`). Por la API
+  se le puede acortar o renovar el vencimiento dentro de ese tope, pero no
+  quitárselo. Para rotarla se crea otra y se desactiva la vieja.
+- **No da administración.** No es staff (`PrincipalLlaveApi.is_staff` sigue en
+  `False`): `IsAdminUser` y la gestión de llaves la rechazan. Crear usuarios o
+  llaves sigue exigiendo a una persona staff con su sesión.
+- **Cada petición queda en el log** (`seguridad.llave_global`, con
+  `alcance_global=1`, método y ruta). La aplicación manda en `X-Actor` quién
+  de sus usuarios hizo la acción; es solo informativo, no da ni quita permisos.
+- La llave vive **solo en el backend** de la aplicación, nunca en el navegador.
+
+Los emisores que se creen con ella quedan a nombre de su dueño, el usuario
+técnico.
 
 ### No hay cuenta ni inquilino intermedio
 
@@ -242,7 +272,8 @@ los demás clientes de esa integración.
 | Topes de peticiones por credencial, IP y destinatario | `apps/seguridad/limites.py` |
 | API de gestión de llaves (cada quien las suyas; el staff, todas) | `apps/seguridad/views/llave_api.py`, ruta `/api/seguridad/llave-api/` |
 | API de usuarios (solo staff) | `apps/seguridad/views/usuario.py`, ruta `/api/seguridad/usuario/` |
-| Alta de llave por CLI | `python manage.py crear_llave_api --usuario <correo> --nombre "..."` |
+| Alta de llave por CLI | `python manage.py crear_llave_api --usuario <correo> --nombre "..."` (`--alcance-global --dias N` para la global) |
+| Pruebas de la llave de alcance global | `apps/seguridad/tests_llave_global.py` |
 | Rutas de seguridad | `apps/seguridad/urls.py`, montado en `/api/seguridad/` |
 | Auth classes, `SIMPLE_JWT`, cookies, CORS, topes | `config/settings/base.py` |
 | Cómo se describen las dos autenticaciones en OpenAPI | `apps/nucleo/esquema.py` |
