@@ -7,6 +7,8 @@ from django.http import JsonResponse
 from django.urls import include, path
 from rest_framework.permissions import AllowAny
 
+from apps.recepcion.views import inbound
+
 from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularRedocView,
@@ -21,6 +23,12 @@ def estado_servicio(_request):
 
 urlpatterns = [
     path("estado/", estado_servicio, name="estado-servicio"),
+
+    # Entrada del Email Worker de Cloudflare (recepción de facturas de
+    # proveedores). Fuera de `/api/`: no es API pública, la llama una máquina.
+    # Sin barra final porque así la llama el Worker, y `APPEND_SLASH` no puede
+    # redirigir un POST.
+    path("recepcion/inbound", inbound, name="recepcion-inbound"),
 
     # --- Documentación de la API ------------------------------------------
     # Públicas a propósito: el esquema lo consumen el frontend y quien integre

@@ -632,6 +632,21 @@ server {
         proxy_read_timeout 150s;
         proxy_connect_timeout 10s;
     }
+
+    # Los correos que reenvía el Email Worker de Cloudflare (recepción de
+    # facturas de proveedores) llegan con el MIME entero: hasta 30 MB.
+    location = /recepcion/inbound {
+        client_max_body_size 30M;
+        proxy_pass http://127.0.0.1:8005;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_read_timeout 150s;
+        proxy_connect_timeout 10s;
+    }
 }
 EOF
 
