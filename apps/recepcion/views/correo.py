@@ -2,6 +2,7 @@
 import logging
 
 from django.db import transaction
+from django.db.models import Prefetch
 from rest_framework import filters, mixins, status, viewsets
 from rest_framework.exceptions import APIException
 from rest_framework.response import Response
@@ -9,8 +10,8 @@ from rest_framework.response import Response
 from apps.nucleo.api import ErrorSolicitud, entero_de_query, fecha_de_query
 from apps.nucleo.registro import campos
 from apps.recepcion import r2, serializers
-from apps.recepcion.models import Correo
-from apps.seguridad.alcance import AlcanceEmisorMixin
+from apps.recepcion.models import Correo, Documento
+from apps.seguridad.alcance import AlcanceEmisorMixin, emisores_permitidos
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,13 @@ class CorreoViewSet(
         """El filtro por ``emisor`` acota dentro del alcance, nunca lo amplía:
         el mixin ya restringió el queryset antes de llegar aquí."""
         qs = super().get_queryset()
+        # Un correo puede traer documentos de otro emisor (manda el NIT receptor
+        # del XML): dentro del correo solo van los que alcanza quien consulta.
+        documentos = Documento.objects.select_related("documento_tipo")
+        permitidos = emisores_permitidos(self.request)
+        if permitidos is not None:
+            documentos = documentos.filter(emisor__in=permitidos)
+        qs = qs.prefetch_related(Prefetch("documentos", queryset=documentos))
         params = self.request.query_params
         if (emisor := entero_de_query(params, "emisor")) is not None:
             qs = qs.filter(emisor=emisor)

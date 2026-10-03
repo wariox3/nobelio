@@ -1,7 +1,7 @@
 # Recepción de facturas de proveedores
 
 Estado: **en construcción, por pasos**. Iniciado el 2026-10-02. Hoy los correos
-llegan, se registran y se procesan sus cabeceras; los adjuntos todavía no.
+llegan, se registran y se procesan: cabeceras, adjuntos y documentos.
 
 Nobelio recibe por correo las facturas que los proveedores les mandan a los
 emisores registrados, extrae los documentos electrónicos (factura, nota crédito,
@@ -92,8 +92,32 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
     minutos. Permanentes (sin el MIME, credenciales rechazadas, sin `R2_*`):
     `error` en el acto. Cada intento suma a `intentos`.
   - En desarrollo también lee de R2, con las mismas variables.
-  - Por ahora `procesado` no mira los adjuntos ni distingue `sin_documentos` o
-    `empresa_desconocida`: eso llega con el paso de adjuntos.
+- **Documentos** (`apps/recepcion/extraccion.py` y `procesamiento.py`):
+  - Recorre XML y PDF adjuntos, ZIP (también anidados) y correos adjuntos
+    (`message/rfc822` o `.eml`). Un `.docx`/`.xlsx` no se abre como ZIP.
+  - Lee el AttachedDocument (documento del CDATA de
+    `cac:Attachment/cac:ExternalReference/cbc:Description` y validación de
+    `ResultOfVerification`) o un Invoice, CreditNote o DebitNote suelto.
+    Invoice con 01–04 es factura de venta; otro código (05, documento
+    soporte) se ignora.
+  - Seguridad: XML sin DTD, entidades ni red (no hay XXE), y topes de 4 niveles
+    de anidamiento, 200 archivos y 100 MB descomprimidos; pasarlos deja el
+    correo en `error`.
+  - El PDF va con el XML de su mismo nombre en el mismo contenedor; si hay un
+    solo documento y un solo PDF, van juntos aunque estén en sitios distintos.
+  - Modelo `Documento` (`rec_documento`), aparte de `doc_documento` (allá el
+    emisor factura; aquí recibe). Reusa `DocumentoTipo` y `Moneda`. XML
+    recibido, XML del documento y PDF en B2, en
+    `<emisor>/recepcion/<aaaa>/<mm>/`.
+  - El emisor del documento es el del **NIT receptor del XML**, aunque el
+    correo llegara a otro buzón. Si el correo no tenía emisor, toma ese.
+  - CUFE único: un repetido se ignora (sin fila ni archivos).
+  - Estado del correo: `procesado` (al menos un documento de un emisor, nuevo o
+    repetido), `sin_documentos` o `empresa_desconocida` (ninguno es de un
+    emisor; no se guarda nada).
+  - En `GET /api/recepcion/correo/` cada correo trae `documentos`, solo los de
+    los emisores que alcanza quien consulta.
+  - No se verifica la firma ni el CUFE de los documentos.
 - **nginx**: bloque `location = /recepcion/inbound` con `client_max_body_size
   30M` (`docs/despliegue.md`).
 - **Cloudflare (pruebas, `rededoc.uk`)**, funcionando de punta a punta:
@@ -110,29 +134,17 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
 En orden. Cada uno se cierra (código, tests, despliegue en pruebas) antes de
 empezar el siguiente.
 
-1. **Adjuntos y documentos.**
-   - Extraer XML sueltos, ZIP (también anidados) y `.eml` o `message/rfc822`
-     adjuntos.
-   - Parsear el AttachedDocument (factura embebida en el CDATA de
-     `cac:Attachment/cac:ExternalReference/cbc:Description`, y la
-     ApplicationResponse de la DIAN), Invoice, CreditNote y DebitNote.
-   - Modelo `Documento` (`rec_documento`) con los datos extraídos, y XML, XML de
-     la factura y PDF guardados en B2 (`almacenamiento_backblaze`).
-   - Validar el NIT receptor contra el del emisor. Si el correo llegó sin
-     emisor (el alias no es un NIT registrado) pero el NIT receptor sí lo es,
-     asociarlo y anotar `alias_no_registrado`.
-   - Sin coincidencia por ninguna de las dos vías: `empresa_desconocida`.
-2. **Comando `reprocesar_correos`**: `--id <n>` o `--todos` (los correos en
+1. **Comando `reprocesar_correos`**: `--id <n>` o `--todos` (los correos en
    error, pendiente o empresa_desconocida), descargando de R2.
-3. **API de documentos.** `GET /api/recepcion/documento/`, con los mismos
+2. **API de documentos.** `GET /api/recepcion/documento/`, con los mismos
    filtros que la de correos y las descargas `xml/`, `xml-factura/` y `pdf/`.
    La de correos ya existe; ahí se le suman sus documentos.
-4. **Webhook al ERP** (`rec_aviso`). Una bandera nueva `documento_recibido` en
+3. **Webhook al ERP** (`rec_aviso`). Una bandera nueva `documento_recibido` en
    `emi_webhook`, firmada con el `firmar` de `apps/emisores/servicios/webhooks.py`.
    Con reintentos y backoff, a diferencia de los avisos de emisión. El contrato
    (`tipo: "documento_recibido"`) hay que agregarlo en
    `torio/docs/webhook_rededoc.md`.
-5. **Producción**: repetir lo de Cloudflare en `rededoc.co` y apuntar el Worker
+4. **Producción**: repetir lo de Cloudflare en `rededoc.co` y apuntar el Worker
    a `api.rededoc.co`.
 
 Fuera de alcance: eventos RADIAN (030, 031, 032 y 033). El documento tiene pk
@@ -143,20 +155,15 @@ UUID y CUFE; los eventos irán en una tabla aparte con FK al documento.
 | Tema | Decisión |
 |---|---|
 | Nombres de tablas | `rec_correo`, `rec_documento` y `rec_aviso` (modelos `Correo`, `Documento` y `Aviso`) |
+| `rec_documento` aparte de `doc_documento` | Los roles están invertidos (allá el emisor factura, aquí recibe) y las acciones de emisión no aplican. Se reusan los catálogos `DocumentoTipo` y `Moneda` |
+| Emisor del documento | El del NIT receptor del XML, no el del buzón |
 | Tests | `django.test.TestCase` con `manage.py test`, como el resto. Sin pytest |
 | Idempotencia del endpoint | SHA-256 del body. `X-Raw-Key` no sirve porque cambia en cada entrega |
+| CUFE repetido | Se ignora: CUFE único en `rec_documento` y, si ya existe, no se crea nada ni se marca (decidido 2026-10-03) |
 | Carpeta en R2 | Fecha en UTC (`AAAA-MM-DD/<uuid>.eml`): un correo después de las 19:00 de Colombia cae en la del día siguiente. Solo organiza; la fecha que cuenta es `recibido_en` |
 | MIME crudo | En R2 (vinculación nativa del Worker), no en B2. Se evaluó B2 vía API S3 desde el Worker y se descartó (2026-10-03) |
 | Token | Obligatorio y falla cerrado. La primera versión fue abierta, a propósito, para probar el flujo |
 | Asociación con la empresa | El buzón es el NIT del emisor sin DV (`901192048@recepcion.rededoc.co`). Se asocia en el endpoint; sin campo ni tabla aparte |
-
-### Por decidir (antes del paso indicado)
-
-- **CUFE duplicado** (paso 1). El pedido original quiere un CUFE único y a la vez
-  un estado `duplicado`, y las dos cosas chocan. La propuesta es una unicidad
-  condicional: CUFE único entre `recibido` y `receptor_no_coincide`, con filas
-  `duplicado` que apuntan al original y el par (correo, cufe) único para que
-  reprocesar no repita filas.
 
 ## Probar el endpoint
 

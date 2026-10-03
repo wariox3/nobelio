@@ -6663,10 +6663,16 @@ components:
           type: string
           readOnly: true
           title: Confirmación de reenvío
+        documentos:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentoResumen'
+          readOnly: true
       required:
       - alias
       - asunto
       - confirmacion_reenvio
+      - documentos
       - emisor
       - envelope_from
       - envelope_to
@@ -8076,6 +8082,102 @@ components:
       - caja_ubicacion
       - cajero
       - codigo_venta
+    DocumentoResumen:
+      type: object
+      description: Lo que se muestra de cada documento dentro de su correo.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        emisor:
+          type: integer
+          readOnly: true
+        documento_tipo:
+          allOf:
+          - $ref: '#/components/schemas/DocumentoTipoEnum'
+          title: Código
+          description: |-
+            Discriminador interno que define la lógica de generación.
+
+            * `factura_venta` - Factura de venta
+            * `nota_credito` - Nota crédito
+            * `nota_debito` - Nota débito
+            * `documento_soporte` - Documento soporte
+            * `nota_ajuste` - Nota de ajuste al documento soporte
+            * `nomina` - Nómina electrónica
+            * `documento_equivalente_pos` - Documento equivalente P.O.S.
+            * `nota_ajuste_de_credito` - Nota de ajuste crédito al documento equivalente
+            * `nota_ajuste_de_debito` - Nota de ajuste débito al documento equivalente
+          readOnly: true
+        numero:
+          type: string
+          readOnly: true
+          title: Número
+          description: cbc:ID del documento.
+        cufe_cude:
+          type: string
+          readOnly: true
+          title: CUFE/CUDE
+          description: cbc:UUID del documento. CUFE en facturas, CUDE en notas.
+        fecha_emision:
+          type: string
+          format: date
+          readOnly: true
+          title: Fecha de emisión
+        proveedor_numero_identificacion:
+          type: string
+          readOnly: true
+          title: NIT del proveedor
+        proveedor_razon_social:
+          type: string
+          readOnly: true
+          title: Razón social del proveedor
+        total_a_pagar:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,18}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+          description: cbc:PayableAmount.
+        validacion_codigo:
+          type: string
+          readOnly: true
+          title: Código de validación DIAN
+          description: ValidationResultCode del AttachedDocument (02 = validado).
+      required:
+      - cufe_cude
+      - documento_tipo
+      - emisor
+      - fecha_emision
+      - id
+      - numero
+      - proveedor_numero_identificacion
+      - proveedor_razon_social
+      - total_a_pagar
+      - validacion_codigo
+    DocumentoTipoEnum:
+      enum:
+      - factura_venta
+      - nota_credito
+      - nota_debito
+      - documento_soporte
+      - nota_ajuste
+      - nomina
+      - documento_equivalente_pos
+      - nota_ajuste_de_credito
+      - nota_ajuste_de_debito
+      type: string
+      description: |-
+        * `factura_venta` - Factura de venta
+        * `nota_credito` - Nota crédito
+        * `nota_debito` - Nota débito
+        * `documento_soporte` - Documento soporte
+        * `nota_ajuste` - Nota de ajuste al documento soporte
+        * `nomina` - Nómina electrónica
+        * `documento_equivalente_pos` - Documento equivalente P.O.S.
+        * `nota_ajuste_de_credito` - Nota de ajuste crédito al documento equivalente
+        * `nota_ajuste_de_debito` - Nota de ajuste débito al documento equivalente
     ElementoCatalogo:
       type: object
       description: Serializer común para los catálogos simples (modelo base abstracto).

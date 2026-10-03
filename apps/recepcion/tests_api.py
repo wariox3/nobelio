@@ -93,6 +93,27 @@ class CorreoApiTests(CorreosBase):
     def test_el_correo_ajeno_es_404(self):
         self.assertEqual(self.client.get(f"{URL}{self.ajeno.pk}/").status_code, 404)
 
+    def test_muestra_solo_los_documentos_de_sus_emisores(self):
+        from apps.documentos.models import DocumentoTipo
+        from apps.recepcion.models import Documento
+
+        def documento(emisor, cufe):
+            return Documento.objects.create(
+                numero="FE-1", cufe_cude=cufe, fecha_emision="2026-10-01",
+                proveedor_numero_identificacion="800123456",
+                receptor_numero_identificacion=emisor.numero_identificacion,
+                xml_archivo="x.xml", emisor=emisor, correo=self.primero,
+                documento_tipo=DocumentoTipo.objects.get(codigo="factura_venta"),
+            )
+
+        propio = documento(self.emisor, "1" * 96)
+        documento(self.emisor_ajeno, "2" * 96)
+
+        fila = self.client.get(f"{URL}{self.primero.pk}/").json()
+
+        self.assertEqual([d["id"] for d in fila["documentos"]], [str(propio.pk)])
+        self.assertEqual(fila["documentos"][0]["documento_tipo"], "factura_venta")
+
     def test_filtra_por_emisor(self):
         respuesta = self.client.get(URL, {"emisor": self.hermano.pk})
 
