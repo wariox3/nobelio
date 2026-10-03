@@ -196,6 +196,10 @@ MFA_ENCRYPTION_KEY=<la segunda clave Fernet>
 # Cifra el secreto de los webhooks. También arranca vacía: lo que falla es
 # guardar un webhook con secreto.
 WEBHOOK_ENCRYPTION_KEY=<la tercera clave Fernet>
+# El Bearer con el que el Email Worker de Cloudflare publica los correos en
+# /recepcion/inbound. El mismo valor va como secreto INBOUND_TOKEN del Worker.
+# Vacía, el endpoint responde 401 a todo.
+INBOUND_TOKEN=<python3 -c "import secrets; print(secrets.token_urlsafe(32))">
 DEBUG=False
 ALLOWED_HOSTS=api.rededoc.co
 

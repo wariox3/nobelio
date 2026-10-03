@@ -501,6 +501,14 @@ WEBHOOK_ENCRYPTION_KEY = clave_fernet(
     obligatoria=False,
 )
 
+# Token con el que el Email Worker de Cloudflare publica los correos en
+# `POST /recepcion/inbound` (`Authorization: Bearer <token>`). Es el mismo valor
+# que el secreto `INBOUND_TOKEN` del Worker. Vacío —el default— el endpoint
+# responde 401 a todo: falla cerrado, para que un despliegue sin la variable no
+# deje abierta una ruta pública que escribe en la base.
+#   python -c "import secrets; print(secrets.token_urlsafe(32))"
+INBOUND_TOKEN = env("INBOUND_TOKEN", default="")
+
 # --- Celery (tareas en segundo plano) ----------------------------------------
 # Broker RabbitMQ, gestionado (CloudAMQP): la URL es `amqps://`, porque está en
 # internet. Ver config/celery.py y docs/despliegue.md.
