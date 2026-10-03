@@ -25,6 +25,11 @@ def _cliente():
     )
 
 
+def r2_habilitado():
+    """¿Están las variables ``R2_*``?"""
+    return settings.R2_HABILITADO
+
+
 def descargar_mime(raw_key):
     """Los bytes del MIME de ``raw_key``.
 

@@ -78,6 +78,13 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
     responde 400; sin las variables `R2_*`, 503, y si R2 falla, 502 y la fila
     se queda. Como los correos sin emisor solo los ve el staff o una llave de
     alcance global, en la práctica solo ellos pueden eliminarlos.
+  - `DELETE /api/recepcion/correo/<id>/eliminar-admin/` fuerza la eliminación
+    de **cualquier** correo: sus documentos (de cualquier emisor), sus archivos
+    en B2 y el MIME en R2. Solo el staff o una llave de alcance global (permiso
+    `AlcanceTotal` de `apps/seguridad/alcance.py`); el resto, 403. Responde 200
+    con `{correo, documentos, archivos}`. Filas en una transacción y archivos
+    dentro de ella: si B2 o R2 fallan, las filas vuelven (502) y repetir la
+    petición termina el trabajo. Sin `R2_*`, 503 sin tocar nada.
 - **Procesamiento en Celery** (`apps/recepcion/tareas.py`, cola `recepcion`):
   - El endpoint encola `procesar_correo` al registrar el correo, y también al
     recibir un repetido que sigue `pendiente` (por si el broker falló la

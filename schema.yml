@@ -5986,6 +5986,8 @@ paths:
 
         ``DELETE`` elimina un correo **sin emisor** (el de una empresa que no está
         ni va a estar en la plataforma), junto con su MIME en R2.
+        ``DELETE eliminar-admin/`` elimina cualquiera, con sus documentos y todos
+        sus archivos; solo el staff o una llave de alcance global.
       parameters:
       - name: ordering
         required: false
@@ -6045,6 +6047,8 @@ paths:
 
         ``DELETE`` elimina un correo **sin emisor** (el de una empresa que no está
         ni va a estar en la plataforma), junto con su MIME en R2.
+        ``DELETE eliminar-admin/`` elimina cualquiera, con sus documentos y todos
+        sus archivos; solo el staff o una llave de alcance global.
       parameters:
       - in: path
         name: id
@@ -6107,6 +6111,75 @@ paths:
       responses:
         '204':
           description: No response body
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/recepcion/correo/{id}/eliminar-admin/:
+    delete:
+      operationId: recepcion_correo_eliminar_admin_destroy
+      description: |-
+        Elimina el correo aunque tenga emisor, con todo lo que cuelga de él.
+
+        Borra los documentos que salieron del correo (de cualquier emisor), sus
+        archivos en B2 y el MIME en R2. Solo el staff o una llave de alcance
+        global: son documentos fiscales, y el ERP puede haberlos procesado ya.
+
+        Las filas se borran en una transacción y los archivos dentro de ella,
+        después: si B2 o R2 fallan, las filas vuelven y responde 502. Los
+        archivos que ya se borraron no vuelven, pero repetir la petición
+        termina el trabajo, porque borrar lo que ya no existe no es error. Así
+        nunca quedan archivos sin dueño en los buckets.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este correo recibido.
+        required: true
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CorreoEliminadoAdmin'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
         '429':
           description: Error
           content:
@@ -6947,6 +7020,19 @@ components:
       - message_id
       - raw_key
       - recibido_en
+    CorreoEliminadoAdmin:
+      type: object
+      properties:
+        correo:
+          type: integer
+        documentos:
+          type: integer
+        archivos:
+          type: integer
+      required:
+      - archivos
+      - correo
+      - documentos
     CorreoEstadoEnum:
       enum:
       - pendiente

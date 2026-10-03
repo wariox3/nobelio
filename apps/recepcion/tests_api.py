@@ -1,17 +1,20 @@
 """La API de consulta de los correos recibidos."""
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from unittest import mock
 from zoneinfo import ZoneInfo
 
 from botocore.exceptions import EndpointConnectionError
-
 from django.contrib.auth import get_user_model
+from django.core.files.base import ContentFile
 from django.test import override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
 
+from apps.documentos.models import DocumentoTipo
 from apps.documentos.tests_utils import crear_catalogos_minimos, crear_usuario
 from apps.emisores.models import Emisor
-from apps.recepcion.models import Correo
+from apps.recepcion.models import Correo, Documento
+from apps.seguridad.models import LlaveApi
 
 Usuario = get_user_model()
 
@@ -94,9 +97,6 @@ class CorreoApiTests(CorreosBase):
         self.assertEqual(self.client.get(f"{URL}{self.ajeno.pk}/").status_code, 404)
 
     def test_muestra_solo_los_documentos_de_sus_emisores(self):
-        from apps.documentos.models import DocumentoTipo
-        from apps.recepcion.models import Documento
-
         def documento(emisor, cufe):
             return Documento.objects.create(
                 numero="FE-1", cufe_cude=cufe, fecha_emision="2026-10-01",
@@ -222,3 +222,111 @@ class EliminarCorreoTests(CorreosBase):
 
         self.assertEqual(self.eliminar(self.sin_emisor).status_code, 404)
         self.assertEqual(self.eliminar(self.primero).status_code, 400)
+
+
+@override_settings(**R2_CONFIGURADO)
+class EliminarAdminTests(CorreosBase):
+    """``DELETE eliminar-admin/``: el correo con sus documentos y archivos, solo
+    para el staff o una llave de alcance global."""
+
+    def setUp(self):
+        super().setUp()
+        tecnico = crear_usuario(nombre="App admin", is_staff=True)
+        _, clave = LlaveApi.generar(
+            usuario=tecnico, nombre="App administrativa",
+            expira_en=timezone.now() + timedelta(days=30), alcance_global=True,
+        )
+        self.llave_global = {"HTTP_AUTHORIZATION": f"Api-Key {clave}"}
+        parche = mock.patch("apps.recepcion.r2._cliente")
+        self.r2 = parche.start()()
+        self.addCleanup(parche.stop)
+        self.documento = self.crear_documento(self.primero, self.emisor, "1")
+        # Un documento de otro emisor en el mismo correo también se va.
+        self.documento_ajeno = self.crear_documento(self.primero, self.emisor_ajeno, "2")
+
+    def crear_documento(self, correo, emisor, cufe):
+        documento = Documento(
+            numero=f"FE-{cufe}", cufe_cude=cufe * 96, fecha_emision=date(2026, 10, 1),
+            proveedor_numero_identificacion="800123456",
+            receptor_numero_identificacion=emisor.numero_identificacion,
+            emisor=emisor, correo=correo,
+            documento_tipo=DocumentoTipo.objects.get(codigo="factura_venta"),
+        )
+        documento.xml_archivo.save("ad.xml", ContentFile(b"<AttachedDocument/>"), save=False)
+        documento.pdf_archivo.save("fe.pdf", ContentFile(b"%PDF"), save=False)
+        documento.save()
+        return documento
+
+    def eliminar(self, correo, **cabeceras):
+        # Con credencial en la cabecera, un cliente sin la sesión forzada del setUp.
+        cliente = APIClient() if cabeceras else self.client
+        return cliente.delete(f"{URL}{correo.pk}/eliminar-admin/", **cabeceras)
+
+    def test_la_llave_global_elimina_el_correo_con_todo(self):
+        archivos = [
+            (d.xml_archivo.storage, d.xml_archivo.name, d.pdf_archivo.name)
+            for d in (self.documento, self.documento_ajeno)
+        ]
+        respuesta = self.eliminar(self.primero, **self.llave_global)
+
+        self.assertEqual(respuesta.status_code, 200, respuesta.content)
+        self.assertEqual(
+            respuesta.json(), {"correo": self.primero.pk, "documentos": 2, "archivos": 4},
+        )
+        self.assertFalse(Correo.objects.filter(pk=self.primero.pk).exists())
+        self.assertFalse(Documento.objects.exists())
+        for storage, xml, pdf in archivos:
+            self.assertFalse(storage.exists(xml))
+            self.assertFalse(storage.exists(pdf))
+        self.r2.delete_object.assert_called_once_with(
+            Bucket="nobelio-inbound-raw", Key="2026-10-02/1.eml",
+        )
+
+    def test_el_staff_tambien_puede(self):
+        admin = Usuario.objects.create_superuser(email="admin@nobelio.co", password="Clave123456")
+        self.client.force_authenticate(admin)
+
+        self.assertEqual(self.eliminar(self.primero).status_code, 200)
+
+    def test_un_correo_sin_documentos_ni_emisor(self):
+        respuesta = self.eliminar(self.sin_emisor, **self.llave_global)
+
+        self.assertEqual(respuesta.json()["documentos"], 0)
+        self.assertFalse(Correo.objects.filter(pk=self.sin_emisor.pk).exists())
+
+    def test_el_dueno_del_emisor_no_puede(self):
+        respuesta = self.eliminar(self.primero)
+
+        self.assertEqual(respuesta.status_code, 403)
+        self.assertTrue(Correo.objects.filter(pk=self.primero.pk).exists())
+        self.assertEqual(Documento.objects.count(), 2)
+
+    def test_una_llave_normal_no_puede(self):
+        _, clave = LlaveApi.generar(usuario=self.usuario, nombre="ERP")
+        respuesta = self.eliminar(self.primero, HTTP_AUTHORIZATION=f"Api-Key {clave}")
+
+        self.assertEqual(respuesta.status_code, 403)
+
+    @override_settings(R2_HABILITADO=False)
+    def test_sin_r2_no_toca_nada(self):
+        respuesta = self.eliminar(self.primero, **self.llave_global)
+
+        self.assertEqual(respuesta.status_code, 503)
+        self.assertEqual(Documento.objects.count(), 2)
+        self.assertTrue(self.documento.xml_archivo.storage.exists(self.documento.xml_archivo.name))
+
+    def test_si_r2_falla_las_filas_vuelven(self):
+        self.r2.delete_object.side_effect = EndpointConnectionError(endpoint_url="r2")
+        respuesta = self.eliminar(self.primero, **self.llave_global)
+
+        self.assertEqual(respuesta.status_code, 502)
+        self.assertTrue(Correo.objects.filter(pk=self.primero.pk).exists())
+        self.assertEqual(Documento.objects.count(), 2)
+
+    def test_repetir_despues_de_un_fallo_termina_el_trabajo(self):
+        self.r2.delete_object.side_effect = [EndpointConnectionError(endpoint_url="r2"), None]
+        self.eliminar(self.primero, **self.llave_global)
+        respuesta = self.eliminar(self.primero, **self.llave_global)
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertFalse(Documento.objects.exists())

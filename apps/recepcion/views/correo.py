@@ -3,15 +3,19 @@ import logging
 
 from django.db import transaction
 from django.db.models import Prefetch
-from rest_framework import filters, mixins, status, viewsets
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import filters, mixins, serializers as drf_serializers, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.exceptions import APIException
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.nucleo.api import ErrorSolicitud, entero_de_query, fecha_de_query
+from apps.nucleo.esquema import ErrorSerializer
 from apps.nucleo.registro import campos
 from apps.recepcion import r2, serializers
 from apps.recepcion.models import Correo, Documento
-from apps.seguridad.alcance import AlcanceEmisorMixin, emisores_permitidos
+from apps.seguridad.alcance import AlcanceEmisorMixin, AlcanceTotal, emisores_permitidos
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +48,8 @@ class CorreoViewSet(
 
     ``DELETE`` elimina un correo **sin emisor** (el de una empresa que no está
     ni va a estar en la plataforma), junto con su MIME en R2.
+    ``DELETE eliminar-admin/`` elimina cualquiera, con sus documentos y todos
+    sus archivos; solo el staff o una llave de alcance global.
     """
 
     serializer_class = serializers.CorreoSerializer
@@ -103,3 +109,62 @@ class CorreoViewSet(
             por=request.user,
         ))
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @extend_schema(
+        request=None,
+        responses={
+            200: inline_serializer("CorreoEliminadoAdmin", {
+                "correo": drf_serializers.IntegerField(),
+                "documentos": drf_serializers.IntegerField(),
+                "archivos": drf_serializers.IntegerField(),
+            }),
+            403: ErrorSerializer, 502: ErrorSerializer, 503: ErrorSerializer,
+        },
+    )
+    @action(
+        detail=True, methods=["delete"], url_path="eliminar-admin",
+        permission_classes=[IsAuthenticated, AlcanceTotal],
+    )
+    def eliminar_admin(self, request, pk=None):
+        """Elimina el correo aunque tenga emisor, con todo lo que cuelga de él.
+
+        Borra los documentos que salieron del correo (de cualquier emisor), sus
+        archivos en B2 y el MIME en R2. Solo el staff o una llave de alcance
+        global: son documentos fiscales, y el ERP puede haberlos procesado ya.
+
+        Las filas se borran en una transacción y los archivos dentro de ella,
+        después: si B2 o R2 fallan, las filas vuelven y responde 502. Los
+        archivos que ya se borraron no vuelven, pero repetir la petición
+        termina el trabajo, porque borrar lo que ya no existe no es error. Así
+        nunca quedan archivos sin dueño en los buckets.
+        """
+        correo = self.get_object()
+        if not r2.r2_habilitado():
+            # Antes de tocar nada: sin R2 el MIME quedaría huérfano.
+            logger.error("recepcion.r2_no_configurado R2_* no está configurado")
+            raise R2NoDisponible
+        with transaction.atomic():
+            correo = Correo.objects.select_for_update().get(pk=correo.pk)
+            documentos = list(Documento.objects.filter(correo=correo))
+            archivos = [
+                campo
+                for documento in documentos
+                for campo in (
+                    documento.xml_archivo, documento.xml_factura_archivo,
+                    documento.pdf_archivo,
+                )
+                if campo
+            ]
+            Documento.objects.filter(correo=correo).delete()
+            correo.delete()
+            for archivo in archivos:
+                archivo.storage.delete(archivo.name)
+            r2.borrar_mime(correo.raw_key)
+        logger.info("recepcion.correo_eliminado_admin %s", campos(
+            correo=pk, alias=correo.alias, emisor=correo.emisor_id,
+            documentos=len(documentos), archivos=len(archivos),
+            raw_key=correo.raw_key, por=request.user,
+        ))
+        return Response({
+            "correo": int(pk), "documentos": len(documentos), "archivos": len(archivos),
+        })

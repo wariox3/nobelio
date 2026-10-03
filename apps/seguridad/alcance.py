@@ -21,6 +21,7 @@ from django.core.exceptions import ValidationError as ErrorValidacionDjango
 from django.db.models import Q
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.permissions import BasePermission
 
 from apps.emisores.models import Emisor
 
@@ -43,6 +44,17 @@ def es_llave_global(request):
     """
     llave = getattr(getattr(request, "user", None), "llave", None)
     return bool(llave is not None and llave.alcance_global)
+
+
+class AlcanceTotal(BasePermission):
+    """Solo quien alcanza todos los emisores: el staff o una llave de alcance
+    global. Para las operaciones de administración de la plataforma que no
+    son de un emisor sino de todos (p. ej. forzar la eliminación de un correo)."""
+
+    message = "Solo el staff o una llave de alcance global pueden hacer esto."
+
+    def has_permission(self, request, view):
+        return es_staff(request) or es_llave_global(request)
 
 
 def usuario_del_request(request):
