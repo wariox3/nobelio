@@ -56,4 +56,5 @@ urlpatterns = [
     path("api/emisores/", include("apps.emisores.urls")),
     path("api/documentos/", include("apps.documentos.urls")),
     path("api/nomina/", include("apps.nomina.urls")),
+    path("api/recepcion/", include("apps.recepcion.urls")),
 ]

@@ -8,6 +8,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
+from apps.emisores.models import Emisor
 from apps.nucleo.registro import campos
 from apps.recepcion.models import Correo
 
@@ -35,6 +36,18 @@ def _token_valido(request):
     return hmac.compare_digest(recibido.strip().encode(), esperado.encode())
 
 
+def _emisor_del_alias(alias):
+    """El emisor cuyo NIT es el alias, o ``None``.
+
+    El buzón de cada emisor es su NIT sin DV: ``901192048@recepcion.rededoc.co``.
+    Si el alias no es un NIT registrado, el correo queda sin emisor; se guarda
+    igual para reprocesarlo cuando lo den de alta.
+    """
+    if not alias.isdigit():
+        return None
+    return Emisor.objects.filter(numero_identificacion=alias).first()
+
+
 class CuerpoDemasiadoGrande(Exception):
     """El body supera ``MAXIMO_BYTES``."""
 
@@ -59,9 +72,9 @@ def _sha256_del_cuerpo(request):
 @csrf_exempt
 @require_POST
 def inbound(request):
-    """Registra el correo que llega a ``<alias>@recepcion.rededoc.co``.
+    """Registra el correo que llega a ``<nit>@recepcion.rededoc.co``.
 
-    Solo lo registra: no abre el MIME ni sus adjuntos. Es idempotente por el
+    Lo asocia al emisor de ese NIT, pero no abre el MIME ni sus adjuntos. Es idempotente por el
     SHA-256 del body, porque el Worker reintenta el POST si no recibe
     respuesta: el mismo correo responde 200 y no crea un segundo registro.
 
@@ -83,16 +96,18 @@ def inbound(request):
     except CuerpoDemasiadoGrande:
         return JsonResponse({"detail": "El correo supera los 30 MB."}, status=413)
 
+    alias = envelope_to.rsplit("@", 1)[0].lower()
     correo, creado = Correo.objects.get_or_create(
         sha256=sha256,
         defaults={
-            "alias": envelope_to.rsplit("@", 1)[0].lower(),
+            "alias": alias,
+            "emisor": _emisor_del_alias(alias),
             "envelope_to": envelope_to,
             "envelope_from": request.headers.get("X-Envelope-From", "").strip(),
             "raw_key": request.headers.get("X-Raw-Key", "").strip(),
         },
     )
     logger.info("recepcion.correo %s", campos(
-        correo=correo.pk, alias=correo.alias, nuevo=creado,
+        correo=correo.pk, alias=correo.alias, emisor=correo.emisor_id, nuevo=creado,
     ))
     return JsonResponse({"id": correo.pk, "estado": correo.estado}, status=201 if creado else 200)

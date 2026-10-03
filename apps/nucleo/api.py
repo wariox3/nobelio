@@ -26,6 +26,7 @@ código y el mismo texto que ``detail``. Así el cliente decide siempre por
 """
 import logging
 import uuid
+from datetime import date
 
 from rest_framework.exceptions import APIException
 from rest_framework.settings import api_settings
@@ -87,6 +88,25 @@ def uuid_de_query(params, nombre):
     except ValueError:
         raise ErrorSolicitud(
             f"El filtro '{nombre}' tiene que ser un UUID; se recibió '{valor}'."
+        )
+
+
+def fecha_de_query(params, nombre):
+    """Lee un filtro de fecha ``AAAA-MM-DD`` de la query string, o lanza un 400.
+
+    Igual que ``entero_de_query``: sin el parámetro devuelve ``None`` y el
+    filtro no se aplica; con un valor que no es fecha responde 400 en vez de
+    ignorarlo.
+    """
+    valor = params.get(nombre)
+    if valor is None or valor == "":
+        return None
+    try:
+        return date.fromisoformat(valor)
+    except ValueError:
+        raise ErrorSolicitud(
+            f"El filtro '{nombre}' tiene que ser una fecha AAAA-MM-DD; "
+            f"se recibió '{valor}'."
         )
 
 

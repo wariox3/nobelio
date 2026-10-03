@@ -5969,6 +5969,112 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/recepcion/correo/:
+    get:
+      operationId: recepcion_correo_list
+      description: |-
+        Los correos que llegaron a ``<nit>@recepcion.rededoc.co``.
+
+        De solo lectura: los registra el Email Worker de Cloudflare en
+        ``POST /recepcion/inbound``. Un correo cuyo alias no es el NIT de ningún
+        emisor no tiene emisor, así que fuera del staff no lo ve nadie.
+
+        Filtros: ``?emisor=<id>``, ``?estado=pendiente|procesado|...`` y
+        ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD`` sobre ``recibido_en``, ambos
+        inclusive. ``?search=`` busca en remitente, asunto y Message-ID, y
+        ``?ordering=`` ordena por ``recibido_en`` o ``estado``.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Qué campo usar para ordenar los resultados.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: Un número de página dentro del conjunto de resultados paginado.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCorreoList'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/recepcion/correo/{id}/:
+    get:
+      operationId: recepcion_correo_retrieve
+      description: |-
+        Los correos que llegaron a ``<nit>@recepcion.rededoc.co``.
+
+        De solo lectura: los registra el Email Worker de Cloudflare en
+        ``POST /recepcion/inbound``. Un correo cuyo alias no es el NIT de ningún
+        emisor no tiene emisor, así que fuera del staff no lo ve nadie.
+
+        Filtros: ``?emisor=<id>``, ``?estado=pendiente|procesado|...`` y
+        ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD`` sobre ``recibido_en``, ambos
+        inclusive. ``?search=`` busca en remitente, asunto y Message-ID, y
+        ``?ordering=`` ordena por ``recibido_en`` o ``estado``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este correo recibido.
+        required: true
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Correo'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 components:
   schemas:
     Adquiriente:
@@ -6461,6 +6567,81 @@ components:
       - errores
       - es_valido
       - estado
+    Correo:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        emisor:
+          type: integer
+          readOnly: true
+          nullable: true
+        alias:
+          type: string
+          readOnly: true
+        envelope_from:
+          type: string
+          readOnly: true
+          title: Remitente (sobre)
+        envelope_to:
+          type: string
+          readOnly: true
+          title: Destinatario (sobre)
+        message_id:
+          type: string
+          readOnly: true
+        asunto:
+          type: string
+          readOnly: true
+        recibido_en:
+          type: string
+          format: date-time
+          readOnly: true
+        estado:
+          allOf:
+          - $ref: '#/components/schemas/CorreoEstadoEnum'
+          readOnly: true
+        error_detalle:
+          type: string
+          readOnly: true
+          title: Detalle del error
+        intentos:
+          type: integer
+          readOnly: true
+        confirmacion_reenvio:
+          type: string
+          readOnly: true
+          title: Confirmación de reenvío
+      required:
+      - alias
+      - asunto
+      - confirmacion_reenvio
+      - emisor
+      - envelope_from
+      - envelope_to
+      - error_detalle
+      - estado
+      - id
+      - intentos
+      - message_id
+      - recibido_en
+    CorreoEstadoEnum:
+      enum:
+      - pendiente
+      - procesado
+      - sin_documentos
+      - error
+      - empresa_desconocida
+      - confirmacion_reenvio
+      type: string
+      description: |-
+        * `pendiente` - Pendiente
+        * `procesado` - Procesado
+        * `sin_documentos` - Sin documentos
+        * `error` - Error
+        * `empresa_desconocida` - Empresa desconocida
+        * `confirmacion_reenvio` - Confirmación de reenvío
     Documento:
       type: object
       description: Serializer de lectura del documento, con detalles anidados.
@@ -10515,6 +10696,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Certificado'
+    PaginatedCorreoList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Correo'
     PaginatedDocumentoEventoList:
       type: object
       required:

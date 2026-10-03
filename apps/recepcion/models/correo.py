@@ -4,11 +4,12 @@ from django.utils import timezone
 
 
 class Correo(models.Model):
-    """Un correo que llegó a ``<alias>@recepcion.rededoc.co``.
+    """Un correo que llegó a ``<nit>@recepcion.rededoc.co``.
 
     Se crea `pendiente` en el request del Email Worker, sin parsear nada: el
-    MIME se procesa después en el worker de Celery. El emisor se resuelve ahí
-    (por alias y luego por el NIT receptor del XML), por eso nace nulo.
+    MIME se procesa después en el worker de Celery. El alias es el NIT del
+    emisor (sin DV) y con él se asocia al llegar; si no corresponde a ninguno,
+    queda nulo y el worker lo intenta luego con el NIT receptor del XML.
 
     El MIME crudo no vive aquí sino en R2, bajo ``raw_key``: es la fuente para
     procesarlo y para reprocesarlo.

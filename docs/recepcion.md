@@ -12,7 +12,7 @@ nota débito) y se los entrega al ERP del emisor. Nobelio no es multitenant: la
 ## Flujo
 
 ```
-proveedor ──► compras@cliente.com ──(reenvío)──► <alias>@recepcion.rededoc.uk
+proveedor ──► compras@cliente.com ──(reenvío)──► <nit>@recepcion.rededoc.uk
                                                          │
                                        Cloudflare Email Routing (catch-all)
                                                          │
@@ -27,8 +27,8 @@ proveedor ──► compras@cliente.com ──(reenvío)──► <alias>@recepc
 
 | Ambiente | Dominio del buzón | nobelio |
 |---|---|---|
-| Pruebas | `<alias>@recepcion.rededoc.uk` | `https://api.rededoc.uk` |
-| Producción | `<alias>@recepcion.rededoc.co` | `https://api.rededoc.co` |
+| Pruebas | `<nit>@recepcion.rededoc.uk` | `https://api.rededoc.uk` |
+| Producción | `<nit>@recepcion.rededoc.co` | `https://api.rededoc.co` |
 
 ### Lo que manda el Worker
 
@@ -39,7 +39,7 @@ no puede redirigir un POST):
 |---|---|
 | `Content-Type` | `message/rfc822` |
 | `Authorization` | `Bearer <INBOUND_TOKEN>` |
-| `X-Envelope-To` | destinatario, p. ej. `veloenvios@recepcion.rededoc.uk` |
+| `X-Envelope-To` | destinatario, p. ej. `901192048@recepcion.rededoc.uk` |
 | `X-Envelope-From` | remitente del sobre |
 | `X-Raw-Key` | clave del objeto en R2: `AAAA-MM-DD/<uuid>.eml` |
 
@@ -60,9 +60,18 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
   - Lee el body por stream con un tope de 30 MB (413), sin pasar por
     `DATA_UPLOAD_MAX_MEMORY_SIZE`.
   - Idempotente por el SHA-256 del body: 201 si es nuevo, 200 si ya existía.
-  - Guarda el alias (parte local de `X-Envelope-To`, en minúsculas). No abre el
-    MIME ni sus adjuntos, y no encola nada.
-- **Tests**: `apps/recepcion/tests_inbound.py`, 12 casos.
+  - Guarda el alias (parte local de `X-Envelope-To`, en minúsculas) y, si es
+    el NIT de un emisor, lo asocia (`Emisor.numero_identificacion`, sin DV).
+    Si no corresponde a ninguno, el correo queda sin emisor. No abre el MIME
+    ni sus adjuntos, y no encola nada.
+- **Tests**: `apps/recepcion/tests_inbound.py`, 14 casos.
+- **API de consulta `GET /api/recepcion/correo/`** (`apps/recepcion/views/correo.py`),
+  de solo lectura y acotada con `AlcanceEmisorMixin`: cada usuario ve los
+  correos de sus emisores, y el staff todos, incluidos los que no tienen emisor.
+  - Filtros: `?emisor=<id>`, `?estado=<estado>`, `?desde=AAAA-MM-DD` y
+    `?hasta=AAAA-MM-DD` (sobre `recibido_en`, en hora de Colombia, inclusive).
+  - `?search=` en remitente, asunto y Message-ID; `?ordering=recibido_en|estado`.
+  - No expone `sha256` ni `raw_key`. Tests en `apps/recepcion/tests_api.py`.
 - **nginx**: bloque `location = /recepcion/inbound` con `client_max_body_size
   30M` (`docs/despliegue.md`).
 - **Cloudflare (pruebas, `rededoc.uk`)**, funcionando de punta a punta:
@@ -71,40 +80,26 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
   - Worker `nobelio-recepcion` con la vinculación R2 `RAW` y la variable
     `NOBELIO_URL = https://api.rededoc.uk/recepcion/inbound`.
   - Regla catch-all: enviar al Worker `nobelio-recepcion`.
-
-### Falta para cerrar el paso del token
-
-El código está listo, pero **falta desplegarlo**. En este orden:
-
-1. Generar el token: `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`.
-2. Cloudflare: en el Worker, agregar el **secreto** `INBOUND_TOKEN` con ese valor.
-3. Servidor de pruebas: `INBOUND_TOKEN=<el mismo valor>` en `/opt/nobelio/.env`.
-4. Hacer commit y push, y correr `sudo /opt/nobelio/actualizar.sh`.
-5. Mandar un correo a `prueba@recepcion.rededoc.uk`. El log del Worker debe
-   decir `nobelio 201`; un 401 es que los valores no coinciden.
+  - Secreto `INBOUND_TOKEN` en el Worker, el mismo valor en `/opt/nobelio/.env`.
+    Desplegado y verificado el 2026-10-03: los correos entran con `201`.
 
 ## Siguientes pasos
 
 En orden. Cada uno se cierra (código, tests, despliegue en pruebas) antes de
 empezar el siguiente.
 
-1. **Alias por empresa.** Un campo `Emisor.alias_recepcion` (único y nullable,
-   slug en minúsculas), editable desde el serializer del emisor. Se eligió el
-   campo y no una tabla `buzones_recepcion` porque cada emisor tiene un solo
-   buzón.
-2. **Procesar el correo en Celery, sin abrir adjuntos.**
+1. **Procesar el correo en Celery, sin abrir adjuntos.**
    - El endpoint encola `procesar_correo` en una cola nueva, `recepcion`
      (agregarla a `CELERY_TASK_ROUTES` y al `-Q` del worker en
      `docs/despliegue.md`).
    - El worker descarga el MIME de R2 por `raw_key` (boto3 contra el endpoint
      S3 de R2) y lee `Message-ID` y asunto.
-   - Asocia el emisor por alias.
    - Detecta la confirmación de reenvío de Gmail (`forwarding-noreply@google.com`)
      y guarda el código o enlace en `confirmacion_reenvio`.
    - Reintenta los errores transitorios con backoff, máximo 5 (`intentos`).
    - Variables nuevas: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
      `R2_SECRET_ACCESS_KEY` y `R2_BUCKET`.
-3. **Adjuntos y documentos.**
+2. **Adjuntos y documentos.**
    - Extraer XML sueltos, ZIP (también anidados) y `.eml` o `message/rfc822`
      adjuntos.
    - Parsear el AttachedDocument (factura embebida en el CDATA de
@@ -112,21 +107,21 @@ empezar el siguiente.
      ApplicationResponse de la DIAN), Invoice, CreditNote y DebitNote.
    - Modelo `Documento` (`rec_documento`) con los datos extraídos, y XML, XML de
      la factura y PDF guardados en B2 (`almacenamiento_backblaze`).
-   - Validar el NIT receptor contra el del emisor. Si el alias no existe pero el
-     NIT corresponde a un emisor, asociarlo y anotar `alias_no_registrado`.
+   - Validar el NIT receptor contra el del emisor. Si el correo llegó sin
+     emisor (el alias no es un NIT registrado) pero el NIT receptor sí lo es,
+     asociarlo y anotar `alias_no_registrado`.
    - Sin coincidencia por ninguna de las dos vías: `empresa_desconocida`.
-4. **Comando `reprocesar_correos`**: `--id <n>` o `--todos` (los correos en
+3. **Comando `reprocesar_correos`**: `--id <n>` o `--todos` (los correos en
    error, pendiente o empresa_desconocida), descargando de R2.
-5. **API de lectura.** `GET /api/recepcion/correo/` y
-   `GET /api/recepcion/documento/`, con filtros por fecha, emisor y estado y
-   las descargas `xml/`, `xml-factura/` y `pdf/`. Acotadas con
-   `AlcanceEmisorMixin`.
-6. **Webhook al ERP** (`rec_aviso`). Una bandera nueva `documento_recibido` en
+4. **API de documentos.** `GET /api/recepcion/documento/`, con los mismos
+   filtros que la de correos y las descargas `xml/`, `xml-factura/` y `pdf/`.
+   La de correos ya existe; ahí se le suman sus documentos.
+5. **Webhook al ERP** (`rec_aviso`). Una bandera nueva `documento_recibido` en
    `emi_webhook`, firmada con el `firmar` de `apps/emisores/servicios/webhooks.py`.
    Con reintentos y backoff, a diferencia de los avisos de emisión. El contrato
    (`tipo: "documento_recibido"`) hay que agregarlo en
    `torio/docs/webhook_rededoc.md`.
-7. **Producción**: repetir lo de Cloudflare en `rededoc.co` y apuntar el Worker
+6. **Producción**: repetir lo de Cloudflare en `rededoc.co` y apuntar el Worker
    a `api.rededoc.co`.
 
 Fuera de alcance: eventos RADIAN (030, 031, 032 y 033). El documento tiene pk
@@ -139,15 +134,16 @@ UUID y CUFE; los eventos irán en una tabla aparte con FK al documento.
 | Nombres de tablas | `rec_correo`, `rec_documento` y `rec_aviso` (modelos `Correo`, `Documento` y `Aviso`) |
 | Tests | `django.test.TestCase` con `manage.py test`, como el resto. Sin pytest |
 | Idempotencia del endpoint | SHA-256 del body. `X-Raw-Key` no sirve porque cambia en cada entrega |
+| MIME crudo | En R2 (vinculación nativa del Worker), no en B2. Se evaluó B2 vía API S3 desde el Worker y se descartó (2026-10-03) |
 | Token | Obligatorio y falla cerrado. La primera versión fue abierta, a propósito, para probar el flujo |
-| Asociación con la empresa | Campo `Emisor.alias_recepcion`, no tabla aparte |
+| Asociación con la empresa | El buzón es el NIT del emisor sin DV (`901192048@recepcion.rededoc.co`). Se asocia en el endpoint; sin campo ni tabla aparte |
 
 ### Por decidir (antes del paso indicado)
 
-- **Origen del MIME en dev** (paso 2). La propuesta es que, sin las variables
+- **Origen del MIME en dev** (paso 1). La propuesta es que, sin las variables
   `R2_*`, el endpoint guarde el body en un `mime_archivo` local, para poder
   probar sin R2. En pruebas y producción siempre se descarga de R2.
-- **CUFE duplicado** (paso 3). El pedido original quiere un CUFE único y a la vez
+- **CUFE duplicado** (paso 2). El pedido original quiere un CUFE único y a la vez
   un estado `duplicado`, y las dos cosas chocan. La propuesta es una unicidad
   condicional: CUFE único entre `recibido` y `receptor_no_coincide`, con filas
   `duplicado` que apuntan al original y el par (correo, cufe) único para que
@@ -161,7 +157,7 @@ Local (`manage.py runserver`, con `INBOUND_TOKEN` en el `.env`):
 curl -i -X POST http://localhost:8000/recepcion/inbound \
   -H "Authorization: Bearer $INBOUND_TOKEN" \
   -H "Content-Type: message/rfc822" \
-  -H "X-Envelope-To: veloenvios@recepcion.rededoc.uk" \
+  -H "X-Envelope-To: 901192048@recepcion.rededoc.uk" \
   -H "X-Envelope-From: facturas@proveedor.test" \
   -H "X-Raw-Key: 2026-10-02/prueba.eml" \
   --data-binary @correo.eml

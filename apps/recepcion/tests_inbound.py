@@ -4,6 +4,7 @@ from unittest import mock
 from django.test import TestCase, override_settings
 
 from apps.recepcion.models import Correo
+from apps.seguridad.tests_autenticacion import crear_emisor
 
 URL = "/recepcion/inbound"
 TOKEN = "token-de-prueba"
@@ -40,6 +41,25 @@ class InboundTests(TestCase):
         self.assertEqual(correo.envelope_from, "compras@cliente.example")
         self.assertEqual(correo.raw_key, "2026-10-02/0b7c1d2e.eml")
         self.assertEqual(len(correo.sha256), 64)
+        self.assertIsNone(correo.emisor)
+
+    def test_asocia_el_emisor_por_nit(self):
+        emisor = crear_emisor()
+
+        self.publicar(cabeceras={**CABECERAS, "X-Envelope-To": "900123456@recepcion.rededoc.co"})
+
+        correo = Correo.objects.get()
+        self.assertEqual(correo.alias, "900123456")
+        self.assertEqual(correo.emisor, emisor)
+
+    def test_nit_no_registrado_queda_sin_emisor(self):
+        crear_emisor()
+
+        respuesta = self.publicar(cabeceras={**CABECERAS, "X-Envelope-To": "800999999@recepcion.rededoc.co"})
+
+        self.assertEqual(respuesta.status_code, 201)
+        correo = Correo.objects.get()
+        self.assertEqual(correo.alias, "800999999")
         self.assertIsNone(correo.emisor)
 
     def test_el_mismo_correo_no_se_registra_dos_veces(self):
