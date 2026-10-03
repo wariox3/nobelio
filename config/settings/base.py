@@ -553,6 +553,7 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_ROUTES = {
     "apps.documentos.tareas.emitir_documento": {"queue": "emitir_documento"},
     "apps.emisores.tareas.*": {"queue": "avisos_webhook"},
+    "apps.recepcion.tareas.*": {"queue": "recepcion"},
 }
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 # Encolar se hace dentro de una petición (crear el documento, emitirlo). Con el

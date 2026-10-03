@@ -497,15 +497,18 @@ archivo, no hay conflicto entre ambas vías.
 ## 6.1 Cola de tareas: RabbitMQ y worker de Celery
 
 Lo que no tiene que esperar a una petición va por Celery, con RabbitMQ de broker.
-Son dos colas:
+Son tres colas:
 
 | Cola | Tarea | Qué hace |
 |---|---|---|
 | `emitir_documento` | `apps.documentos.tareas.emitir_documento` | Firma y envía a la DIAN el documento recién creado. La encola la creación. |
 | `avisos_webhook` | `apps.emisores.tareas.responder_validado`, `enviar_avisos` | Avisa a los webhooks del emisor cuando la DIAN acepta un documento (y marca `respuesta_validado`) o cuando se notifica. |
+| `recepcion` | `apps.recepcion.tareas.procesar_correo` | Procesa el correo que registra `/recepcion/inbound`: lo descarga de R2 y lee sus cabeceras. Necesita las variables `R2_*`. |
 
-Ninguna reintenta, por decisión: lo que no terminó se recupera a mano con
-`emitir/` o con `respuesta-validado/` del documento.
+Las de emisión y avisos no reintentan, por decisión: lo que no terminó se
+recupera a mano con `emitir/` o con `respuesta-validado/` del documento.
+`procesar_correo` sí reintenta los fallos transitorios de R2 (5 veces, a 1, 2,
+4, 8 y 16 minutos); agotados, el correo queda en `error`.
 
 Sin el worker corriendo, **crear sigue funcionando** pero los documentos se
 quedan en `borrador`, esperando en la cola hasta que arranque. Si el broker no
@@ -568,7 +571,7 @@ Environment=PYTHONUNBUFFERED=1
 # tareas sin ruta. Una cola que no esté aquí no la atiende nadie.
 ExecStart=/opt/nobelio/.venv/bin/celery -A config worker \
     --loglevel=info --concurrency=2 -O fair \
-    -Q emitir_documento,avisos_webhook,celery \
+    -Q emitir_documento,avisos_webhook,recepcion,celery \
     --without-gossip --without-mingle --without-heartbeat
 
 Restart=always

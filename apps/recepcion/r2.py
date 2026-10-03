@@ -25,6 +25,18 @@ def _cliente():
     )
 
 
+def descargar_mime(raw_key):
+    """Los bytes del MIME de ``raw_key``.
+
+    Lanza ``R2NoConfigurado`` sin credenciales, y los errores de botocore tal
+    cual (``NoSuchKey`` si la clave no existe).
+    """
+    if not settings.R2_HABILITADO:
+        raise R2NoConfigurado
+    respuesta = _cliente().get_object(Bucket=settings.R2_BUCKET, Key=raw_key)
+    return respuesta["Body"].read()
+
+
 def borrar_mime(raw_key):
     """Borra el MIME de ``raw_key``.
 

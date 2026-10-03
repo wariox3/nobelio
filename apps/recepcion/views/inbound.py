@@ -9,8 +9,10 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
 from apps.emisores.models import Emisor
+from apps.nucleo.colas import encolar
 from apps.nucleo.registro import campos
 from apps.recepcion.models import Correo
+from apps.recepcion.tareas import procesar_correo
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +76,8 @@ def _sha256_del_cuerpo(request):
 def inbound(request):
     """Registra el correo que llega a ``<nit>@recepcion.rededoc.co``.
 
-    Lo asocia al emisor de ese NIT, pero no abre el MIME ni sus adjuntos. Es idempotente por el
+    Lo asocia al emisor de ese NIT y encola ``procesar_correo``, pero no abre
+    el MIME: eso lo hace la tarea, descargándolo de R2. Es idempotente por el
     SHA-256 del body, porque el Worker reintenta el POST si no recibe
     respuesta: el mismo correo responde 200 y no crea un segundo registro.
 
@@ -107,6 +110,11 @@ def inbound(request):
             "raw_key": request.headers.get("X-Raw-Key", "").strip(),
         },
     )
+    # También el repetido si sigue pendiente: si la primera vez el broker no
+    # respondió, el reintento del Worker es lo que lo vuelve a encolar. La
+    # tarea no procesa dos veces lo mismo.
+    if creado or correo.estado == Correo.Estado.PENDIENTE:
+        encolar(procesar_correo, correo.pk)
     logger.info("recepcion.correo %s", campos(
         correo=correo.pk, alias=correo.alias, emisor=correo.emisor_id, nuevo=creado,
     ))

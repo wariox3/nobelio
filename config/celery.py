@@ -4,7 +4,7 @@ Como `wsgi.py`, cae por defecto en los settings de desarrollo; en el servidor
 los fija la unidad de systemd (`docs/despliegue.md`). En desarrollo:
 
     .venv/bin/celery -A config worker -l info \
-        -Q emitir_documento,avisos_webhook,celery \
+        -Q emitir_documento,avisos_webhook,recepcion,celery \
         --without-gossip --without-mingle --without-heartbeat
 
 Las tareas viven en el ``tareas.py`` de cada app, no en ``tasks.py``: el código

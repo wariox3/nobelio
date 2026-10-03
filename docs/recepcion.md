@@ -1,7 +1,7 @@
 # Recepción de facturas de proveedores
 
 Estado: **en construcción, por pasos**. Iniciado el 2026-10-02. Hoy los correos
-llegan y se registran; todavía no se abren ni se procesan.
+llegan, se registran y se procesan sus cabeceras; los adjuntos todavía no.
 
 Nobelio recibe por correo las facturas que los proveedores les mandan a los
 emisores registrados, extrae los documentos electrónicos (factura, nota crédito,
@@ -22,7 +22,7 @@ proveedor ──► compras@cliente.com ──(reenvío)──► <nit>@recepcio
                                                          │
                                          nobelio: registra `rec_correo`
                                                          │
-                                    (pendiente) Celery: procesa el correo
+                          Celery (cola `recepcion`): `procesar_correo`
 ```
 
 | Ambiente | Dominio del buzón | nobelio |
@@ -78,6 +78,22 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
     responde 400; sin las variables `R2_*`, 503, y si R2 falla, 502 y la fila
     se queda. Como los correos sin emisor solo los ve el staff o una llave de
     alcance global, en la práctica solo ellos pueden eliminarlos.
+- **Procesamiento en Celery** (`apps/recepcion/tareas.py`, cola `recepcion`):
+  - El endpoint encola `procesar_correo` al registrar el correo, y también al
+    recibir un repetido que sigue `pendiente` (por si el broker falló la
+    primera vez).
+  - `apps/recepcion/procesamiento.py` descarga el MIME de R2 (`r2.py`) y
+    guarda asunto y `Message-ID` decodificados. Si el remitente es
+    `forwarding-noreply@google.com`, el estado es `confirmacion_reenvio` y en
+    `confirmacion_reenvio` quedan el código y el enlace; si no, `procesado`.
+  - Solo procesa correos `pendiente` o `error`: puede correr dos veces sin
+    efecto doble, y un correo en error se reprocesa reencolándolo.
+  - Fallos transitorios de R2 (red, 5xx): 5 reintentos a 1, 2, 4, 8 y 16
+    minutos. Permanentes (sin el MIME, credenciales rechazadas, sin `R2_*`):
+    `error` en el acto. Cada intento suma a `intentos`.
+  - En desarrollo también lee de R2, con las mismas variables.
+  - Por ahora `procesado` no mira los adjuntos ni distingue `sin_documentos` o
+    `empresa_desconocida`: eso llega con el paso de adjuntos.
 - **nginx**: bloque `location = /recepcion/inbound` con `client_max_body_size
   30M` (`docs/despliegue.md`).
 - **Cloudflare (pruebas, `rededoc.uk`)**, funcionando de punta a punta:
@@ -94,18 +110,7 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
 En orden. Cada uno se cierra (código, tests, despliegue en pruebas) antes de
 empezar el siguiente.
 
-1. **Procesar el correo en Celery, sin abrir adjuntos.**
-   - El endpoint encola `procesar_correo` en una cola nueva, `recepcion`
-     (agregarla a `CELERY_TASK_ROUTES` y al `-Q` del worker en
-     `docs/despliegue.md`).
-   - El worker descarga el MIME de R2 por `raw_key` (boto3 contra el endpoint
-     S3 de R2) y lee `Message-ID` y asunto.
-   - Detecta la confirmación de reenvío de Gmail (`forwarding-noreply@google.com`)
-     y guarda el código o enlace en `confirmacion_reenvio`.
-   - Reintenta los errores transitorios con backoff, máximo 5 (`intentos`).
-   - Usa las variables `R2_*` y el cliente de `apps/recepcion/r2.py`, que ya
-     existen para el borrado.
-2. **Adjuntos y documentos.**
+1. **Adjuntos y documentos.**
    - Extraer XML sueltos, ZIP (también anidados) y `.eml` o `message/rfc822`
      adjuntos.
    - Parsear el AttachedDocument (factura embebida en el CDATA de
@@ -117,17 +122,17 @@ empezar el siguiente.
      emisor (el alias no es un NIT registrado) pero el NIT receptor sí lo es,
      asociarlo y anotar `alias_no_registrado`.
    - Sin coincidencia por ninguna de las dos vías: `empresa_desconocida`.
-3. **Comando `reprocesar_correos`**: `--id <n>` o `--todos` (los correos en
+2. **Comando `reprocesar_correos`**: `--id <n>` o `--todos` (los correos en
    error, pendiente o empresa_desconocida), descargando de R2.
-4. **API de documentos.** `GET /api/recepcion/documento/`, con los mismos
+3. **API de documentos.** `GET /api/recepcion/documento/`, con los mismos
    filtros que la de correos y las descargas `xml/`, `xml-factura/` y `pdf/`.
    La de correos ya existe; ahí se le suman sus documentos.
-5. **Webhook al ERP** (`rec_aviso`). Una bandera nueva `documento_recibido` en
+4. **Webhook al ERP** (`rec_aviso`). Una bandera nueva `documento_recibido` en
    `emi_webhook`, firmada con el `firmar` de `apps/emisores/servicios/webhooks.py`.
    Con reintentos y backoff, a diferencia de los avisos de emisión. El contrato
    (`tipo: "documento_recibido"`) hay que agregarlo en
    `torio/docs/webhook_rededoc.md`.
-6. **Producción**: repetir lo de Cloudflare en `rededoc.co` y apuntar el Worker
+5. **Producción**: repetir lo de Cloudflare en `rededoc.co` y apuntar el Worker
    a `api.rededoc.co`.
 
 Fuera de alcance: eventos RADIAN (030, 031, 032 y 033). El documento tiene pk
@@ -147,10 +152,7 @@ UUID y CUFE; los eventos irán en una tabla aparte con FK al documento.
 
 ### Por decidir (antes del paso indicado)
 
-- **Origen del MIME en dev** (paso 1). La propuesta es que, sin las variables
-  `R2_*`, el endpoint guarde el body en un `mime_archivo` local, para poder
-  probar sin R2. En pruebas y producción siempre se descarga de R2.
-- **CUFE duplicado** (paso 2). El pedido original quiere un CUFE único y a la vez
+- **CUFE duplicado** (paso 1). El pedido original quiere un CUFE único y a la vez
   un estado `duplicado`, y las dos cosas chocan. La propuesta es una unicidad
   condicional: CUFE único entre `recibido` y `receptor_no_coincide`, con filas
   `duplicado` que apuntan al original y el par (correo, cufe) único para que

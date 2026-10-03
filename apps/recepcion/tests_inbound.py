@@ -128,5 +128,23 @@ class InboundTests(TestCase):
         self.assertEqual(respuesta.status_code, 401)
         self.assertFalse(Correo.objects.exists())
 
+    def test_encola_el_procesamiento(self):
+        with mock.patch("apps.recepcion.views.inbound.procesar_correo") as tarea:
+            with self.captureOnCommitCallbacks(execute=True):
+                self.publicar()
+
+        tarea.delay.assert_called_once_with(Correo.objects.get().pk)
+
+    def test_el_repetido_se_reencola_solo_si_sigue_pendiente(self):
+        self.publicar()
+        with mock.patch("apps.recepcion.views.inbound.procesar_correo") as tarea:
+            with self.captureOnCommitCallbacks(execute=True):
+                self.publicar()
+            Correo.objects.update(estado=Correo.Estado.PROCESADO)
+            with self.captureOnCommitCallbacks(execute=True):
+                self.publicar()
+
+        self.assertEqual(tarea.delay.call_count, 1)
+
     def test_solo_acepta_post(self):
         self.assertEqual(self.client.get(URL).status_code, 405)
