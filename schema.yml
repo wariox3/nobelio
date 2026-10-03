@@ -6125,6 +6125,266 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/recepcion/documento/:
+    get:
+      operationId: recepcion_documento_list
+      description: |-
+        Facturas y notas que los proveedores les mandaron a los emisores.
+
+        De solo lectura: las crea el procesamiento de los correos de recepción.
+
+        Filtros: ``?emisor=<id>``, ``?correo=<id>``,
+        ``?documento_tipo=factura_venta|nota_credito|nota_debito``,
+        ``?proveedor=<NIT sin DV>`` y ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD``
+        sobre la fecha de emisión, ambos inclusive. ``?search=`` busca en número,
+        CUFE, NIT y razón social del proveedor, y ``?ordering=`` ordena por
+        ``fecha_emision``, ``numero``, ``total_a_pagar`` o ``creado_en``.
+
+        Los archivos se bajan con ``xml/`` (el XML tal como llegó), ``xml-factura/``
+        (el documento, sin el AttachedDocument) y ``pdf/``.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Qué campo usar para ordenar los resultados.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: Un número de página dentro del conjunto de resultados paginado.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDocumentoRecibidoList'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/recepcion/documento/{id}/:
+    get:
+      operationId: recepcion_documento_retrieve
+      description: |-
+        Facturas y notas que los proveedores les mandaron a los emisores.
+
+        De solo lectura: las crea el procesamiento de los correos de recepción.
+
+        Filtros: ``?emisor=<id>``, ``?correo=<id>``,
+        ``?documento_tipo=factura_venta|nota_credito|nota_debito``,
+        ``?proveedor=<NIT sin DV>`` y ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD``
+        sobre la fecha de emisión, ambos inclusive. ``?search=`` busca en número,
+        CUFE, NIT y razón social del proveedor, y ``?ordering=`` ordena por
+        ``fecha_emision``, ``numero``, ``total_a_pagar`` o ``creado_en``.
+
+        Los archivos se bajan con ``xml/`` (el XML tal como llegó), ``xml-factura/``
+        (el documento, sin el AttachedDocument) y ``pdf/``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este documento recibido.
+        required: true
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentoRecibido'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/recepcion/documento/{id}/pdf/:
+    get:
+      operationId: recepcion_documento_pdf_retrieve
+      description: La representación gráfica que mandó el proveedor.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este documento recibido.
+        required: true
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/recepcion/documento/{id}/xml/:
+    get:
+      operationId: recepcion_documento_xml_retrieve
+      description: 'El XML tal como llegó: el AttachedDocument o el documento suelto.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este documento recibido.
+        required: true
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/xml:
+              schema:
+                type: string
+                format: binary
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/recepcion/documento/{id}/xml-factura/:
+    get:
+      operationId: recepcion_documento_xml_factura_retrieve
+      description: |-
+        El documento electrónico, sin el AttachedDocument que lo envolvía.
+
+        Si llegó suelto, es el mismo XML de ``xml/``.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este documento recibido.
+        required: true
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/xml:
+              schema:
+                type: string
+                format: binary
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 components:
   schemas:
     Adquiriente:
@@ -6666,7 +6926,7 @@ components:
         documentos:
           type: array
           items:
-            $ref: '#/components/schemas/DocumentoResumen'
+            $ref: '#/components/schemas/DocumentoRecibidoResumen'
           readOnly: true
       required:
       - alias
@@ -8082,7 +8342,152 @@ components:
       - caja_ubicacion
       - cajero
       - codigo_venta
-    DocumentoResumen:
+    DocumentoRecibido:
+      type: object
+      description: |-
+        Un documento recibido. Los archivos no van aquí: se bajan por sus rutas
+        (``xml/``, ``xml-factura/`` y ``pdf/``).
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        emisor:
+          type: integer
+          readOnly: true
+        correo:
+          type: integer
+          readOnly: true
+        documento_tipo:
+          allOf:
+          - $ref: '#/components/schemas/DocumentoTipoEnum'
+          title: Código
+          description: |-
+            Discriminador interno que define la lógica de generación.
+
+            * `factura_venta` - Factura de venta
+            * `nota_credito` - Nota crédito
+            * `nota_debito` - Nota débito
+            * `documento_soporte` - Documento soporte
+            * `nota_ajuste` - Nota de ajuste al documento soporte
+            * `nomina` - Nómina electrónica
+            * `documento_equivalente_pos` - Documento equivalente P.O.S.
+            * `nota_ajuste_de_credito` - Nota de ajuste crédito al documento equivalente
+            * `nota_ajuste_de_debito` - Nota de ajuste débito al documento equivalente
+          readOnly: true
+        tipo_codigo_dian:
+          type: string
+          readOnly: true
+          title: Código DIAN del tipo
+          description: InvoiceTypeCode, CreditNoteTypeCode o DebitNoteTypeCode tal
+            como vino.
+        numero:
+          type: string
+          readOnly: true
+          title: Número
+          description: cbc:ID del documento.
+        cufe_cude:
+          type: string
+          readOnly: true
+          title: CUFE/CUDE
+          description: cbc:UUID del documento. CUFE en facturas, CUDE en notas.
+        fecha_emision:
+          type: string
+          format: date
+          readOnly: true
+          title: Fecha de emisión
+        hora_emision:
+          type: string
+          format: time
+          readOnly: true
+          nullable: true
+          title: Hora de emisión
+        proveedor_numero_identificacion:
+          type: string
+          readOnly: true
+          title: NIT del proveedor
+        proveedor_digito_verificacion:
+          type: string
+          readOnly: true
+          title: DV del proveedor
+        proveedor_razon_social:
+          type: string
+          readOnly: true
+          title: Razón social del proveedor
+        receptor_numero_identificacion:
+          type: string
+          readOnly: true
+          title: NIT del receptor
+        moneda:
+          type: string
+          title: Código
+          readOnly: true
+        valor_bruto:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,18}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+          description: cbc:LineExtensionAmount.
+        total_impuestos:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,18}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+          description: Suma de los cbc:TaxAmount de los cac:TaxTotal del documento.
+        total_a_pagar:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,18}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+          description: cbc:PayableAmount.
+        validacion_codigo:
+          type: string
+          readOnly: true
+          title: Código de validación DIAN
+          description: ValidationResultCode del AttachedDocument (02 = validado).
+        fecha_validacion:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          title: Fecha de validación DIAN
+        tiene_xml_factura:
+          type: boolean
+          readOnly: true
+        tiene_pdf:
+          type: boolean
+          readOnly: true
+        creado_en:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - correo
+      - creado_en
+      - cufe_cude
+      - documento_tipo
+      - emisor
+      - fecha_emision
+      - fecha_validacion
+      - hora_emision
+      - id
+      - moneda
+      - numero
+      - proveedor_digito_verificacion
+      - proveedor_numero_identificacion
+      - proveedor_razon_social
+      - receptor_numero_identificacion
+      - tiene_pdf
+      - tiene_xml_factura
+      - tipo_codigo_dian
+      - total_a_pagar
+      - total_impuestos
+      - validacion_codigo
+      - valor_bruto
+    DocumentoRecibidoResumen:
       type: object
       description: Lo que se muestra de cada documento dentro de su correo.
       properties:
@@ -10940,6 +11345,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DocumentoNotificacion'
+    PaginatedDocumentoRecibidoList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentoRecibido'
     PaginatedElementoCatalogoList:
       type: object
       required:

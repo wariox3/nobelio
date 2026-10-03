@@ -118,6 +118,16 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
   - En `GET /api/recepcion/correo/` cada correo trae `documentos`, solo los de
     los emisores que alcanza quien consulta.
   - No se verifica la firma ni el CUFE de los documentos.
+- **API de documentos `GET /api/recepcion/documento/`**
+  (`apps/recepcion/views/documento.py`), de solo lectura y acotada con
+  `AlcanceEmisorMixin`. `basename` propio (`documento-recibido`) para no chocar
+  con `documento-detail` de la emisión.
+  - Filtros: `?emisor`, `?correo`, `?documento_tipo`, `?proveedor` (NIT sin DV)
+    y `?desde`/`?hasta` sobre `fecha_emision`. `?search=` en número, CUFE, NIT
+    y razón social del proveedor; `?ordering=fecha_emision|numero|total_a_pagar|creado_en`.
+  - Descargas: `xml/` (como llegó), `xml-factura/` (el documento sin el
+    AttachedDocument; si llegó suelto, el mismo de `xml/`) y `pdf/` (400 si el
+    proveedor no lo mandó). `tiene_pdf` y `tiene_xml_factura` lo anticipan.
 - **nginx**: bloque `location = /recepcion/inbound` con `client_max_body_size
   30M` (`docs/despliegue.md`).
 - **Cloudflare (pruebas, `rededoc.uk`)**, funcionando de punta a punta:
@@ -136,15 +146,12 @@ empezar el siguiente.
 
 1. **Comando `reprocesar_correos`**: `--id <n>` o `--todos` (los correos en
    error, pendiente o empresa_desconocida), descargando de R2.
-2. **API de documentos.** `GET /api/recepcion/documento/`, con los mismos
-   filtros que la de correos y las descargas `xml/`, `xml-factura/` y `pdf/`.
-   La de correos ya existe; ahí se le suman sus documentos.
-3. **Webhook al ERP** (`rec_aviso`). Una bandera nueva `documento_recibido` en
+2. **Webhook al ERP** (`rec_aviso`). Una bandera nueva `documento_recibido` en
    `emi_webhook`, firmada con el `firmar` de `apps/emisores/servicios/webhooks.py`.
    Con reintentos y backoff, a diferencia de los avisos de emisión. El contrato
    (`tipo: "documento_recibido"`) hay que agregarlo en
    `torio/docs/webhook_rededoc.md`.
-4. **Producción**: repetir lo de Cloudflare en `rededoc.co` y apuntar el Worker
+3. **Producción**: repetir lo de Cloudflare en `rededoc.co` y apuntar el Worker
    a `api.rededoc.co`.
 
 Fuera de alcance: eventos RADIAN (030, 031, 032 y 033). El documento tiene pk

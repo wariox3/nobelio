@@ -1,5 +1,9 @@
 """Serializers de la API de recepción."""
 from .correo import CorreoSerializer
-from .documento import DocumentoResumenSerializer
+from .documento import DocumentoRecibidoResumenSerializer, DocumentoRecibidoSerializer
 
-__all__ = ["CorreoSerializer", "DocumentoResumenSerializer"]
+__all__ = [
+    "CorreoSerializer",
+    "DocumentoRecibidoResumenSerializer",
+    "DocumentoRecibidoSerializer",
+]

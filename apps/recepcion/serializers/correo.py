@@ -3,12 +3,12 @@ from rest_framework import serializers
 
 from apps.recepcion.models import Correo
 
-from .documento import DocumentoResumenSerializer
+from .documento import DocumentoRecibidoResumenSerializer
 
 
 class CorreoSerializer(serializers.ModelSerializer):
     # Solo los del alcance de quien consulta: los acota el prefetch de la vista.
-    documentos = DocumentoResumenSerializer(many=True, read_only=True)
+    documentos = DocumentoRecibidoResumenSerializer(many=True, read_only=True)
 
     # `sha256` y `raw_key` se quedan fuera: son la idempotencia del endpoint y
     # la clave interna en R2, no información para quien consulta.
