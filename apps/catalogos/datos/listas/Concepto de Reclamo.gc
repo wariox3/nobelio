@@ -21,6 +21,11 @@
          <ShortName>Nombre</ShortName>
          <Data Type="normalizedString"/>
       </Column>
+      <Column Id="id" Use="optional">
+         <ShortName>Id</ShortName>
+         <LongName xml:lang="es">Id fijo del código en nobelio</LongName>
+         <Data Type="nonNegativeInteger"/>
+      </Column>
       <Key Id="codeKey">
          <ShortName>CodeKey</ShortName>
          <ColumnRef Ref="code"/>
@@ -31,6 +36,9 @@
          <Value ColumnRef="code">
             <SimpleValue>01</SimpleValue>
          </Value>
+         <Value ColumnRef="id">
+            <SimpleValue>1</SimpleValue>
+         </Value>
          <Value ColumnRef="name">
             <SimpleValue>Documento con inconsistencias</SimpleValue>
          </Value>
@@ -38,6 +46,9 @@
       <Row>
          <Value ColumnRef="code">
             <SimpleValue>02</SimpleValue>
+         </Value>
+         <Value ColumnRef="id">
+            <SimpleValue>2</SimpleValue>
          </Value>
          <Value ColumnRef="name">
             <SimpleValue>Mercancía no entregada totalmente</SimpleValue>
@@ -47,12 +58,18 @@
          <Value ColumnRef="code">
             <SimpleValue>03</SimpleValue>
          </Value>
+         <Value ColumnRef="id">
+            <SimpleValue>3</SimpleValue>
+         </Value>
          <Value ColumnRef="name">
             <SimpleValue>Mercancía no entregada parcialmente</SimpleValue>
          </Value>
       </Row><Row>
          <Value ColumnRef="code">
             <SimpleValue>04</SimpleValue>
+         </Value>
+         <Value ColumnRef="id">
+            <SimpleValue>4</SimpleValue>
          </Value>
          <Value ColumnRef="name">
             <SimpleValue>Servicio no prestado</SimpleValue>

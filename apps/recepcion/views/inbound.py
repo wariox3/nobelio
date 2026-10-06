@@ -8,10 +8,10 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
-from apps.emisores.models import Emisor
 from apps.nucleo.colas import encolar
 from apps.nucleo.registro import campos
 from apps.recepcion.models import Correo
+from apps.recepcion.procesamiento import emisor_del_alias
 from apps.recepcion.tareas import procesar_correo
 
 logger = logging.getLogger(__name__)
@@ -36,18 +36,6 @@ def _token_valido(request):
     if palabra.lower() != "bearer":
         return False
     return hmac.compare_digest(recibido.strip().encode(), esperado.encode())
-
-
-def _emisor_del_alias(alias):
-    """El emisor cuyo NIT es el alias, o ``None``.
-
-    El buzón de cada emisor es su NIT sin DV: ``901192048@recepcion.rededoc.co``.
-    Si el alias no es un NIT registrado, el correo queda sin emisor; se guarda
-    igual para reprocesarlo cuando lo den de alta.
-    """
-    if not alias.isdigit():
-        return None
-    return Emisor.objects.filter(numero_identificacion=alias).first()
 
 
 class CuerpoDemasiadoGrande(Exception):
@@ -104,7 +92,7 @@ def inbound(request):
         sha256=sha256,
         defaults={
             "alias": alias,
-            "emisor": _emisor_del_alias(alias),
+            "emisor": emisor_del_alias(alias),
             "envelope_to": envelope_to,
             "envelope_from": request.headers.get("X-Envelope-From", "").strip(),
             "raw_key": request.headers.get("X-Raw-Key", "").strip(),

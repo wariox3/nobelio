@@ -97,3 +97,20 @@ def eliminar_correo(correo):
             adjunto.archivo.storage.delete(adjunto.archivo.name)
         r2.borrar_mime(raw_key)
     return documentos, len(adjuntos)
+
+
+def vaciar_correo(correo):
+    """Borra los adjuntos de un correo sin documentos, antes de reprocesarlo.
+
+    Devuelve cuántos borró. Mismas reglas que ``eliminar_correo``: las filas
+    en una transacción y los archivos dentro de ella, después.
+    """
+    with transaction.atomic():
+        correo = Correo.objects.select_for_update().get(pk=correo.pk)
+        if Documento.objects.filter(correo=correo).exists():
+            raise ValueError(f"El correo {correo.pk} tiene documentos: no se vacía.")
+        adjuntos = list(Adjunto.objects.filter(correo=correo))
+        Adjunto.objects.filter(correo=correo).delete()
+        for adjunto in adjuntos:
+            adjunto.archivo.storage.delete(adjunto.archivo.name)
+    return len(adjuntos)

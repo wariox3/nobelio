@@ -45,6 +45,123 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/catalogos/concepto-reclamo/:
+    get:
+      operationId: catalogos_concepto_reclamo_list
+      description: |-
+        Por qué se reclama una factura en el evento 031: inconsistencias, mercancía no entregada total o parcialmente, servicio no prestado.
+
+        **Lista DIAN:** `ConceptoReclamo`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023), RADIAN v1.1 (Resolución 000085 de 2022).
+
+        Paginado; `search` busca por código y nombre.
+      summary: Listar conceptos de reclamo
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un número de página dentro del conjunto de resultados paginado.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedElementoCatalogoList'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/catalogos/concepto-reclamo/{id}/:
+    get:
+      operationId: catalogos_concepto_reclamo_retrieve
+      description: |-
+        Por qué se reclama una factura en el evento 031: inconsistencias, mercancía no entregada total o parcialmente, servicio no prestado.
+
+        **Lista DIAN:** `ConceptoReclamo`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023), RADIAN v1.1 (Resolución 000085 de 2022).
+      summary: Consultar concepto de reclamo
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        description: Un valor único que identifique este concepto de reclamo.
+        required: true
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ElementoCatalogo'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/catalogos/concepto-reclamo/exportar/:
+    get:
+      operationId: catalogos_concepto_reclamo_exportar_list
+      description: |-
+        Por qué se reclama una factura en el evento 031: inconsistencias, mercancía no entregada total o parcialmente, servicio no prestado.
+
+        **Lista DIAN:** `ConceptoReclamo`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023), RADIAN v1.1 (Resolución 000085 de 2022).
+
+        El catálogo entero en una respuesta, sin paginar y con los mismos campos que el detalle. Admite `search`.
+      summary: Exportar conceptos de reclamo
+      parameters:
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ElementoCatalogo'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/catalogos/departamento/:
     get:
       operationId: catalogos_departamento_list
@@ -166,6 +283,123 @@ paths:
 
         El catálogo entero en una respuesta, sin paginar y con los mismos campos que el detalle. Admite `search`.
       summary: Exportar departamentos
+      parameters:
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ElementoCatalogo'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/catalogos/evento-radian/:
+    get:
+      operationId: catalogos_evento_radian_list
+      description: |-
+        Evento que el adquiriente registra en RADIAN sobre una factura recibida: acuse de recibo (030), reclamo (031), recibo del bien o servicio (032) y aceptación expresa (033). La DIAN no lo publica en Genericode: sale de los ejemplos del anexo RADIAN.
+
+        **Lista DIAN:** `EventoRadian`. **Anexo técnico:** RADIAN v1.1 (Resolución 000085 de 2022).
+
+        Paginado; `search` busca por código y nombre.
+      summary: Listar eventos RADIAN
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un número de página dentro del conjunto de resultados paginado.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedElementoCatalogoList'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/catalogos/evento-radian/{id}/:
+    get:
+      operationId: catalogos_evento_radian_retrieve
+      description: |-
+        Evento que el adquiriente registra en RADIAN sobre una factura recibida: acuse de recibo (030), reclamo (031), recibo del bien o servicio (032) y aceptación expresa (033). La DIAN no lo publica en Genericode: sale de los ejemplos del anexo RADIAN.
+
+        **Lista DIAN:** `EventoRadian`. **Anexo técnico:** RADIAN v1.1 (Resolución 000085 de 2022).
+      summary: Consultar evento RADIAN
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        description: Un valor único que identifique este evento RADIAN.
+        required: true
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ElementoCatalogo'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/catalogos/evento-radian/exportar/:
+    get:
+      operationId: catalogos_evento_radian_exportar_list
+      description: |-
+        Evento que el adquiriente registra en RADIAN sobre una factura recibida: acuse de recibo (030), reclamo (031), recibo del bien o servicio (032) y aceptación expresa (033). La DIAN no lo publica en Genericode: sale de los ejemplos del anexo RADIAN.
+
+        **Lista DIAN:** `EventoRadian`. **Anexo técnico:** RADIAN v1.1 (Resolución 000085 de 2022).
+
+        El catálogo entero en una respuesta, sin paginar y con los mismos campos que el detalle. Admite `search`.
+      summary: Exportar eventos RADIAN
       parameters:
       - name: search
         required: false

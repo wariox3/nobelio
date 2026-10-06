@@ -1,4 +1,5 @@
 """Pruebas del parser de listas de valores DIAN (Genericode)."""
+from datetime import date
 from io import StringIO
 from unittest import mock
 
@@ -167,6 +168,17 @@ class IdsFijosTests(SimpleTestCase):
             with self.subTest(codigo=codigo):
                 self.assertEqual(id_fijo, int(codigo))
 
+    def test_eventos_radian_y_conceptos_de_reclamo(self):
+        """El id es el código: 030 → 30, 01 → 1."""
+        tabla = _tabla_de_ids()
+        self.assertEqual(tabla["EventoRadian"], {"030": 30, "031": 31, "032": 32, "033": 33})
+        self.assertEqual(tabla["ConceptoReclamo"], {"01": 1, "02": 2, "03": 3, "04": 4})
+
+    def test_en_festivos_el_id_es_la_fecha(self):
+        for codigo, id_fijo in _tabla_de_ids()["Festivo"].items():
+            with self.subTest(codigo=codigo):
+                self.assertEqual(id_fijo, int(codigo.replace("-", "")))
+
     def test_ids_que_torio_manda(self):
         """torio envía estos ids fijos o los de su propio catálogo."""
         tabla = _tabla_de_ids()
@@ -202,6 +214,13 @@ class CargaTests(TestCase):
     def test_enlaza_el_municipio_a_su_departamento(self):
         cargar([models.Departamento, Municipio])
         self.assertEqual(Municipio.objects.get(codigo="05001").departamento.codigo, "05")
+
+    def test_el_festivo_toma_la_fecha_del_codigo(self):
+        cargar([models.Festivo])
+        festivo = models.Festivo.objects.get(codigo="2026-01-12")
+        self.assertEqual(festivo.fecha, date(2026, 1, 12))
+        self.assertEqual(festivo.id, 20260112)
+        self.assertEqual(festivo.nombre, "Día de los Reyes Magos")
 
     def test_repetir_actualiza_sin_duplicar(self):
         cargar([models.Moneda])

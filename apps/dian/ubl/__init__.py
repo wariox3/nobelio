@@ -18,6 +18,8 @@ había convertido en el sitio donde había que buscarlo todo. Ahora está partid
 - ``soporte``     — documento soporte y su nota de ajuste
 - ``adjunto``     — el ``AttachedDocument`` que se entrega al comprador
 - ``equivalente`` — documento equivalente P.O.S. y sus notas de ajuste
+- ``evento``      — el ``ApplicationResponse`` de los eventos RADIAN del
+  adquiriente (030–033), que no sale de un documento de la base
 
 La superficie pública **no cambió**: todo lo que antes colgaba de
 ``apps.dian.ubl`` se reexporta aquí, así que ``from apps.dian import ubl`` y
@@ -60,6 +62,12 @@ from apps.dian.ubl.equivalente import (  # noqa: F401
     ConstructorDocumentoEquivalentePOS,
     ConstructorNotaAjusteDECredito,
     ConstructorNotaAjusteDEDebito,
+)
+from apps.dian.ubl.evento import (  # noqa: F401
+    ConstructorEvento,
+    Evento,
+    Parte,
+    Persona,
 )
 from apps.documentos.models import DocumentoTipo as _Tipo
 

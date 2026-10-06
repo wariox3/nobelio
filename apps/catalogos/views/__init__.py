@@ -2,7 +2,9 @@
 from apps.catalogos.esquema import documentar
 
 from .base import _CatalogoViewSet
+from .concepto_reclamo import ConceptoReclamoViewSet
 from .departamento import DepartamentoViewSet
+from .evento_radian import EventoRadianViewSet
 from .forma_pago import FormaPagoViewSet
 from .indice import CatalogosView
 from .medio_pago import MedioPagoViewSet
@@ -27,6 +29,7 @@ for _vista in (
     ResponsabilidadFiscalViewSet, SubTipoTrabajadorViewSet, TipoContratoViewSet,
     TipoFacturaViewSet, TipoIdentificacionViewSet, TipoOrganizacionViewSet,
     TipoTrabajadorViewSet, TributoViewSet, UnidadMedidaViewSet,
+    EventoRadianViewSet, ConceptoReclamoViewSet,
 ):
     documentar(_vista)
 
@@ -49,4 +52,7 @@ __all__ = [
     "TipoContratoViewSet",
     "TipoTrabajadorViewSet",
     "SubTipoTrabajadorViewSet",
+    # RADIAN.
+    "EventoRadianViewSet",
+    "ConceptoReclamoViewSet",
 ]

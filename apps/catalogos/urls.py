@@ -21,6 +21,8 @@ router.register("periodo-nomina", views.PeriodoNominaViewSet)
 router.register("tipo-contrato", views.TipoContratoViewSet)
 router.register("tipo-trabajador", views.TipoTrabajadorViewSet)
 router.register("subtipo-trabajador", views.SubTipoTrabajadorViewSet)
+router.register("evento-radian", views.EventoRadianViewSet)
+router.register("concepto-reclamo", views.ConceptoReclamoViewSet)
 
 urlpatterns = [
     path("", views.CatalogosView.as_view(), name="catalogos"),

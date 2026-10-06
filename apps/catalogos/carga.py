@@ -87,6 +87,13 @@ LISTAS = (
     Lista("TipoContrato", models.TipoContrato, carpeta="nomina"),
     Lista("TipoTrabajador", models.TipoTrabajador, carpeta="nomina"),
     Lista("SubTipoTrabajador", models.SubTipoTrabajador, carpeta="nomina"),
+    # RADIAN: los eventos 030–033 no están en ninguna lista de la DIAN y se
+    # transcribieron de sus ejemplos; los conceptos de reclamo son la lista
+    # oficial de la caja de factura.
+    Lista("EventoRadian", models.EventoRadian, carpeta="radian"),
+    Lista("Concepto de Reclamo", models.ConceptoReclamo),
+    # Propia: los festivos de Colombia, que se actualizan a mano cada año.
+    Lista("Festivo", models.Festivo, carpeta="calendario"),
 )
 
 
@@ -109,6 +116,11 @@ def _volcar(lista):
     filas = lista.filas()
     if not filas:
         return 0, 0
+
+    if Modelo is models.Festivo:
+        # El código es la fecha.
+        for campos in filas.values():
+            campos["fecha"] = campos["codigo"]
 
     if Modelo is models.Municipio:
         # Los dos primeros dígitos del código DANE son el departamento.

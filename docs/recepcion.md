@@ -157,6 +157,19 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
   - Descargas: `xml/` (como llegó), `xml-factura/` (el documento sin el
     AttachedDocument; si llegó suelto, el mismo de `xml/`) y `pdf/` (400 si el
     proveedor no lo mandó). `tiene_pdf` y `tiene_xml_factura` lo anticipan.
+- **Comando `reprocesar_correos`** (`apps/recepcion/management/commands/`):
+  `--id <n>` o `--todos`. Corre en el mismo proceso, no en Celery, y muestra
+  cómo quedó cada correo.
+  - Reprocesa los correos en `error`, en `pendiente` y en
+    `empresa_desconocida` (`procesamiento.reprocesar`). Con `--todos` se
+    salta los pendientes de menos de 30 minutos, que pueden seguir en la cola.
+  - Antes borra los adjuntos del intento anterior, de la base y de B2
+    (`adjuntos.vaciar_correo`), para no duplicarlos. Un correo con documentos
+    no se reprocesa.
+  - Si el correo sigue sin emisor, lo busca otra vez por el alias
+    (`procesamiento.emisor_del_alias`, el mismo del endpoint).
+  - Si R2 o B2 fallan, el correo queda `pendiente` y sin adjuntos, listo para
+    otro intento. Tests en `apps/recepcion/tests_reprocesar.py`.
 - **nginx**: bloque `location = /recepcion/inbound` con `client_max_body_size
   30M` (`docs/despliegue.md`).
 - **Cloudflare (pruebas, `rededoc.uk`)**, funcionando de punta a punta:
@@ -173,9 +186,7 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
 En orden. Cada uno se cierra (código, tests, despliegue en pruebas) antes de
 empezar el siguiente.
 
-1. **Comando `reprocesar_correos`**: `--id <n>` o `--todos` (los correos en
-   error, pendiente o empresa_desconocida), descargando de R2.
-2. **Producción**: repetir lo de Cloudflare en `rededoc.co` y apuntar el Worker
+1. **Producción**: repetir lo de Cloudflare en `rededoc.co` y apuntar el Worker
    a `api.rededoc.co`.
 
 Después siguen los eventos RADIAN (sección siguiente, pasos R1 a R5).
@@ -258,24 +269,38 @@ y no nos toca.
 | XSD de `ApplicationResponse` y ejemplos 030–033 | Hay |
 | CUDE del evento | Falta. Composición y vector confirmados |
 | `AttachedDocument` | Hay el de las facturas. Hay que adaptarlo al evento |
-| Catálogo de eventos | Falta. Ninguna lista `.gc` trae los eventos 030–034 vigentes (`EventoDocumento-2.1.gc` está desactualizada y `Eventos-2.1.gc` de RADIAN solo trae del 035 al 051). Se arma a mano con id fijo |
-| Conceptos de reclamo | `Concepto de Reclamo.gc` está bien. Falta cargarlo |
+| Catálogo de eventos | Hecho (R1): `EventoRadian`, transcrito de los ejemplos, porque ninguna lista `.gc` trae los 030–033 vigentes |
+| Conceptos de reclamo | Hecho (R1): `ConceptoReclamo` |
 | `SendEventUpdateStatus` / `GetStatusEvent` | Faltan |
-| Días hábiles con festivos de Colombia | Falta: catálogo `Festivo` propio (plazo del 033) |
+| Días hábiles con festivos de Colombia | Hecho (R1): catálogo `Festivo` y `calendario.py` |
 
 ### Pasos
 
-Van después del punto 2 de arriba, con la misma regla: cada paso se cierra
+Van después del punto 1 de arriba, con la misma regla: cada paso se cierra
 antes de empezar el siguiente.
 
-- **R1. Catálogos**: `EventoRadian` (030–033, ids fijos y descripción), `ConceptoReclamo` y `Festivo` en `apps/catalogos`, cargados por
-  `cargar_catalogos`. Los festivos se cargan de una lista propia en
-  `apps/catalogos/datos/` que se actualiza cada año. Hay que cargar el año
-  siguiente antes del 1 de enero, porque sin él los plazos se calculan mal. Una
-  función `dias_habiles(desde, n)` resuelve los plazos.
-- **R2. Generación**: constructor del `ApplicationResponse` en
-  `apps/dian/ubl/`, `calcular_cude_evento` en `identificadores.py` con el
-  vector del anexo, firma y validación contra el XSD.
+- **R1. Catálogos** ✅ (2026-10-06): `EventoRadian` (030–033, id = código),
+  `ConceptoReclamo` (lista oficial, id = código) y `Festivo` (propio: código =
+  fecha, id = `AAAAMMDD`, 2026 y 2027) en `apps/catalogos`, cargados por
+  `cargar_catalogos` (migración `0002`). Los dos primeros se publican en
+  `/api/catalogos/evento-radian/` y `/api/catalogos/concepto-reclamo/`.
+  `apps/catalogos/calendario.py` tiene `es_habil(fecha)` y
+  `sumar_dias_habiles(desde, n)`. Si falta el año de festivos que un plazo
+  recorre, lanza `FestivosNoCargados` en vez de contar mal. **Mantenimiento:**
+  cargar los festivos del año siguiente antes del 1 de enero
+  (`datos/listas/calendario/README.md`).
+- **R2. Generación** ✅ (2026-10-06): `ConstructorEvento` en
+  `apps/dian/ubl/evento.py`. No parte de un modelo: recibe un `Evento` con sus
+  `Parte` (quien lo emite y el proveedor) y la `Persona` que recibe (030 y
+  032). Valida que el código sea 030–033, que el 030 y el 032 traigan la
+  persona y que el 031 traiga el concepto.
+  - `calcular_cude_evento` en `identificadores.py`, con el vector del anexo.
+  - Se firma con el `FirmadorXAdES` de siempre y valida contra el XSD.
+  - La estructura es la del ejemplo oficial 030, elemento por elemento, salvo
+    una diferencia: el DV (`@schemeID`) solo se emite en identificaciones NIT,
+    no en cédulas. Los ejemplos ponen `4` de relleno en casi todas, también en
+    NIT donde no cuadra. ⚠ Confirmarlo en habilitación (R3).
+  - Tests en `apps/dian/tests_evento.py`.
 - **R3. WS**: `enviar_evento` (`SendEventUpdateStatus`) y `consultar_eventos`
   (`GetStatusEvent`) en `soap.py`, con tests del sobre. Prueba real en
   habilitación: un 030 sobre una factura validada.

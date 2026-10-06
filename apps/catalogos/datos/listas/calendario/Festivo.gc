@@ -1,0 +1,431 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Lista propia de nobelio, no de la DIAN: los festivos nacionales (Ley 51 de 1983). Se mantiene a mano cada año. Ver README.md. -->
+<gc:CodeList xmlns:gc="http://docs.oasis-open.org/codelist/ns/genericode/1.0/">
+	<Identification>
+		<ShortName>Festivo</ShortName>
+		<LongName xml:lang="es">Festivos de Colombia</LongName>
+		<Version>1</Version>
+		<CanonicalUri>urn:nobelio:listacodigos:gc:Festivo</CanonicalUri>
+		<CanonicalVersionUri>urn:nobelio:listacodigos:gc:Festivo-1</CanonicalVersionUri>
+		<Agency>
+			<LongName xml:lang="es">nobelio</LongName>
+		</Agency>
+	</Identification>
+	<ColumnSet>
+		<Column Id="code" Use="required">
+			<ShortName>Code</ShortName>
+			<Data Type="normalizedString"/>
+		</Column>
+		<Column Id="name" Use="required">
+			<ShortName>Name</ShortName>
+			<Data Type="string"/>
+		</Column>
+		<Column Id="id" Use="optional">
+			<ShortName>Id</ShortName>
+			<LongName xml:lang="es">Id fijo del código en nobelio</LongName>
+			<Data Type="nonNegativeInteger"/>
+		</Column>
+		<Key Id="codeKey">
+			<ShortName>CodeKey</ShortName>
+			<ColumnRef Ref="code"/>
+		</Key>
+	</ColumnSet>
+	<SimpleCodeList>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2026-01-01</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20260101</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Año Nuevo</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2026-01-12</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20260112</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Día de los Reyes Magos</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2026-03-23</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20260323</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Día de San José</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2026-04-02</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20260402</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Jueves Santo</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2026-04-03</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20260403</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Viernes Santo</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2026-05-01</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20260501</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Día del Trabajo</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2026-05-18</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20260518</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Ascensión del Señor</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2026-06-08</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20260608</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Corpus Christi</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2026-06-15</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20260615</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Sagrado Corazón de Jesús</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2026-06-29</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20260629</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>San Pedro y San Pablo</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2026-07-20</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20260720</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Día de la Independencia</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2026-08-07</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20260807</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Batalla de Boyacá</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2026-08-17</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20260817</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>La Asunción de la Virgen</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2026-10-12</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20261012</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Día de la Raza</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2026-11-02</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20261102</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Todos los Santos</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2026-11-16</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20261116</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Independencia de Cartagena</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2026-12-08</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20261208</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Día de la Inmaculada Concepción</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2026-12-25</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20261225</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Navidad</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2027-01-01</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20270101</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Año Nuevo</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2027-01-11</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20270111</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Día de los Reyes Magos</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2027-03-22</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20270322</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Día de San José</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2027-03-25</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20270325</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Jueves Santo</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2027-03-26</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20270326</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Viernes Santo</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2027-05-01</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20270501</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Día del Trabajo</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2027-05-10</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20270510</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Ascensión del Señor</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2027-05-31</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20270531</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Corpus Christi</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2027-06-07</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20270607</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Sagrado Corazón de Jesús</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2027-07-05</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20270705</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>San Pedro y San Pablo</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2027-07-20</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20270720</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Día de la Independencia</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2027-08-07</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20270807</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Batalla de Boyacá</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2027-08-16</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20270816</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>La Asunción de la Virgen</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2027-10-18</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20271018</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Día de la Raza</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2027-11-01</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20271101</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Todos los Santos</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2027-11-15</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20271115</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Independencia de Cartagena</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2027-12-08</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20271208</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Día de la Inmaculada Concepción</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>2027-12-25</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>20271225</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Navidad</SimpleValue>
+			</Value>
+		</Row>
+	</SimpleCodeList>
+</gc:CodeList>

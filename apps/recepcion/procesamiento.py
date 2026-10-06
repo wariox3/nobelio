@@ -10,9 +10,13 @@ trae (``extraccion``), con todos sus archivos como ``Adjunto``:
 - El correo queda ``procesado`` si trajo al menos un documento de un emisor
   (nuevo o repetido), ``sin_documentos`` si no trajo ninguno y
   ``empresa_desconocida`` si los que trajo no son de ningún emisor.
+
+``reprocesar`` vuelve a pasar por aquí un correo que se quedó en el camino: lo
+usa el comando ``reprocesar_correos``.
 """
 import logging
 import re
+from datetime import timedelta
 from email import policy
 from email.parser import BytesParser
 from email.utils import parseaddr
@@ -20,6 +24,7 @@ from email.utils import parseaddr
 from botocore.exceptions import BotoCoreError, ClientError
 from django.db import IntegrityError, transaction
 from django.db.models import F
+from django.utils import timezone
 
 from apps.catalogos.models import Moneda
 from apps.documentos.models import DocumentoTipo
@@ -40,6 +45,13 @@ ENLACE_GMAIL = re.compile(r"https://mail(?:-settings)?\.google\.com/mail/\S+")
 # Lo que ya terminó no se vuelve a procesar: la tarea puede correr dos veces
 # (``acks_late``) y el endpoint puede reencolar un correo que sigue pendiente.
 ESTADOS_PROCESABLES = {Correo.Estado.PENDIENTE, Correo.Estado.ERROR}
+
+# Lo que se puede reprocesar: lo que no terminó y lo que llegó antes de que
+# registraran a su emisor. Lo demás ya quedó como debía.
+ESTADOS_REPROCESABLES = ESTADOS_PROCESABLES | {Correo.Estado.EMPRESA_DESCONOCIDA}
+# Un pendiente más reciente puede estar todavía en la cola: reprocesarlo a la
+# vez que la tarea duplicaría sus adjuntos.
+ESPERA_PENDIENTE = timedelta(minutes=30)
 
 
 class ErrorTransitorio(Exception):
@@ -78,6 +90,57 @@ def procesar(correo_id):
     logger.info("recepcion.correo_procesado %s", campos(
         correo=correo.pk, estado=correo.estado, emisor=correo.emisor_id,
     ))
+
+
+def emisor_del_alias(alias):
+    """El emisor cuyo NIT es el alias, o ``None``.
+
+    El buzón de cada emisor es su NIT sin DV: ``901192048@recepcion.rededoc.co``.
+    Si el alias no es un NIT registrado, el correo queda sin emisor; se guarda
+    igual para reprocesarlo cuando lo den de alta.
+    """
+    if not alias.isdigit():
+        return None
+    return Emisor.objects.filter(numero_identificacion=alias).first()
+
+
+class NoReprocesable(Exception):
+    """El correo no está en un estado que se pueda reprocesar."""
+
+
+def reprocesables():
+    """Los correos que ``reprocesar_correos --todos`` vuelve a procesar."""
+    limite = timezone.now() - ESPERA_PENDIENTE
+    return Correo.objects.filter(
+        estado__in=ESTADOS_REPROCESABLES,
+    ).exclude(
+        estado=Correo.Estado.PENDIENTE, recibido_en__gt=limite,
+    ).order_by("recibido_en", "id")
+
+
+def reprocesar(correo_id):
+    """Procesa de nuevo el correo ``correo_id``, en este proceso.
+
+    Antes borra sus adjuntos (los de un correo sin documentos, que son todos
+    ``otro``) para no duplicarlos, lo deja ``pendiente`` y, si sigue sin
+    emisor, lo busca otra vez por el alias. Devuelve el correo ya procesado.
+
+    Lanza ``NoReprocesable`` si el correo ya terminó o tiene documentos, y deja
+    subir ``ErrorTransitorio``: el correo queda ``pendiente``, sin adjuntos, y
+    se puede reprocesar otra vez.
+    """
+    correo = Correo.objects.get(pk=correo_id)
+    if correo.estado not in ESTADOS_REPROCESABLES:
+        raise NoReprocesable(f"El correo {correo.pk} está {correo.get_estado_display().lower()}.")
+    if correo.documentos.exists():
+        raise NoReprocesable(f"El correo {correo.pk} ya tiene documentos.")
+    adjuntos.vaciar_correo(correo)
+    correo.estado = Correo.Estado.PENDIENTE
+    correo.emisor = correo.emisor or emisor_del_alias(correo.alias)
+    correo.save(update_fields=["estado", "emisor"])
+    procesar(correo.pk)
+    correo.refresh_from_db()
+    return correo
 
 
 def marcar_error(correo_id, detalle):

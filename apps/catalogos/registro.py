@@ -55,6 +55,7 @@ EQUIVALENTE = Anexo(
     "Documento Equivalente Electrónico", "1.0", "Resolución 000165 de 2023"
 )
 NOMINA = Anexo("Nómina Electrónica", "1.0", "Resolución 000013 de 2021")
+RADIAN = Anexo("RADIAN", "1.1", "Resolución 000085 de 2022")
 
 DOCUMENTO = "/api/documentos/documento/"
 EMISOR = "/api/emisores/emisor/"
@@ -208,6 +209,20 @@ CATALOGOS = (
         "SubTipoTrabajador", (NOMINA,),
         _id(EMPLEADO, "subtipo_trabajador")
         + _id(NOMINA_RUTA, "subtipo_trabajador", "empleado.subtipo_trabajador"),
+    ),
+    Catalogo(
+        "evento-radian", models.EventoRadian,
+        "Evento que el adquiriente registra en RADIAN sobre una factura "
+        "recibida: acuse de recibo (030), reclamo (031), recibo del bien o "
+        "servicio (032) y aceptación expresa (033). La DIAN no lo publica en "
+        "Genericode: sale de los ejemplos del anexo RADIAN.",
+        "EventoRadian", (RADIAN,),
+    ),
+    Catalogo(
+        "concepto-reclamo", models.ConceptoReclamo,
+        "Por qué se reclama una factura en el evento 031: inconsistencias, "
+        "mercancía no entregada total o parcialmente, servicio no prestado.",
+        "ConceptoReclamo", (FACTURA, RADIAN),
     ),
 )
 

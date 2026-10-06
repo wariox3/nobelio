@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Transcrita de los ejemplos oficiales de la Caja de herramientas RADIAN 1.1 (cbc:ResponseCode y cbc:Description): ninguna lista .gc trae los eventos 030-033 vigentes. Ver README.md. -->
+<gc:CodeList xmlns:gc="http://docs.oasis-open.org/codelist/ns/genericode/1.0/">
+	<Identification>
+		<ShortName>EventoRadian</ShortName>
+		<LongName xml:lang="es">Eventos RADIAN del adquiriente</LongName>
+		<Version>1</Version>
+		<CanonicalUri>urn:nobelio:listacodigos:gc:EventoRadian</CanonicalUri>
+		<CanonicalVersionUri>urn:nobelio:listacodigos:gc:EventoRadian-1</CanonicalVersionUri>
+		<Agency>
+			<LongName xml:lang="es">nobelio</LongName>
+		</Agency>
+	</Identification>
+	<ColumnSet>
+		<Column Id="code" Use="required">
+			<ShortName>Code</ShortName>
+			<Data Type="normalizedString"/>
+		</Column>
+		<Column Id="name" Use="required">
+			<ShortName>Name</ShortName>
+			<Data Type="string"/>
+		</Column>
+		<Column Id="id" Use="optional">
+			<ShortName>Id</ShortName>
+			<LongName xml:lang="es">Id fijo del código en nobelio</LongName>
+			<Data Type="nonNegativeInteger"/>
+		</Column>
+		<Key Id="codeKey">
+			<ShortName>CodeKey</ShortName>
+			<ColumnRef Ref="code"/>
+		</Key>
+	</ColumnSet>
+	<SimpleCodeList>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>030</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>30</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Acuse de recibo de Factura Electrónica de Venta</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>031</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>31</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Reclamo de la Factura Electrónica de Venta</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>032</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>32</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Recibo del bien y/o prestación del servicio</SimpleValue>
+			</Value>
+		</Row>
+		<Row>
+			<Value ColumnRef="code">
+				<SimpleValue>033</SimpleValue>
+			</Value>
+			<Value ColumnRef="id">
+				<SimpleValue>33</SimpleValue>
+			</Value>
+			<Value ColumnRef="name">
+				<SimpleValue>Aceptación expresa</SimpleValue>
+			</Value>
+		</Row>
+	</SimpleCodeList>
+</gc:CodeList>

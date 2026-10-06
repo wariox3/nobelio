@@ -14,9 +14,11 @@ dice un único registro, `LISTAS` en `apps/catalogos/carga.py`:
 
 | Carpeta | Listas |
 |---------|--------|
-| esta | las 14 de factura: tipo de documento, identificación, organización, responsabilidad, tributo, unidad de medida, forma y medio de pago, moneda, país, departamento, municipio, conceptos de nota crédito y débito |
+| esta | las 14 de factura: tipo de documento, identificación, organización, responsabilidad, tributo, unidad de medida, forma y medio de pago, moneda, país, departamento, municipio, conceptos de nota crédito y débito; y `Concepto de Reclamo` (evento RADIAN 031) |
 | `documento-soporte/` | `TipoDocumento` (el `05` y el `95`), que se suman a los tipos de factura |
 | `nomina/` | `PeriodoNomina`, `TipoContrato`, `TipoTrabajador`, `SubTipoTrabajador` |
+| `radian/` | `EventoRadian` (030–033), transcrita de los ejemplos del anexo RADIAN |
+| `calendario/` | `Festivo`: los festivos de Colombia. **Propia, se actualiza a mano cada año** (ver su README) |
 
 ```bash
 python manage.py cargar_catalogos
@@ -55,7 +57,7 @@ columna `id`) y una línea en `LISTAS`.
 > Al reemplazar una lista por una versión nueva de la caja de herramientas hay
 > que volver a poner todo lo de este apartado, con los mismos ids.
 
-- **Columna `id`** en las 15 listas oficiales que se cargan (las 14 de aquí y
+- **Columna `id`** en las 16 listas oficiales que se cargan (las 15 de aquí y
   `documento-soporte/TipoDocumento-2.1.gc`), declarada `Use="optional"` y
   colocada en cada fila justo después de `code`. Los valores son los ids que ya
   circulaban, los de la base con la que torio está integrado: no se deducen de
@@ -65,6 +67,9 @@ columna `id`) y una línea en `LISTAS`.
   código (`13` cédula → id 13, `31` NIT → id 31), porque todos sus códigos son
   numéricos y así quien integra puede mandar el código DIAN como id. Un código
   nuevo en esa lista lleva como id su código, no el siguiente libre.
+
+  Igual en **`Concepto de Reclamo.gc`** (añadida el 2026-10-06, sin ids
+  previos que respetar): `01` → id 1, …, `04` → id 4.
 
 - **Filas que la DIAN no publica en ninguna lista:**
   - `TipoDocumento-2.1.gc`: `20` Documento equivalente P.O.S. (id 9).

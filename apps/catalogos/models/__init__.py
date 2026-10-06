@@ -8,7 +8,10 @@ con integridad referencial. Se cargan con ``python manage.py cargar_catalogos``.
 from .base import ElementoCatalogo
 from .concepto_nota_credito import ConceptoNotaCredito
 from .concepto_nota_debito import ConceptoNotaDebito
+from .concepto_reclamo import ConceptoReclamo
 from .departamento import Departamento
+from .evento_radian import EventoRadian
+from .festivo import Festivo
 from .forma_pago import FormaPago
 from .medio_pago import MedioPago
 from .moneda import Moneda
@@ -46,4 +49,9 @@ __all__ = [
     "TipoContrato",
     "TipoTrabajador",
     "SubTipoTrabajador",
+    # RADIAN: eventos del adquiriente y conceptos de reclamo.
+    "EventoRadian",
+    "ConceptoReclamo",
+    # Propio de nobelio: festivos de Colombia, para los días hábiles.
+    "Festivo",
 ]

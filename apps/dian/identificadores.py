@@ -353,6 +353,46 @@ def calcular_cune(
     return _sha384_hex(composicion)
 
 
+def calcular_cude_evento(
+    *,
+    numero_evento: str,
+    fecha,
+    hora,
+    nit_emisor_evento: str,
+    id_receptor_evento: str,
+    codigo_evento: str,
+    numero_documento: str,
+    tipo_documento: str,
+    pin_software: str,
+) -> str:
+    """Calcula el CUDE de un evento RADIAN (``ApplicationResponse``).
+
+    No comparte composición con el CUDE de las notas: no hay valores ni
+    ambiente, y entran el código del evento y el documento al que se refiere.
+
+    ``CUDE = SHA-384(Num_DE + Fec_Emi + Hor_Emi + NitFE + DocAdq + ResponseCode
+    + ID + DocumentTypeCode + Software-PIN)``, donde NitFE es quien genera el
+    evento (``cac:SenderParty``), DocAdq quien lo recibe
+    (``cac:ReceiverParty``), ID el número de la factura referenciada y
+    DocumentTypeCode su tipo (``01``). Identificaciones sin DV.
+
+    Numeral 12.1.1 del Anexo Técnico RADIAN v1.1 (Res. 000085/2022); resumen en
+    ``docs/anexo-radian.md``.
+    """
+    composicion = (
+        f"{numero_evento}"
+        f"{formatear_fecha(fecha)}"
+        f"{formatear_hora(hora)}"
+        f"{nit_emisor_evento}"
+        f"{id_receptor_evento}"
+        f"{codigo_evento}"
+        f"{numero_documento}"
+        f"{tipo_documento}"
+        f"{pin_software}"
+    )
+    return _sha384_hex(composicion)
+
+
 def calcular_codigo_seguridad_software(
     *, id_software: str, pin: str, numero_documento: str
 ) -> str:
