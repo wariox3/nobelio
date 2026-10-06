@@ -5,7 +5,9 @@ llegan, se registran y se procesan: cabeceras, adjuntos y documentos.
 
 Nobelio recibe por correo las facturas que los proveedores les mandan a los
 emisores registrados, extrae los documentos electrónicos (factura, nota crédito,
-nota débito) y se los entrega al ERP del emisor. Nobelio no es multitenant: la
+nota débito) y los deja disponibles en nobelio, desde donde el emisor los
+consulta y les registra los eventos RADIAN. El proceso de recibo existe solo
+aquí: no se le entrega nada al ERP. Nobelio no es multitenant: la
 "empresa" es el `Emisor`, y el acceso se resuelve con el alcance de siempre
 (`apps/seguridad/alcance.py`).
 
@@ -173,22 +175,131 @@ empezar el siguiente.
 
 1. **Comando `reprocesar_correos`**: `--id <n>` o `--todos` (los correos en
    error, pendiente o empresa_desconocida), descargando de R2.
-2. **Webhook al ERP** (`rec_aviso`). Una bandera nueva `documento_recibido` en
-   `emi_webhook`, firmada con el `firmar` de `apps/emisores/servicios/webhooks.py`.
-   Con reintentos y backoff, a diferencia de los avisos de emisión. El contrato
-   (`tipo: "documento_recibido"`) hay que agregarlo en
-   `torio/docs/webhook_rededoc.md`.
-3. **Producción**: repetir lo de Cloudflare en `rededoc.co` y apuntar el Worker
+2. **Producción**: repetir lo de Cloudflare en `rededoc.co` y apuntar el Worker
    a `api.rededoc.co`.
 
-Fuera de alcance: eventos RADIAN (030, 031, 032 y 033). El documento tiene pk
-UUID y CUFE; los eventos irán en una tabla aparte con FK al documento.
+Después siguen los eventos RADIAN (sección siguiente, pasos R1 a R5).
+
+## Eventos RADIAN (análisis, 2026-10-06)
+
+Fuente: **Anexo Técnico RADIAN 1.1** (Resolución 000085 de 2022), resumido en
+[anexo-radian.md](anexo-radian.md). Los ejemplos oficiales del 030 al 034
+están en `apps/dian/datos/ejemplos/radian/` y validan contra el XSD que ya
+teníamos. Lo marcado con ⚠ sigue abierto.
+
+### Qué son
+
+Un evento es un `ApplicationResponse` UBL 2.1 firmado que un participante le
+transmite a la DIAN sobre una factura electrónica de venta ya validada. La DIAN
+lo valida, lo registra en RADIAN y queda ligado al CUFE.
+
+**Alcance: solo los eventos que el emisor emite como adquiriente**, sobre las
+facturas que recibe de sus proveedores (`rec_documento`), desde el
+frontend de nobelio: el proceso de recibo existe solo aquí, el ERP no
+interviene. Los eventos sobre las facturas que el emisor emite **quedan fuera**:
+enterarse de los eventos de sus clientes, la aceptación tácita (034) y el
+bloqueo de notas sobre facturas aceptadas (decidido 2026-10-06).
+
+| Código | Evento | Lo emite | Se lo dirige a | Plazo (regla DIAN) |
+|---|---|---|---|---|
+| 030 | Acuse de recibo | Adquiriente | Facturador | No antes de la fecha de la factura (DC24a) |
+| 032 | Recibo del bien o prestación del servicio | Adquiriente | Facturador | No antes del 030 (DC24b) |
+| 033 | Aceptación expresa | Adquiriente | Facturador | Dentro de 3 días hábiles del 032 (DC24c) |
+| 031 | Reclamo | Adquiriente | Facturador | Excluye al 033. Plazo: 3 días hábiles por el Código de Comercio; el anexo RADIAN no trae regla propia ⚠ |
+
+El 034 (aceptación tácita) lo emite el facturador, así que lo emite el proveedor
+y no nos toca.
+
+- El 030 y el 032 llevan la **persona** que recibe (documento, nombres, cargo
+  y área). El 031 lleva el concepto (`Concepto de Reclamo.gc`) en
+  `cbc:ResponseCode/@listID`.
+- La DIAN rechaza un evento repetido y uno incoherente con los anteriores.
+- Con aceptación (033 o 034), el proveedor ya no puede emitir notas crédito ni
+  débito sobre esa factura.
+- El anexo dice que estos eventos son para facturas **a crédito** que se
+  quieren usar como título valor. Los eventos de título valor (035–051) **quedan
+  fuera de alcance**.
+- Las reglas campo a campo de los eventos (`AAxx`) no están en este anexo sino
+  en el **Anexo Técnico FE 1.9**, que no tenemos ⚠. Con los ejemplos y el
+  encabezado común alcanza para construirlos; los rechazos en habilitación
+  dirán lo que falte.
+
+### Técnica (confirmada en el anexo)
+
+- **XML**: el encabezado es `CustomizationID` 1,
+  `ProfileID` «DIAN 2.1: ApplicationResponse de la Factura Electrónica de
+  Venta», `ProfileExecutionID` y `UUID/@schemeID` según el ambiente. El
+  `cbc:ID` es un consecutivo propio (sin resolución) que no se repite por tipo
+  de evento. Después vienen `SenderParty`, `ReceiverParty` y
+  `DocumentResponse`, con la referencia a la factura (número, CUFE y tipo 01).
+  `DianExtensions` como en la factura, pero sin `InvoiceControl`. Firma
+  XAdES-EPES de siempre.
+- **CUDE**: `SHA-384(Num_DE + Fec_Emi + Hor_Emi + NitFE + DocAdq + ResponseCode
+  + ID factura + DocumentTypeCode + PIN)`. El vector del anexo está comprobado
+  (en `anexo-radian.md`). El `SoftwareSecurityCode` es el de la factura.
+- **WS**: el mismo endpoint y el mismo sobre que la factura.
+  `SendEventUpdateStatus(contentFile)` es síncrono, recibe un ZIP con un solo
+  `ApplicationResponse` y responde como `SendBillSync`.
+  `GetStatusEvent(trackId=CUFE)` devuelve los eventos de la factura: sirve
+  para conciliar lo que tenemos con lo que registró la DIAN.
+- **Entrega a la contraparte**: por correo, con el asunto
+  `Evento;<factura>;<NIT>;<nombre>;<número evento>;<código>;<línea opcional>`
+  y un ZIP de máximo 2 MB con el `AttachedDocument` (el evento y la respuesta
+  de la DIAN). Sale por Zinc, como las facturas.
+- **Software**: se envía con el `SoftwareDian` de facturación del emisor. Hay
+  que confirmar si la DIAN exige una habilitación aparte para eventos ⚠: se
+  sabrá al enviar el primero en habilitación (R3).
+
+### Lo que hay y lo que falta
+
+| Pieza | Estado |
+|---|---|
+| Firma XAdES, sobre WS-Security, ZIP, `SoftwareSecurityCode` | Hay. Se reusan |
+| XSD de `ApplicationResponse` y ejemplos 030–033 | Hay |
+| CUDE del evento | Falta. Composición y vector confirmados |
+| `AttachedDocument` | Hay el de las facturas. Hay que adaptarlo al evento |
+| Catálogo de eventos | Falta. Ninguna lista `.gc` trae los eventos 030–034 vigentes (`EventoDocumento-2.1.gc` está desactualizada y `Eventos-2.1.gc` de RADIAN solo trae del 035 al 051). Se arma a mano con id fijo |
+| Conceptos de reclamo | `Concepto de Reclamo.gc` está bien. Falta cargarlo |
+| `SendEventUpdateStatus` / `GetStatusEvent` | Faltan |
+| Días hábiles con festivos de Colombia | Falta: catálogo `Festivo` propio (plazo del 033) |
+
+### Pasos
+
+Van después del punto 2 de arriba, con la misma regla: cada paso se cierra
+antes de empezar el siguiente.
+
+- **R1. Catálogos**: `EventoRadian` (030–033, ids fijos y descripción), `ConceptoReclamo` y `Festivo` en `apps/catalogos`, cargados por
+  `cargar_catalogos`. Los festivos se cargan de una lista propia en
+  `apps/catalogos/datos/` que se actualiza cada año. Hay que cargar el año
+  siguiente antes del 1 de enero, porque sin él los plazos se calculan mal. Una
+  función `dias_habiles(desde, n)` resuelve los plazos.
+- **R2. Generación**: constructor del `ApplicationResponse` en
+  `apps/dian/ubl/`, `calcular_cude_evento` en `identificadores.py` con el
+  vector del anexo, firma y validación contra el XSD.
+- **R3. WS**: `enviar_evento` (`SendEventUpdateStatus`) y `consultar_eventos`
+  (`GetStatusEvent`) en `soap.py`, con tests del sobre. Prueba real en
+  habilitación: un 030 sobre una factura validada.
+- **R4. Eventos del adquiriente**: modelo `rec_evento` (FK a `rec_documento`)
+  con código, número, CUDE, fecha y hora, persona que recibe, concepto del
+  reclamo, estado ante la DIAN, XML firmado y respuesta. El servicio valida el
+  orden, los plazos y la exclusión entre 031 y 033 antes de ir a la DIAN.
+  - Numeración: consecutivo por emisor y tipo de evento, con prefijo por código.
+  - El 030 se emite solo al registrar el documento (en `procesar_correo`), salvo
+    que el emisor lo tenga apagado.
+  - El emisor configura una persona que recibe por defecto (030 y 032). La
+    petición puede reemplazarla.
+  - API: `POST /api/recepcion/documento/<id>/evento/` con `{codigo, ...}` y
+    `GET /api/recepcion/evento/`.
+  - `rec_documento` gana un resumen del estado RADIAN.
+- **R5. Notificación al proveedor**: el `AttachedDocument` del evento por Zinc,
+  con el asunto reglamentario.
 
 ## Decisiones
 
 | Tema | Decisión |
 |---|---|
-| Nombres de tablas | `rec_correo`, `rec_documento` y `rec_aviso` (modelos `Correo`, `Documento` y `Aviso`) |
+| Nombres de tablas | `rec_correo`, `rec_documento`, `rec_adjunto` y `rec_evento` (modelos `Correo`, `Documento`, `Adjunto` y `Evento`) |
+| Integración con el ERP | Ninguna: el recibo vive solo en nobelio. Se descartaron el webhook `documento_recibido` (`rec_aviso`) y el `evento_radian` (decidido 2026-10-06) |
 | `rec_documento` aparte de `doc_documento` | Los roles están invertidos (allá el emisor factura, aquí recibe) y las acciones de emisión no aplican. Se reusan los catálogos `DocumentoTipo` y `Moneda` |
 | Emisor del documento | El del NIT receptor del XML, no el del buzón |
 | Archivos | Todos en `rec_adjunto` (también el XML y el PDF del documento), con `correo` siempre y `documento` opcional. Se descartó una tabla de archivos genérica (`arc_archivo`) |
@@ -197,6 +308,13 @@ UUID y CUFE; los eventos irán en una tabla aparte con FK al documento.
 | Idempotencia del endpoint | SHA-256 del body. `X-Raw-Key` no sirve porque cambia en cada entrega |
 | CUFE repetido | Se ignora: CUFE único en `rec_documento` y, si ya existe, no se crea nada ni se marca (decidido 2026-10-03) |
 | Carpeta en R2 | Fecha en UTC (`AAAA-MM-DD/<uuid>.eml`): un correo después de las 19:00 de Colombia cae en la del día siguiente. Solo organiza; la fecha que cuenta es `recibido_en` |
+| Numeración de eventos RADIAN | Consecutivo en nobelio por emisor y tipo de evento, con prefijo por código. (decidido 2026-10-06) |
+| Acuse (030) | Automático al recibir la factura, con opción en el emisor para apagarlo |
+| Persona que recibe (030/032) | Un valor por defecto en el emisor que la petición puede reemplazar |
+| Alcance RADIAN | Solo como adquiriente (030–033 sobre `rec_documento`), operado desde nobelio, sin ERP ni webhook. Nada sobre las facturas emitidas: ni 034, ni consulta de eventos de los clientes, ni bloqueo de notas (decidido 2026-10-06) |
+| Tabla de eventos RADIAN | `rec_evento`, con FK a `rec_documento`. `doc_documento_evento` no tiene nada que ver: es la bitácora de estados de la emisión ante la DIAN |
+| Festivos | Catálogo propio (`Festivo`), mantenido a mano cada año. Se descartó la librería `holidays` |
+| Facturas con eventos | Cualquier factura 01, sin filtrar por forma de pago. Si la DIAN rechaza, se ajusta en habilitación |
 | MIME crudo | En R2 (vinculación nativa del Worker), no en B2. Se evaluó B2 vía API S3 desde el Worker y se descartó (2026-10-03) |
 | Token | Obligatorio y falla cerrado. La primera versión fue abierta, a propósito, para probar el flujo |
 | Asociación con la empresa | El buzón es el NIT del emisor sin DV (`901192048@recepcion.rededoc.co`). Se asocia en el endpoint; sin campo ni tabla aparte |
