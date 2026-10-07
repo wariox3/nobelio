@@ -1,7 +1,7 @@
 """Utilidades para montar una nómina en las pruebas.
 
 Se apoya en dos cosas que ya existen y no conviene duplicar: los catálogos
-mínimos de `apps.documentos.tests_utils` —cuenta, tipos de identificación,
+mínimos de `apps.documentos.tests_utils` —usuario, tipos de identificación,
 geografía, moneda— y `crear_nomina_prueba`, que es el mismo constructor que usa
 el endpoint de habilitación. Probar contra él tiene la ventaja de que si la
 nómina de habilitación deja de armarse bien, estas pruebas lo dicen.

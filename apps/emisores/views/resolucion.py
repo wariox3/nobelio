@@ -172,16 +172,6 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
             if (r.prefijo or "", r.numero_resolucion) not in existentes
         ]
 
-        # Esta acción persiste sin pasar por el serializer, así que la regla de
-        # numeración se comprueba aquí: si el NIT ya numera con ese prefijo y
-        # resolución en otra cuenta, no se importa nada.
-        for r in nuevos:
-            ocupada = models.resolucion_activa_en_otra_cuenta(
-                emisor, prefijo=r.prefijo or "", numero_resolucion=r.numero_resolucion
-            )
-            if ocupada is not None:
-                raise ErrorSolicitud(models.mensaje_resolucion_ocupada(ocupada))
-
         creadas = [
             models.Resolucion.objects.create(
                 emisor=emisor,

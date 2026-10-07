@@ -46,7 +46,7 @@ from apps.seguridad.serializers import (
     },
 )
 class RegistroView(APIView):
-    """``POST /api/seguridad/registro/`` — crea la cuenta y su usuario dueño."""
+    """``POST /api/seguridad/registro/`` — crea el usuario."""
 
     permission_classes = [AllowAny]
     authentication_classes = []

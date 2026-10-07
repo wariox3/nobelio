@@ -20,7 +20,7 @@ CUERPO = {
 
 
 class RegistroTests(TestCase):
-    """El alta crea usuario y cuenta, y deja al usuario como dueño."""
+    """El alta crea el usuario y le manda el correo de confirmación."""
 
     def setUp(self):
         self.cliente = APIClient()
@@ -182,7 +182,7 @@ class ReenvioTests(TestCase):
 
 
 class AlcanceDelDuenoTests(TestCase):
-    """Ser dueño de una cuenta es lo que desbloquea dar de alta emisores."""
+    """Un usuario registrado puede dar de alta emisores, y queda como su dueño."""
 
     def setUp(self):
         self.cliente = APIClient()

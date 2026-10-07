@@ -3,15 +3,15 @@
 El RUES es un registro ajeno y a veces caído: consultarlo al dar de alta ataba
 la creación de emisores a que un tercero respondiera. Queda como consulta
 voluntaria en ``GET /api/emisores/emisor/validar-nit/``, para autocompletar el
-formulario. Lo que sí se sigue exigiendo es que el emisor no esté ya dado de
-alta en esa cuenta (ver ``tests_multicuenta``).
+formulario. Lo que sí se sigue exigiendo es que el NIT no esté ya dado de alta
+en la plataforma (ver ``tests_nit_unico``).
 """
 from unittest import mock
 
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from apps.documentos.tests_utils import crear_usuario, crear_catalogos_minimos
+from apps.documentos.tests_utils import crear_catalogos_minimos
 from apps.emisores.models import Emisor
 from apps.seguridad.models import Usuario
 from apps.nucleo.tests_utils import errores_por_campo
@@ -23,7 +23,6 @@ _RUES = "apps.utilidades.rues.consultar_nit"
 class AltaSinValidarRuesTests(APITestCase):
     def setUp(self):
         self.cat = crear_catalogos_minimos()
-        self.usuario = crear_usuario(nombre="RedDoc ERP")
         admin = Usuario.objects.create_superuser(
             email="admin@nobelio.co", password="ClaveSegura123"
         )
@@ -32,7 +31,6 @@ class AltaSinValidarRuesTests(APITestCase):
     def payload(self, **extra):
         c = self.cat
         datos = {
-            "cuenta": self.usuario.id,
             "razon_social": "Semantica Digital S.A.S",
             "tipo_identificacion": c["nit"].id,
             "numero_identificacion": "901192048",

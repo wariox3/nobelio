@@ -37,14 +37,11 @@ class Usuario(AbstractBaseUser, PermissionsMixin, ModeloConFechas):
     )
 
     # --- Relaciones ---
-    # El usuario sigue sin pertenecer a una cuenta: los emisores que alcanza son
-    # los que tenga asignados aquí, uno a uno. Lo que cambia con el registro
-    # abierto es que ahora puede además *ser dueño* de una cuenta
-    # (`Cuenta.propietario`), y por esa vía alcanza todos los emisores de esa
-    # cuenta sin tener que asignárselos. Las dos vías se suman en
+    # Un usuario alcanza los emisores que posee (`Emisor.usuario`) más los que
+    # tenga asignados aquí, uno a uno. Las dos vías se suman en
     # `apps.seguridad.alcance.emisores_permitidos`.
     #
-    # Sin emisores asignados y sin cuenta propia, un usuario no staff no ve nada
+    # Sin emisores propios ni asignados, un usuario no staff no ve nada
     # (falla cerrado). La granularidad de este M2M es lo que permite que un
     # contador vea un solo emisor de los varios de un cliente.
     emisores = models.ManyToManyField(

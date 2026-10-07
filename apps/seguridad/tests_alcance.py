@@ -1,7 +1,7 @@
 """Pruebas del aislamiento entre inquilinos (``apps.seguridad.alcance``).
 
-Lo que se comprueba aquí es que los datos de una cuenta no se ven ni se tocan
-desde otra: es la frontera que hace que una misma integración pueda facturar
+Lo que se comprueba aquí es que los datos de los emisores de un usuario no se
+ven ni se tocan desde otro: es la frontera que hace que una misma integración pueda facturar
 para muchos emisores sin mezclarlos.
 """
 import re
@@ -122,7 +122,7 @@ class FlujoDeAltaTests(AlcanceBase):
 
 
 class AlcanceLlaveDeCuentaTests(AlcanceBase):
-    """Una llave alcanza todos los emisores de su cuenta, y solo esos."""
+    """Una llave alcanza todos los emisores de su usuario, y solo esos."""
 
     def setUp(self):
         super().setUp()
@@ -213,8 +213,7 @@ class AlcanceDeDocumentosTests(AlcanceBase):
     """Los documentos de otra cuenta no aparecen ni se pueden referenciar."""
 
     def test_no_lista_documentos_de_otra_cuenta(self):
-        # El helper monta su propio emisor bajo la cuenta de los catálogos,
-        # que no es self.usuario.
+        # El helper monta su propio emisor con un dueño que no es self.usuario.
         crear_documento_factura(catalogos=self.cat)
         resp = self.client.get(
             "/api/documentos/documento/", **self._api_key(usuario=self.usuario)
