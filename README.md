@@ -282,6 +282,24 @@ ni `1`). Si algún valor no cumple, la respuesta es 400 con código `tipo_invali
 en cada campo que falla, todos juntos y antes que cualquier otro error. Vale para
 crear y para editar.
 
+**Editar un emisor** es solo por `PATCH /api/emisores/emisor/{id}/` (PUT responde
+405), y solo admite estos campos:
+
+```json
+{
+  "razon_social": "Semantica Digital S.A.S",
+  "tipo_organizacion": 1,
+  "direccion": "Calle 10 # 20-30",
+  "pais": 46, "departamento": 1, "municipio": 1,
+  "correo": "facturacion@empresa.co"
+}
+```
+
+Se puede mandar cualquier subconjunto. Cualquier otro campo —identificación,
+`referencia_externa`, `cuenta`, teléfono, código postal, correo en copia,
+responsabilidades, `activo`, ambientes…— responde 400 con código
+`campo_no_actualizable` y no se guarda nada del PATCH. Esos se fijan en el alta.
+
 El **dueño no se envía**: el emisor queda a nombre de quien hace la petición
 (con una API Key, a nombre de la persona dueña de la llave). El NIT es **único
 en toda la plataforma**: si ya está dado de alta, responde 400 en

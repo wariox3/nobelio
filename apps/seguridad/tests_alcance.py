@@ -190,20 +190,16 @@ class AltaDeEmisoresTests(AlcanceBase):
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         self.assertEqual(resp.data["usuario"], self.usuario.id)
 
-    def test_el_staff_puede_editar_sin_reenviar_la_cuenta(self):
-        # PUT sin 'cuenta': el default de la credencial es None para el staff y
-        # antes se intentaba guardar el emisor sin cuenta (IntegrityError).
+    def test_el_staff_edita_sin_cambiar_el_dueno(self):
         self.client.force_authenticate(
             Usuario.objects.create_user(
                 email="staff@nobelio.co", password="ClaveSegura123", is_staff=True
             )
         )
-        payload = self.payload(
-            numero_identificacion=self.emisor.numero_identificacion,
-            razon_social="Cliente A renombrado",
-        )
-        resp = self.client.put(
-            f"{URL_EMISORES}{self.emisor.id}/", payload, format="json"
+        resp = self.client.patch(
+            f"{URL_EMISORES}{self.emisor.id}/",
+            {"razon_social": "Cliente A renombrado"},
+            format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
         self.emisor.refresh_from_db()

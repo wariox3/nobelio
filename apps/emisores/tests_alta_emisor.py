@@ -17,6 +17,7 @@ from apps.documentos.tests_utils import crear_catalogos_minimos
 from apps.catalogos.models import Departamento
 from apps.catalogos.models.municipio import mensaje_municipio_de_otro_departamento
 from apps.emisores.models import Emisor
+from apps.emisores.serializers.emisor import CAMPOS_ACTUALIZABLES, MENSAJE_NO_ACTUALIZABLE
 from apps.nucleo.serializers import MENSAJE_LISTA_DE_TEXTOS, MENSAJES_TIPO
 from apps.seguridad.models import Usuario
 from apps.nucleo.tests_utils import errores_por_campo
@@ -149,9 +150,19 @@ class AltaSinValidarRuesTests(APITestCase):
         Emisor.objects.update(correo="")
         emisor = Emisor.objects.get()
         resp = self.client.patch(
-            f"{URL_EMISORES}{emisor.id}/", {"telefono": "6041234567"}, format="json"
+            f"{URL_EMISORES}{emisor.id}/", {"direccion": "Calle 10 # 20-30"},
+            format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+
+    def test_el_correo_no_se_puede_vaciar_al_editar(self):
+        self.client.post(URL_EMISORES, self.payload(), format="json")
+        emisor = Emisor.objects.get()
+        resp = self.client.patch(
+            f"{URL_EMISORES}{emisor.id}/", {"correo": ""}, format="json"
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("correo", errores_por_campo(resp))
 
     # --- Tipos de datos -----------------------------------------------------
 
@@ -212,14 +223,87 @@ class AltaSinValidarRuesTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(errores_por_campo(resp), {"municipio": [MENSAJES_TIPO[int]]})
 
-    def test_editar_el_nit_tampoco_consulta_el_rues(self):
-        self.client.post(URL_EMISORES, self.payload(), format="json")
-        emisor = Emisor.objects.get(numero_identificacion="901192048")
-        with mock.patch(_RUES) as consultar:
-            resp = self.client.patch(
-                f"{URL_EMISORES}{emisor.id}/",
-                {"numero_identificacion": "900123456"},
-                format="json",
-            )
+
+
+class ActualizacionEmisorTests(APITestCase):
+    """Del emisor dado de alta solo se actualiza lo de `CAMPOS_ACTUALIZABLES`."""
+
+    def setUp(self):
+        self.cat = crear_catalogos_minimos()
+        admin = Usuario.objects.create_superuser(
+            email="admin@nobelio.co", password="ClaveSegura123"
+        )
+        self.client.force_authenticate(admin)
+        c = self.cat
+        resp = self.client.post(URL_EMISORES, {
+            "razon_social": "Semantica Digital S.A.S",
+            "tipo_identificacion": c["nit"].id,
+            "numero_identificacion": "901192048",
+            "tipo_organizacion": c["juridica"].id,
+            "pais": c["colombia"].id,
+            "departamento": c["antioquia"].id,
+            "municipio": c["medellin"].id,
+            "direccion": "Calle 1 # 2-3",
+            "correo": "facturacion@empresa.co",
+            "referencia_externa": "15",
+        }, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.url = f"{URL_EMISORES}{resp.data['id']}/"
+
+    def test_se_actualizan_los_campos_permitidos(self):
+        c = self.cat
+        cambios = {
+            "razon_social": "Semantica Digital SAS",
+            "tipo_organizacion": c["juridica"].id,
+            "direccion": "Calle 10 # 20-30",
+            "pais": c["colombia"].id,
+            "departamento": c["antioquia"].id,
+            "municipio": c["medellin"].id,
+            "correo": "otro@empresa.co",
+        }
+        self.assertEqual(set(cambios), set(CAMPOS_ACTUALIZABLES))
+        resp = self.client.patch(self.url, cambios, format="json")
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
-        consultar.assert_not_called()
+        emisor = Emisor.objects.get()
+        self.assertEqual(emisor.razon_social, "Semantica Digital SAS")
+        self.assertEqual(emisor.direccion, "Calle 10 # 20-30")
+        self.assertEqual(emisor.correo, "otro@empresa.co")
+
+    def test_el_resto_de_campos_no_se_actualiza(self):
+        for campo, valor in (
+            ("numero_identificacion", "900123456"),
+            ("tipo_identificacion", self.cat["nit"].id),
+            ("referencia_externa", "16"),
+            ("cuenta", None),
+            ("telefono", "6041234567"),
+            ("codigo_postal", "050001"),
+            ("correo_copia", "copia@empresa.co"),
+            ("responsabilidades", []),
+            ("activo", False),
+            ("ambiente_facturacion", 2),
+            ("habilitado_nomina", True),
+            ("usuario", 1),
+            ("no_existe", "x"),
+        ):
+            with self.subTest(campo=campo):
+                resp = self.client.patch(self.url, {campo: valor}, format="json")
+                self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertEqual(
+                    errores_por_campo(resp), {campo: [MENSAJE_NO_ACTUALIZABLE]}
+                )
+        emisor = Emisor.objects.get()
+        self.assertEqual(emisor.numero_identificacion, "901192048")
+        self.assertEqual(emisor.referencia_externa, "15")
+
+    def test_un_campo_prohibido_tumba_el_patch_entero(self):
+        """Nada se guarda a medias: ni siquiera los campos permitidos."""
+        resp = self.client.patch(
+            self.url, {"razon_social": "Otra", "telefono": "1"}, format="json"
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(set(errores_por_campo(resp)), {"telefono"})
+        self.assertEqual(Emisor.objects.get().razon_social, "Semantica Digital S.A.S")
+
+    def test_put_no_esta_permitido(self):
+        resp = self.client.put(self.url, {"razon_social": "Otra"}, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)

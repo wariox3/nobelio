@@ -13,6 +13,9 @@ from apps.utilidades.rues import RuesNoDisponible, consultar_detalle
 class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
 
     campo_emisor = "id"
+    # Sin PUT: reemplazar el emisor entero exigiría mandar campos que después
+    # no se pueden actualizar (ver `CAMPOS_ACTUALIZABLES`). Se edita por PATCH.
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     queryset = models.Emisor.objects.prefetch_related("resoluciones", "responsabilidades")
     serializer_class = serializers.EmisorSerializer

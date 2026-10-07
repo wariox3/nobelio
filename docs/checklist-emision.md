@@ -57,6 +57,10 @@ puede faltar. Las rutas cuelgan de `/api/`.
   - **Tipos estrictos**: cada valor con su tipo JSON (enteros como número, textos como
     texto, booleanos como `true`/`false`); si no, 400 con código `tipo_invalido` en
     cada campo, antes que cualquier otro error. Aplica también al PATCH.
+  - **Edición** solo por `PATCH` (PUT responde 405) y solo de `razon_social`,
+    `tipo_organizacion`, `direccion`, `pais`, `departamento`, `municipio` y `correo`.
+    Cualquier otro campo responde 400 con código `campo_no_actualizable`: el resto
+    (NIT, `referencia_externa`, `cuenta`, teléfono, ambientes…) se fija en el alta.
 
 ## 4. Certificado digital
 

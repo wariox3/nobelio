@@ -933,15 +933,23 @@ solo: `_marcar_habilitacion_superada` (`apps/dian/servicios.py`) pone
 `SendTestSetAsync` a `SendBillSync`— y marca la bandera `habilitado_*` que
 corresponda. No hay que tocar ninguna de las dos a mano.
 
-Lo que sí es una decisión tuya es mover el ambiente del emisor, y solo se puede
-después de esa habilitación:
+Lo que sí es una decisión tuya es mover el ambiente del emisor, y solo después
+de esa habilitación. Los ambientes **no se pueden cambiar por la API** (el PATCH
+del emisor solo acepta los campos de `CAMPOS_ACTUALIZABLES`, ver
+`apps/emisores/serializers/emisor.py`), así que se mueven por backend:
 
 ```bash
-curl -X PATCH https://api.rededoc.co/api/emisores/emisor/<id>/ \
-  -H "Authorization: Api-Key <prefijo>.<secreto>" \
-  -H "Content-Type: application/json" \
-  -d '{"ambiente_facturacion": 1}'
+cd /opt/nobelio && DJANGO_SETTINGS_MODULE=config.settings.prod \
+  .venv/bin/python manage.py shell -c "
+from apps.emisores.models import Emisor
+Emisor.objects.filter(numero_identificacion='900123456').update(ambiente_facturacion=1)
+"
 ```
+
+Ojo: por aquí no pasa la validación del serializer, así que nada impide poner
+`ambiente_nomina` o `ambiente_documento_equivalente` en `1` sin la bandera
+`habilitado_*` correspondiente. Compruébala antes; sin ella la DIAN rechaza con
+la regla 92.
 
 Las tres banderas `habilitado_*` son de **solo lectura** en la API: constatan un
 hecho que declara la DIAN, no una decisión del cliente, y como además condicionan

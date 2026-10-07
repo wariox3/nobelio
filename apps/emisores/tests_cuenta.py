@@ -4,7 +4,9 @@ from rest_framework.test import APITestCase
 
 from apps.documentos.tests_utils import crear_catalogos_minimos, crear_usuario
 from apps.emisores.models import Cuenta, Emisor
+from apps.emisores.serializers.emisor import MENSAJE_NO_ACTUALIZABLE
 from apps.emisores.views.cuenta import MENSAJE_CUENTA_CON_EMISORES
+from apps.nucleo.tests_utils import errores_por_campo
 from apps.seguridad.models import Usuario
 
 URL_CUENTAS = "/api/emisores/cuenta/"
@@ -100,20 +102,21 @@ class CuentaTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         self.assertEqual(resp.data["cuenta"], cuenta.id)
 
-    def test_se_cambia_y_se_quita_la_cuenta_del_emisor(self):
-        emisor = self.crear_emisor()
+    def test_la_cuenta_no_se_cambia_por_patch(self):
+        """Se fija en el alta: no está en `CAMPOS_ACTUALIZABLES`."""
         cuenta = Cuenta.objects.create(nombre="RedDoc ERP")
+        emisor = self.crear_emisor(cuenta=cuenta)
         url = f"{URL_EMISORES}{emisor.id}/"
 
-        resp = self.client.patch(url, {"cuenta": cuenta.id}, format="json")
-        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        for valor in (Cuenta.objects.create(nombre="Semantica ERP").id, None):
+            with self.subTest(valor=valor):
+                resp = self.client.patch(url, {"cuenta": valor}, format="json")
+                self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertEqual(
+                    errores_por_campo(resp), {"cuenta": [MENSAJE_NO_ACTUALIZABLE]}
+                )
         emisor.refresh_from_db()
         self.assertEqual(emisor.cuenta, cuenta)
-
-        resp = self.client.patch(url, {"cuenta": None}, format="json")
-        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
-        emisor.refresh_from_db()
-        self.assertIsNone(emisor.cuenta)
 
     def test_una_cuenta_inexistente_se_rechaza(self):
         resp = self.client.post(

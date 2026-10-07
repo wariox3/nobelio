@@ -1,5 +1,8 @@
 """Serializer del emisor."""
+from collections.abc import Mapping
+
 from rest_framework import serializers
+from rest_framework.exceptions import ErrorDetail
 
 from apps.catalogos.memoria import RelacionDeCatalogo
 from apps.catalogos.models import (
@@ -60,6 +63,25 @@ MENSAJE_DOCUMENTO_EQUIVALENTE_SIN_HABILITAR = (
 )
 
 
+# Lo único que se puede cambiar de un emisor ya dado de alta. El resto —la
+# identificación, la cuenta, la referencia externa, los ambientes…— se fija en
+# el alta, y mandarlo en un PATCH responde 400 en vez de ignorarse en silencio.
+CAMPOS_ACTUALIZABLES = (
+    "razon_social",
+    "tipo_organizacion",
+    "direccion",
+    "pais",
+    "departamento",
+    "municipio",
+    "correo",
+)
+CODIGO_NO_ACTUALIZABLE = "campo_no_actualizable"
+MENSAJE_NO_ACTUALIZABLE = (
+    "No se puede actualizar. Solo se pueden actualizar: "
+    + ", ".join(CAMPOS_ACTUALIZABLES) + "."
+)
+
+
 class EmisorSerializer(TiposEstrictos, serializers.ModelSerializer):
     resoluciones = ResolucionSerializer(many=True, read_only=True)
     # La ubicación entra y sale por el `id` del catálogo, que es fijo en todos
@@ -96,6 +118,22 @@ class EmisorSerializer(TiposEstrictos, serializers.ModelSerializer):
     # banderas: 'estoy habilitado' es un hecho que constata la DIAN, mientras
     # que 'emite contra producción' es una decisión nuestra sobre este emisor.
     # Es lo que permite pasar a uno a producción sin mover a los demás.
+
+    def to_internal_value(self, data):
+        """Al editar, rechaza cualquier campo fuera de ``CAMPOS_ACTUALIZABLES``.
+
+        Va antes que los tipos: si el campo no se puede tocar, da igual con qué
+        tipo llegue.
+        """
+        if self.instance is not None and isinstance(data, Mapping):
+            errores = {
+                campo: [ErrorDetail(MENSAJE_NO_ACTUALIZABLE, CODIGO_NO_ACTUALIZABLE)]
+                for campo in data
+                if campo not in CAMPOS_ACTUALIZABLES
+            }
+            if errores:
+                raise serializers.ValidationError(errores)
+        return super().to_internal_value(data)
 
     def validate(self, attrs):
         """Comprueba que el emisor no esté ya dado de alta.
