@@ -246,21 +246,41 @@ curl -X POST http://localhost:8000/api/emisores/emisor/ \
   -H "Content-Type: application/json" -H "Authorization: Api-Key $API_KEY" \
   -d '{
     "razon_social": "Empresa Demo SAS",
-    "tipo_identificacion": 1,
+    "tipo_identificacion": 31,
     "numero_identificacion": "700085371",
     "digito_verificacion": "1",
     "tipo_organizacion": 1,
     "responsabilidades": [],
-    "pais": "CO", "departamento": "05", "municipio": "05001",
+    "pais": 46, "departamento": 1, "municipio": 1,
     "direccion": "Calle 1 # 2-3",
-    "correo": "facturacion@empresa.co"
+    "correo": "facturacion@empresa.co",
+    "cuenta": null
   }'
 ```
 
-`pais`, `departamento` y `municipio` van por **código** (ISO 3166 y DANE), no
-por id: el id es un serial de cada base y cambia entre ambientes. El servidor
-resuelve el código contra el catálogo y guarda la fila que corresponde; si el
-código no existe, responde 400 en ese campo.
+`pais`, `departamento` y `municipio` son **obligatorios y van por `id`** del
+catálogo (en el ejemplo: Colombia, Antioquia, Medellín), igual que el resto de
+catálogos de la API. Los ids son fijos en todos los ambientes (columna `id` del
+`.gc`), así que se pueden guardar en el ERP. Mandar el código (`"CO"`, `"05"`,
+`"05001"`) o el id como texto (`"1"`) responde 400 en ese campo. El municipio
+tiene que ser del departamento enviado. La respuesta también devuelve los ids.
+
+`responsabilidades` es la excepción: sigue por **código** (`["O-13", "O-15"]`),
+que es lo que viaja en el `TaxLevelCode` del XML.
+
+El `correo` es **obligatorio** al crear: no se acepta ausente, vacío, `null` ni
+con formato inválido.
+
+`cuenta` es **opcional**: el id de la cuenta que agrupa al emisor (p. ej. el ERP
+que lo integra), o `null`. Las cuentas solo agrupan, no dan acceso a nada, y se
+administran en `/api/emisores/cuenta/` (solo staff; únicamente `id` y `nombre`).
+
+**Tipos estrictos.** Cada campo tiene que llegar con su tipo JSON: los ids, los
+ambientes y demás enteros como número (`31`, no `"31"`), los textos como texto
+(`"700085371"`, no `700085371`) y los booleanos como `true`/`false` (no `"true"`
+ni `1`). Si algún valor no cumple, la respuesta es 400 con código `tipo_invalido`
+en cada campo que falla, todos juntos y antes que cualquier otro error. Vale para
+crear y para editar.
 
 El **dueño no se envía**: el emisor queda a nombre de quien hace la petición
 (con una API Key, a nombre de la persona dueña de la llave). El NIT es **único
@@ -485,7 +505,7 @@ nobelio/
 │   │   ├── genericode.py    Parser de listas .gc
 │   │   └── datos/listas/    Listas oficiales DIAN (.gc)
 │   │       └── documento-soporte/  Listas propias del DS (no se cargan aún)
-│   ├── emisores/            Emisor (OFE), software, certificado, resolución
+│   ├── emisores/            Emisor (OFE), cuenta, software, certificado, resolución
 │   ├── documentos/          Documento electrónico, detalles, impuestos, receptor, API
 │   ├── nomina/              Nómina electrónica: empleado, nómina, conceptos y API
 │   └── dian/                Núcleo DIAN:
@@ -499,7 +519,7 @@ nobelio/
 │       │   └── nomina/         XSD propios de nómina (no es UBL)
 │       └── datos/ejemplos/     Ejemplificaciones oficiales DIAN
 ├── docs/
-│   ├── checklist-emision.md    Del alta del tenant a la emisión, paso a paso
+│   ├── checklist-emision.md    Del alta del emisor a la emisión, paso a paso
 │   ├── autenticacion.md        JWT, API Key y alcance multi-inquilino
 │   ├── anexo-tecnico.md        Resumen del Anexo Técnico v1.9
 │   ├── anexo-documento-soporte.md  Resumen del Anexo del DS v1.1 (Res. 000167)

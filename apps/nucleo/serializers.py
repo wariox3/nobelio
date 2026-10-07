@@ -1,5 +1,9 @@
 """Piezas de serializer compartidas por las apps.
 
+``TiposEstrictos`` exige que cada valor llegue con su tipo JSON (entero, texto,
+booleano, lista) en vez de dejar que DRF lo convierta; responde 400 con código
+``tipo_invalido``. Lo usa el emisor; ver su comentario más abajo.
+
 ``EstructuraEstricta`` valida la **estructura** de la petición antes que sus
 datos: que no venga ninguna clave que el serializer no pueda escribir y que no
 falte ninguna obligatoria.

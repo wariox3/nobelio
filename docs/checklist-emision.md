@@ -30,12 +30,15 @@ puede faltar. Las rutas cuelgan de `/api/`.
 - [ ] **Ambiente DIAN** definido (`DIAN_ENVIRONMENT`: `2` habilitación / `1` producción).
 - [ ] **Usuario staff** inicial para poder crear usuarios y llaves.
 
-## 1. Cuenta (tenant)
+## 1. Cuenta (opcional)
 
+- [ ] *(opcional, solo staff)* `POST /api/emisores/cuenta/` con `{"nombre": "RedDoc ERP"}`
+      → agrupador de emisores (p. ej. el ERP que los integra). Solo `id` y `nombre`;
+      no da acceso a nada. Una cuenta con emisores no se puede borrar (400).
 
 ## 2. Usuario y acceso
 
-- [ ] `POST /api/seguridad/usuario/` (solo staff) → usuario por **email**, ligado a la cuenta.
+- [ ] `POST /api/seguridad/usuario/` (solo staff) → usuario por **email**.
 - [ ] `POST /api/seguridad/token/` con email + contraseña → obtiene `access`/`refresh` (JWT).
 - [ ] *(ERP, opcional)* `POST /api/seguridad/llave-api/` → credencial API Key para el ERP.
 
@@ -43,8 +46,17 @@ puede faltar. Las rutas cuelgan de `/api/`.
 
 - [ ] *(opcional)* `GET /api/emisores/emisor/validar-nit/?nit=<NIT>` → consulta el RUES
       y autocompleta datos. El alta **no** lo exige: es ayuda para el formulario.
-- [ ] `POST /api/emisores/emisor/` → crea el emisor ligado a la **cuenta**
-      (razón social, NIT + DV, tipo de organización, ubicación, responsabilidades).
+- [ ] `POST /api/emisores/emisor/` → crea el emisor a nombre de quien hace la petición
+      (razón social, NIT + DV, tipo de organización, ubicación, responsabilidades, correo).
+  - `pais`, `departamento` y `municipio` **obligatorios y por `id`** del catálogo, como
+    enteros; el código DANE/ISO o el id como texto responden 400. El municipio tiene
+    que ser del departamento enviado.
+  - `responsabilidades` sigue por **código** (`["O-13"]`).
+  - `correo` **obligatorio** y válido.
+  - `cuenta` opcional (id de `/api/emisores/cuenta/` o `null`).
+  - **Tipos estrictos**: cada valor con su tipo JSON (enteros como número, textos como
+    texto, booleanos como `true`/`false`); si no, 400 con código `tipo_invalido` en
+    cada campo, antes que cualquier otro error. Aplica también al PATCH.
 
 ## 4. Certificado digital
 
