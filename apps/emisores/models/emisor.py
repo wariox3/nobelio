@@ -124,6 +124,16 @@ class Emisor(ModeloConFechas):
         verbose_name="usuario",
         help_text="Usuario dueño del emisor.",
     )
+    # Agrupador opcional (p. ej. el ERP que lo integra). PROTECT: borrar una
+    # cuenta con emisores dentro los dejaría sueltos sin que nadie lo decida.
+    cuenta = models.ForeignKey(
+        "emisores.Cuenta",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="emisores",
+        verbose_name="cuenta",
+    )
     tipo_identificacion = models.ForeignKey(
         "catalogos.TipoIdentificacion",
         on_delete=models.PROTECT,

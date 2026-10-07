@@ -64,10 +64,11 @@ class NitUnicoTests(APITestCase):
             "tipo_identificacion": c["nit"].id,
             "numero_identificacion": nit,
             "tipo_organizacion": c["juridica"].id,
-            "pais": c["colombia"].codigo,
-            "departamento": c["antioquia"].codigo,
-            "municipio": c["medellin"].codigo,
+            "pais": c["colombia"].id,
+            "departamento": c["antioquia"].id,
+            "municipio": c["medellin"].id,
             "direccion": "Calle 1 # 2-3",
+            "correo": "facturacion@empresa.co",
         }
 
     def payload_resolucion(self, emisor, prefijo="SETP", numero="18760000001"):

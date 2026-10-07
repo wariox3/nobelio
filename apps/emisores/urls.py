@@ -4,6 +4,7 @@ from rest_framework.routers import SimpleRouter
 from apps.emisores import views
 
 router = SimpleRouter()
+router.register("cuenta", views.CuentaViewSet)
 router.register("emisor", views.EmisorViewSet)
 router.register("software", views.SoftwareDianViewSet)
 router.register("certificado", views.CertificadoViewSet)

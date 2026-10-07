@@ -201,9 +201,9 @@ class AlcanceDelDuenoTests(TestCase):
             "digito_verificacion": "1",
             "tipo_organizacion": self.cat["juridica"].pk,
             "responsabilidades": [],
-            "pais": "CO",
-            "departamento": "05",
-            "municipio": "05001",
+            "pais": self.cat["colombia"].pk,
+            "departamento": self.cat["antioquia"].pk,
+            "municipio": self.cat["medellin"].pk,
             "direccion": "Calle 1 # 2-3",
             "correo": "facturacion@empresa.co",
         }

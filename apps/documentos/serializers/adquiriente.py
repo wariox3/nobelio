@@ -2,6 +2,7 @@
 from rest_framework import serializers
 
 from apps.catalogos.memoria import RelacionDeCatalogo
+from apps.catalogos.models.municipio import mensaje_municipio_de_otro_departamento
 from apps.documentos.models import Adquiriente
 from apps.nucleo.serializers import EstructuraEstricta
 
@@ -56,26 +57,6 @@ def mensaje_identificacion_de_persona(tipo_identificacion):
 def mensaje_falta_en_colombia(campo):
     """Mensaje para un adquiriente en Colombia al que le falta la ubicación."""
     return f"Un adquiriente en Colombia debe informar {OBLIGATORIOS_EN_COLOMBIA[campo]}."
-
-
-def mensaje_municipio_de_otro_departamento(municipio, departamento):
-    """Mensaje para un municipio que no es del departamento informado."""
-    return (
-        f"El municipio {municipio.nombre} ({municipio.codigo}) no pertenece al "
-        f"departamento {departamento.nombre} ({departamento.codigo})."
-    )
-
-
-def _pertenece(municipio, departamento):
-    """¿Es el municipio de ese departamento?
-
-    Manda la relación del catálogo. Como es nullable, cuando no está cargada se
-    compara lo que la sustituye: el código DANE del municipio empieza por el
-    del departamento (05001 es de 05, Antioquia).
-    """
-    if municipio.departamento_id is not None:
-        return municipio.departamento_id == departamento.pk
-    return municipio.codigo[:2] == departamento.codigo
 
 
 class AdquirienteSerializer(EstructuraEstricta, serializers.ModelSerializer):
@@ -212,7 +193,7 @@ class AdquirienteSerializer(EstructuraEstricta, serializers.ModelSerializer):
                 if not attrs.get(campo)
             }
             departamento, municipio = attrs.get("departamento"), attrs.get("municipio")
-            if departamento and municipio and not _pertenece(municipio, departamento):
+            if departamento and municipio and not municipio.es_de(departamento):
                 errores["municipio"] = mensaje_municipio_de_otro_departamento(
                     municipio, departamento,
                 )

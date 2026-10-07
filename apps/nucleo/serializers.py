@@ -116,6 +116,91 @@ def _errores_del_anidado(campo, valor):
     return {}
 
 
+CODIGO_TIPO_INVALIDO = "tipo_invalido"
+
+MENSAJES_TIPO = {
+    int: "Se espera un número entero.",
+    str: "Se espera un texto.",
+    bool: "Se espera true o false.",
+    list: "Se espera una lista.",
+}
+MENSAJE_LISTA_DE_ENTEROS = "Se espera una lista de números enteros."
+MENSAJE_LISTA_DE_TEXTOS = "Se espera una lista de textos."
+
+
+class TiposEstrictos:
+    # Sin docstring por lo mismo que `EstructuraEstricta`.
+    #
+    # DRF convierte lo que puede: acepta `"5"` como id o entero, `123` como
+    # texto y `"true"`, `1` o `"yes"` como booleano. Para quien integra eso
+    # esconde errores —un id que viaja como texto suele ser un código mal
+    # puesto—, así que aquí cada valor tiene que llegar con su tipo JSON. Los
+    # errores de tipo se responden solos, antes que los de datos. El nulo no se
+    # mira: si se admite o no lo dice `allow_null`, en la validación de DRF.
+
+    def to_internal_value(self, data):
+        errores = self.errores_de_tipo(data)
+        if errores:
+            raise serializers.ValidationError(errores)
+        return super().to_internal_value(data)
+
+    def errores_de_tipo(self, data):
+        """Los campos de ``data`` cuyo valor no tiene el tipo JSON esperado."""
+        if not isinstance(data, Mapping):
+            return {}
+        errores = {}
+        for clave, valor in data.items():
+            campo = self.fields.get(clave)
+            if campo is None or campo.read_only or valor is None:
+                continue
+            mensaje = _error_de_tipo(campo, valor)
+            if mensaje:
+                errores[clave] = [ErrorDetail(mensaje, CODIGO_TIPO_INVALIDO)]
+        return errores
+
+
+def _tipo_esperado(campo):
+    """El tipo de Python que corresponde al JSON que espera ``campo``, o None."""
+    # El orden importa: `BooleanField` va antes que nada y `ChoiceField` decide
+    # por sus claves (los ambientes son enteros; otras listas, textos).
+    if isinstance(campo, serializers.BooleanField):
+        return bool
+    if isinstance(campo, serializers.ChoiceField):
+        claves = list(campo.choices)
+        if claves and all(_es_entero(c) for c in claves):
+            return int
+        return str
+    if isinstance(campo, (serializers.IntegerField, serializers.PrimaryKeyRelatedField)):
+        return int
+    if isinstance(campo, (serializers.CharField, serializers.SlugRelatedField)):
+        return str
+    return None
+
+
+def _es_entero(valor):
+    # `True` es un `int` para Python, pero no un entero en JSON.
+    return isinstance(valor, int) and not isinstance(valor, bool)
+
+
+def _tiene_tipo(valor, tipo):
+    return _es_entero(valor) if tipo is int else isinstance(valor, tipo)
+
+
+def _error_de_tipo(campo, valor):
+    """El mensaje si ``valor`` no tiene el tipo que espera ``campo``, o None."""
+    if isinstance(campo, serializers.ManyRelatedField):
+        if not isinstance(valor, list):
+            return MENSAJES_TIPO[list]
+        tipo = _tipo_esperado(campo.child_relation)
+        if tipo is not None and not all(_tiene_tipo(v, tipo) for v in valor):
+            return MENSAJE_LISTA_DE_ENTEROS if tipo is int else MENSAJE_LISTA_DE_TEXTOS
+        return None
+    tipo = _tipo_esperado(campo)
+    if tipo is not None and not _tiene_tipo(valor, tipo):
+        return MENSAJES_TIPO[tipo]
+    return None
+
+
 class RelacionMemorizada(serializers.PrimaryKeyRelatedField):
     """Relación por id que no repite la búsqueda de un id que ya encontró.
 

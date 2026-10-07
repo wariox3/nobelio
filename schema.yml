@@ -175,7 +175,7 @@ paths:
         | Ruta | Campo | Se envía |
         |---|---|---|
         | `/api/documentos/documento/` | `adquiriente.departamento` | `id` |
-        | `/api/emisores/emisor/` | `departamento` | `codigo` |
+        | `/api/emisores/emisor/` | `departamento` | `id` |
         | `/api/nomina/empleado/` | `departamento` | `id` |
         | `/api/nomina/nomina/` | `empleado.departamento` | `id` |
         | `/api/nomina/nomina/` | `lugar_trabajo_departamento` | `id` |
@@ -225,7 +225,7 @@ paths:
         | Ruta | Campo | Se envía |
         |---|---|---|
         | `/api/documentos/documento/` | `adquiriente.departamento` | `id` |
-        | `/api/emisores/emisor/` | `departamento` | `codigo` |
+        | `/api/emisores/emisor/` | `departamento` | `id` |
         | `/api/nomina/empleado/` | `departamento` | `id` |
         | `/api/nomina/nomina/` | `empleado.departamento` | `id` |
         | `/api/nomina/nomina/` | `lugar_trabajo_departamento` | `id` |
@@ -276,7 +276,7 @@ paths:
         | Ruta | Campo | Se envía |
         |---|---|---|
         | `/api/documentos/documento/` | `adquiriente.departamento` | `id` |
-        | `/api/emisores/emisor/` | `departamento` | `codigo` |
+        | `/api/emisores/emisor/` | `departamento` | `id` |
         | `/api/nomina/empleado/` | `departamento` | `id` |
         | `/api/nomina/nomina/` | `empleado.departamento` | `id` |
         | `/api/nomina/nomina/` | `lugar_trabajo_departamento` | `id` |
@@ -865,7 +865,7 @@ paths:
         | Ruta | Campo | Se envía |
         |---|---|---|
         | `/api/documentos/documento/` | `adquiriente.municipio` | `id` |
-        | `/api/emisores/emisor/` | `municipio` | `codigo` |
+        | `/api/emisores/emisor/` | `municipio` | `id` |
         | `/api/nomina/empleado/` | `municipio` | `id` |
         | `/api/nomina/nomina/` | `empleado.municipio` | `id` |
         | `/api/nomina/nomina/` | `lugar_trabajo_municipio` | `id` |
@@ -915,7 +915,7 @@ paths:
         | Ruta | Campo | Se envía |
         |---|---|---|
         | `/api/documentos/documento/` | `adquiriente.municipio` | `id` |
-        | `/api/emisores/emisor/` | `municipio` | `codigo` |
+        | `/api/emisores/emisor/` | `municipio` | `id` |
         | `/api/nomina/empleado/` | `municipio` | `id` |
         | `/api/nomina/nomina/` | `empleado.municipio` | `id` |
         | `/api/nomina/nomina/` | `lugar_trabajo_municipio` | `id` |
@@ -966,7 +966,7 @@ paths:
         | Ruta | Campo | Se envía |
         |---|---|---|
         | `/api/documentos/documento/` | `adquiriente.municipio` | `id` |
-        | `/api/emisores/emisor/` | `municipio` | `codigo` |
+        | `/api/emisores/emisor/` | `municipio` | `id` |
         | `/api/nomina/empleado/` | `municipio` | `id` |
         | `/api/nomina/nomina/` | `empleado.municipio` | `id` |
         | `/api/nomina/nomina/` | `lugar_trabajo_municipio` | `id` |
@@ -1012,7 +1012,7 @@ paths:
         | Ruta | Campo | Se envía |
         |---|---|---|
         | `/api/documentos/documento/` | `adquiriente.pais` | `id` |
-        | `/api/emisores/emisor/` | `pais` | `codigo` |
+        | `/api/emisores/emisor/` | `pais` | `id` |
         | `/api/nomina/empleado/` | `pais` | `id` |
         | `/api/nomina/nomina/` | `empleado.pais` | `id` |
         | `/api/nomina/nomina/` | `lugar_trabajo_pais` | `id` |
@@ -1062,7 +1062,7 @@ paths:
         | Ruta | Campo | Se envía |
         |---|---|---|
         | `/api/documentos/documento/` | `adquiriente.pais` | `id` |
-        | `/api/emisores/emisor/` | `pais` | `codigo` |
+        | `/api/emisores/emisor/` | `pais` | `id` |
         | `/api/nomina/empleado/` | `pais` | `id` |
         | `/api/nomina/nomina/` | `empleado.pais` | `id` |
         | `/api/nomina/nomina/` | `lugar_trabajo_pais` | `id` |
@@ -1113,7 +1113,7 @@ paths:
         | Ruta | Campo | Se envía |
         |---|---|---|
         | `/api/documentos/documento/` | `adquiriente.pais` | `id` |
-        | `/api/emisores/emisor/` | `pais` | `codigo` |
+        | `/api/emisores/emisor/` | `pais` | `id` |
         | `/api/nomina/empleado/` | `pais` | `id` |
         | `/api/nomina/nomina/` | `empleado.pais` | `id` |
         | `/api/nomina/nomina/` | `lugar_trabajo_pais` | `id` |
@@ -3633,6 +3633,302 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '400':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/emisores/cuenta/:
+    get:
+      operationId: emisores_cuenta_list
+      description: |-
+        CRUD de cuentas. Solo staff: las cuentas son de toda la plataforma y
+        listarlas revelaría qué integraciones la usan.
+
+        Una cuenta con emisores no se puede borrar (400): hay que sacarlos antes.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un número de página dentro del conjunto de resultados paginado.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - emisores
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCuentaList'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: emisores_cuenta_create
+      description: |-
+        CRUD de cuentas. Solo staff: las cuentas son de toda la plataforma y
+        listarlas revelaría qué integraciones la usan.
+
+        Una cuenta con emisores no se puede borrar (400): hay que sacarlos antes.
+      tags:
+      - emisores
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CuentaRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CuentaRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CuentaRequest'
+        required: true
+      security:
+      - LlaveApi: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cuenta'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/emisores/cuenta/{id}/:
+    get:
+      operationId: emisores_cuenta_retrieve
+      description: |-
+        CRUD de cuentas. Solo staff: las cuentas son de toda la plataforma y
+        listarlas revelaría qué integraciones la usan.
+
+        Una cuenta con emisores no se puede borrar (400): hay que sacarlos antes.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este cuenta.
+        required: true
+      tags:
+      - emisores
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cuenta'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      operationId: emisores_cuenta_update
+      description: |-
+        CRUD de cuentas. Solo staff: las cuentas son de toda la plataforma y
+        listarlas revelaría qué integraciones la usan.
+
+        Una cuenta con emisores no se puede borrar (400): hay que sacarlos antes.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este cuenta.
+        required: true
+      tags:
+      - emisores
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CuentaRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CuentaRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CuentaRequest'
+        required: true
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cuenta'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      operationId: emisores_cuenta_partial_update
+      description: |-
+        CRUD de cuentas. Solo staff: las cuentas son de toda la plataforma y
+        listarlas revelaría qué integraciones la usan.
+
+        Una cuenta con emisores no se puede borrar (400): hay que sacarlos antes.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este cuenta.
+        required: true
+      tags:
+      - emisores
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCuentaRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedCuentaRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedCuentaRequest'
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cuenta'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: emisores_cuenta_destroy
+      description: |-
+        CRUD de cuentas. Solo staff: las cuentas son de toda la plataforma y
+        listarlas revelaría qué integraciones la usan.
+
+        Una cuenta con emisores no se puede borrar (400): hay que sacarlos antes.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este cuenta.
+        required: true
+      tags:
+      - emisores
+      security:
+      - LlaveApi: []
+      responses:
+        '204':
+          description: No response body
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
           description: Error
           content:
             application/json:
@@ -7529,6 +7825,27 @@ components:
         * `error` - Error
         * `empresa_desconocida` - Empresa desconocida
         * `confirmacion_reenvio` - Confirmación de reenvío
+    Cuenta:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        nombre:
+          type: string
+          maxLength: 150
+      required:
+      - id
+      - nombre
+    CuentaRequest:
+      type: object
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+          maxLength: 150
+      required:
+      - nombre
     Documento:
       type: object
       description: Serializer de lectura del documento, con detalles anidados.
@@ -9278,6 +9595,9 @@ components:
           type: integer
           readOnly: true
           description: Usuario dueño del emisor.
+        cuenta:
+          type: integer
+          nullable: true
         razon_social:
           type: string
           title: Razón social
@@ -9311,20 +9631,26 @@ components:
             x-catalogo: responsabilidad-fiscal
             x-catalogo-valor: codigo
         pais:
-          type: string
-          title: Código
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           x-catalogo: pais
-          x-catalogo-valor: codigo
+          x-catalogo-valor: id
         departamento:
-          type: string
-          title: Código
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           x-catalogo: departamento
-          x-catalogo-valor: codigo
+          x-catalogo-valor: id
         municipio:
-          type: string
-          title: Código
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           x-catalogo: municipio
-          x-catalogo-valor: codigo
+          x-catalogo-valor: id
         direccion:
           type: string
           title: Dirección
@@ -9345,13 +9671,10 @@ components:
           title: Teléfono
           maxLength: 50
         correo:
+          type: string
+          format: email
           title: Correo electrónico
-          oneOf:
-          - type: string
-            format: email
-            maxLength: 254
-          - type: string
-            maxLength: 0
+          maxLength: 254
         activo:
           type: boolean
         referencia_externa:
@@ -9426,6 +9749,7 @@ components:
       required:
       - certificado_activo
       - certificado_vence
+      - correo
       - departamento
       - direccion
       - habilitado_documento_equivalente
@@ -9456,6 +9780,9 @@ components:
           type: integer
           readOnly: true
           description: Usuario dueño del emisor.
+        cuenta:
+          type: integer
+          nullable: true
         razon_social:
           type: string
           title: Razón social
@@ -9508,13 +9835,10 @@ components:
           title: Teléfono
           maxLength: 50
         correo:
+          type: string
+          format: email
           title: Correo electrónico
-          oneOf:
-          - type: string
-            format: email
-            maxLength: 254
-          - type: string
-            maxLength: 0
+          maxLength: 254
         activo:
           type: boolean
         referencia_externa:
@@ -9593,6 +9917,7 @@ components:
       required:
       - certificado_activo
       - certificado_vence
+      - correo
       - direccion
       - habilitado_documento_equivalente
       - habilitado_facturacion
@@ -9609,6 +9934,9 @@ components:
     EmisorRequest:
       type: object
       properties:
+        cuenta:
+          type: integer
+          nullable: true
         razon_social:
           type: string
           minLength: 1
@@ -9645,23 +9973,26 @@ components:
             x-catalogo: responsabilidad-fiscal
             x-catalogo-valor: codigo
         pais:
-          type: string
-          minLength: 1
-          title: Código
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           x-catalogo: pais
-          x-catalogo-valor: codigo
+          x-catalogo-valor: id
         departamento:
-          type: string
-          minLength: 1
-          title: Código
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           x-catalogo: departamento
-          x-catalogo-valor: codigo
+          x-catalogo-valor: id
         municipio:
-          type: string
-          minLength: 1
-          title: Código
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           x-catalogo: municipio
-          x-catalogo-valor: codigo
+          x-catalogo-valor: id
         direccion:
           type: string
           minLength: 1
@@ -9683,13 +10014,11 @@ components:
           title: Teléfono
           maxLength: 50
         correo:
+          type: string
+          format: email
+          minLength: 1
           title: Correo electrónico
-          oneOf:
-          - type: string
-            format: email
-            maxLength: 254
-          - type: string
-            maxLength: 0
+          maxLength: 254
         activo:
           type: boolean
         referencia_externa:
@@ -9732,6 +10061,7 @@ components:
           minimum: 0
           maximum: 32767
       required:
+      - correo
       - departamento
       - direccion
       - municipio
@@ -11870,6 +12200,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Correo'
+    PaginatedCuentaList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Cuenta'
     PaginatedDocumentoEventoList:
       type: object
       required:
@@ -12192,9 +12545,19 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Webhook'
+    PatchedCuentaRequest:
+      type: object
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+          maxLength: 150
     PatchedEmisorRequest:
       type: object
       properties:
+        cuenta:
+          type: integer
+          nullable: true
         razon_social:
           type: string
           minLength: 1
@@ -12231,23 +12594,26 @@ components:
             x-catalogo: responsabilidad-fiscal
             x-catalogo-valor: codigo
         pais:
-          type: string
-          minLength: 1
-          title: Código
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           x-catalogo: pais
-          x-catalogo-valor: codigo
+          x-catalogo-valor: id
         departamento:
-          type: string
-          minLength: 1
-          title: Código
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           x-catalogo: departamento
-          x-catalogo-valor: codigo
+          x-catalogo-valor: id
         municipio:
-          type: string
-          minLength: 1
-          title: Código
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           x-catalogo: municipio
-          x-catalogo-valor: codigo
+          x-catalogo-valor: id
         direccion:
           type: string
           minLength: 1
@@ -12269,13 +12635,11 @@ components:
           title: Teléfono
           maxLength: 50
         correo:
+          type: string
+          format: email
+          minLength: 1
           title: Correo electrónico
-          oneOf:
-          - type: string
-            format: email
-            maxLength: 254
-          - type: string
-            maxLength: 0
+          maxLength: 254
         activo:
           type: boolean
         referencia_externa:

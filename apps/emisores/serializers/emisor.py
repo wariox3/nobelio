@@ -1,14 +1,17 @@
 """Serializer del emisor."""
 from rest_framework import serializers
 
+from apps.catalogos.memoria import RelacionDeCatalogo
 from apps.catalogos.models import (
     Departamento,
     Municipio,
     Pais,
     ResponsabilidadFiscal,
 )
+from apps.catalogos.models.municipio import mensaje_municipio_de_otro_departamento
 from apps.emisores.models import Emisor, ambiente_por_defecto
 from apps.nucleo.models import Ambiente
+from apps.nucleo.serializers import TiposEstrictos
 
 from .resolucion import ResolucionSerializer
 
@@ -16,11 +19,9 @@ from .resolucion import ResolucionSerializer
 class CodigoDeCatalogo(serializers.SlugRelatedField):
     """Campo de catálogo que entra y sale por su ``codigo``, no por el ``id``.
 
-    El id es un serial de la base y no significa nada fuera de ella: el mismo
-    municipio tiene distinto id en desarrollo y en producción, según en qué
-    orden se cargaron las listas. El código sí es estable y es el que el ERP
-    conoce —ISO 3166 para el país, DANE para departamento (2 dígitos) y
-    municipio (5)—, así que es lo que se recibe y lo que se devuelve.
+    Solo para las responsabilidades fiscales, cuyo código ('O-13', 'R-99-PN')
+    es lo que el ERP conoce y lo que viaja en el XML. El resto de catálogos del
+    emisor van por id, como en el resto de la API.
     """
 
     default_error_messages = {
@@ -59,13 +60,14 @@ MENSAJE_DOCUMENTO_EQUIVALENTE_SIN_HABILITAR = (
 )
 
 
-class EmisorSerializer(serializers.ModelSerializer):
+class EmisorSerializer(TiposEstrictos, serializers.ModelSerializer):
     resoluciones = ResolucionSerializer(many=True, read_only=True)
-    # La ubicación llega por código; el serializer resuelve la fila y guarda su
-    # llave, que es lo que la FK necesita.
-    pais = CodigoDeCatalogo(queryset=Pais.objects.all())
-    departamento = CodigoDeCatalogo(queryset=Departamento.objects.all())
-    municipio = CodigoDeCatalogo(queryset=Municipio.objects.all())
+    # La ubicación entra y sale por el `id` del catálogo, que es fijo en todos
+    # los entornos (columna `id` del `.gc`). `TiposEstrictos` exige que llegue
+    # como entero: un "05001" es un código DANE puesto donde va el id.
+    pais = RelacionDeCatalogo(queryset=Pais.objects.all())
+    departamento = RelacionDeCatalogo(queryset=Departamento.objects.all())
+    municipio = RelacionDeCatalogo(queryset=Municipio.objects.all())
     # Igual que la ubicación: por su código de la lista TipoResponsabilidad
     # ('O-13', 'O-15', 'O-23', 'O-47', 'R-99-PN'), que es lo que viaja en el
     # TaxLevelCode del XML y lo que el ERP conoce. Sin ninguna, el XML sale con
@@ -126,6 +128,15 @@ class EmisorSerializer(serializers.ModelSerializer):
         self.exigir_habilitacion_de_documento_equivalente(
             ambiente_de, valor("habilitado_documento_equivalente"),
         )
+
+        departamento = valor("departamento")
+        municipio = valor("municipio")
+        if departamento and municipio and not municipio.es_de(departamento):
+            raise serializers.ValidationError({
+                "municipio": mensaje_municipio_de_otro_departamento(
+                    municipio, departamento
+                )
+            })
 
         tipo = valor("tipo_identificacion")
         numero = valor("numero_identificacion")
@@ -192,7 +203,7 @@ class EmisorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Emisor
         fields = [
-            "id", "usuario", "razon_social",
+            "id", "usuario", "cuenta", "razon_social",
             "tipo_identificacion", "numero_identificacion", "digito_verificacion",
             "tipo_organizacion", "responsabilidades",
             "pais", "departamento", "municipio", "direccion", "codigo_postal",
@@ -213,6 +224,9 @@ class EmisorSerializer(serializers.ModelSerializer):
         # que hay un .p12 donde no lo hay, y el primer documento que se emita
         # se estrella al ir a firmar.
         read_only_fields = ["usuario", "certificado_activo", "certificado_vence"]
+        # El correo se exige aunque la columna lo admita vacío: los emisores
+        # antiguos pueden no tenerlo, pero uno nuevo no se da de alta sin él.
+        extra_kwargs = {"correo": {"required": True, "allow_blank": False}}
         # Vacío a propósito: desactiva el UniqueTogetherValidator automático de
         # DRF para que la unicidad la explique `validate()` con un mensaje útil.
         validators = []

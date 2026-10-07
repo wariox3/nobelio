@@ -1,4 +1,6 @@
-"""Reglas del alta del emisor: el NIT no se contrasta con el RUES.
+"""Reglas del alta del emisor: RUES, ubicación por id y tipos de datos.
+
+El NIT no se contrasta con el RUES.
 
 El RUES es un registro ajeno y a veces caído: consultarlo al dar de alta ataba
 la creación de emisores a que un tercero respondiera. Queda como consulta
@@ -12,7 +14,10 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.documentos.tests_utils import crear_catalogos_minimos
+from apps.catalogos.models import Departamento
+from apps.catalogos.models.municipio import mensaje_municipio_de_otro_departamento
 from apps.emisores.models import Emisor
+from apps.nucleo.serializers import MENSAJE_LISTA_DE_TEXTOS, MENSAJES_TIPO
 from apps.seguridad.models import Usuario
 from apps.nucleo.tests_utils import errores_por_campo
 
@@ -35,10 +40,11 @@ class AltaSinValidarRuesTests(APITestCase):
             "tipo_identificacion": c["nit"].id,
             "numero_identificacion": "901192048",
             "tipo_organizacion": c["juridica"].id,
-            "pais": c["colombia"].codigo,
-            "departamento": c["antioquia"].codigo,
-            "municipio": c["medellin"].codigo,
+            "pais": c["colombia"].id,
+            "departamento": c["antioquia"].id,
+            "municipio": c["medellin"].id,
             "direccion": "Calle 1 # 2-3",
+            "correo": "facturacion@empresa.co",
         }
         datos.update(extra)
         return datos
@@ -60,9 +66,9 @@ class AltaSinValidarRuesTests(APITestCase):
             Emisor.objects.filter(numero_identificacion="000000000").exists()
         )
 
-    # --- Ubicación por código, no por id ----------------------------------
+    # --- Ubicación por id, no por código ----------------------------------
 
-    def test_la_ubicacion_llega_por_codigo_y_se_guarda_la_fila_correcta(self):
+    def test_la_ubicacion_llega_por_id_y_se_guarda_la_fila_correcta(self):
         resp = self.client.post(URL_EMISORES, self.payload(), format="json")
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
         emisor = Emisor.objects.get(numero_identificacion="901192048")
@@ -70,27 +76,141 @@ class AltaSinValidarRuesTests(APITestCase):
         self.assertEqual(emisor.departamento, self.cat["antioquia"])
         self.assertEqual(emisor.municipio, self.cat["medellin"])
 
-    def test_la_respuesta_devuelve_los_codigos(self):
+    def test_la_respuesta_devuelve_los_ids(self):
         resp = self.client.post(URL_EMISORES, self.payload(), format="json")
-        self.assertEqual(resp.data["pais"], "CO")
-        self.assertEqual(resp.data["departamento"], "05")
-        self.assertEqual(resp.data["municipio"], "05001")
+        self.assertEqual(resp.data["pais"], self.cat["colombia"].id)
+        self.assertEqual(resp.data["departamento"], self.cat["antioquia"].id)
+        self.assertEqual(resp.data["municipio"], self.cat["medellin"].id)
 
-    def test_un_codigo_que_no_esta_en_el_catalogo_se_rechaza(self):
+    def test_la_ubicacion_es_obligatoria(self):
+        for campo in ("pais", "departamento", "municipio"):
+            with self.subTest(campo=campo):
+                datos = self.payload()
+                del datos[campo]
+                resp = self.client.post(URL_EMISORES, datos, format="json")
+                self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn(campo, errores_por_campo(resp))
+
+    def test_un_id_que_no_esta_en_el_catalogo_se_rechaza(self):
         resp = self.client.post(
-            URL_EMISORES, self.payload(municipio="99999"), format="json"
+            URL_EMISORES, self.payload(municipio=999999), format="json"
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("municipio", errores_por_campo(resp))
 
-    def test_mandar_el_id_en_vez_del_codigo_se_rechaza(self):
+    def test_mandar_el_codigo_en_vez_del_id_se_rechaza(self):
+        """Ni el código DANE ni el id como texto: el id va como entero."""
+        for campo, valor in (
+            ("pais", "CO"),
+            ("departamento", "05"),
+            ("municipio", "05001"),
+            ("municipio", str(self.cat["medellin"].id)),
+        ):
+            with self.subTest(campo=campo, valor=valor):
+                resp = self.client.post(
+                    URL_EMISORES, self.payload(**{campo: valor}), format="json"
+                )
+                self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertEqual(
+                    errores_por_campo(resp), {campo: [MENSAJES_TIPO[int]]}
+                )
+
+    def test_el_municipio_tiene_que_ser_del_departamento(self):
+        cundinamarca = Departamento.objects.create(
+            id=11, codigo="25", nombre="Cundinamarca"
+        )
         resp = self.client.post(
-            URL_EMISORES,
-            self.payload(municipio=self.cat["medellin"].id),
-            format="json",
+            URL_EMISORES, self.payload(departamento=cundinamarca.id), format="json"
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("municipio", errores_por_campo(resp))
+        self.assertEqual(errores_por_campo(resp), {
+            "municipio": [
+                mensaje_municipio_de_otro_departamento(self.cat["medellin"], cundinamarca)
+            ],
+        })
+
+    # --- Correo -------------------------------------------------------------
+
+    def test_el_correo_es_obligatorio(self):
+        for datos in (
+            {k: v for k, v in self.payload().items() if k != "correo"},
+            self.payload(correo=""),
+            self.payload(correo=None),
+            self.payload(correo="no-es-un-correo"),
+        ):
+            with self.subTest(correo=datos.get("correo", "<ausente>")):
+                resp = self.client.post(URL_EMISORES, datos, format="json")
+                self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn("correo", errores_por_campo(resp))
+
+    def test_un_emisor_antiguo_sin_correo_se_edita_sin_mandarlo(self):
+        """El PATCH no exige lo que no toca, aunque el emisor no lo tenga."""
+        self.client.post(URL_EMISORES, self.payload(), format="json")
+        Emisor.objects.update(correo="")
+        emisor = Emisor.objects.get()
+        resp = self.client.patch(
+            f"{URL_EMISORES}{emisor.id}/", {"telefono": "6041234567"}, format="json"
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+
+    # --- Tipos de datos -----------------------------------------------------
+
+    def test_cada_campo_exige_su_tipo(self):
+        for campo, valor, tipo in (
+            ("tipo_identificacion", "31", int),
+            ("tipo_identificacion", True, int),
+            ("tipo_organizacion", 1.0, int),
+            ("razon_social", 123, str),
+            ("numero_identificacion", 901192048, str),
+            ("direccion", ["Calle 1"], str),
+            ("activo", "true", bool),
+            ("activo", 1, bool),
+            ("ambiente_facturacion", "2", int),
+        ):
+            with self.subTest(campo=campo, valor=valor):
+                resp = self.client.post(
+                    URL_EMISORES, self.payload(**{campo: valor}), format="json"
+                )
+                self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertEqual(
+                    errores_por_campo(resp), {campo: [MENSAJES_TIPO[tipo]]}
+                )
+
+    def test_las_responsabilidades_son_una_lista_de_codigos(self):
+        for valor, mensaje in (
+            ("O-13", MENSAJES_TIPO[list]),
+            ([13], MENSAJE_LISTA_DE_TEXTOS),
+        ):
+            with self.subTest(valor=valor):
+                resp = self.client.post(
+                    URL_EMISORES, self.payload(responsabilidades=valor),
+                    format="json",
+                )
+                self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertEqual(
+                    errores_por_campo(resp), {"responsabilidades": [mensaje]}
+                )
+
+    def test_se_informan_todos_los_errores_de_tipo_juntos(self):
+        resp = self.client.post(
+            URL_EMISORES, self.payload(pais="CO", razon_social=1), format="json"
+        )
+        self.assertEqual(set(errores_por_campo(resp)), {"pais", "razon_social"})
+
+    def test_el_nulo_lo_decide_allow_null_y_no_el_tipo(self):
+        resp = self.client.post(
+            URL_EMISORES, self.payload(cuenta=None), format="json"
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+    def test_editar_tambien_exige_los_tipos(self):
+        self.client.post(URL_EMISORES, self.payload(), format="json")
+        emisor = Emisor.objects.get(numero_identificacion="901192048")
+        resp = self.client.patch(
+            f"{URL_EMISORES}{emisor.id}/", {"municipio": "05001"}, format="json"
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(errores_por_campo(resp), {"municipio": [MENSAJES_TIPO[int]]})
 
     def test_editar_el_nit_tampoco_consulta_el_rues(self):
         self.client.post(URL_EMISORES, self.payload(), format="json")

@@ -152,7 +152,7 @@ CATALOGOS = (
         "País (`cac:Country`), ISO 3166-1 alfa-2.",
         "Paises", (FACTURA,),
         _id(DOCUMENTO, "adquiriente.pais")
-        + _codigo(EMISOR, "pais")
+        + _id(EMISOR, "pais")
         + _id(EMPLEADO, "pais")
         + _id(NOMINA_RUTA, "empleado.pais", "lugar_trabajo_pais"),
     ),
@@ -163,7 +163,7 @@ CATALOGOS = (
         "el mismo en todos los entornos.",
         "Departamentos", (FACTURA,),
         _id(DOCUMENTO, "adquiriente.departamento")
-        + _codigo(EMISOR, "departamento")
+        + _id(EMISOR, "departamento")
         + _id(EMPLEADO, "departamento")
         + _id(NOMINA_RUTA, "empleado.departamento", "lugar_trabajo_departamento"),
     ),
@@ -175,7 +175,7 @@ CATALOGOS = (
         "municipal, del dataset de 4-72 en datos.gov.co.",
         "Municipio", (FACTURA,),
         _id(DOCUMENTO, "adquiriente.municipio")
-        + _codigo(EMISOR, "municipio")
+        + _id(EMISOR, "municipio")
         + _id(EMPLEADO, "municipio")
         + _id(NOMINA_RUTA, "empleado.municipio", "lugar_trabajo_municipio"),
     ),
