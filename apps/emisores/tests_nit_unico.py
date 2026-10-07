@@ -18,7 +18,7 @@ from rest_framework.test import APITestCase
 from apps.catalogos.models import TipoFactura
 from apps.documentos.tests_utils import crear_catalogos_minimos, crear_usuario
 from apps.emisores.models import Emisor, Resolucion
-from apps.emisores.serializers.emisor import MENSAJE_DUPLICADO
+from apps.emisores.serializers.emisor import CODIGO_DUPLICADO, MENSAJE_DUPLICADO
 from apps.nucleo.api import MENSAJE_GENERICO
 from apps.seguridad.models import Usuario
 from apps.nucleo.tests_utils import errores_por_campo
@@ -102,6 +102,25 @@ class NitUnicoTests(APITestCase):
             [MENSAJE_DUPLICADO.format(numero=NIT)],
         )
         self.assertEqual(resp.data["detail"], MENSAJE_GENERICO)
+
+    def test_el_alta_duplicada_devuelve_el_emisor_id_existente(self):
+        resp = self.client.post(URL_EMISORES, self.payload_emisor(), format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(resp.data["emisor_id"], self.emisor.id)
+        self.assertEqual(resp.data["errores"], [{
+            "codigo": CODIGO_DUPLICADO,
+            "mensaje": "numero_identificacion: "
+            + MENSAJE_DUPLICADO.format(numero=NIT),
+        }])
+
+    def test_otros_errores_no_llevan_emisor_id(self):
+        resp = self.client.post(
+            URL_EMISORES, self.payload_emisor(nit="900123456") | {"correo": ""},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertNotIn("emisor_id", resp.data)
 
     def test_el_mensaje_no_revela_de_quien_es_el_nit(self):
         """Decir quién lo tiene sería filtrar quién usa la plataforma."""

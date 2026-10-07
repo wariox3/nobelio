@@ -3984,13 +3984,10 @@ paths:
     post:
       operationId: emisores_emisor_create
       description: |-
-        Restringe un ``ViewSet`` a los emisores que alcanza el solicitante.
+        El de DRF, salvo que un NIT repetido devuelve el `emisor_id` existente.
 
-        Filtra el queryset en lectura y comprueba el emisor recibido en escritura,
-        de modo que nadie pueda ni ver ni crear datos de un emisor ajeno.
-
-        ``campo_emisor`` es la ruta ORM del modelo hasta el emisor (``"emisor"`` en
-        casi todos; ``"id"`` cuando el propio modelo es el emisor).
+        Así quien integra puede enlazar el emisor que ya está dado de alta en
+        vez de quedarse solo con el mensaje.
       tags:
       - emisores
       requestBody:

@@ -20,6 +20,10 @@ con cada error. Ahora cada error tiene siempre las mismas dos claves.
   (``detalles[0].impuestos[1].tributo: Este campo es obligatorio.``); cuando no,
   el mensaje va solo.
 
+Una excepción con atributo ``datos_extra`` (un dict) suma esas claves al cuerpo,
+junto a ``detail`` y ``errores``; es lo que lleva el ``emisor_id`` del emisor
+duplicado.
+
 La lista nunca va vacía: un 404 o un error de negocio llevan un elemento con su
 código y el mismo texto que ``detail``. Así el cliente decide siempre por
 ``codigo``, venga el fallo de donde venga.
@@ -209,4 +213,10 @@ def exception_handler(exc, context):
         respuesta.data, getattr(exc, "default_code", CODIGO_POR_DEFECTO),
     )
     respuesta.data = {"detail": detail, "errores": errores}
+    # Datos que ayudan a resolver el error (p. ej. el `emisor_id` del emisor que
+    # ya existe), al lado de la forma fija y sin pisarla.
+    extra = getattr(exc, "datos_extra", None) or {}
+    respuesta.data.update(
+        {k: v for k, v in extra.items() if k not in ("detail", "errores")}
+    )
     return respuesta

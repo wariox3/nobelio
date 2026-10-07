@@ -2,7 +2,7 @@
 
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from apps.emisores import models, serializers
@@ -36,6 +36,23 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
                 "responsabilidades"
             ).select_related("municipio")
         return consulta
+
+    def create(self, request, *args, **kwargs):
+        """El de DRF, salvo que un NIT repetido devuelve el `emisor_id` existente.
+
+        Así quien integra puede enlazar el emisor que ya está dado de alta en
+        vez de quedarse solo con el mensaje.
+        """
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            error = ValidationError(serializer.errors)
+            duplicado_id = getattr(serializer, "emisor_duplicado_id", None)
+            if duplicado_id is not None:
+                error.datos_extra = {"emisor_id": duplicado_id}
+            raise error
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def perform_create(self, serializer):
         """El emisor queda a nombre de quien lo da de alta.

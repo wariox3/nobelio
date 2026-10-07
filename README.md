@@ -303,7 +303,18 @@ responsabilidades, `activo`, ambientes…— responde 400 con código
 El **dueño no se envía**: el emisor queda a nombre de quien hace la petición
 (con una API Key, a nombre de la persona dueña de la llave). El NIT es **único
 en toda la plataforma**: si ya está dado de alta, responde 400 en
-`numero_identificacion` sin decir de quién es. El alta no consulta el RUES; lo que se rechaza es repetir un emisor ya
+`numero_identificacion` con código `emisor_duplicado`, sin decir de quién es, y
+con el `emisor_id` del existente al lado de `detail` y `errores`:
+
+```json
+{
+  "detail": "La solicitud no es válida.",
+  "errores": [{"codigo": "emisor_duplicado", "mensaje": "numero_identificacion: El emisor con identificación 900000000 ya está dado de alta."}],
+  "emisor_id": 12
+}
+```
+
+El alta no consulta el RUES; lo que se rechaza es repetir un emisor ya
 dado de alta. Para comprobar un NIT (y autocompletar el
 formulario) está `GET /api/emisores/emisor/validar-nit/?nit=<NIT>`.
 

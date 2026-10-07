@@ -42,6 +42,7 @@ class CodigoDeCatalogo(serializers.SlugRelatedField):
 MENSAJE_DUPLICADO = (
     "El emisor con identificación {numero} ya está dado de alta."
 )
+CODIGO_DUPLICADO = "emisor_duplicado"
 
 # La DIAN rechaza con la regla 92 ("El Emisor del Documento no se encuentra
 # Habilitado"), un mensaje que hace buscar el error dentro de la nómina cuando
@@ -227,16 +228,24 @@ class EmisorSerializer(TiposEstrictos, serializers.ModelSerializer):
 
         Ojo con lo que **no** dice el mensaje: si el NIT lo tiene dado de alta
         otra persona, no se revela quién. Sería filtrar quién usa la plataforma.
+        La respuesta sí lleva el `emisor_id` del existente (ver la vista), que
+        no dice de quién es: si no está en su alcance, no lo puede abrir.
         """
         repetidos = Emisor.objects.filter(
             tipo_identificacion=tipo, numero_identificacion=numero
         )
         if self.instance is not None:
             repetidos = repetidos.exclude(pk=self.instance.pk)
-        if repetidos.exists():
-            raise serializers.ValidationError(
-                {"numero_identificacion": MENSAJE_DUPLICADO.format(numero=numero)}
-            )
+        repetido_id = repetidos.values_list("pk", flat=True).first()
+        if repetido_id is not None:
+            # Para que la vista devuelva su `emisor_id`: DRF rehace el
+            # ValidationError en `is_valid` y lo que colgara de este se pierde.
+            self.emisor_duplicado_id = repetido_id
+            raise serializers.ValidationError({
+                "numero_identificacion": ErrorDetail(
+                    MENSAJE_DUPLICADO.format(numero=numero), CODIGO_DUPLICADO
+                )
+            })
 
     class Meta:
         model = Emisor
