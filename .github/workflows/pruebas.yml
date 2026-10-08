@@ -13,7 +13,9 @@ on:
 
 jobs:
   pruebas:
-    runs-on: ubuntu-latest
+    # Fijo y no `ubuntu-latest`: así la imagen cambia cuando lo decidimos aquí,
+    # no cuando GitHub mueve la etiqueta (a Ubuntu 26 desde el 2026-10-19).
+    runs-on: ubuntu-24.04
 
     services:
       # La suite necesita PostgreSQL de verdad: el proyecto usa restricciones y
@@ -42,9 +44,9 @@ jobs:
       DJANGO_SECRET_KEY: clave-solo-para-ci
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
