@@ -6866,9 +6866,18 @@ paths:
         Filtros: ``?emisor=<id>``, ``?correo=<id>``,
         ``?documento_tipo=factura_venta|nota_credito|nota_debito``,
         ``?proveedor=<NIT sin DV>`` y ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD``
-        sobre la fecha de emisión, ambos inclusive. ``?search=`` busca en número,
-        CUFE, NIT y razón social del proveedor, y ``?ordering=`` ordena por
+        sobre la fecha de emisión, ambos inclusive. ``?ordering=`` ordena por
         ``fecha_emision``, ``numero``, ``total_a_pagar`` o ``creado_en``.
+
+        ``?search=`` busca en cuatro campos, cada uno a su manera:
+
+        - CUFE/CUDE: completo y exacto. Uno parcial no tiene sentido.
+        - NIT del proveedor: por el comienzo (``8001`` encuentra ``800111222``).
+        - Número y razón social: en cualquier parte.
+
+        Es el listado de más consumo de la recepción, así que pagina de 25 en 25
+        por defecto, con ``?page_size=`` hasta 100, y siempre desempata el orden
+        por ``id`` para que ninguna fila se repita ni se pierda entre páginas.
 
         Los archivos se bajan con ``xml/`` (el XML tal como llegó), ``xml-factura/``
         (el documento, sin el AttachedDocument) y ``pdf/``. Son ``Adjunto`` del
@@ -6884,6 +6893,12 @@ paths:
         required: false
         in: query
         description: Un número de página dentro del conjunto de resultados paginado.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Número de resultados a devolver por página.
         schema:
           type: integer
       - name: search
@@ -6926,9 +6941,18 @@ paths:
         Filtros: ``?emisor=<id>``, ``?correo=<id>``,
         ``?documento_tipo=factura_venta|nota_credito|nota_debito``,
         ``?proveedor=<NIT sin DV>`` y ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD``
-        sobre la fecha de emisión, ambos inclusive. ``?search=`` busca en número,
-        CUFE, NIT y razón social del proveedor, y ``?ordering=`` ordena por
+        sobre la fecha de emisión, ambos inclusive. ``?ordering=`` ordena por
         ``fecha_emision``, ``numero``, ``total_a_pagar`` o ``creado_en``.
+
+        ``?search=`` busca en cuatro campos, cada uno a su manera:
+
+        - CUFE/CUDE: completo y exacto. Uno parcial no tiene sentido.
+        - NIT del proveedor: por el comienzo (``8001`` encuentra ``800111222``).
+        - Número y razón social: en cualquier parte.
+
+        Es el listado de más consumo de la recepción, así que pagina de 25 en 25
+        por defecto, con ``?page_size=`` hasta 100, y siempre desempata el orden
+        por ``id`` para que ninguna fila se repita ni se pierda entre páginas.
 
         Los archivos se bajan con ``xml/`` (el XML tal como llegó), ``xml-factura/``
         (el documento, sin el AttachedDocument) y ``pdf/``. Son ``Adjunto`` del

@@ -77,6 +77,11 @@ Lo que hay que pedirle a quien administre la base:
   restricciones sobre el esquema; no basta con lectura y escritura sobre tablas
   ya hechas. También es quien crea la tabla `cache_general` del paso 5.
 - **Alcance del rol**: dueño de esa base y de nada más. Nada de superusuario.
+- La **extensión `pg_trgm`**, que necesitan los índices de búsqueda de la
+  recepción. La crea la migración `recepcion.0003` con `CREATE EXTENSION IF
+  NOT EXISTS`. Desde PostgreSQL 13 es *trusted*, así que el dueño de la base la
+  puede crear sin ser superusuario. Si el servicio la restringe, hay que
+  pedirla instalada antes de migrar.
 - El **host, puerto, nombre y credenciales**, y si el servicio exige TLS.
 
 No hace falta pedir `client_encoding` ni `timezone` en el rol, aunque la versión

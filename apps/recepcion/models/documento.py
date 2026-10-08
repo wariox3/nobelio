@@ -76,8 +76,10 @@ class Documento(ModeloUUID, ModeloConFechas):
     )
     # El emisor que lo recibe: el del NIT receptor del XML, que puede no ser el
     # del buzón al que llegó el correo.
+    # Sin índice propio: lo cubre `rec_doc_emisor_recientes`, que empieza por
+    # el emisor. Uno más solo encarecería cada inserción.
     emisor = models.ForeignKey(
-        "emisores.Emisor", on_delete=models.PROTECT,
+        "emisores.Emisor", on_delete=models.PROTECT, db_index=False,
         related_name="documentos_recibidos", verbose_name="emisor",
     )
     # PROTECT: un correo con documentos no se elimina (el DELETE de la API

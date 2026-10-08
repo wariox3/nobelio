@@ -152,8 +152,21 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
   `AlcanceEmisorMixin`. `basename` propio (`documento-recibido`) para no chocar
   con `documento-detail` de la emisión.
   - Filtros: `?emisor`, `?correo`, `?documento_tipo`, `?proveedor` (NIT sin DV)
-    y `?desde`/`?hasta` sobre `fecha_emision`. `?search=` en número, CUFE, NIT
-    y razón social del proveedor; `?ordering=fecha_emision|numero|total_a_pagar|creado_en`.
+    y `?desde`/`?hasta` sobre `fecha_emision`.
+    `?ordering=fecha_emision|numero|total_a_pagar|creado_en`.
+  - `?search=`: CUFE/CUDE completo y exacto, NIT del proveedor por el
+    comienzo, y número y razón social en cualquier parte.
+  - Paginación (2026-10-08, es el listado de más consumo): 25 por defecto,
+    `?page_size=` hasta 100 (`PaginacionAjustable`). El orden siempre
+    desempata por `id` (`OrdenEstable`), así que con OFFSET ninguna fila se
+    repite ni se pierde entre páginas.
+  - Índices: `(emisor, -fecha_emision, -creado_en, -id)` cubre la bandeja en
+    orden y sin ordenar aparte. La búsqueda va con `UPPER(cufe_cude)` y con
+    trigramas (`pg_trgm`, GIN) sobre `UPPER()` de NIT, número y razón social.
+    `tiene_pdf` y `tiene_xml_factura` salen con `EXISTS` en la misma consulta,
+    sin cargar los adjuntos.
+  - Recomendación para el front: mandar siempre `emisor` y un rango de fechas
+    por defecto (el mes en curso).
   - Descargas: `xml/` (como llegó), `xml-factura/` (el documento sin el
     AttachedDocument; si llegó suelto, el mismo de `xml/`) y `pdf/` (400 si el
     proveedor no lo mandó). `tiene_pdf` y `tiene_xml_factura` lo anticipan.
