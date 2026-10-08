@@ -13,9 +13,13 @@ trae (``extraccion``), con todos sus archivos como ``Adjunto``:
 
 ``reprocesar`` vuelve a pasar por aquí un correo que se quedó en el camino: lo
 usa el comando ``reprocesar_correos``.
+
+``cargar`` registra un ZIP o XML que un usuario sube a mano: la misma
+extracción y el mismo guardado, pero en el request y para un emisor fijo.
 """
 import logging
 import re
+from dataclasses import dataclass, field
 from datetime import timedelta
 from email import policy
 from email.parser import BytesParser
@@ -29,9 +33,11 @@ from django.utils import timezone
 from apps.catalogos.models import Moneda
 from apps.documentos.models import DocumentoTipo
 from apps.emisores.models import Emisor
+from apps.nucleo.colas import encolar
 from apps.nucleo.registro import campos
 from apps.recepcion import adjuntos, extraccion, r2
 from apps.recepcion.models import Adjunto, Correo, Documento
+from apps.recepcion.tareas import verificar_documento
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +66,37 @@ class ErrorTransitorio(Exception):
 
 class ErrorPermanente(Exception):
     """Un fallo que no se arregla reintentando: el correo queda en ``error``."""
+
+
+class CargaInvalida(Exception):
+    """El archivo cargado no trae nada que registrar. El mensaje es para el
+    usuario."""
+
+
+@dataclass
+class Rechazo:
+    datos: object
+    motivo: str
+
+
+@dataclass
+class Resultado:
+    """Qué pasó con cada documento de una entrada."""
+
+    creados: list = field(default_factory=list)
+    # El documento que ya existía, o `None` si no es del emisor de la carga.
+    repetidos: list = field(default_factory=list)
+    # Los de un receptor que no es ningún emisor (correo) o que no es el
+    # emisor elegido (carga).
+    rechazados: list = field(default_factory=list)
+
+
+class _SinNuevos(Exception):
+    """Deshace una carga que no creó nada: no se guarda ni la fila ni sus
+    adjuntos."""
+
+    def __init__(self, resultado):
+        self.resultado = resultado
 
 
 def procesar(correo_id):
@@ -192,51 +229,70 @@ def _registrar_documentos(correo, mensaje):
     subidos = []
     try:
         with transaction.atomic():
-            conteo = _guardar_todo(correo, extraido, subidos)
+            resultado = _guardar_todo(correo, extraido, subidos)
     except (BotoCoreError, ClientError) as error:
         adjuntos.borrar_subidos(subidos)
         raise ErrorTransitorio(f"No se pudieron guardar los adjuntos en B2: {error}.")
     except Exception:
         adjuntos.borrar_subidos(subidos)
         raise
-    nuevos, repetidos, desconocidos = conteo
     if not extraido.documentos:
         correo.estado = Correo.Estado.SIN_DOCUMENTOS
-    elif nuevos or repetidos:
+    elif resultado.creados or resultado.repetidos:
         correo.estado = Correo.Estado.PROCESADO
     else:
         correo.estado = Correo.Estado.EMPRESA_DESCONOCIDA
     logger.info("recepcion.documentos %s", campos(
-        correo=correo.pk, nuevos=nuevos, repetidos=repetidos,
-        desconocidos=desconocidos, adjuntos=len(extraido.archivos),
+        correo=correo.pk, nuevos=len(resultado.creados),
+        repetidos=len(resultado.repetidos), desconocidos=len(resultado.rechazados),
+        adjuntos=len(extraido.archivos),
     ))
 
 
-def _guardar_todo(correo, extraido, subidos):
+def _guardar_todo(correo, extraido, subidos, emisor_fijo=None):
     """Crea los documentos nuevos y un ``Adjunto`` por cada archivo del correo.
 
     Los archivos de un documento nuevo quedan con su rol (``xml``, ``pdf``) y
     el documento; los demás —también los de un documento repetido o de un
     receptor desconocido— como ``otro``.
+
+    Con ``emisor_fijo`` (una carga) cada documento tiene que ser de ese emisor:
+    no se busca el emisor por el NIT receptor, porque quien sube el archivo
+    solo puede registrar documentos de los emisores que alcanza.
     """
-    nuevos = repetidos = desconocidos = 0
+    resultado = Resultado()
     roles = {}  # id(archivo) -> (rol, documento)
     for datos in extraido.documentos:
-        emisor = Emisor.objects.filter(
-            numero_identificacion=datos.receptor_numero_identificacion,
-        ).first()
-        if emisor is None:
-            desconocidos += 1
-            continue
+        receptor = datos.receptor_numero_identificacion
+        if emisor_fijo is not None:
+            if receptor != emisor_fijo.numero_identificacion:
+                resultado.rechazados.append(Rechazo(datos, (
+                    f"El receptor del documento (NIT {receptor}) no es el "
+                    f"emisor seleccionado (NIT {emisor_fijo.numero_identificacion})."
+                )))
+                continue
+            emisor = emisor_fijo
+        else:
+            emisor = Emisor.objects.filter(numero_identificacion=receptor).first()
+            if emisor is None:
+                resultado.rechazados.append(Rechazo(
+                    datos, f"El NIT receptor {receptor} no es de ningún emisor.",
+                ))
+                continue
         if correo.emisor_id is None:
             # Llegó a un buzón que no es un NIT registrado, pero el XML dice
             # de quién es.
             correo.emisor = emisor
         documento = _crear_documento(datos, emisor, correo)
         if documento is None:
-            repetidos += 1
+            resultado.repetidos.append(Documento.objects.filter(
+                cufe_cude=datos.cufe_cude, emisor=emisor,
+            ).first())
             continue
-        nuevos += 1
+        resultado.creados.append(documento)
+        # Al confirmar la transacción: si la carga se deshace, no se verifica
+        # un documento que ya no existe.
+        encolar(verificar_documento, str(documento.pk))
         roles[id(datos.xml)] = (Adjunto.Rol.XML, documento)
         if datos.pdf is not None:
             roles[id(datos.pdf)] = (Adjunto.Rol.PDF, documento)
@@ -251,7 +307,60 @@ def _guardar_todo(correo, extraido, subidos):
             correo, archivo.contenido, nombre=archivo.nombre, rol=rol,
             documento=documento, subidos=subidos,
         )
-    return nuevos, repetidos, desconocidos
+    return resultado
+
+
+def cargar(emisor, usuario, nombre, contenido):
+    """Registra los documentos de un ZIP o XML que un usuario subió a mano.
+
+    Todo en el request, con las reglas del correo salvo una: los documentos
+    tienen que ser de ``emisor`` (el NIT receptor del XML) y los de otro se
+    rechazan. Devuelve el ``Resultado``.
+
+    La carga (una fila de ``Correo`` con ``origen = carga``) y sus adjuntos
+    solo se guardan si se creó al menos un documento. Si todo estaba repetido
+    no se guarda nada y se devuelve igual, para que quien sube vea cuáles
+    eran. Lanza ``CargaInvalida`` si el archivo no trae ningún documento o
+    todos son de otro receptor, y deja subir los errores de B2.
+    """
+    try:
+        extraido = extraccion.extraer_archivo(nombre, contenido)
+    except extraccion.ContenidoExcesivo as error:
+        raise CargaInvalida(str(error))
+    if not extraido.documentos:
+        raise CargaInvalida(
+            "El archivo no trae ninguna factura ni nota electrónica: no se "
+            "encontró un XML de la DIAN que se pudiera leer."
+        )
+    subidos = []
+    try:
+        with transaction.atomic():
+            carga = Correo.objects.create(
+                origen=Correo.Origen.CARGA,
+                usuario=usuario,
+                emisor=emisor,
+                alias=emisor.numero_identificacion,
+                asunto=adjuntos.nombre_seguro(nombre),
+                estado=Correo.Estado.PROCESADO,
+            )
+            resultado = _guardar_todo(carga, extraido, subidos, emisor_fijo=emisor)
+            if not resultado.creados:
+                raise _SinNuevos(resultado)
+    except _SinNuevos as sin_nuevos:
+        adjuntos.borrar_subidos(subidos)
+        resultado = sin_nuevos.resultado
+        if not resultado.repetidos:
+            raise CargaInvalida(" ".join(r.motivo for r in resultado.rechazados))
+        return resultado
+    except Exception:
+        adjuntos.borrar_subidos(subidos)
+        raise
+    logger.info("recepcion.carga %s", campos(
+        carga=carga.pk, emisor=emisor.pk, usuario=getattr(usuario, "pk", None),
+        nuevos=len(resultado.creados), repetidos=len(resultado.repetidos),
+        rechazados=len(resultado.rechazados),
+    ))
+    return resultado
 
 
 def _crear_documento(datos, emisor, correo):
@@ -275,6 +384,7 @@ def _crear_documento(datos, emisor, correo):
                 total_a_pagar=datos.total_a_pagar,
                 validacion_codigo=datos.validacion_codigo,
                 fecha_validacion=datos.fecha_validacion,
+                ambiente=datos.ambiente,
                 documento_tipo=DocumentoTipo.objects.get(codigo=datos.tipo),
                 moneda=(
                     Moneda.objects.filter(codigo=datos.moneda).first() if datos.moneda else None

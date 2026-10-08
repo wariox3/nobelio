@@ -9,6 +9,7 @@ CUFE = "a" * 96
 def xml_documento(
     raiz="Invoice", *, numero="FE-100", cufe=CUFE, tipo="01", nit_proveedor="800123456",
     nit_receptor="901192048", fecha="2026-10-01", totales="LegalMonetaryTotal",
+    ambiente=None,
 ):
     codigo = {"Invoice": "InvoiceTypeCode", "CreditNote": "CreditNoteTypeCode",
               "DebitNote": "DebitNoteTypeCode"}[raiz]
@@ -16,6 +17,7 @@ def xml_documento(
 <{raiz} xmlns="urn:oasis:names:specification:ubl:schema:xsd:{raiz}-2"
     xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
     xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  {f"<cbc:ProfileExecutionID>{ambiente}</cbc:ProfileExecutionID>" if ambiente else ""}
   <cbc:ID>{numero}</cbc:ID>
   <cbc:UUID schemeName="CUFE-SHA384">{cufe}</cbc:UUID>
   <cbc:IssueDate>{fecha}</cbc:IssueDate>

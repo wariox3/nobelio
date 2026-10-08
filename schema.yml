@@ -6581,7 +6581,11 @@ paths:
         Un correo cuyo alias no es el NIT de ningún emisor no tiene emisor, así que
         fuera del staff (o de una llave de alcance global) no lo ve nadie.
 
-        Filtros: ``?emisor=<id>``, ``?estado=pendiente|procesado|...`` y
+        También lista las cargas manuales (``origen = carga``), las de
+        ``POST /api/recepcion/documento/cargar/``.
+
+        Filtros: ``?emisor=<id>``, ``?estado=pendiente|procesado|...``,
+        ``?origen=correo|carga`` y
         ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD`` sobre ``recibido_en``, ambos
         inclusive. ``?search=`` busca en remitente, asunto y Message-ID, y
         ``?ordering=`` ordena por ``recibido_en`` o ``estado``.
@@ -6642,7 +6646,11 @@ paths:
         Un correo cuyo alias no es el NIT de ningún emisor no tiene emisor, así que
         fuera del staff (o de una llave de alcance global) no lo ve nadie.
 
-        Filtros: ``?emisor=<id>``, ``?estado=pendiente|procesado|...`` y
+        También lista las cargas manuales (``origen = carga``), las de
+        ``POST /api/recepcion/documento/cargar/``.
+
+        Filtros: ``?emisor=<id>``, ``?estado=pendiente|procesado|...``,
+        ``?origen=correo|carga`` y
         ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD`` sobre ``recibido_en``, ambos
         inclusive. ``?search=`` busca en remitente, asunto y Message-ID, y
         ``?ordering=`` ordena por ``recibido_en`` o ``estado``.
@@ -6865,8 +6873,9 @@ paths:
 
         Filtros: ``?emisor=<id>``, ``?correo=<id>``,
         ``?documento_tipo=factura_venta|nota_credito|nota_debito``,
-        ``?proveedor=<NIT sin DV>`` y ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD``
-        sobre la fecha de emisión, ambos inclusive. ``?ordering=`` ordena por
+        ``?proveedor=<NIT sin DV>``, ``?verificacion_estado=valido|invalido|...``
+        y ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD`` sobre la fecha de
+        emisión, ambos inclusive. ``?ordering=`` ordena por
         ``fecha_emision``, ``numero``, ``total_a_pagar`` o ``creado_en``.
 
         ``?search=`` busca en cuatro campos, cada uno a su manera:
@@ -6878,6 +6887,13 @@ paths:
         Es el listado de más consumo de la recepción, así que pagina de 25 en 25
         por defecto, con ``?page_size=`` hasta 100, y siempre desempata el orden
         por ``id`` para que ninguna fila se repita ni se pierda entre páginas.
+
+        ``POST cargar/`` registra los documentos de un ZIP o XML subido a mano,
+        para quien no quiere recibirlos por correo.
+
+        Cada documento nuevo se verifica solo contra la DIAN (``GetStatus`` por su
+        CUFE, en segundo plano): ``verificacion_estado`` dice si la DIAN lo tiene
+        como válido. ``POST {id}/verificar/`` repite la consulta en el momento.
 
         Los archivos se bajan con ``xml/`` (el XML tal como llegó), ``xml-factura/``
         (el documento, sin el AttachedDocument) y ``pdf/``. Son ``Adjunto`` del
@@ -6940,8 +6956,9 @@ paths:
 
         Filtros: ``?emisor=<id>``, ``?correo=<id>``,
         ``?documento_tipo=factura_venta|nota_credito|nota_debito``,
-        ``?proveedor=<NIT sin DV>`` y ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD``
-        sobre la fecha de emisión, ambos inclusive. ``?ordering=`` ordena por
+        ``?proveedor=<NIT sin DV>``, ``?verificacion_estado=valido|invalido|...``
+        y ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD`` sobre la fecha de
+        emisión, ambos inclusive. ``?ordering=`` ordena por
         ``fecha_emision``, ``numero``, ``total_a_pagar`` o ``creado_en``.
 
         ``?search=`` busca en cuatro campos, cada uno a su manera:
@@ -6953,6 +6970,13 @@ paths:
         Es el listado de más consumo de la recepción, así que pagina de 25 en 25
         por defecto, con ``?page_size=`` hasta 100, y siempre desempata el orden
         por ``id`` para que ninguna fila se repita ni se pierda entre páginas.
+
+        ``POST cargar/`` registra los documentos de un ZIP o XML subido a mano,
+        para quien no quiere recibirlos por correo.
+
+        Cada documento nuevo se verifica solo contra la DIAN (``GetStatus`` por su
+        CUFE, en segundo plano): ``verificacion_estado`` dice si la DIAN lo tiene
+        como válido. ``POST {id}/verificar/`` repite la consulta en el momento.
 
         Los archivos se bajan con ``xml/`` (el XML tal como llegó), ``xml-factura/``
         (el documento, sin el AttachedDocument) y ``pdf/``. Son ``Adjunto`` del
@@ -7023,6 +7047,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/recepcion/documento/{id}/verificar/:
+    post:
+      operationId: recepcion_documento_verificar_create
+      description: |-
+        Consulta el CUFE en la DIAN ahora mismo y devuelve el documento.
+
+        Para repetir una verificación que quedó en ``error`` o
+        ``no_verificable`` (por ejemplo, después de cargar el certificado), o
+        para confirmar un estado. Si la DIAN no responde, el documento queda
+        en ``error`` con el detalle; la respuesta es 200 igual, porque lo que
+        se pidió —consultar— se intentó.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este documento recibido.
+        required: true
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentoRecibido'
           description: ''
         '429':
           description: Error
@@ -7136,6 +7208,72 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/recepcion/documento/cargar/:
+    post:
+      operationId: recepcion_documento_cargar_create
+      description: |-
+        Registra los documentos de un ZIP o XML, sin pasar por el correo.
+
+        ``multipart/form-data`` con ``emisor`` y ``archivo`` (``.zip`` o
+        ``.xml``, hasta 10 MB). Se procesa en el momento, con la misma lectura
+        que los correos: el ZIP del proveedor con su AttachedDocument y su
+        PDF, o el XML suelto.
+
+        Cada documento tiene que ser **del emisor elegido** (su NIT receptor):
+        los de otro van en ``rechazados``. Un CUFE ya registrado va en
+        ``repetidos`` y no se duplica.
+
+        - 201 si creó al menos uno. La carga queda en
+          ``/api/recepcion/correo/?origen=carga``, con sus archivos.
+        - 200 si todos estaban ya registrados. No se guarda nada.
+        - 400 si el archivo no trae documentos o todos son de otro receptor.
+      tags:
+      - recepcion
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CargaDocumentoRequest'
+        required: true
+      security:
+      - LlaveApi: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoCarga'
+          description: ''
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoCarga'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
           description: Error
           content:
             application/json:
@@ -7443,6 +7581,20 @@ components:
     BlankEnum:
       enum:
       - ''
+    CargaDocumentoRequest:
+      type: object
+      description: La entrada de ``POST /api/recepcion/documento/cargar/``.
+      properties:
+        emisor:
+          type: integer
+        archivo:
+          type: string
+          format: binary
+          description: El ZIP que manda el proveedor (AttachedDocument y PDF) o el
+            XML suelto.
+      required:
+      - archivo
+      - emisor
     CatalogoResumen:
       type: object
       properties:
@@ -7693,6 +7845,15 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        origen:
+          allOf:
+          - $ref: '#/components/schemas/OrigenEnum'
+          readOnly: true
+        usuario:
+          type: string
+          format: email
+          title: Correo electrónico
+          readOnly: true
         alias:
           type: string
           readOnly: true
@@ -7751,8 +7912,10 @@ components:
       - id
       - intentos
       - message_id
+      - origen
       - raw_key
       - recibido_en
+      - usuario
     CorreoEliminadoAdmin:
       type: object
       properties:
@@ -9299,6 +9462,38 @@ components:
           readOnly: true
           nullable: true
           title: Fecha de validación DIAN
+        ambiente:
+          readOnly: true
+          nullable: true
+          description: |-
+            ProfileExecutionID del XML. Vacío si no venía: se verifica en producción.
+
+            * `1` - Producción
+            * `2` - Habilitación
+          oneOf:
+          - $ref: '#/components/schemas/AmbienteEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        verificacion_estado:
+          allOf:
+          - $ref: '#/components/schemas/VerificacionEstadoEnum'
+          readOnly: true
+          title: Verificación DIAN
+        verificacion_codigo:
+          type: string
+          readOnly: true
+          title: Código de la verificación
+          description: StatusCode que respondió la DIAN.
+        verificacion_descripcion:
+          type: string
+          readOnly: true
+          title: Detalle de la verificación
+          description: StatusDescription y errores de la DIAN, o por qué no se pudo
+            consultar.
+        verificado_en:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
         tiene_xml_factura:
           type: boolean
           readOnly: true
@@ -9310,6 +9505,7 @@ components:
           format: date-time
           readOnly: true
       required:
+      - ambiente
       - correo
       - creado_en
       - cufe_cude
@@ -9332,6 +9528,10 @@ components:
       - total_impuestos
       - validacion_codigo
       - valor_bruto
+      - verificacion_codigo
+      - verificacion_descripcion
+      - verificacion_estado
+      - verificado_en
     DocumentoRecibidoResumen:
       type: object
       description: Lo que se muestra de cada documento dentro de su correo.
@@ -9395,6 +9595,11 @@ components:
           readOnly: true
           title: Código de validación DIAN
           description: ValidationResultCode del AttachedDocument (02 = validado).
+        verificacion_estado:
+          allOf:
+          - $ref: '#/components/schemas/VerificacionEstadoEnum'
+          readOnly: true
+          title: Verificación DIAN
       required:
       - cufe_cude
       - documento_tipo
@@ -9406,6 +9611,7 @@ components:
       - proveedor_razon_social
       - total_a_pagar
       - validacion_codigo
+      - verificacion_estado
     DocumentoTipoEnum:
       enum:
       - factura_venta
@@ -12096,6 +12302,17 @@ components:
       - respuesta
       - tamano
       - tipo
+    NullEnum:
+      enum:
+      - null
+    OrigenEnum:
+      enum:
+      - correo
+      - carga
+      type: string
+      description: |-
+        * `correo` - Correo
+        * `carga` - Carga manual
     PaginatedAdjuntoList:
       type: object
       required:
@@ -12907,6 +13124,22 @@ components:
           type: string
           writeOnly: true
           maxLength: 255
+    RechazoCarga:
+      type: object
+      properties:
+        numero:
+          type: string
+        cufe_cude:
+          type: string
+        receptor_numero_identificacion:
+          type: string
+        motivo:
+          type: string
+      required:
+      - cufe_cude
+      - motivo
+      - numero
+      - receptor_numero_identificacion
     Resolucion:
       type: object
       properties:
@@ -13027,6 +13260,30 @@ components:
       required:
       - avisos
       - respuesta_validado
+    ResultadoCarga:
+      type: object
+      description: |-
+        Qué pasó con cada documento del archivo.
+
+        ``creados`` son los nuevos; ``repetidos``, los que ya estaban registrados
+        (por correo o por otra carga); ``rechazados``, los de otro receptor.
+      properties:
+        creados:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentoRecibidoResumen'
+        repetidos:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentoRecibidoResumen'
+        rechazados:
+          type: array
+          items:
+            $ref: '#/components/schemas/RechazoCarga'
+      required:
+      - creados
+      - rechazados
+      - repetidos
     RolEnum:
       enum:
       - xml
@@ -13252,6 +13509,20 @@ components:
       description: |-
         * `id` - id
         * `codigo` - codigo
+    VerificacionEstadoEnum:
+      enum:
+      - pendiente
+      - valido
+      - invalido
+      - no_verificable
+      - error
+      type: string
+      description: |-
+        * `pendiente` - Pendiente
+        * `valido` - Válido
+        * `invalido` - No válido
+        * `no_verificable` - No verificable
+        * `error` - Error al consultar
     Webhook:
       type: object
       properties:

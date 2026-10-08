@@ -41,7 +41,11 @@ class CorreoViewSet(
     Un correo cuyo alias no es el NIT de ningún emisor no tiene emisor, así que
     fuera del staff (o de una llave de alcance global) no lo ve nadie.
 
-    Filtros: ``?emisor=<id>``, ``?estado=pendiente|procesado|...`` y
+    También lista las cargas manuales (``origen = carga``), las de
+    ``POST /api/recepcion/documento/cargar/``.
+
+    Filtros: ``?emisor=<id>``, ``?estado=pendiente|procesado|...``,
+    ``?origen=correo|carga`` y
     ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD`` sobre ``recibido_en``, ambos
     inclusive. ``?search=`` busca en remitente, asunto y Message-ID, y
     ``?ordering=`` ordena por ``recibido_en`` o ``estado``.
@@ -75,6 +79,8 @@ class CorreoViewSet(
             qs = qs.filter(emisor=emisor)
         if estado := params.get("estado"):
             qs = qs.filter(estado=estado)
+        if origen := params.get("origen"):
+            qs = qs.filter(origen=origen)
         if desde := fecha_de_query(params, "desde"):
             qs = qs.filter(recibido_en__date__gte=desde)
         if hasta := fecha_de_query(params, "hasta"):

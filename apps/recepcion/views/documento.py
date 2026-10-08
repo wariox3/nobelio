@@ -2,8 +2,10 @@
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from django.db.models import Exists, OuterRef
-from rest_framework import filters, viewsets
+from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser
+from rest_framework.response import Response
 
 from apps.nucleo.api import (
     ErrorSolicitud,
@@ -13,10 +15,10 @@ from apps.nucleo.api import (
     fecha_de_query,
 )
 from apps.nucleo.esquema import ErrorSerializer
-from apps.recepcion import serializers
+from apps.recepcion import procesamiento, serializers, verificacion
 from apps.recepcion.models import Adjunto, Documento
 from apps.recepcion.views.adjunto import descarga
-from apps.seguridad.alcance import AlcanceEmisorMixin
+from apps.seguridad.alcance import AlcanceEmisorMixin, usuario_del_request
 
 RESPUESTA_XML = {(200, "application/xml"): OpenApiTypes.BINARY, 400: ErrorSerializer}
 RESPUESTA_PDF = {(200, "application/pdf"): OpenApiTypes.BINARY, 400: ErrorSerializer}
@@ -29,8 +31,9 @@ class DocumentoRecibidoViewSet(AlcanceEmisorMixin, viewsets.ReadOnlyModelViewSet
 
     Filtros: ``?emisor=<id>``, ``?correo=<id>``,
     ``?documento_tipo=factura_venta|nota_credito|nota_debito``,
-    ``?proveedor=<NIT sin DV>`` y ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD``
-    sobre la fecha de emisión, ambos inclusive. ``?ordering=`` ordena por
+    ``?proveedor=<NIT sin DV>``, ``?verificacion_estado=valido|invalido|...``
+    y ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD`` sobre la fecha de
+    emisión, ambos inclusive. ``?ordering=`` ordena por
     ``fecha_emision``, ``numero``, ``total_a_pagar`` o ``creado_en``.
 
     ``?search=`` busca en cuatro campos, cada uno a su manera:
@@ -42,6 +45,13 @@ class DocumentoRecibidoViewSet(AlcanceEmisorMixin, viewsets.ReadOnlyModelViewSet
     Es el listado de más consumo de la recepción, así que pagina de 25 en 25
     por defecto, con ``?page_size=`` hasta 100, y siempre desempata el orden
     por ``id`` para que ninguna fila se repita ni se pierda entre páginas.
+
+    ``POST cargar/`` registra los documentos de un ZIP o XML subido a mano,
+    para quien no quiere recibirlos por correo.
+
+    Cada documento nuevo se verifica solo contra la DIAN (``GetStatus`` por su
+    CUFE, en segundo plano): ``verificacion_estado`` dice si la DIAN lo tiene
+    como válido. ``POST {id}/verificar/`` repite la consulta en el momento.
 
     Los archivos se bajan con ``xml/`` (el XML tal como llegó), ``xml-factura/``
     (el documento, sin el AttachedDocument) y ``pdf/``. Son ``Adjunto`` del
@@ -83,7 +93,82 @@ class DocumentoRecibidoViewSet(AlcanceEmisorMixin, viewsets.ReadOnlyModelViewSet
             qs = qs.filter(fecha_emision__gte=desde)
         if hasta := fecha_de_query(params, "hasta"):
             qs = qs.filter(fecha_emision__lte=hasta)
+        if estado := params.get("verificacion_estado"):
+            qs = qs.filter(verificacion_estado=estado)
         return qs
+
+    @extend_schema(
+        request={"multipart/form-data": serializers.CargaDocumentoSerializer},
+        responses={
+            201: serializers.ResultadoCargaSerializer,
+            200: serializers.ResultadoCargaSerializer,
+            400: ErrorSerializer,
+            502: ErrorSerializer,
+        },
+    )
+    @action(detail=False, methods=["post"], parser_classes=[MultiPartParser])
+    def cargar(self, request):
+        """Registra los documentos de un ZIP o XML, sin pasar por el correo.
+
+        ``multipart/form-data`` con ``emisor`` y ``archivo`` (``.zip`` o
+        ``.xml``, hasta 10 MB). Se procesa en el momento, con la misma lectura
+        que los correos: el ZIP del proveedor con su AttachedDocument y su
+        PDF, o el XML suelto.
+
+        Cada documento tiene que ser **del emisor elegido** (su NIT receptor):
+        los de otro van en ``rechazados``. Un CUFE ya registrado va en
+        ``repetidos`` y no se duplica.
+
+        - 201 si creó al menos uno. La carga queda en
+          ``/api/recepcion/correo/?origen=carga``, con sus archivos.
+        - 200 si todos estaban ya registrados. No se guarda nada.
+        - 400 si el archivo no trae documentos o todos son de otro receptor.
+        """
+        entrada = serializers.CargaDocumentoSerializer(
+            data=request.data, context=self.get_serializer_context(),
+        )
+        entrada.is_valid(raise_exception=True)
+        archivo = entrada.validated_data["archivo"]
+        try:
+            resultado = procesamiento.cargar(
+                entrada.validated_data["emisor"], usuario_del_request(request),
+                archivo.name, archivo.read(),
+            )
+        except procesamiento.CargaInvalida as error:
+            raise ErrorSolicitud(str(error))
+        respuesta = serializers.ResultadoCargaSerializer({
+            "creados": resultado.creados,
+            "repetidos": [d for d in resultado.repetidos if d is not None],
+            "rechazados": [
+                {
+                    "numero": r.datos.numero,
+                    "cufe_cude": r.datos.cufe_cude,
+                    "receptor_numero_identificacion": r.datos.receptor_numero_identificacion,
+                    "motivo": r.motivo,
+                }
+                for r in resultado.rechazados
+            ],
+        })
+        codigo = status.HTTP_201_CREATED if resultado.creados else status.HTTP_200_OK
+        return Response(respuesta.data, status=codigo)
+
+    @extend_schema(request=None, responses={200: serializers.DocumentoRecibidoSerializer})
+    @action(detail=True, methods=["post"])
+    def verificar(self, request, pk=None):
+        """Consulta el CUFE en la DIAN ahora mismo y devuelve el documento.
+
+        Para repetir una verificación que quedó en ``error`` o
+        ``no_verificable`` (por ejemplo, después de cargar el certificado), o
+        para confirmar un estado. Si la DIAN no responde, el documento queda
+        en ``error`` con el detalle; la respuesta es 200 igual, porque lo que
+        se pidió —consultar— se intentó.
+        """
+        documento = self.get_object()
+        try:
+            verificacion.verificar(documento)
+        except verificacion.ErrorTransitorio as error:
+            verificacion.marcar_error(documento, str(error))
+        return Response(self.get_serializer(self.get_object()).data)
 
     @extend_schema(responses=RESPUESTA_XML)
     @action(detail=True, methods=["get"])

@@ -170,6 +170,46 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
   - Descargas: `xml/` (como llegó), `xml-factura/` (el documento sin el
     AttachedDocument; si llegó suelto, el mismo de `xml/`) y `pdf/` (400 si el
     proveedor no lo mandó). `tiene_pdf` y `tiene_xml_factura` lo anticipan.
+- **Carga manual `POST /api/recepcion/documento/cargar/`** (2026-10-08), para
+  quien no quiere recibir por correo. `multipart/form-data` con `emisor` y
+  `archivo` (`.zip` o `.xml`, hasta 10 MB). Se procesa en el request con la
+  misma extracción del correo (`extraccion.extraer_archivo`,
+  `procesamiento.cargar`).
+  - **Seguridad:** el emisor tiene que estar en el alcance y cada documento
+    tiene que traer su NIT como receptor. Los de otro receptor se rechazan,
+    aunque ese NIT sea de otro emisor de la plataforma.
+  - Responde `creados`, `repetidos` y `rechazados`. 201 si creó alguno; 200 si
+    todos estaban registrados (no guarda nada); 400 si no hay documentos o
+    todos son de otro receptor.
+  - La carga es una fila de `rec_correo` con `origen = carga`, `usuario` (quién
+    la subió), `asunto` = nombre del archivo y `sha256` nulo. Solo se guarda si
+    creó al menos un documento, así que siempre queda `procesado` y nunca es
+    reprocesable. Se lista con `GET /api/recepcion/correo/?origen=carga` y se
+    borra con `eliminar-admin/`, que no toca R2 porque no hay MIME.
+  - No verifica la firma del XML. El CUFE sí se verifica ante la DIAN, igual
+    que en los correos (ver el punto siguiente).
+- **Verificación del CUFE ante la DIAN** (2026-10-08,
+  `apps/recepcion/verificacion.py`). La validación que trae el AttachedDocument
+  la escribe el proveedor, así que no prueba nada. Cada documento nuevo, por
+  correo o por carga, encola `verificar_documento`, que consulta `GetStatus`
+  por el CUFE.
+  - Usa el **certificado del emisor que recibe** y el **ambiente del
+    documento**: `ProfileExecutionID` del XML, guardado en `ambiente`; si no
+    venía, producción.
+  - El resultado va en `verificacion_estado`: `pendiente`, `valido`,
+    `invalido` (la DIAN no lo reconoce o lo rechazó), `no_verificable` (el
+    emisor no tiene certificado vigente) o `error` (la DIAN no respondió tras 5
+    reintentos). También se guardan `verificacion_codigo` (StatusCode),
+    `verificacion_descripcion` y `verificado_en`.
+  - `POST /api/recepcion/documento/{id}/verificar/` repite la consulta en el
+    momento. `?verificacion_estado=` filtra la bandeja.
+  - Comando `verificar_documentos --todos` (o `--id <uuid>`): verifica los
+    pendientes, en error y no verificables. Sirve para los documentos que
+    llegaron antes de esto y para los de un emisor que acaba de cargar su
+    certificado.
+  - ⚠ Falta confirmar con un documento real en producción que `GetStatus`
+    responde por un CUFE que emitió otro (el proveedor), y qué `StatusCode`
+    devuelve uno inexistente. Las pruebas suponen `66`.
 - **Comando `reprocesar_correos`** (`apps/recepcion/management/commands/`):
   `--id <n>` o `--todos`. Corre en el mismo proceso, no en Celery, y muestra
   cómo quedó cada correo.

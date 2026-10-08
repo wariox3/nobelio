@@ -3,7 +3,21 @@ from django.contrib.postgres.indexes import GinIndex, OpClass
 from django.db import models
 from django.db.models.functions import Upper
 
-from apps.nucleo.models import ModeloConFechas, ModeloUUID
+from apps.nucleo.models import Ambiente, ModeloConFechas, ModeloUUID
+
+
+class EstadoVerificacion(models.TextChoices):
+    """Qué dijo la DIAN del documento al consultarlo por su CUFE."""
+
+    PENDIENTE = "pendiente", "Pendiente"
+    # La DIAN lo tiene registrado y válido.
+    VALIDO = "valido", "Válido"
+    # La DIAN no lo reconoce o lo tiene rechazado: no existe para ella.
+    INVALIDO = "invalido", "No válido"
+    # El emisor no tiene un certificado vigente con el que consultar.
+    NO_VERIFICABLE = "no_verificable", "No verificable"
+    # No se pudo consultar (la DIAN no respondió) y se agotaron los reintentos.
+    ERROR = "error", "Error al consultar"
 
 
 class Documento(ModeloUUID, ModeloConFechas):
@@ -64,6 +78,27 @@ class Documento(ModeloUUID, ModeloConFechas):
         help_text="ValidationResultCode del AttachedDocument (02 = validado).",
     )
     fecha_validacion = models.DateTimeField("fecha de validación DIAN", null=True, blank=True)
+    ambiente = models.PositiveSmallIntegerField(
+        "ambiente", choices=Ambiente.choices, null=True, blank=True,
+        help_text="ProfileExecutionID del XML. Vacío si no venía: se verifica en producción.",
+    )
+
+    # La verificación contra la DIAN (GetStatus por CUFE), que sí es de fiar:
+    # la validación de arriba la escribe el proveedor en su AttachedDocument, y
+    # un XML inventado puede traer cualquier cosa. Ver `apps.recepcion.verificacion`.
+    verificacion_estado = models.CharField(
+        "verificación DIAN", max_length=20, choices=EstadoVerificacion.choices,
+        default=EstadoVerificacion.PENDIENTE,
+    )
+    verificacion_codigo = models.CharField(
+        "código de la verificación", max_length=10, blank=True,
+        help_text="StatusCode que respondió la DIAN.",
+    )
+    verificacion_descripcion = models.TextField(
+        "detalle de la verificación", blank=True,
+        help_text="StatusDescription y errores de la DIAN, o por qué no se pudo consultar.",
+    )
+    verificado_en = models.DateTimeField("verificado en", null=True, blank=True)
 
     # Relaciones
     documento_tipo = models.ForeignKey(

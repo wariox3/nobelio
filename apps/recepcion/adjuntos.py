@@ -83,7 +83,8 @@ def eliminar_correo(correo):
     ``r2.R2NoConfigurado`` antes de tocar nada si faltan las ``R2_*``, y deja
     subir los errores de B2 y R2 (la transacción se deshace).
     """
-    if not r2.r2_habilitado():
+    # Una carga manual no tiene MIME en R2: para borrarla no hace falta.
+    if correo.raw_key and not r2.r2_habilitado():
         raise r2.R2NoConfigurado
     with transaction.atomic():
         correo = Correo.objects.select_for_update().get(pk=correo.pk)
@@ -95,7 +96,8 @@ def eliminar_correo(correo):
         correo.delete()
         for adjunto in adjuntos:
             adjunto.archivo.storage.delete(adjunto.archivo.name)
-        r2.borrar_mime(raw_key)
+        if raw_key:
+            r2.borrar_mime(raw_key)
     return documentos, len(adjuntos)
 
 

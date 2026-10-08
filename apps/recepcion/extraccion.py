@@ -96,6 +96,9 @@ class DatosDocumento:
     total_a_pagar: Decimal | None
     validacion_codigo: str = ""
     fecha_validacion: datetime | None = None
+    # ProfileExecutionID: 1 producción, 2 habilitación. Es el ambiente donde
+    # está registrado el documento, y contra el que se verifica.
+    ambiente: int | None = None
     # Los archivos: el XML como llegó, el documento extraído (si venía en un
     # AttachedDocument) y el PDF que lo acompañaba.
     xml: Archivo | None = None
@@ -153,6 +156,19 @@ def extraer(mensaje: EmailMessage) -> Extraccion:
     """
     grupos = []
     _recorrer_mensaje(mensaje, grupos, _Conteo(), profundidad=0)
+    archivos = [a for g in grupos for a in (*g.xml, *g.pdf, *g.otros)]
+    return Extraccion(documentos=_documentos(grupos), archivos=archivos)
+
+
+def extraer_archivo(nombre, contenido) -> Extraccion:
+    """Como :func:`extraer`, pero de un archivo suelto (un ZIP o un XML) en
+    vez de un correo: es la entrada de las cargas manuales.
+
+    Mismos topes que un correo; lanza ``ContenidoExcesivo`` si los pasa.
+    """
+    grupo = _Grupo()
+    grupos = [grupo]
+    _agregar(Archivo(nombre, contenido), grupo, grupos, _Conteo(), profundidad=0)
     archivos = [a for g in grupos for a in (*g.xml, *g.pdf, *g.otros)]
     return Extraccion(documentos=_documentos(grupos), archivos=archivos)
 
@@ -352,7 +368,12 @@ def _leer_documento(raiz):
         valor_bruto=_decimal(_texto(totales, "cbc:LineExtensionAmount")),
         total_impuestos=sum(impuestos) if impuestos else None,
         total_a_pagar=_decimal(_texto(totales, "cbc:PayableAmount")),
+        ambiente=_ambiente(_texto(raiz, "cbc:ProfileExecutionID")),
     )
+
+
+def _ambiente(texto):
+    return int(texto) if texto in ("1", "2") else None
 
 
 def _parsear(contenido):
