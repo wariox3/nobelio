@@ -126,14 +126,6 @@ class SoftwareDianAPITests(APITestCase):
         self.assertEqual(resp.status_code, 201, resp.data)
         self.assertEqual(resp.data["modulo"], SoftwareDian.Modulo.FACTURACION)
 
-    def test_cambiar_el_tipo_cambia_el_modulo(self):
-        creado = self.client.post(self.url, self._payload(), format="json")
-        resp = self.client.patch(
-            f"{self.url}{creado.data['id']}/", {"tipo": "nomina"}, format="json",
-        )
-        self.assertEqual(resp.status_code, 200, resp.data)
-        self.assertEqual(resp.data["modulo"], SoftwareDian.Modulo.NOMINA)
-
     def test_filtra_por_modulo(self):
         for tipo in SoftwareDian.Tipo:
             SoftwareDian.objects.create(
@@ -152,6 +144,65 @@ class SoftwareDianAPITests(APITestCase):
     def test_un_modulo_desconocido_responde_400(self):
         resp = self.client.get(self.url, {"modulo": "contabilidad"})
         self.assertEqual(resp.status_code, 400, resp.data)
+
+    # --- Qué se puede actualizar --------------------------------------------
+
+    def _crear(self, **cambios):
+        resp = self.client.post(self.url, {**self._payload(), **cambios}, format="json")
+        self.assertEqual(resp.status_code, 201, resp.data)
+        return resp.data["id"]
+
+    def test_set_pruebas_aceptado_no_se_escribe(self):
+        """Lo marca el backend cuando la DIAN acepta el set, no el cliente."""
+        id_ = self._crear(set_pruebas_aceptado=True)
+        self.assertFalse(SoftwareDian.objects.get(pk=id_).set_pruebas_aceptado)
+
+        self.client.patch(
+            f"{self.url}{id_}/", {"set_pruebas_aceptado": True}, format="json",
+        )
+        self.assertFalse(SoftwareDian.objects.get(pk=id_).set_pruebas_aceptado)
+
+    def test_el_emisor_no_se_puede_cambiar(self):
+        id_ = self._crear()
+        otro = _crear_emisor(self.cat, nit="800197268")
+        self.usuario.emisores.add(otro)
+
+        resp = self.client.patch(f"{self.url}{id_}/", {"emisor": otro.id}, format="json")
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertIn("emisor", errores_por_campo(resp))
+        self.assertEqual(SoftwareDian.objects.get(pk=id_).emisor, self.emisor)
+
+    def test_el_tipo_no_se_puede_cambiar(self):
+        id_ = self._crear()
+
+        resp = self.client.patch(f"{self.url}{id_}/", {"tipo": "nomina"}, format="json")
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertIn("tipo", errores_por_campo(resp))
+        self.assertEqual(SoftwareDian.objects.get(pk=id_).tipo, "facturacion")
+
+    def test_un_put_con_el_mismo_emisor_y_tipo_vale(self):
+        id_ = self._crear()
+        payload = {**self._payload(), "identificador": "otro-id"}
+
+        resp = self.client.put(f"{self.url}{id_}/", payload, format="json")
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(SoftwareDian.objects.get(pk=id_).identificador, "otro-id")
+
+    def test_con_el_set_aceptado_no_se_puede_actualizar(self):
+        id_ = self._crear()
+        SoftwareDian.objects.filter(pk=id_).update(set_pruebas_aceptado=True)
+
+        resp = self.client.patch(
+            f"{self.url}{id_}/", {"identificador": "otro", "pin": "1"}, format="json",
+        )
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        software = SoftwareDian.objects.get(pk=id_)
+        self.assertEqual(software.identificador, "abc123-software-id")
+        self.assertEqual(software.pin, "12345")
 
     # --- Uno por emisor y operación ----------------------------------------
 

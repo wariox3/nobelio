@@ -176,9 +176,6 @@ class SoftwareDianViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         self._guardar(super().perform_update, serializer)
-        # `modulo` lo calcula la base de datos y un UPDATE no lo trae de
-        # vuelta: sin releerlo, cambiar el `tipo` respondería el módulo viejo.
-        serializer.instance.refresh_from_db(fields=["modulo"])
 
     @staticmethod
     def _guardar(guardar, serializer):

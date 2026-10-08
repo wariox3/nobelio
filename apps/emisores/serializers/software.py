@@ -28,6 +28,10 @@ class SoftwareDianSerializer(serializers.ModelSerializer):
         # `write_only` por decisión suya, a raíz de un escáner que lo marcó como
         # campo sensible expuesto (ver §A2 de docs/revision-tecnica.md).
         extra_kwargs = {"pin": {"write_only": True}}
+        # Lo marca el backend (`apps/dian/servicios.py`) cuando la DIAN acepta
+        # el Set de Pruebas, y con él los envíos pasan a SendBillSync. Dejarlo
+        # escribir permitiría saltarse la habilitación con un PATCH.
+        read_only_fields = ["set_pruebas_aceptado"]
         #
         # Vacío a propósito: desactiva el UniqueTogetherValidator que DRF saca
         # solo del `UniqueConstraint(emisor, tipo)`. La regla es la misma, pero
@@ -44,6 +48,8 @@ class SoftwareDianSerializer(serializers.ModelSerializer):
         dos pasos que siguen. Registrar el software sin él deja al emisor a
         medio habilitar, sin poder avanzar y sin que nada lo diga.
         """
+        if self.instance is not None:
+            self.exigir_actualizable(attrs)
         emisor = attrs.get("emisor") or getattr(self.instance, "emisor", None)
         if emisor is None:
             return attrs
@@ -52,6 +58,31 @@ class SoftwareDianSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"emisor": motivo})
         self.exigir_uno_por_tipo(emisor, attrs)
         return attrs
+
+    def exigir_actualizable(self, attrs):
+        """Reglas de un PUT/PATCH: ni emisor ni tipo cambian, y aceptado no se toca.
+
+        El SoftwareID que entrega la DIAN es de un NIT y de una operación, así
+        que moverlo de emisor o de tipo daría un software que la DIAN no
+        reconoce. Mandarlos con el mismo valor sí vale, para que un PUT pueda
+        devolver el objeto tal cual.
+
+        Con el Set de Pruebas aceptado el software ya está habilitado: cambiarle
+        el identificador o el PIN invalidaría lo que la DIAN aprobó.
+        """
+        software = self.instance
+        if software.set_pruebas_aceptado:
+            raise serializers.ValidationError(
+                "El Set de Pruebas de este software ya fue aceptado por la "
+                "DIAN; no se puede modificar."
+            )
+        errores = {}
+        if "emisor" in attrs and attrs["emisor"] != software.emisor:
+            errores["emisor"] = "El emisor de un software no se puede cambiar."
+        if "tipo" in attrs and attrs["tipo"] != software.tipo:
+            errores["tipo"] = "El tipo de un software no se puede cambiar."
+        if errores:
+            raise serializers.ValidationError(errores)
 
     def exigir_uno_por_tipo(self, emisor, attrs):
         """Un software por emisor y operación; para cambiarlo se actualiza.
