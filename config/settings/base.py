@@ -55,6 +55,10 @@ DJANGO_APPS = [
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.staticfiles",
+    # Por los índices de `rec_documento`: al cargar registra `OpClass` como
+    # envoltorio de las expresiones de índice. Sin ella, un GinIndex con
+    # `gin_trgm_ops` sobre una expresión sale con SQL inválido.
+    "django.contrib.postgres",
 ]
 
 THIRD_PARTY_APPS = [

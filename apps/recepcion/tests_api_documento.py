@@ -1,11 +1,13 @@
 """La API de consulta de los documentos recibidos."""
 from django.contrib.auth import get_user_model
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from rest_framework.test import APIClient, APITestCase
 
 from apps.documentos.tests_utils import crear_catalogos_minimos, crear_usuario
 from apps.emisores.models import Emisor
-from apps.recepcion.models import Correo
+from apps.recepcion.models import Correo, Documento
 from apps.recepcion.tests_utils import crear_documento_recibido
 
 Usuario = get_user_model()
@@ -96,6 +98,68 @@ class DocumentoRecibidoApiTests(APITestCase):
 
     def test_busca_por_razon_social_del_proveedor(self):
         self.assertEqual(self.ids(search="ferreter"), {str(self.nota.pk)})
+
+    def test_busca_el_cufe_completo(self):
+        self.assertEqual(self.ids(search="1" * 96), {str(self.factura.pk)})
+        # Un pedazo de CUFE no encuentra nada: la búsqueda es exacta.
+        self.assertEqual(self.ids(search="1" * 20), set())
+
+    def test_busca_el_nit_del_proveedor_por_el_comienzo(self):
+        self.assertEqual(self.ids(search="8001"), {str(self.factura.pk)})
+        self.assertEqual(self.ids(search="111222"), set())
+
+    def test_busca_por_numero(self):
+        self.assertEqual(self.ids(search="FE-2"), {str(self.nota.pk)})
+
+    # --- Paginación -----------------------------------------------------------
+
+    def test_pagina_de_25_por_defecto(self):
+        for i in range(30):
+            self.crear_documento(self.emisor, chr(ord("A") + i))
+
+        cuerpo = self.client.get(URL).json()
+
+        self.assertEqual(cuerpo["count"], 32)
+        self.assertEqual(len(cuerpo["results"]), 25)
+        self.assertIsNotNone(cuerpo["next"])
+
+    def test_el_cliente_elige_el_tamano_hasta_100(self):
+        self.assertEqual(len(self.client.get(URL, {"page_size": 1}).json()["results"]), 1)
+        # Por encima del tope se queda en el tope, no falla.
+        respuesta = self.client.get(URL, {"page_size": 500})
+        self.assertEqual(respuesta.status_code, 200)
+
+    def test_con_empates_ninguna_fila_se_repite_ni_se_pierde(self):
+        """Mismo día y mismo `creado_en`: solo el `id` desempata."""
+        for i in range(7):
+            self.crear_documento(self.emisor, chr(ord("A") + i), fecha="2026-10-03")
+        Documento.objects.filter(emisor=self.emisor).update(creado_en=self.factura.creado_en)
+
+        for ordering in (None, "fecha_emision", "-total_a_pagar"):
+            vistos = []
+            for pagina in range(1, 5):
+                filtros = {"page": pagina, "page_size": 3, "emisor": self.emisor.pk}
+                if ordering:
+                    filtros["ordering"] = ordering
+                respuesta = self.client.get(URL, filtros)
+                if respuesta.status_code == 404:
+                    break
+                vistos += [fila["id"] for fila in respuesta.json()["results"]]
+            self.assertEqual(len(vistos), 9, ordering)
+            self.assertEqual(len(set(vistos)), 9, ordering)
+
+    def test_las_consultas_no_crecen_con_la_pagina(self):
+        """Los flags de PDF y XML salen en la misma consulta del listado."""
+        for i in range(10):
+            self.crear_documento(self.emisor, chr(ord("A") + i), pdf=True)
+
+        with CaptureQueriesContext(connection) as pocas:
+            self.client.get(URL, {"page_size": 2})
+        with CaptureQueriesContext(connection) as muchas:
+            filas = self.client.get(URL, {"page_size": 12}).json()["results"]
+
+        self.assertEqual(len(pocas), len(muchas))
+        self.assertTrue(all(fila["tiene_pdf"] for fila in filas if fila["numero"] != "FE-2"))
 
     def test_filtro_invalido_es_400(self):
         self.assertEqual(self.client.get(URL, {"desde": "ayer"}).status_code, 400)

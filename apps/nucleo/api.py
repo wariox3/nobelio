@@ -33,6 +33,8 @@ import uuid
 from datetime import date
 
 from rest_framework.exceptions import APIException
+from rest_framework.filters import OrderingFilter
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.settings import api_settings
 from rest_framework.views import exception_handler as drf_exception_handler
 
@@ -220,3 +222,36 @@ def exception_handler(exc, context):
         {k: v for k, v in extra.items() if k not in ("detail", "errores")}
     )
     return respuesta
+
+
+class PaginacionAjustable(PageNumberPagination):
+    """Paginación por número de página con tamaño a elección del cliente.
+
+    Para los listados de mucho consumo, como la bandeja de documentos
+    recibidos: 25 por defecto y ``?page_size=`` hasta 100. Mantiene ``count``
+    y los enlaces ``next``/``previous`` porque el front los usa para mostrar el
+    total y saltar de página.
+    """
+
+    page_size = 25
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+
+class OrdenEstable(OrderingFilter):
+    """``OrderingFilter`` que siempre desempata por la llave primaria.
+
+    Paginar con OFFSET sobre un orden que admite empates no es determinista:
+    dos filas con la misma fecha pueden cambiar de lugar entre una petición y
+    la siguiente, y una sale repetida en dos páginas mientras otra no sale en
+    ninguna. Desempatar por ``pk`` deja un orden total.
+    """
+
+    def get_ordering(self, request, queryset, view):
+        orden = super().get_ordering(request, queryset, view)
+        if orden is None:
+            orden = list(queryset.model._meta.ordering)
+        orden = list(orden)
+        if not any(campo.lstrip("-") in ("pk", "id") for campo in orden):
+            orden.append("-pk")
+        return orden

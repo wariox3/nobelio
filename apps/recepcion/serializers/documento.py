@@ -25,8 +25,9 @@ class DocumentoRecibidoSerializer(serializers.ModelSerializer):
 
     documento_tipo = serializers.SlugRelatedField(slug_field="codigo", read_only=True)
     moneda = serializers.SlugRelatedField(slug_field="codigo", read_only=True)
-    tiene_xml_factura = serializers.SerializerMethodField()
-    tiene_pdf = serializers.SerializerMethodField()
+    # Los anota la vista con EXISTS (`DocumentoRecibidoViewSet.get_queryset`).
+    tiene_xml_factura = serializers.BooleanField(read_only=True)
+    tiene_pdf = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Documento
@@ -40,14 +41,3 @@ class DocumentoRecibidoSerializer(serializers.ModelSerializer):
             "tiene_pdf", "creado_en",
         ]
         read_only_fields = fields
-
-    def get_tiene_xml_factura(self, obj) -> bool:
-        return _tiene(obj, "xml_documento")
-
-    def get_tiene_pdf(self, obj) -> bool:
-        return _tiene(obj, "pdf")
-
-
-def _tiene(documento, rol):
-    # Sobre `adjuntos.all()` y no con un filtro: así usa el prefetch de la vista.
-    return any(adjunto.rol == rol for adjunto in documento.adjuntos.all())

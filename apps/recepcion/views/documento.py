@@ -1,10 +1,17 @@
 """API de los documentos recibidos de proveedores."""
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
+from django.db.models import Exists, OuterRef
 from rest_framework import filters, viewsets
 from rest_framework.decorators import action
 
-from apps.nucleo.api import ErrorSolicitud, entero_de_query, fecha_de_query
+from apps.nucleo.api import (
+    ErrorSolicitud,
+    OrdenEstable,
+    PaginacionAjustable,
+    entero_de_query,
+    fecha_de_query,
+)
 from apps.nucleo.esquema import ErrorSerializer
 from apps.recepcion import serializers
 from apps.recepcion.models import Adjunto, Documento
@@ -23,9 +30,18 @@ class DocumentoRecibidoViewSet(AlcanceEmisorMixin, viewsets.ReadOnlyModelViewSet
     Filtros: ``?emisor=<id>``, ``?correo=<id>``,
     ``?documento_tipo=factura_venta|nota_credito|nota_debito``,
     ``?proveedor=<NIT sin DV>`` y ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD``
-    sobre la fecha de emisión, ambos inclusive. ``?search=`` busca en número,
-    CUFE, NIT y razón social del proveedor, y ``?ordering=`` ordena por
+    sobre la fecha de emisión, ambos inclusive. ``?ordering=`` ordena por
     ``fecha_emision``, ``numero``, ``total_a_pagar`` o ``creado_en``.
+
+    ``?search=`` busca en cuatro campos, cada uno a su manera:
+
+    - CUFE/CUDE: completo y exacto. Uno parcial no tiene sentido.
+    - NIT del proveedor: por el comienzo (``8001`` encuentra ``800111222``).
+    - Número y razón social: en cualquier parte.
+
+    Es el listado de más consumo de la recepción, así que pagina de 25 en 25
+    por defecto, con ``?page_size=`` hasta 100, y siempre desempata el orden
+    por ``id`` para que ninguna fila se repita ni se pierda entre páginas.
 
     Los archivos se bajan con ``xml/`` (el XML tal como llegó), ``xml-factura/``
     (el documento, sin el AttachedDocument) y ``pdf/``. Son ``Adjunto`` del
@@ -33,20 +49,27 @@ class DocumentoRecibidoViewSet(AlcanceEmisorMixin, viewsets.ReadOnlyModelViewSet
     """
 
     serializer_class = serializers.DocumentoRecibidoSerializer
-    queryset = Documento.objects.select_related(
-        "documento_tipo", "moneda",
-    ).prefetch_related("adjuntos")
+    queryset = Documento.objects.select_related("documento_tipo", "moneda")
+    pagination_class = PaginacionAjustable
 
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    filter_backends = [filters.SearchFilter, OrdenEstable]
+    # Los prefijos de DRF: `=` es igualdad (iexact) y `^` es "empieza por".
+    # Los índices de `Documento.Meta` están hechos para estas búsquedas.
     search_fields = [
-        "numero", "cufe_cude", "proveedor_numero_identificacion", "proveedor_razon_social",
+        "=cufe_cude", "^proveedor_numero_identificacion", "numero", "proveedor_razon_social",
     ]
     ordering_fields = ["fecha_emision", "numero", "total_a_pagar", "creado_en"]
 
     def get_queryset(self):
         """Los filtros acotan dentro del alcance, nunca lo amplían: el mixin ya
         restringió el queryset antes de llegar aquí."""
-        qs = super().get_queryset()
+        qs = super().get_queryset().annotate(
+            # Dos subconsultas EXISTS en la misma consulta del listado, en vez
+            # de traerse todas las filas de adjuntos de la página solo para
+            # saber si hay PDF y XML del documento.
+            tiene_pdf=_tiene_adjunto(Adjunto.Rol.PDF),
+            tiene_xml_factura=_tiene_adjunto(Adjunto.Rol.XML_DOCUMENTO),
+        )
         params = self.request.query_params
         if (emisor := entero_de_query(params, "emisor")) is not None:
             qs = qs.filter(emisor=emisor)
@@ -97,4 +120,8 @@ class DocumentoRecibidoViewSet(AlcanceEmisorMixin, viewsets.ReadOnlyModelViewSet
 
 
 def _de(documento, rol):
-    return next((a for a in documento.adjuntos.all() if a.rol == rol), None)
+    return documento.adjuntos.filter(rol=rol).first()
+
+
+def _tiene_adjunto(rol):
+    return Exists(Adjunto.objects.filter(documento=OuterRef("pk"), rol=rol))

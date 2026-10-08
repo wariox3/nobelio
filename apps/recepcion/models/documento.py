@@ -1,5 +1,7 @@
 """Documento electrónico recibido de un proveedor."""
+from django.contrib.postgres.indexes import GinIndex, OpClass
 from django.db import models
+from django.db.models.functions import Upper
 
 from apps.nucleo.models import ModeloConFechas, ModeloUUID
 
@@ -89,9 +91,34 @@ class Documento(ModeloUUID, ModeloConFechas):
         db_table = "rec_documento"
         verbose_name = "documento recibido"
         verbose_name_plural = "documentos recibidos"
-        ordering = ["-fecha_emision", "-creado_en"]
+        # El `-id` final desempata: sin él, paginar con OFFSET puede repetir o
+        # saltarse filas que comparten fecha.
+        ordering = ["-fecha_emision", "-creado_en", "-id"]
         indexes = [
-            models.Index(fields=["emisor", "-fecha_emision"], name="rec_doc_emisor_recientes"),
+            # La bandeja: los de un emisor, del más reciente al más viejo. Cubre
+            # el orden completo para que Postgres no tenga que ordenar aparte.
+            models.Index(
+                fields=["emisor", "-fecha_emision", "-creado_en", "-id"],
+                name="rec_doc_emisor_recientes",
+            ),
+            # La búsqueda (`?search=`). DRF la traduce a `UPPER(col) = / LIKE
+            # UPPER(...)`, así que los índices van sobre `UPPER(col)`: uno
+            # normal para la igualdad del CUFE y trigramas (`pg_trgm`) para
+            # los LIKE de NIT, número y razón social, que con `%x%` no pueden
+            # usar un B-tree.
+            models.Index(Upper("cufe_cude"), name="rec_doc_cufe_upper"),
+            GinIndex(
+                OpClass(Upper("proveedor_numero_identificacion"), name="gin_trgm_ops"),
+                name="rec_doc_nit_trgm",
+            ),
+            GinIndex(
+                OpClass(Upper("numero"), name="gin_trgm_ops"),
+                name="rec_doc_numero_trgm",
+            ),
+            GinIndex(
+                OpClass(Upper("proveedor_razon_social"), name="gin_trgm_ops"),
+                name="rec_doc_razon_social_trgm",
+            ),
         ]
 
     def __str__(self):
