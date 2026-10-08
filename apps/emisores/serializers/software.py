@@ -9,7 +9,7 @@ class SoftwareDianSerializer(serializers.ModelSerializer):
     class Meta:
         model = SoftwareDian
         fields = [
-            "id", "emisor", "tipo", "identificador", "pin",
+            "id", "emisor", "tipo", "modulo", "identificador", "pin",
             "test_set_id", "set_pruebas_aceptado",
             # Solo los usa el documento equivalente, pero se exponen siempre:
             # son campos del software y esconderlos según el tipo daría un

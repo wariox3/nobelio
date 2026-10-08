@@ -103,6 +103,56 @@ class SoftwareDianAPITests(APITestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["count"], 1)
 
+    # --- Módulo -------------------------------------------------------------
+
+    def test_el_modulo_sale_del_tipo(self):
+        """Nómina es su módulo; factura y documento equivalente, facturación."""
+        esperado = {
+            SoftwareDian.Tipo.FACTURACION: SoftwareDian.Modulo.FACTURACION,
+            SoftwareDian.Tipo.DOCUMENTO_EQUIVALENTE: SoftwareDian.Modulo.FACTURACION,
+            SoftwareDian.Tipo.NOMINA: SoftwareDian.Modulo.NOMINA,
+        }
+        for tipo, modulo in esperado.items():
+            payload = self._payload()
+            payload["tipo"] = tipo
+            resp = self.client.post(self.url, payload, format="json")
+            self.assertEqual(resp.status_code, 201, (tipo, resp.data))
+            self.assertEqual(resp.data["modulo"], modulo, tipo)
+
+    def test_el_modulo_no_se_escribe(self):
+        payload = self._payload()
+        payload["modulo"] = SoftwareDian.Modulo.NOMINA
+        resp = self.client.post(self.url, payload, format="json")
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(resp.data["modulo"], SoftwareDian.Modulo.FACTURACION)
+
+    def test_cambiar_el_tipo_cambia_el_modulo(self):
+        creado = self.client.post(self.url, self._payload(), format="json")
+        resp = self.client.patch(
+            f"{self.url}{creado.data['id']}/", {"tipo": "nomina"}, format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data["modulo"], SoftwareDian.Modulo.NOMINA)
+
+    def test_filtra_por_modulo(self):
+        for tipo in SoftwareDian.Tipo:
+            SoftwareDian.objects.create(
+                emisor=self.emisor, tipo=tipo, identificador=tipo, pin="1",
+            )
+        facturacion = self.client.get(self.url, {"modulo": "facturacion"})
+        nomina = self.client.get(self.url, {"modulo": "nomina"})
+        self.assertEqual(
+            sorted(s["tipo"] for s in facturacion.data["results"]),
+            ["documento_equivalente", "facturacion"],
+        )
+        self.assertEqual(
+            [s["tipo"] for s in nomina.data["results"]], ["nomina"],
+        )
+
+    def test_un_modulo_desconocido_responde_400(self):
+        resp = self.client.get(self.url, {"modulo": "contabilidad"})
+        self.assertEqual(resp.status_code, 400, resp.data)
+
     # --- Uno por emisor y operación ----------------------------------------
 
     def test_rechaza_un_segundo_software_del_mismo_tipo(self):

@@ -1,6 +1,6 @@
 """Software de facturación registrado ante la DIAN."""
 from django.db import models
-from django.db.models import UniqueConstraint
+from django.db.models import Case, Value, When, UniqueConstraint
 
 from apps.nucleo.models import ModeloConFechas
 
@@ -35,11 +35,34 @@ class SoftwareDian(ModeloConFechas):
             "documento_equivalente", "Documento equivalente electrónico"
         )
 
+    class Modulo(models.TextChoices):
+        """Módulo de las integraciones y los ERP que consumen el software.
+
+        Segmenta la habilitación en dos frentes: nómina por un lado, y por otro
+        facturación, que agrupa la factura y el documento equivalente.
+        """
+
+        FACTURACION = "facturacion", "Facturación"
+        NOMINA = "nomina", "Nómina"
+
     # --- Atributos ---
     tipo = models.CharField(
         "tipo de software", max_length=25, choices=Tipo.choices,
         help_text="Operación que habilita: facturación, nómina electrónica o "
         "documento equivalente.",
+    )
+    # Columna generada por la base de datos a partir de `tipo`: se puede
+    # filtrar e indexar como cualquier otra, pero no se escribe nunca, así que
+    # no hay forma de que contradiga al tipo.
+    modulo = models.GeneratedField(
+        expression=Case(
+            When(tipo="nomina", then=Value(Modulo.NOMINA)),
+            default=Value(Modulo.FACTURACION),
+        ),
+        output_field=models.CharField(
+            "módulo", max_length=15, choices=Modulo.choices,
+        ),
+        db_persist=True,
     )
     identificador = models.CharField(
         "ID del software", max_length=100,

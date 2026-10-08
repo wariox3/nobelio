@@ -20,10 +20,24 @@ class SoftwareDianViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
     queryset = models.SoftwareDian.objects.select_related("emisor")
 
     def get_queryset(self):
-        """Permite filtrar por emisor: ``/api/emisores/software/?emisor=<id>``."""
+        """Permite filtrar por emisor y por módulo.
+
+        ``/api/emisores/software/?emisor=<id>&modulo=<facturacion|nomina>``.
+        """
         qs = super().get_queryset()
         emisor = entero_de_query(self.request.query_params, "emisor")
-        return qs.filter(emisor=emisor) if emisor else qs
+        if emisor:
+            qs = qs.filter(emisor=emisor)
+        modulo = self.request.query_params.get("modulo")
+        if modulo:
+            if modulo not in models.SoftwareDian.Modulo.values:
+                raise ErrorSolicitud(
+                    "El filtro 'modulo' tiene que ser uno de: "
+                    + ", ".join(models.SoftwareDian.Modulo.values)
+                    + f"; se recibió '{modulo}'."
+                )
+            qs = qs.filter(modulo=modulo)
+        return qs
 
     # Un software por emisor y operación lo comprueba el serializer, que da el
     # mensaje bueno (con la ruta del que ya existe). Lo de aquí abajo es solo
@@ -162,6 +176,9 @@ class SoftwareDianViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         self._guardar(super().perform_update, serializer)
+        # `modulo` lo calcula la base de datos y un UPDATE no lo trae de
+        # vuelta: sin releerlo, cambiar el `tipo` respondería el módulo viejo.
+        serializer.instance.refresh_from_db(fields=["modulo"])
 
     @staticmethod
     def _guardar(guardar, serializer):
