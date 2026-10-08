@@ -6,6 +6,12 @@ from apps.emisores.servicios import motivo_no_puede_emitir
 
 
 class SoftwareDianSerializer(serializers.ModelSerializer):
+    # Explícito para que el esquema lleve sus valores: DRF no saca los
+    # `choices` del `output_field` de un `GeneratedField`.
+    modulo = serializers.ChoiceField(
+        choices=SoftwareDian.Modulo.choices, read_only=True,
+    )
+
     class Meta:
         model = SoftwareDian
         fields = [

@@ -105,6 +105,13 @@ sin certificado cargado y vigente responde 400.
   - **Cambiar de software es actualizar el que hay** (`PATCH
     /api/emisores/software/{id}/`), no registrar otro: un `POST` repetido del
     mismo tipo responde 400 con la ruta del existente.
+  - **Qué admite la actualización:** el `emisor` y el `tipo` no cambian nunca
+    (400 si llegan con otro valor), y con el Set de Pruebas aceptado el software
+    ya no se puede modificar. `set_pruebas_aceptado` es de solo lectura: lo
+    marca el backend cuando la DIAN acepta el set.
+  - `modulo` (solo lectura) segmenta la habilitación para los ERP: `nomina`
+    para el de nómina y `facturacion` para facturación y documento equivalente.
+    Se filtra con `GET /api/emisores/software/?modulo=<facturacion|nomina>`.
   - **Al registrarlo se siembra el resto**, en la misma transacción, para que el
     alta no termine a medias:
     - la **resolución del Set de Pruebas** (`SETP` 18760000001, con su clave

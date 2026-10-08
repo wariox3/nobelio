@@ -10729,6 +10729,14 @@ components:
       description: |-
         * `devengado` - Devengado
         * `deduccion` - Deducción
+    ModuloEnum:
+      enum:
+      - facturacion
+      - nomina
+      type: string
+      description: |-
+        * `facturacion` - Facturación
+        * `nomina` - Nómina
     Municipio:
       type: object
       properties:
@@ -12828,11 +12836,6 @@ components:
           title: ID del set de pruebas
           description: TestSetId entregado por la DIAN para la habilitación.
           maxLength: 100
-        set_pruebas_aceptado:
-          type: boolean
-          title: Set de pruebas aceptado
-          description: Cuando la DIAN acepta el Set de Pruebas, los envíos pasan a
-            SendBillSync (síncrono) en vez de SendTestSetAsync.
         codigo_proveedor_tecnologico:
           type: string
           title: Código del PT
@@ -13030,6 +13033,10 @@ components:
             * `facturacion` - Facturación electrónica
             * `nomina` - Nómina electrónica
             * `documento_equivalente` - Documento equivalente electrónico
+        modulo:
+          allOf:
+          - $ref: '#/components/schemas/ModuloEnum'
+          readOnly: true
         identificador:
           type: string
           title: ID del software
@@ -13042,6 +13049,7 @@ components:
           maxLength: 100
         set_pruebas_aceptado:
           type: boolean
+          readOnly: true
           title: Set de pruebas aceptado
           description: Cuando la DIAN acepta el Set de Pruebas, los envíos pasan a
             SendBillSync (síncrono) en vez de SendTestSetAsync.
@@ -13072,6 +13080,8 @@ components:
       - emisor
       - id
       - identificador
+      - modulo
+      - set_pruebas_aceptado
       - tipo
     SoftwareDianRequest:
       type: object
@@ -13105,11 +13115,6 @@ components:
           title: ID del set de pruebas
           description: TestSetId entregado por la DIAN para la habilitación.
           maxLength: 100
-        set_pruebas_aceptado:
-          type: boolean
-          title: Set de pruebas aceptado
-          description: Cuando la DIAN acepta el Set de Pruebas, los envíos pasan a
-            SendBillSync (síncrono) en vez de SendTestSetAsync.
         codigo_proveedor_tecnologico:
           type: string
           title: Código del PT
