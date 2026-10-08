@@ -9,7 +9,13 @@ from rest_framework.exceptions import APIException
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from apps.nucleo.api import ErrorSolicitud, entero_de_query, fecha_de_query
+from apps.nucleo.api import (
+    ErrorSolicitud,
+    OrdenEstable,
+    PaginacionAjustable,
+    entero_de_query,
+    fecha_de_query,
+)
 from apps.nucleo.esquema import ErrorSerializer
 from apps.nucleo.registro import campos
 from apps.recepcion import adjuntos, r2, serializers
@@ -48,7 +54,8 @@ class CorreoViewSet(
     ``?origen=correo|carga`` y
     ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD`` sobre ``recibido_en``, ambos
     inclusive. ``?search=`` busca en remitente, asunto y Message-ID, y
-    ``?ordering=`` ordena por ``recibido_en`` o ``estado``.
+    ``?ordering=`` ordena por ``recibido_en`` o ``estado``. Pagina de 25 en
+    25, con ``?page_size=`` hasta 100.
 
     ``DELETE`` elimina un correo **sin emisor** (el de una empresa que no está
     ni va a estar en la plataforma), junto con su MIME en R2.
@@ -58,8 +65,11 @@ class CorreoViewSet(
 
     serializer_class = serializers.CorreoSerializer
     queryset = Correo.objects.all()
+    # Igual que la bandeja de documentos: 25 por página, `?page_size=` hasta
+    # 100, y el orden siempre desempatado por `id`.
+    pagination_class = PaginacionAjustable
 
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    filter_backends = [filters.SearchFilter, OrdenEstable]
     search_fields = ["envelope_from", "asunto", "message_id"]
     ordering_fields = ["recibido_en", "estado"]
 

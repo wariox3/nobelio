@@ -6588,7 +6588,8 @@ paths:
         ``?origen=correo|carga`` y
         ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD`` sobre ``recibido_en``, ambos
         inclusive. ``?search=`` busca en remitente, asunto y Message-ID, y
-        ``?ordering=`` ordena por ``recibido_en`` o ``estado``.
+        ``?ordering=`` ordena por ``recibido_en`` o ``estado``. Pagina de 25 en
+        25, con ``?page_size=`` hasta 100.
 
         ``DELETE`` elimina un correo **sin emisor** (el de una empresa que no está
         ni va a estar en la plataforma), junto con su MIME en R2.
@@ -6605,6 +6606,12 @@ paths:
         required: false
         in: query
         description: Un número de página dentro del conjunto de resultados paginado.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Número de resultados a devolver por página.
         schema:
           type: integer
       - name: search
@@ -6653,7 +6660,8 @@ paths:
         ``?origen=correo|carga`` y
         ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD`` sobre ``recibido_en``, ambos
         inclusive. ``?search=`` busca en remitente, asunto y Message-ID, y
-        ``?ordering=`` ordena por ``recibido_en`` o ``estado``.
+        ``?ordering=`` ordena por ``recibido_en`` o ``estado``. Pagina de 25 en
+        25, con ``?page_size=`` hasta 100.
 
         ``DELETE`` elimina un correo **sin emisor** (el de una empresa que no está
         ni va a estar en la plataforma), junto con su MIME en R2.

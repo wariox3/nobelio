@@ -70,9 +70,12 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
 - **API de consulta `GET /api/recepcion/correo/`** (`apps/recepcion/views/correo.py`),
   de solo lectura y acotada con `AlcanceEmisorMixin`: cada usuario ve los
   correos de sus emisores, y el staff todos, incluidos los que no tienen emisor.
-  - Filtros: `?emisor=<id>`, `?estado=<estado>`, `?desde=AAAA-MM-DD` y
-    `?hasta=AAAA-MM-DD` (sobre `recibido_en`, en hora de Colombia, inclusive).
+  - Filtros: `?emisor=<id>`, `?estado=<estado>`, `?origen=correo|carga`,
+    `?desde=AAAA-MM-DD` y `?hasta=AAAA-MM-DD` (sobre `recibido_en`, en hora de
+    Colombia, inclusive).
   - `?search=` en remitente, asunto y Message-ID; `?ordering=recibido_en|estado`.
+  - Pagina igual que los documentos: 25 por defecto, `?page_size=` hasta 100,
+    y el orden siempre desempata por `id`.
   - Expone `raw_key` (la clave del MIME en R2) pero no `sha256`. Tests en `apps/recepcion/tests_api.py`.
   - `DELETE /api/recepcion/correo/<id>/` elimina un correo **sin emisor** (el de
     una empresa que no está ni va a estar en la plataforma): la fila, sus

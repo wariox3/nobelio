@@ -92,6 +92,25 @@ class CorreoApiTests(CorreosBase):
         self.assertNotIn("sha256", fila)
         self.assertEqual(fila["raw_key"], "2026-10-02/1.eml")
 
+    def test_pagina_igual_que_los_documentos(self):
+        """25 por defecto, `?page_size=` hasta 100 y orden estable con empates."""
+        momento = datetime(2026, 10, 3, 9)
+        for huella in "abcdefghijklmnopqrstuvwxyzABCD":
+            self.crear_correo(self.emisor, huella, momento)
+
+        cuerpo = self.client.get(URL).json()
+        self.assertEqual(cuerpo["count"], 32)
+        self.assertEqual(len(cuerpo["results"]), 25)
+
+        vistos = []
+        for pagina in range(1, 5):
+            respuesta = self.client.get(URL, {"page": pagina, "page_size": 10, "ordering": "estado"})
+            if respuesta.status_code == 404:
+                break
+            vistos += [fila["id"] for fila in respuesta.json()["results"]]
+        self.assertEqual(len(vistos), 32)
+        self.assertEqual(len(set(vistos)), 32)
+
     def test_el_correo_ajeno_es_404(self):
         self.assertEqual(self.client.get(f"{URL}{self.ajeno.pk}/").status_code, 404)
 
