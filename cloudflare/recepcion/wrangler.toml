@@ -1,0 +1,24 @@
+# Email Worker de recepción. Despliegue: docs/recepcion.md, "Montaje en Cloudflare".
+# El secreto INBOUND_TOKEN no va aquí: `npx wrangler secret put INBOUND_TOKEN`.
+
+name = "nobelio-recepcion"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+# Pruebas (rededoc.uk).
+[vars]
+NOBELIO_URL = "https://api.rededoc.uk/recepcion/inbound"
+
+[[r2_buckets]]
+binding = "RAW"
+bucket_name = "nobelio-inbound-raw"
+
+# Producción (rededoc.co): `npx wrangler deploy --env produccion`.
+# Con --env, wrangler despliega un Worker aparte llamado
+# `nobelio-recepcion-produccion`, con sus propias variables y secretos.
+[env.produccion.vars]
+NOBELIO_URL = "https://api.rededoc.co/recepcion/inbound"
+
+[[env.produccion.r2_buckets]]
+binding = "RAW"
+bucket_name = "nobelio-inbound-raw-produccion"

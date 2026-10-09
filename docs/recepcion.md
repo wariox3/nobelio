@@ -236,14 +236,16 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
   - Regla catch-all: enviar al Worker `nobelio-recepcion`.
   - Secreto `INBOUND_TOKEN` en el Worker, el mismo valor en `/opt/nobelio/.env`.
     Desplegado y verificado el 2026-10-03: los correos entran con `201`.
+  - El paso a paso está en «Montaje en Cloudflare», más abajo, y el código del
+    Worker en `cloudflare/recepcion/`.
 
 ## Siguientes pasos
 
 En orden. Cada uno se cierra (código, tests, despliegue en pruebas) antes de
 empezar el siguiente.
 
-1. **Producción**: repetir lo de Cloudflare en `rededoc.co` y apuntar el Worker
-   a `api.rededoc.co`.
+1. **Producción**: seguir «Montaje en Cloudflare» con la columna de
+   producción (zona `rededoc.co`, Worker `nobelio-recepcion-produccion`).
 
 Después siguen los eventos RADIAN (sección siguiente, pasos R1 a R5).
 
@@ -399,6 +401,134 @@ antes de empezar el siguiente.
 | MIME crudo | En R2 (vinculación nativa del Worker), no en B2. Se evaluó B2 vía API S3 desde el Worker y se descartó (2026-10-03) |
 | Token | Obligatorio y falla cerrado. La primera versión fue abierta, a propósito, para probar el flujo |
 | Asociación con la empresa | El buzón es el NIT del emisor sin DV (`901192048@recepcion.rededoc.co`). Se asocia en el endpoint; sin campo ni tabla aparte |
+
+## Montaje en Cloudflare
+
+Paso a paso para dejar funcionando un buzón `<nit>@recepcion.<dominio>`. Los
+ejemplos son de pruebas (`rededoc.uk`); en producción cambia el dominio por
+`rededoc.co` y usa los nombres de la columna de producción:
+
+| | Pruebas | Producción |
+|---|---|---|
+| Zona | `rededoc.uk` | `rededoc.co` |
+| Bucket R2 | `nobelio-inbound-raw` | `nobelio-inbound-raw-produccion` |
+| Worker | `nobelio-recepcion` | `nobelio-recepcion-produccion` |
+| `NOBELIO_URL` | `https://api.rededoc.uk/recepcion/inbound` | `https://api.rededoc.co/recepcion/inbound` |
+| Despliegue | `npx wrangler deploy` | `npx wrangler deploy --env produccion` |
+
+El código del Worker y su configuración están en `cloudflare/recepcion/`
+(`worker.js` y `wrangler.toml`).
+
+> El Worker de pruebas se creó en su momento desde el dashboard, y
+> `worker.js` se reconstruyó después a partir de este contrato. Antes del
+> primer `wrangler deploy` en pruebas, compáralo con el código desplegado
+> (*Workers & Pages* → `nobelio-recepcion` → *Edit code*): el deploy lo
+> reemplaza.
+
+### 1. Servidor: `.env` y nginx
+
+Ya descrito en `docs/despliegue.md`; en resumen:
+
+1. Genera el token:
+   `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`.
+2. En `/opt/nobelio/.env`: `INBOUND_TOKEN` con ese valor y las `R2_*`
+   (paso 3 de aquí).
+3. El bloque `location = /recepcion/inbound` de nginx, con
+   `client_max_body_size 30M`.
+4. Reinicia gunicorn y el worker de Celery, que debe escuchar la cola
+   `recepcion`.
+
+Comprueba que responde, sin token: `curl -i -X POST
+https://api.rededoc.uk/recepcion/inbound` → `401`.
+
+### 2. Bucket R2
+
+*R2 Object Storage* → *Create bucket* → `nobelio-inbound-raw`, ubicación
+automática, clase *Standard*. Sin acceso público.
+
+### 3. Token de API de R2 (para nobelio)
+
+Es con lo que el worker de Celery descarga el MIME. *R2* → *Manage R2 API
+Tokens* → *Create API token*:
+
+- Permisos: *Object Read & Write*.
+- Alcance: solo el bucket del paso 2.
+
+Copia al `.env` del servidor:
+
+```
+R2_ACCOUNT_ID=<Account ID, en la portada de R2>
+R2_ACCESS_KEY_ID=<Access Key ID>
+R2_SECRET_ACCESS_KEY=<Secret Access Key>
+R2_BUCKET=nobelio-inbound-raw
+```
+
+El secreto solo se muestra una vez.
+
+### 4. Desplegar el Worker
+
+Desde la raíz del repo, con Node instalado (sin `package.json`: `npx` baja
+wrangler al vuelo):
+
+```bash
+cd cloudflare/recepcion
+npx wrangler login                                  # una vez por máquina
+npx wrangler deploy                                 # producción: --env produccion
+npx wrangler secret put INBOUND_TOKEN               # pega el token del paso 1
+```
+
+`secret put` pide el valor por la terminal; no lo pases como argumento para que
+no quede en el historial. En producción va con `--env produccion` también.
+
+Queda un Worker con la vinculación R2 `RAW`, la variable `NOBELIO_URL` y el
+secreto `INBOUND_TOKEN`. Revísalo en *Workers & Pages* → el Worker →
+*Settings* → *Variables and Secrets* / *Bindings*.
+
+**Sin wrangler (dashboard)**: *Workers & Pages* → *Create* → *Create Worker*,
+pega `worker.js` en el editor y despliega. Luego, en *Settings*:
+*Bindings* → *R2 bucket* con nombre `RAW`; *Variables and Secrets* →
+`NOBELIO_URL` (texto) e `INBOUND_TOKEN` (secreto).
+
+### 5. Email Routing en la zona
+
+En la zona (`rededoc.uk`) → *Email* → *Email Routing*:
+
+1. **Activarlo** (*Get started* / *Enable Email Routing*). Cloudflare propone
+   los registros MX y el TXT de SPF del dominio raíz; acéptalos. Si la zona ya
+   recibe correo en otro proveedor, no los aceptes en el raíz: basta con el
+   subdominio del punto 2.
+2. **Subdominio**: *Settings* → *Subdomains* → *Add subdomain* → `recepcion`.
+   Agrega los MX (`route1/2/3.mx.cloudflare.net`) y el SPF de
+   `recepcion.rededoc.uk`. Verifica en *DNS* que existan.
+3. **Regla catch-all**: *Routing rules* → *Catch-all address* → *Edit*:
+   acción *Send to a Worker*, destino `nobelio-recepcion`, y actívala.
+
+No hace falta verificar direcciones de destino: el Worker es el destino.
+
+### 6. Verificar de punta a punta
+
+1. En una terminal, los logs del Worker:
+   `cd cloudflare/recepcion && npx wrangler tail` (con `--env produccion` en
+   producción).
+2. Desde cualquier buzón (Gmail sirve), manda un correo con una factura
+   adjunta a `<nit de un emisor registrado>@recepcion.rededoc.uk`.
+3. En el tail debe salir `recepcion.ok 201 to=... key=AAAA-MM-DD/<uuid>.eml`.
+4. En R2, el objeto con esa clave.
+5. En nobelio, `GET /api/recepcion/correo/` lo lista, primero `pendiente` y,
+   cuando el worker de Celery lo procesa, con sus adjuntos y documentos.
+
+| Síntoma | Causa |
+|---|---|
+| El correo rebota al remitente | Falta el MX del subdominio o la regla catch-all está apagada |
+| `recepcion.fallo ... 401` | `INBOUND_TOKEN` distinto en el Worker y en el `.env` (o vacío en el `.env`) |
+| `recepcion.fallo ... 413` | nginx sin el bloque de `/recepcion/inbound` (corta en 1 MB) |
+| `recepcion.fallo ... 5xx` o error de red, tras 3 reintentos | nobelio caído; el MIME quedó en R2 (ver abajo) |
+| El correo queda `pendiente` | Worker de Celery sin la cola `recepcion`, o sin las `R2_*` |
+
+Si nobelio no registró un correo, el MIME sigue en R2 con la clave del log:
+descárgalo (*R2* → bucket → objeto → *Download*) y publícalo con el `curl`
+de la sección siguiente, poniendo esa clave en `X-Raw-Key` y el destinatario
+original en `X-Envelope-To`.
 
 ## Probar el endpoint
 
