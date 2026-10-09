@@ -495,8 +495,9 @@ un correo en este punto, el Worker falla y el log lo muestra.
 
 1. Vuelve al Worker → pestaña *Settings* → *Bindings* → *Add*.
 2. Tipo *R2 bucket*.
-3. *Variable name*: `RAW` (exactamente así, en mayúsculas: el código usa
-   `env.RAW`).
+3. *Variable name*: `RAW` (exactamente así, en mayúsculas, y sin `env.`
+   delante: el `env.` lo pone el código). Con otro nombre, el Worker falla con
+   `Cannot read properties of undefined (reading 'put')`.
 4. *R2 bucket*: `nobelio-inbound-raw` (producción:
    `nobelio-inbound-raw-produccion`).
 5. *Deploy* / *Save*.
