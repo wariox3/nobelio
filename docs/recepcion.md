@@ -414,15 +414,15 @@ ejemplos son de pruebas (`rededoc.uk`); en producción cambia el dominio por
 | Bucket R2 | `nobelio-inbound-raw` | `nobelio-inbound-raw-produccion` |
 | Worker | `nobelio-recepcion` | `nobelio-recepcion-produccion` |
 | `NOBELIO_URL` | `https://api.rededoc.uk/recepcion/inbound` | `https://api.rededoc.co/recepcion/inbound` |
-| Despliegue | `npx wrangler deploy` | `npx wrangler deploy --env produccion` |
 
-El código del Worker y su configuración están en `cloudflare/recepcion/`
-(`worker.js` y `wrangler.toml`).
+Todo se hace a mano en el dashboard de Cloudflare (dash.cloudflare.com). El
+código del Worker está en `cloudflare/recepcion/worker.js`: es la fuente de
+verdad, y lo que se pega en el editor del dashboard sale de ahí. Si se cambia
+en el dashboard, se copia de vuelta al repo.
 
 > El Worker de pruebas se creó en su momento desde el dashboard, y
-> `worker.js` se reconstruyó después a partir de este contrato. Antes del
-> primer `wrangler deploy` en pruebas, compáralo con el código desplegado
-> (*Workers & Pages* → `nobelio-recepcion` → *Edit code*): el deploy lo
+> `worker.js` se reconstruyó después a partir de este contrato. Antes de pegarlo
+> en pruebas, compáralo con el código desplegado (paso 4.2): pegarlo lo
 > reemplaza.
 
 ### 1. Servidor: `.env` y nginx
@@ -467,27 +467,75 @@ El secreto solo se muestra una vez.
 
 ### 4. Desplegar el Worker
 
-Desde la raíz del repo, con Node instalado (sin `package.json`: `npx` baja
-wrangler al vuelo):
+A mano, en el dashboard. Los nombres de los botones pueden variar un poco
+según la versión del dashboard; el orden es el mismo.
 
-```bash
-cd cloudflare/recepcion
-npx wrangler login                                  # una vez por máquina
-npx wrangler deploy                                 # producción: --env produccion
-npx wrangler secret put INBOUND_TOKEN               # pega el token del paso 1
-```
+**4.1. Crear el Worker** (si ya existe, como en pruebas, salta al 4.2):
 
-`secret put` pide el valor por la terminal; no lo pases como argumento para que
-no quede en el historial. En producción va con `--env produccion` también.
+1. Menú izquierdo → *Workers & Pages* → *Create* (o *Create application*).
+2. Pestaña *Workers* → *Start with Hello World!* (la plantilla vacía).
+3. *Worker name*: `nobelio-recepcion` (producción:
+   `nobelio-recepcion-produccion`).
+4. *Deploy*. Queda publicado con el "Hello World"; se reemplaza en el 4.2.
 
-Queda un Worker con la vinculación R2 `RAW`, la variable `NOBELIO_URL` y el
-secreto `INBOUND_TOKEN`. Revísalo en *Workers & Pages* → el Worker →
-*Settings* → *Variables and Secrets* / *Bindings*.
+**4.2. Pegar el código:**
 
-**Sin wrangler (dashboard)**: *Workers & Pages* → *Create* → *Create Worker*,
-pega `worker.js` en el editor y despliega. Luego, en *Settings*:
-*Bindings* → *R2 bucket* con nombre `RAW`; *Variables and Secrets* →
-`NOBELIO_URL` (texto) e `INBOUND_TOKEN` (secreto).
+1. En el Worker → *Edit code* (arriba a la derecha).
+2. Si el Worker ya existía, copia primero lo que hay en el editor y compáralo
+   con `cloudflare/recepcion/worker.js`. Si difieren en algo que no sea forma,
+   detente y revísalo antes de seguir.
+3. Selecciona todo el contenido de `worker.js` (el archivo del editor suele
+   llamarse `worker.js` o `index.js`; da igual) y reemplázalo por el del repo.
+4. *Deploy* (botón azul, arriba a la derecha) y confirma.
+
+Todavía no funciona: faltan la vinculación, la variable y el secreto. Si llega
+un correo en este punto, el Worker falla y el log lo muestra.
+
+**4.3. Vinculación con R2 (`RAW`):**
+
+1. Vuelve al Worker → pestaña *Settings* → *Bindings* → *Add*.
+2. Tipo *R2 bucket*.
+3. *Variable name*: `RAW` (exactamente así, en mayúsculas: el código usa
+   `env.RAW`).
+4. *R2 bucket*: `nobelio-inbound-raw` (producción:
+   `nobelio-inbound-raw-produccion`).
+5. *Deploy* / *Save*.
+
+**4.4. Variable `NOBELIO_URL`:**
+
+1. *Settings* → *Variables and Secrets* → *Add*.
+2. *Type*: *Text*.
+3. *Variable name*: `NOBELIO_URL`.
+4. *Value*: `https://api.rededoc.uk/recepcion/inbound` (producción:
+   `https://api.rededoc.co/recepcion/inbound`). Sin barra final: con barra,
+   Django responde 404.
+5. *Deploy* / *Save*.
+
+**4.5. Secreto `INBOUND_TOKEN`:**
+
+1. *Settings* → *Variables and Secrets* → *Add*.
+2. *Type*: *Secret* (no *Text*: el secreto no se vuelve a mostrar ni queda
+   en texto plano en el dashboard).
+3. *Variable name*: `INBOUND_TOKEN`.
+4. *Value*: el mismo token del paso 1, idéntico al de `/opt/nobelio/.env`.
+   Pégalo sin espacios ni salto de línea al final.
+5. *Deploy* / *Save*.
+
+**4.6. Comprobar la configuración.** En *Settings* deben verse:
+
+| Sección | Nombre | Tipo | Valor |
+|---|---|---|---|
+| *Bindings* | `RAW` | R2 bucket | el bucket del paso 2 |
+| *Variables and Secrets* | `NOBELIO_URL` | Text | la URL de `/recepcion/inbound` |
+| *Variables and Secrets* | `INBOUND_TOKEN` | Secret | *(oculto)* |
+
+Y en *Deployments*, la última versión con la fecha de hoy. Cada cambio en
+*Settings* crea una versión nueva; no hace falta volver a pegar el código.
+
+**Cambiar el token después**: *Settings* → *Variables and Secrets* →
+`INBOUND_TOKEN` → *Edit* → nuevo valor → *Deploy*. Cambia también el `.env`
+y reinicia gunicorn; mientras uno y otro no coincidan, los correos fallan con
+`401` (el MIME queda en R2).
 
 ### 5. Email Routing en la zona
 
@@ -507,12 +555,11 @@ No hace falta verificar direcciones de destino: el Worker es el destino.
 
 ### 6. Verificar de punta a punta
 
-1. En una terminal, los logs del Worker:
-   `cd cloudflare/recepcion && npx wrangler tail` (con `--env produccion` en
-   producción).
+1. Abre los logs en vivo del Worker: *Workers & Pages* → el Worker → *Logs*
+   (o *Observability*) → *Begin log stream* / *Live*.
 2. Desde cualquier buzón (Gmail sirve), manda un correo con una factura
    adjunta a `<nit de un emisor registrado>@recepcion.rededoc.uk`.
-3. En el tail debe salir `recepcion.ok 201 to=... key=AAAA-MM-DD/<uuid>.eml`.
+3. En los logs debe salir `recepcion.ok 201 to=... key=AAAA-MM-DD/<uuid>.eml`.
 4. En R2, el objeto con esa clave.
 5. En nobelio, `GET /api/recepcion/correo/` lo lista, primero `pendiente` y,
    cuando el worker de Celery lo procesa, con sus adjuntos y documentos.
