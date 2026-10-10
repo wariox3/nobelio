@@ -109,6 +109,50 @@ def eliminar_correo(correo):
     return documentos, len(adjuntos)
 
 
+class DocumentoConEventos(Exception):
+    """El documento tiene eventos RADIAN: no se elimina."""
+
+
+def eliminar_documento(documento):
+    """Borra un documento sin eventos y sus archivos en B2.
+
+    Solo si no tiene ningún evento, en ningún estado: uno registrado está en
+    RADIAN, y uno rechazado guarda la respuesta de la DIAN. Lanza
+    ``DocumentoConEventos`` si los tiene.
+
+    El correo se queda, con su MIME y los demás adjuntos, salvo que sea una
+    carga manual y este fuera su único documento: sin documentos, la carga no
+    tiene sentido y se borra con sus archivos. Devuelve ``(carga_borrada,
+    archivos)``. Mismas reglas que ``eliminar_correo``: las filas en una
+    transacción y los archivos dentro de ella, después.
+    """
+    with transaction.atomic():
+        # El candado del documento hace esperar a un evento que se esté
+        # creando a la vez: su llave foránea no pasa hasta que esto termine.
+        documento = Documento.objects.select_for_update().select_related("correo").get(
+            pk=documento.pk,
+        )
+        if Evento.objects.filter(documento=documento).exists():
+            raise DocumentoConEventos(
+                "El documento tiene eventos RADIAN: no se puede eliminar."
+            )
+        correo = documento.correo
+        borrar = list(Adjunto.objects.filter(documento=documento))
+        Adjunto.objects.filter(documento=documento).delete()
+        documento.delete()
+        carga_borrada = (
+            correo.origen == Correo.Origen.CARGA
+            and not Documento.objects.filter(correo=correo).exists()
+        )
+        if carga_borrada:
+            borrar += list(Adjunto.objects.filter(correo=correo))
+            Adjunto.objects.filter(correo=correo).delete()
+            correo.delete()
+        for adjunto in borrar:
+            adjunto.archivo.storage.delete(adjunto.archivo.name)
+    return carga_borrada, len(borrar)
+
+
 def vaciar_correo(correo):
     """Borra los adjuntos de un correo sin documentos, antes de reprocesarlo.
 

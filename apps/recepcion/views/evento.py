@@ -2,7 +2,7 @@
 from django.http import FileResponse
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
-from rest_framework import filters, viewsets
+from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -17,7 +17,7 @@ from apps.seguridad.alcance import AlcanceEmisorMixin
 RESPUESTA_XML = {(200, "application/xml"): OpenApiTypes.BINARY, 400: ErrorSerializer}
 
 
-class EventoViewSet(AlcanceEmisorMixin, viewsets.ReadOnlyModelViewSet):
+class EventoViewSet(AlcanceEmisorMixin, mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewSet):
     """Los eventos RADIAN que los emisores registraron sobre sus facturas recibidas.
 
     Se piden con ``POST /api/recepcion/documento/{id}/evento/`` (o salen solos:
@@ -30,6 +30,8 @@ class EventoViewSet(AlcanceEmisorMixin, viewsets.ReadOnlyModelViewSet):
     ``?codigo=030|031|032|033``. ``?ordering=`` por ``creado_en`` o ``numero``.
 
     ``POST {id}/enviar/`` reenvía uno en ``error``, con el mismo XML.
+    ``DELETE`` elimina uno ``rechazado`` (la DIAN no lo registró); su número
+    no se vuelve a usar.
     ``xml/`` baja el evento firmado y ``respuesta/`` el ApplicationResponse
     con el que la DIAN respondió.
     """
@@ -52,6 +54,20 @@ class EventoViewSet(AlcanceEmisorMixin, viewsets.ReadOnlyModelViewSet):
         if codigo := params.get("codigo"):
             qs = qs.filter(evento_radian__codigo=codigo)
         return qs
+
+    @extend_schema(responses={204: None, 400: ErrorSerializer, 502: ErrorSerializer})
+    def destroy(self, request, *args, **kwargs):
+        """Elimina un evento rechazado y sus archivos en B2.
+
+        Solo los ``rechazado``: los demás responden 400. Con el evento se van
+        el motivo del rechazo y la respuesta de la DIAN. Su número no se
+        libera. Si B2 falla, la fila vuelve y responde 502.
+        """
+        try:
+            eventos.eliminar(self.get_object())
+        except eventos.EventoNoEliminable as error:
+            raise ErrorSolicitud(str(error))
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @extend_schema(request=None, responses={200: serializers.EventoSerializer, 400: ErrorSerializer})
     @action(detail=True, methods=["post"])

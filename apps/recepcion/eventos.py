@@ -33,7 +33,6 @@ import requests
 from botocore.exceptions import BotoCoreError, ClientError
 from django.core.files.base import ContentFile
 from django.db import transaction
-from django.db.models import Max
 from django.utils import timezone
 from lxml import etree
 
@@ -52,7 +51,7 @@ from apps.nucleo.models import Ambiente
 from apps.nucleo.registro import campos
 from apps.recepcion import extraccion
 from apps.recepcion.models import (
-    Adjunto, EstadoEvento, EstadoRadian, EstadoVerificacion, Evento,
+    Adjunto, ConsecutivoEvento, EstadoEvento, EstadoRadian, EstadoVerificacion, Evento,
 )
 
 logger = logging.getLogger(__name__)
@@ -136,10 +135,14 @@ def solicitar(documento, codigo, *, usuario=None, persona=None, concepto_reclamo
         # registran dos veces el mismo evento.
         Emisor.objects.select_for_update().get(pk=emisor.pk)
         _validar_orden(documento, codigo)
-        consecutivo = (
-            Evento.objects.filter(emisor=emisor, evento_radian=tipo)
-            .aggregate(ultimo=Max("consecutivo"))["ultimo"] or 0
-        ) + 1
+        # Del contador y no del máximo de rec_evento: un rechazado que se
+        # elimina no devuelve su número.
+        contador, _ = ConsecutivoEvento.objects.get_or_create(
+            emisor=emisor, evento_radian=tipo,
+        )
+        contador.ultimo += 1
+        contador.save(update_fields=["ultimo"])
+        consecutivo = contador.ultimo
         evento = Evento.objects.create(
             documento=documento,
             emisor=emisor,
@@ -339,6 +342,37 @@ def enviar(evento, *, cliente=None, firmador=None):
     except (requests.RequestException, etree.XMLSyntaxError) as error:
         raise ErrorTransitorio(f"La DIAN no respondió: {error}.")
     return _guardar_respuesta(evento, respuesta)
+
+
+class EventoNoEliminable(Exception):
+    """El evento no está rechazado: no se elimina."""
+
+
+def eliminar(evento):
+    """Borra un evento **rechazado** y sus archivos en B2.
+
+    Solo los rechazados: la DIAN no los registró, así que no existen en RADIAN.
+    Uno registrado está allá; uno pendiente o en error puede estar en camino o
+    registrado sin que lo sepamos. Su número no se libera: el consecutivo sale
+    de ``ConsecutivoEvento``, no de los eventos que quedan. Lanza
+    ``EventoNoEliminable`` si no está rechazado.
+    """
+    with transaction.atomic():
+        evento = Evento.objects.select_for_update().get(pk=evento.pk)
+        if evento.estado != EstadoEvento.RECHAZADO:
+            raise EventoNoEliminable(
+                "Solo se eliminan los eventos rechazados; este está "
+                f"{evento.get_estado_display().lower()}."
+            )
+        archivos = [a for a in (evento.xml_archivo, evento.respuesta_archivo) if a]
+        evento_id = evento.pk
+        evento.delete()
+        for archivo in archivos:
+            archivo.storage.delete(archivo.name)
+    logger.info("recepcion.evento_eliminado %s", campos(
+        evento=evento_id, numero=evento.numero, documento=evento.documento_id,
+    ))
+    return len(archivos)
 
 
 def marcar_error(evento, detalle):

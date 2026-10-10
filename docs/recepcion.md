@@ -322,9 +322,15 @@ y no nos toca.
   `Evento;<factura>;<NIT>;<nombre>;<número evento>;<código>;<línea opcional>`
   y un ZIP de máximo 2 MB con el `AttachedDocument` (el evento y la respuesta
   de la DIAN). nobelio no la hace: R5 se descartó (2026-10-09).
-- **Software**: se envía con el `SoftwareDian` de facturación del emisor. Hay
-  que confirmar si la DIAN exige una habilitación aparte para eventos ⚠: se
-  sabrá al enviar el primero en habilitación (R3).
+- **Software**: se envía con el `SoftwareDian` de facturación del emisor, y la
+  DIAN lo exige (confirmado en producción el 2026-10-09): un 030 con un
+  SoftwareID y un PIN inventados, sobre una factura de contado para que no
+  pudiera registrarse, se rechazó con **AAB24b** («El identificador del
+  software … no corresponde a un software autorizado para este OFE») y
+  **AAD06** (el CUDE no cuadra: la DIAN lo recalcula con el PIN registrado).
+  Con el software real del emisor solo salió LGC62, así que no hay una
+  habilitación aparte para eventos. Sin cargo ni área de la persona que
+  recibe, la DIAN notifica **AAH17** y **AAH18**, sin rechazar.
 
 ### Lo que hay y lo que falta
 
@@ -384,8 +390,11 @@ empezar el siguiente.
     deja la respuesta cruda de `GetStatusEvent` en `capturas/eventos/`.
     Hubo un comando `probar_evento` que mandaba el 030 con un número a mano;
     se quitó porque chocaba con la numeración de R4.
-  - Falta: correr la prueba y confirmar con las respuestas reales los ⚠ (forma
-    de `GetStatusEvent`, si los eventos piden habilitación aparte, el DV).
+  - Primer 030 real (2026-10-09): rechazado por LGC62, factura de contado
+    (de ahí la regla de solo facturas a crédito). Software: confirmado que
+    hace falta el del emisor y que no hay habilitación aparte (ver «Técnica»).
+  - Falta: un 030 **registrado** sobre una factura a crédito, y con él
+    confirmar los ⚠ que quedan (forma de `GetStatusEvent`, el DV).
 - **R4. Eventos del adquiriente** ✅ (2026-10-09, sin probar aún contra la
   DIAN): modelo `Evento` (`rec_evento`, FK a `rec_documento`) y servicio
   `apps/recepcion/eventos.py`. Tests en `apps/recepcion/tests_eventos.py`.
@@ -397,8 +406,12 @@ empezar el siguiente.
     error (uno rechazado sí se puede volver a pedir, con otro número). Crea
     el evento `pendiente` y encola `enviar_evento` (cola `recepcion`).
   - Numeración: consecutivo por emisor y tipo, con prefijo `ACR` (030),
-    `REC` (031), `RBS` (032) y `ACE` (033). Bajo candado del emisor, para que
-    dos peticiones no saquen el mismo número.
+    `REC` (031), `RBS` (032) y `ACE` (033). Sale de un contador propio
+    (`ConsecutivoEvento`, `rec_consecutivo_evento`, migración
+    `recepcion/0009`, que lo inicializa con el máximo de los eventos que ya
+    había), no del máximo de `rec_evento`: así un rechazado eliminado no
+    devuelve su número. Bajo candado del emisor, para que dos peticiones no
+    saquen el mismo.
   - `enviar` genera el XML (fecha, hora y CUDE del momento), lo firma, lo
     manda y guarda la respuesta: `registrado` o `rechazado`, y en B2 el XML
     firmado y el ApplicationResponse de la DIAN. Al registrarse, actualiza
@@ -434,6 +447,19 @@ empezar el siguiente.
     DIAN. Una factura de contado tampoco saca acuse automático.
   - El borrado forzado del correo (`eliminar-admin/`) se lleva sus eventos y
     los archivos de B2; en RADIAN siguen registrados.
+  - `DELETE /api/recepcion/evento/<id>/` (2026-10-09) elimina un evento
+    **rechazado** y sus archivos en B2 (`eventos.eliminar`); los demás
+    estados responden 400. Con él se van el motivo y la respuesta de la DIAN.
+    Su número no se vuelve a usar. Sirve, por ejemplo, para dejar sin eventos
+    una factura de contado y poder eliminarla.
+  - `DELETE /api/recepcion/documento/<id>/` (2026-10-09) elimina un documento
+    **sin ningún evento** (en cualquier estado; con alguno, 400) y sus
+    adjuntos en B2 (`adjuntos.eliminar_documento`). El correo se queda con
+    su MIME y sus demás adjuntos; una carga manual que se queda sin
+    documentos se elimina con él. Un correo ya procesado no se reprocesa
+    (`reprocesar_correos` solo toma pendientes, en error o de empresa
+    desconocida), así que el documento no vuelve solo; se puede recargar a
+    mano con `cargar/`. Tests en `apps/recepcion/tests_eventos.py`.
 - **R5. Notificación al proveedor** ❌ descartado (2026-10-09): nobelio no le
   manda al proveedor el `AttachedDocument` del evento por correo. El evento
   queda registrado en RADIAN, donde el proveedor lo consulta.
@@ -450,6 +476,8 @@ empezar el siguiente.
 | Adjuntos guardados | Los archivos finales, no los ZIP que los envolvían. Sin deduplicar por hash |
 | Tests | `django.test.TestCase` con `manage.py test`, como el resto. Sin pytest |
 | Idempotencia del endpoint | SHA-256 del body. `X-Raw-Key` no sirve porque cambia en cada entrega |
+| Eliminar un evento | Solo los rechazados, que no existen en RADIAN. Su número no se reutiliza (2026-10-09) |
+| Eliminar un documento | Solo sin eventos RADIAN, en ningún estado: uno registrado está en RADIAN y uno rechazado guarda la respuesta de la DIAN. El correo se queda (2026-10-09) |
 | CUFE repetido | Se ignora: CUFE único en `rec_documento` y, si ya existe, no se crea nada ni se marca (decidido 2026-10-03) |
 | Carpeta en R2 | Fecha en UTC (`AAAA-MM-DD/<uuid>.eml`): un correo después de las 19:00 de Colombia cae en la del día siguiente. Solo organiza; la fecha que cuenta es `recibido_en` |
 | Numeración de eventos RADIAN | Consecutivo en nobelio por emisor y tipo de evento, con prefijo por código: `ACR`, `REC`, `RBS`, `ACE` (decidido 2026-10-06) |

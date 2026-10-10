@@ -6901,7 +6901,8 @@ paths:
       description: |-
         Facturas y notas que los proveedores les mandaron a los emisores.
 
-        De solo lectura: las crea el procesamiento de los correos de recepción.
+        Las crea el procesamiento de los correos de recepción (o la carga manual).
+        ``DELETE`` elimina uno **sin eventos RADIAN**, con sus archivos.
 
         Filtros: ``?emisor=<id>``, ``?correo=<id>``,
         ``?documento_tipo=factura_venta|nota_credito|nota_debito``,
@@ -6989,7 +6990,8 @@ paths:
       description: |-
         Facturas y notas que los proveedores les mandaron a los emisores.
 
-        De solo lectura: las crea el procesamiento de los correos de recepción.
+        Las crea el procesamiento de los correos de recepción (o la carga manual).
+        ``DELETE`` elimina uno **sin eventos RADIAN**, con sus archivos.
 
         Filtros: ``?emisor=<id>``, ``?correo=<id>``,
         ``?documento_tipo=factura_venta|nota_credito|nota_debito``,
@@ -7041,6 +7043,63 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DocumentoRecibido'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: recepcion_documento_destroy
+      description: |-
+        Elimina el documento y sus archivos en B2, si no tiene eventos.
+
+        Con cualquier evento, en cualquier estado, responde 400: uno registrado
+        está en RADIAN y uno rechazado guarda la respuesta de la DIAN. El
+        correo se queda con su MIME y sus demás adjuntos; si era una carga
+        manual y este era su único documento, se elimina también.
+
+        Si B2 falla, las filas vuelven y responde 502; repetir termina el
+        trabajo.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este documento recibido.
+        required: true
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '204':
+          description: No response body
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: ''
         '429':
           description: Error
@@ -7407,6 +7466,8 @@ paths:
         ``?codigo=030|031|032|033``. ``?ordering=`` por ``creado_en`` o ``numero``.
 
         ``POST {id}/enviar/`` reenvía uno en ``error``, con el mismo XML.
+        ``DELETE`` elimina uno ``rechazado`` (la DIAN no lo registró); su número
+        no se vuelve a usar.
         ``xml/`` baja el evento firmado y ``respuesta/`` el ApplicationResponse
         con el que la DIAN respondió.
       parameters:
@@ -7467,6 +7528,8 @@ paths:
         ``?codigo=030|031|032|033``. ``?ordering=`` por ``creado_en`` o ``numero``.
 
         ``POST {id}/enviar/`` reenvía uno en ``error``, con el mismo XML.
+        ``DELETE`` elimina uno ``rechazado`` (la DIAN no lo registró); su número
+        no se vuelve a usar.
         ``xml/`` baja el evento firmado y ``respuesta/`` el ApplicationResponse
         con el que la DIAN respondió.
       parameters:
@@ -7487,6 +7550,59 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Evento'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: recepcion_evento_destroy
+      description: |-
+        Elimina un evento rechazado y sus archivos en B2.
+
+        Solo los ``rechazado``: los demás responden 400. Con el evento se van
+        el motivo del rechazo y la respuesta de la DIAN. Su número no se
+        libera. Si B2 falla, la fila vuelve y responde 502.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este evento RADIAN.
+        required: true
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '204':
+          description: No response body
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: ''
         '429':
           description: Error

@@ -472,3 +472,106 @@ class ConsultarEventosComandoTests(BaseEventos, TestCase):
         self.assertIn("evento 030: Acuse de recibo", texto.getvalue())
         with open(f"{salida}/GetStatusEvent-{self.factura.numero}-respuesta.xml") as fh:
             self.assertEqual(fh.read(), "<r/>")
+
+
+class EliminarDocumentoTests(BaseEventos, APITestCase):
+    def setUp(self):
+        super().setUp()
+        self.client.force_authenticate(self.usuario)
+
+    def test_sin_eventos_se_elimina_con_sus_archivos(self):
+        from apps.recepcion.models import Adjunto
+
+        otra = self.documento("2")
+        archivos = [a.archivo.name for a in Adjunto.objects.filter(documento=self.factura)]
+        self.assertTrue(archivos)
+
+        resp = self.client.delete(f"{URL_DOCUMENTO}{self.factura.pk}/")
+
+        self.assertEqual(resp.status_code, 204)
+        self.assertFalse(Documento.objects.filter(pk=self.factura.pk).exists())
+        self.assertFalse(Adjunto.objects.filter(documento_id=self.factura.pk).exists())
+        storage = Adjunto._meta.get_field("archivo").storage
+        self.assertFalse(any(storage.exists(nombre) for nombre in archivos))
+        # El correo y su otro documento se quedan.
+        self.assertTrue(Correo.objects.filter(pk=self.correo.pk).exists())
+        self.assertTrue(Documento.objects.filter(pk=otra.pk).exists())
+
+    def test_con_eventos_no_se_elimina(self):
+        evento = eventos.solicitar(self.factura, "030")
+        Evento.objects.filter(pk=evento.pk).update(estado=EstadoEvento.RECHAZADO)
+
+        resp = self.client.delete(f"{URL_DOCUMENTO}{self.factura.pk}/")
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("tiene eventos RADIAN", resp.data["detail"])
+        self.assertTrue(Documento.objects.filter(pk=self.factura.pk).exists())
+
+    def test_la_carga_sin_documentos_se_va_con_el_ultimo(self):
+        carga = Correo.objects.create(
+            alias="901192048", emisor=self.emisor, origen=Correo.Origen.CARGA,
+            raw_key="", envelope_to="", estado=Correo.Estado.PROCESADO,
+        )
+        documento = crear_documento_recibido(carga, self.emisor, "5")
+
+        resp = self.client.delete(f"{URL_DOCUMENTO}{documento.pk}/")
+
+        self.assertEqual(resp.status_code, 204)
+        self.assertFalse(Correo.objects.filter(pk=carga.pk).exists())
+
+    def test_el_documento_de_otro_emisor_no_existe(self):
+        self.client.force_authenticate(crear_usuario(nombre="Otro", email="otro@x.co"))
+        resp = self.client.delete(f"{URL_DOCUMENTO}{self.factura.pk}/")
+        self.assertEqual(resp.status_code, 404)
+        self.assertTrue(Documento.objects.filter(pk=self.factura.pk).exists())
+
+
+class EliminarEventoTests(BaseEventos, APITestCase):
+    def setUp(self):
+        super().setUp()
+        self.client.force_authenticate(self.usuario)
+
+    def rechazado(self):
+        """Un 030 enviado y rechazado, con su XML y la respuesta en B2."""
+        evento = eventos.solicitar(self.factura, "030")
+        evento = Evento.objects.select_related("documento", "emisor", "evento_radian").get(pk=evento.pk)
+        respuesta = respuesta_dian(False, ["Regla: LGC62, Rechazo: no es de tipo crédito"])
+        b64 = base64.b64encode(b"<ApplicationResponse>RECHAZO</ApplicationResponse>").decode()
+        respuesta.xml_crudo = f"<r><XmlBase64Bytes>{b64}</XmlBase64Bytes></r>"
+        return eventos.enviar(evento, cliente=ClienteFalso(respuesta), firmador=self.firmador())
+
+    def test_un_rechazado_se_elimina_con_sus_archivos(self):
+        evento = self.rechazado()
+        archivos = [evento.xml_archivo.name, evento.respuesta_archivo.name]
+        storage = evento.xml_archivo.storage
+
+        resp = self.client.delete(f"{URL_EVENTO}{evento.pk}/")
+
+        self.assertEqual(resp.status_code, 204)
+        self.assertFalse(Evento.objects.exists())
+        self.assertFalse(any(storage.exists(nombre) for nombre in archivos))
+
+    def test_su_numero_no_se_vuelve_a_usar(self):
+        evento = self.rechazado()
+        self.client.delete(f"{URL_EVENTO}{evento.pk}/")
+        self.assertEqual(eventos.solicitar(self.factura, "030").numero, "ACR2")
+
+    def test_sin_el_rechazado_el_documento_se_puede_eliminar(self):
+        evento = self.rechazado()
+        self.assertEqual(self.client.delete(f"{URL_DOCUMENTO}{self.factura.pk}/").status_code, 400)
+        self.client.delete(f"{URL_EVENTO}{evento.pk}/")
+        self.assertEqual(self.client.delete(f"{URL_DOCUMENTO}{self.factura.pk}/").status_code, 204)
+
+    def test_solo_los_rechazados(self):
+        evento = eventos.solicitar(self.factura, "030")
+        for estado in (EstadoEvento.PENDIENTE, EstadoEvento.ERROR, EstadoEvento.REGISTRADO):
+            Evento.objects.filter(pk=evento.pk).update(estado=estado)
+            resp = self.client.delete(f"{URL_EVENTO}{evento.pk}/")
+            self.assertEqual(resp.status_code, 400, estado)
+            self.assertIn("Solo se eliminan los eventos rechazados", resp.data["detail"])
+        self.assertTrue(Evento.objects.filter(pk=evento.pk).exists())
+
+    def test_el_evento_de_otro_emisor_no_existe(self):
+        evento = self.rechazado()
+        self.client.force_authenticate(crear_usuario(nombre="Otro", email="otro@x.co"))
+        self.assertEqual(self.client.delete(f"{URL_EVENTO}{evento.pk}/").status_code, 404)

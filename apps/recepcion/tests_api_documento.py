@@ -187,9 +187,12 @@ class DocumentoRecibidoApiTests(APITestCase):
     def test_sin_pdf_es_400(self):
         self.assertEqual(self.descargar(self.nota, "pdf")[0].status_code, 400)
 
-    def test_es_de_solo_lectura(self):
+    def test_no_se_crea_ni_se_edita(self):
+        # Los crea el procesamiento; por la API solo se consultan y se eliminan
+        # (los que no tienen eventos, en tests_eventos.EliminarDocumentoTests).
         self.assertEqual(self.client.post(URL, {}).status_code, 405)
-        self.assertEqual(self.client.delete(f"{URL}{self.factura.pk}/").status_code, 405)
+        self.assertEqual(self.client.patch(f"{URL}{self.factura.pk}/", {}).status_code, 405)
+        self.assertEqual(self.client.put(f"{URL}{self.factura.pk}/", {}).status_code, 405)
 
     def test_sin_autenticar_es_401(self):
         self.assertEqual(APIClient().get(URL).status_code, 401)

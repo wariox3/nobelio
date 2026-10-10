@@ -1,8 +1,10 @@
 """API de los documentos recibidos de proveedores."""
+import logging
+
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from django.db.models import Exists, OuterRef
-from rest_framework import filters, status, viewsets
+from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
@@ -15,19 +17,25 @@ from apps.nucleo.api import (
     fecha_de_query,
 )
 from apps.nucleo.esquema import ErrorSerializer
-from apps.recepcion import eventos, procesamiento, serializers, verificacion
+from apps.nucleo.registro import campos
+from apps.recepcion import adjuntos, eventos, procesamiento, serializers, verificacion
 from apps.recepcion.models import Adjunto, Documento
 from apps.recepcion.views.adjunto import descarga
 from apps.seguridad.alcance import AlcanceEmisorMixin, usuario_del_request
+
+logger = logging.getLogger(__name__)
 
 RESPUESTA_XML = {(200, "application/xml"): OpenApiTypes.BINARY, 400: ErrorSerializer}
 RESPUESTA_PDF = {(200, "application/pdf"): OpenApiTypes.BINARY, 400: ErrorSerializer}
 
 
-class DocumentoRecibidoViewSet(AlcanceEmisorMixin, viewsets.ReadOnlyModelViewSet):
+class DocumentoRecibidoViewSet(
+    AlcanceEmisorMixin, mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewSet,
+):
     """Facturas y notas que los proveedores les mandaron a los emisores.
 
-    De solo lectura: las crea el procesamiento de los correos de recepción.
+    Las crea el procesamiento de los correos de recepción (o la carga manual).
+    ``DELETE`` elimina uno **sin eventos RADIAN**, con sus archivos.
 
     Filtros: ``?emisor=<id>``, ``?correo=<id>``,
     ``?documento_tipo=factura_venta|nota_credito|nota_debito``,
@@ -74,6 +82,30 @@ class DocumentoRecibidoViewSet(AlcanceEmisorMixin, viewsets.ReadOnlyModelViewSet
         "=cufe_cude", "^proveedor_numero_identificacion", "numero", "proveedor_razon_social",
     ]
     ordering_fields = ["fecha_emision", "numero", "total_a_pagar", "creado_en"]
+
+    @extend_schema(responses={204: None, 400: ErrorSerializer, 502: ErrorSerializer})
+    def destroy(self, request, *args, **kwargs):
+        """Elimina el documento y sus archivos en B2, si no tiene eventos.
+
+        Con cualquier evento, en cualquier estado, responde 400: uno registrado
+        está en RADIAN y uno rechazado guarda la respuesta de la DIAN. El
+        correo se queda con su MIME y sus demás adjuntos; si era una carga
+        manual y este era su único documento, se elimina también.
+
+        Si B2 falla, las filas vuelven y responde 502; repetir termina el
+        trabajo.
+        """
+        documento = self.get_object()
+        try:
+            carga_borrada, archivos = adjuntos.eliminar_documento(documento)
+        except adjuntos.DocumentoConEventos as error:
+            raise ErrorSolicitud(str(error))
+        logger.info("recepcion.documento_eliminado %s", campos(
+            documento=kwargs["pk"], numero=documento.numero, emisor=documento.emisor_id,
+            correo=documento.correo_id, carga_borrada=carga_borrada, archivos=archivos,
+            por=request.user,
+        ))
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     def get_serializer_class(self):
         if self.action == "evento":

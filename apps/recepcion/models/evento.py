@@ -125,3 +125,36 @@ class Evento(ModeloUUID, ModeloConFechas):
 
     def __str__(self):
         return f"{self.numero} ({self.evento_radian_id}) sobre {self.documento_id}"
+
+
+class ConsecutivoEvento(models.Model):
+    """El último número que se dio a un tipo de evento de un emisor.
+
+    Aparte de ``rec_evento`` para que los números no se reutilicen: un evento
+    rechazado se puede eliminar, y si el consecutivo saliera del máximo de los
+    que quedan, el siguiente repetiría el suyo. Lo escribe solo
+    ``eventos.solicitar``, bajo el candado del emisor.
+    """
+
+    ultimo = models.PositiveIntegerField("último consecutivo", default=0)
+    emisor = models.ForeignKey(
+        "emisores.Emisor", on_delete=models.CASCADE,
+        related_name="consecutivos_evento", verbose_name="emisor",
+    )
+    evento_radian = models.ForeignKey(
+        "catalogos.EventoRadian", on_delete=models.PROTECT,
+        related_name="+", verbose_name="evento",
+    )
+
+    class Meta:
+        db_table = "rec_consecutivo_evento"
+        verbose_name = "consecutivo de evento RADIAN"
+        verbose_name_plural = "consecutivos de eventos RADIAN"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["emisor", "evento_radian"], name="rec_consecutivo_evento_unico",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.emisor_id} {self.evento_radian_id}: {self.ultimo}"
