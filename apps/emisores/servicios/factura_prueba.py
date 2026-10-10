@@ -98,6 +98,12 @@ def _crear_documento(emisor, resolucion, *, codigo_tipo, consecutivo, observacio
     return documento
 
 
+def _avanzar_consecutivo(resolucion, siguiente):
+    """Deja ``consecutivo_actual`` en el siguiente número a usar."""
+    resolucion.consecutivo_actual = siguiente
+    resolucion.save(update_fields=["consecutivo_actual", "actualizado_en"])
+
+
 @transaction.atomic
 def crear_factura_prueba(emisor, resolucion, consecutivo=None):
     """Crea —solo crea— una factura de prueba y su nota crédito, en borrador.
@@ -166,7 +172,7 @@ def crear_facturas_de_prueba(emisor, resolucion, cantidad=FACTURAS_DE_PRUEBA):
 
     desde = resolucion.rango_desde
     with transaction.atomic():
-        return [
+        facturas = [
             _crear_documento(
                 emisor, resolucion,
                 codigo_tipo=DocumentoTipo.Codigo.FACTURA_VENTA,
@@ -175,6 +181,8 @@ def crear_facturas_de_prueba(emisor, resolucion, cantidad=FACTURAS_DE_PRUEBA):
             )
             for i in range(cantidad)
         ]
+        _avanzar_consecutivo(resolucion, desde + cantidad)
+    return facturas
 
 
 def crear_documentos_pos_de_prueba(emisor, resolucion, cantidad=POS_DE_PRUEBA):
@@ -218,6 +226,7 @@ def crear_documentos_pos_de_prueba(emisor, resolucion, cantidad=POS_DE_PRUEBA):
                 codigo_venta=f"{resolucion.prefijo}{consecutivo}",
             )
             documentos.append(documento)
+        _avanzar_consecutivo(resolucion, resolucion.rango_desde + cantidad)
     return documentos
 
 
@@ -375,12 +384,17 @@ def crear_documento_de_prueba(resolucion, consecutivo=None):
         # El índice único (emisor, prefijo, consecutivo, tipo) es quien decide
         # de verdad; el savepoint deja seguir atendiendo la petición si choca.
         with transaction.atomic():
-            return _crear_documento(
+            documento = _crear_documento(
                 emisor, resolucion,
                 codigo_tipo=documento_tipo.codigo,
                 consecutivo=consecutivo,
                 observaciones="Documento del Set de Pruebas (habilitación).",
             )
+            # Solo hacia delante: un consecutivo indicado a mano puede ser
+            # anterior a otros ya usados, y eso no devuelve el contador.
+            if consecutivo + 1 > resolucion.consecutivo_actual:
+                _avanzar_consecutivo(resolucion, consecutivo + 1)
+            return documento
     except IntegrityError:
         raise ValueError(
             f"El emisor ya tiene un documento de este tipo numerado "

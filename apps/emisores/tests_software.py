@@ -343,6 +343,10 @@ class SoftwareDianAPITests(APITestCase):
             [f.consecutivo for f in facturas],
             [resolucion.rango_desde, resolucion.rango_desde + 1],
         )
+        # Y la resolución queda apuntando al siguiente libre.
+        self.assertEqual(
+            resolucion.consecutivo_actual, resolucion.rango_desde + 2
+        )
         for factura in facturas:
             self.assertEqual(factura.estado.nombre, DocumentoEstado.Nombre.BORRADOR)
             self.assertEqual(factura.resolucion_id, resolucion.id)
@@ -410,6 +414,9 @@ class SoftwareDianAPITests(APITestCase):
 
         documentos = list(self._documentos_pos().order_by("consecutivo"))
         self.assertEqual([d.consecutivo for d in documentos], [1, 2])
+        self.assertEqual(
+            Resolucion.objects.get(emisor=self.emisor).consecutivo_actual, 3
+        )
         for documento in documentos:
             self.assertEqual(documento.estado.nombre, DocumentoEstado.Nombre.BORRADOR)
             self.assertEqual(documento.resolucion.prefijo, "EPOS")
@@ -514,6 +521,118 @@ class SoftwareDianAPITests(APITestCase):
 
         self.assertEqual(resp.status_code, 201, resp.data)
         self.assertEqual(self._facturas().count(), 2)
+
+    # --- Borrar el software -------------------------------------------------
+
+    def test_borra_el_software_en_pruebas_y_sin_set_aceptado(self):
+        alta = self.client.post(self.url, self._payload(), format="json")
+
+        resp = self.client.delete(f"{self.url}{alta.data['id']}/")
+
+        self.assertEqual(resp.status_code, 204)
+        self.assertFalse(SoftwareDian.objects.filter(pk=alta.data["id"]).exists())
+
+    def test_no_borra_el_software_con_el_set_de_pruebas_aceptado(self):
+        alta = self.client.post(self.url, self._payload(), format="json")
+        SoftwareDian.objects.filter(pk=alta.data["id"]).update(
+            set_pruebas_aceptado=True
+        )
+
+        resp = self.client.delete(f"{self.url}{alta.data['id']}/")
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertIn("Set de Pruebas", resp.data["detail"])
+        self.assertTrue(SoftwareDian.objects.filter(pk=alta.data["id"]).exists())
+
+    def test_no_borra_el_software_de_un_emisor_en_produccion(self):
+        alta = self.client.post(self.url, self._payload(), format="json")
+        self.emisor.ambiente_facturacion = Ambiente.PRODUCCION
+        self.emisor.save(update_fields=["ambiente_facturacion"])
+
+        resp = self.client.delete(f"{self.url}{alta.data['id']}/")
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertIn("producción", resp.data["detail"])
+        self.assertTrue(SoftwareDian.objects.filter(pk=alta.data["id"]).exists())
+
+    def test_la_produccion_de_otra_operacion_no_bloquea_el_borrado(self):
+        """Cada operación tiene su ambiente: la nómina no frena la factura."""
+        alta = self.client.post(self.url, self._payload(), format="json")
+        self.emisor.ambiente_nomina = Ambiente.PRODUCCION
+        self.emisor.save(update_fields=["ambiente_nomina"])
+
+        resp = self.client.delete(f"{self.url}{alta.data['id']}/")
+
+        self.assertEqual(resp.status_code, 204)
+
+    # --- Desactivar: baja la habilitación del software y del emisor ---------
+
+    def _habilitar(self, software_id, campo):
+        SoftwareDian.objects.filter(pk=software_id).update(
+            set_pruebas_aceptado=True
+        )
+        setattr(self.emisor, campo, True)
+        self.emisor.save(update_fields=[campo])
+
+    def test_desactivar_baja_la_bandera_del_software_y_la_del_emisor(self):
+        alta = self.client.post(self.url, self._payload(), format="json")
+        self._habilitar(alta.data["id"], "habilitado_facturacion")
+
+        resp = self.client.post(f"{self.url}{alta.data['id']}/desactivar/")
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertFalse(resp.data["set_pruebas_aceptado"])
+        self.assertFalse(resp.data["habilitado_facturacion"])
+        self.assertFalse(
+            SoftwareDian.objects.get(pk=alta.data["id"]).set_pruebas_aceptado
+        )
+        self.emisor.refresh_from_db()
+        self.assertFalse(self.emisor.habilitado_facturacion)
+
+    def test_desactivar_no_toca_la_habilitacion_de_otra_operacion(self):
+        alta = self.client.post(self.url, self._payload_nomina(), format="json")
+        self._habilitar(alta.data["id"], "habilitado_nomina")
+        self.emisor.habilitado_facturacion = True
+        self.emisor.save(update_fields=["habilitado_facturacion"])
+
+        resp = self.client.post(f"{self.url}{alta.data['id']}/desactivar/")
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.emisor.refresh_from_db()
+        self.assertFalse(self.emisor.habilitado_nomina)
+        self.assertTrue(self.emisor.habilitado_facturacion)
+
+    def test_desactivar_es_idempotente(self):
+        alta = self.client.post(self.url, self._payload(), format="json")
+
+        resp = self.client.post(f"{self.url}{alta.data['id']}/desactivar/")
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertFalse(resp.data["set_pruebas_aceptado"])
+
+    def test_no_desactiva_en_produccion(self):
+        alta = self.client.post(self.url, self._payload(), format="json")
+        self._habilitar(alta.data["id"], "habilitado_facturacion")
+        self.emisor.ambiente_facturacion = Ambiente.PRODUCCION
+        self.emisor.save(update_fields=["ambiente_facturacion"])
+
+        resp = self.client.post(f"{self.url}{alta.data['id']}/desactivar/")
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertTrue(
+            SoftwareDian.objects.get(pk=alta.data["id"]).set_pruebas_aceptado
+        )
+        self.emisor.refresh_from_db()
+        self.assertTrue(self.emisor.habilitado_facturacion)
+
+    def test_desactivado_se_puede_borrar(self):
+        alta = self.client.post(self.url, self._payload(), format="json")
+        self._habilitar(alta.data["id"], "habilitado_facturacion")
+        self.client.post(f"{self.url}{alta.data['id']}/desactivar/")
+
+        resp = self.client.delete(f"{self.url}{alta.data['id']}/")
+
+        self.assertEqual(resp.status_code, 204)
 
     # --- Una nómina suelta: crear-nomina-prueba -----------------------------
 

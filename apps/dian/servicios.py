@@ -248,6 +248,30 @@ def _marcar_habilitacion_superada(software, emisor):
         emisor.save(update_fields=[campo, "actualizado_en"])
 
 
+def desmarcar_habilitacion(software):
+    """Deshace `_marcar_habilitacion_superada`: vuelve a dejar sin habilitar.
+
+    Baja las dos banderas que aquella sube, la del software y la del emisor
+    para esa operación, y nada más: las demás operaciones no se tocan. Con
+    ellas abajo los envíos vuelven al Set de Pruebas y el software se puede
+    modificar o borrar otra vez.
+
+    Es idempotente. Quien llama decide si procede (ver la acción `desactivar`
+    del software, que lo impide en producción).
+    """
+    emisor = software.emisor
+    if software.set_pruebas_aceptado:
+        software.set_pruebas_aceptado = False
+        software.save(update_fields=["set_pruebas_aceptado", "actualizado_en"])
+    campo = CAMPO_HABILITADO_POR_SOFTWARE.get(
+        software.tipo, "habilitado_facturacion"
+    )
+    if getattr(emisor, campo):
+        setattr(emisor, campo, False)
+        emisor.save(update_fields=[campo, "actualizado_en"])
+    return campo
+
+
 def _anotar_si_cerro_el_set(respuesta, software, emisor):
     """Marca la habilitación si la DIAN dice que el Set de Pruebas ya está cerrado.
 

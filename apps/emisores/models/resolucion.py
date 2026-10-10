@@ -20,6 +20,13 @@ class Resolucion(ModeloConFechas):
     prefijo = models.CharField("prefijo", max_length=10, blank=True)
     rango_desde = models.PositiveBigIntegerField("rango desde")
     rango_hasta = models.PositiveBigIntegerField("rango hasta")
+    # El siguiente número a usar, no el último usado: una resolución recién
+    # creada apunta a `rango_desde` (lo pone `save`), y `rango_hasta + 1`
+    # significa que el rango se agotó.
+    consecutivo_actual = models.PositiveBigIntegerField(
+        "consecutivo actual", blank=True,
+        help_text="Siguiente consecutivo a usar. Vacío toma el rango desde.",
+    )
 
     clave_tecnica = models.CharField("clave técnica", max_length=255, blank=True)
 
@@ -53,6 +60,11 @@ class Resolucion(ModeloConFechas):
                 name="resolucion_unica_por_emisor",
             )
         ]
+
+    def save(self, *args, **kwargs):
+        if self.consecutivo_actual is None:
+            self.consecutivo_actual = self.rango_desde
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"Res. {self.numero_resolucion} {self.prefijo} ({self.emisor})"

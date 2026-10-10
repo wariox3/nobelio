@@ -16,6 +16,7 @@ class ResolucionSerializer(serializers.ModelSerializer):
         model = Resolucion
         fields = [
             "id", "emisor", "tipo_factura", "numero_resolucion", "fecha_resolucion",
-            "prefijo", "rango_desde", "rango_hasta", "vigente_desde", "vigente_hasta",
+            "prefijo", "rango_desde", "rango_hasta", "consecutivo_actual",
+            "vigente_desde", "vigente_hasta",
             "clave_tecnica", "activa",
         ]

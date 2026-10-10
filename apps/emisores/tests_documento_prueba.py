@@ -49,6 +49,23 @@ class CrearDocumentoPruebaTests(APITestCase):
         pk = (resolucion or self.resolucion).pk
         return f"/api/emisores/resolucion/{pk}/crear-documento-prueba/"
 
+    # --- Borrar la resolución -----------------------------------------------
+
+    def test_borra_la_resolucion_sin_documentos(self):
+        resp = self.client.delete(f"/api/emisores/resolucion/{self.resolucion.pk}/")
+
+        self.assertEqual(resp.status_code, 204)
+        self.assertFalse(Resolucion.objects.filter(pk=self.resolucion.pk).exists())
+
+    def test_no_borra_la_resolucion_con_documentos(self):
+        self.client.post(self._url(), {}, format="json")
+
+        resp = self.client.delete(f"/api/emisores/resolucion/{self.resolucion.pk}/")
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertIn("1 documento(s)", resp.data["detail"])
+        self.assertTrue(Resolucion.objects.filter(pk=self.resolucion.pk).exists())
+
     # --- Camino feliz -------------------------------------------------------
 
     def test_crea_una_factura_en_borrador(self):
@@ -67,6 +84,19 @@ class CrearDocumentoPruebaTests(APITestCase):
             documento.adquiriente.numero_identificacion,
             self.emisor.numero_identificacion,
         )
+
+    def test_avanza_el_consecutivo_actual_de_la_resolucion(self):
+        self.client.post(self._url(), {}, format="json")
+
+        self.resolucion.refresh_from_db()
+        self.assertEqual(self.resolucion.consecutivo_actual, 990000001)
+
+    def test_un_consecutivo_anterior_no_devuelve_el_consecutivo_actual(self):
+        self.client.post(self._url(), {"consecutivo": 990000001}, format="json")
+        self.client.post(self._url(), {"consecutivo": 990000000}, format="json")
+
+        self.resolucion.refresh_from_db()
+        self.assertEqual(self.resolucion.consecutivo_actual, 990000002)
 
     def test_sin_consecutivo_toma_el_siguiente_libre(self):
         primero = self.client.post(self._url(), {}, format="json")

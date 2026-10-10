@@ -40,6 +40,19 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         emisor = entero_de_query(self.request.query_params, "emisor")
         return qs.filter(emisor=emisor) if emisor else qs
 
+    def perform_destroy(self, instance):
+        # Comprobado antes de borrar y no capturando el ProtectedError: así el
+        # mensaje dice qué hacer, en vez de un 500.
+        documentos = instance.documentos.count()
+        if documentos:
+            raise ErrorSolicitud(
+                f"La resolución {instance.numero_resolucion} tiene "
+                f"{documentos} documento(s) y no se puede borrar. Para que "
+                f"deje de numerar documentos nuevos, desactívela "
+                f"(PATCH con \"activa\": false)."
+            )
+        instance.delete()
+
     @action(detail=True, methods=["post"], url_path="crear-documento-prueba")
     def crear_documento_prueba(self, request, pk=None):
         """Crea un documento de prueba en borrador sobre esta resolución.

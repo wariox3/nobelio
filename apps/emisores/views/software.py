@@ -4,6 +4,7 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.dian import servicios as dian
 from apps.emisores import models, serializers
 from apps.emisores.servicios import (
     crear_nomina_de_prueba,
@@ -12,7 +13,17 @@ from apps.emisores.servicios import (
     sembrar_resolucion_de_pruebas,
 )
 from apps.nucleo.api import ErrorSolicitud, entero_de_query
+from apps.nucleo.models import Ambiente
 from apps.seguridad.alcance import AlcanceEmisorMixin
+
+
+# El ambiente del emisor que le toca a cada software: cada operación tiene el
+# suyo y pueden no coincidir.
+CAMPO_AMBIENTE_POR_SOFTWARE = {
+    models.SoftwareDian.Tipo.FACTURACION: "ambiente_facturacion",
+    models.SoftwareDian.Tipo.NOMINA: "ambiente_nomina",
+    models.SoftwareDian.Tipo.DOCUMENTO_EQUIVALENTE: "ambiente_documento_equivalente",
+}
 
 
 class SoftwareDianViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
@@ -172,6 +183,80 @@ class SoftwareDianViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
                 ],
             },
             status=status.HTTP_201_CREATED,
+        )
+
+    def perform_destroy(self, instance):
+        """Borra el software, salvo que ya esté habilitado o en producción.
+
+        Con el software se va `set_pruebas_aceptado`, que solo marca el backend
+        cuando la DIAN acepta el Set de Pruebas: registrarlo de nuevo lo deja
+        en falso y no hay forma de recuperarlo por la API. Y en producción,
+        borrarlo deja al emisor sin poder emitir esa operación.
+        """
+        etiqueta = instance.get_tipo_display().lower()
+        if instance.set_pruebas_aceptado:
+            raise ErrorSolicitud(
+                f"El software de {etiqueta} ya tiene el Set de Pruebas "
+                f"aceptado por la DIAN y no se puede borrar: la habilitación "
+                f"se perdería. Si de verdad hay que rehacerla, desactívelo "
+                f"antes (POST .../software/{instance.pk}/desactivar/)."
+            )
+        campo = CAMPO_AMBIENTE_POR_SOFTWARE[instance.tipo]
+        if getattr(instance.emisor, campo) == Ambiente.PRODUCCION:
+            raise ErrorSolicitud(
+                f"El emisor está en producción para {etiqueta} y su software "
+                f"no se puede borrar: se quedaría sin poder emitir. Para "
+                f"cambiar el SoftwareID o el PIN, actualice el que hay (PATCH) "
+                f"en vez de borrarlo."
+            )
+        instance.delete()
+
+    @action(detail=True, methods=["post"])
+    def desactivar(self, request, pk=None):
+        """Deja el software y al emisor sin habilitar para esa operación.
+
+        ``POST /api/emisores/software/{id}/desactivar/``, sin cuerpo.
+
+        Baja ``set_pruebas_aceptado`` del software y la bandera de habilitación
+        del emisor que le corresponde (``habilitado_facturacion``,
+        ``habilitado_nomina`` o ``habilitado_documento_equivalente``). Las
+        otras operaciones no se tocan. Es lo contrario de lo que hace el
+        backend cuando la DIAN acepta el Set de Pruebas, y la única forma de
+        deshacerlo por la API: las dos banderas son de solo lectura.
+
+        Con ellas abajo los envíos vuelven al Set de Pruebas, y el software se
+        puede modificar o borrar otra vez.
+
+        **No en producción.** Un emisor en producción para esa operación tiene
+        que estar habilitado —es lo que exige su propio serializer para nómina
+        y documento equivalente—, así que antes hay que devolverlo a pruebas.
+
+        Es idempotente: sobre un software que ya está sin habilitar responde
+        200 igual.
+        """
+        software = self.get_object()
+        emisor = software.emisor
+        etiqueta = software.get_tipo_display().lower()
+
+        campo_ambiente = CAMPO_AMBIENTE_POR_SOFTWARE[software.tipo]
+        if getattr(emisor, campo_ambiente) == Ambiente.PRODUCCION:
+            raise ErrorSolicitud(
+                f"El emisor está en producción para {etiqueta}: no se puede "
+                f"desactivar su habilitación mientras emite ahí. Páselo antes "
+                f"a pruebas ('{campo_ambiente}')."
+            )
+
+        with transaction.atomic():
+            campo = dian.desmarcar_habilitacion(software)
+
+        return Response(
+            {
+                "id": software.pk,
+                "tipo": software.tipo,
+                "set_pruebas_aceptado": software.set_pruebas_aceptado,
+                "emisor": emisor.pk,
+                campo: getattr(emisor, campo),
+            }
         )
 
     def perform_update(self, serializer):
