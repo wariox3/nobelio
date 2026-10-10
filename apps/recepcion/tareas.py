@@ -47,3 +47,27 @@ def verificar_documento(self, documento_id):
             verificacion.marcar_error(documento, str(error))
             return
         raise self.retry(exc=error, countdown=60 * 2 ** self.request.retries)
+
+
+@shared_task
+def enviar_evento(evento_id):
+    """Envía a la DIAN un evento RADIAN recién solicitado.
+
+    Sin reintentos automáticos, a diferencia de las otras dos: si la DIAN no
+    respondió, puede que sí lo haya registrado, y reenviarlo a ciegas lo
+    rechazaría como repetido. El evento queda en ``error`` y se reenvía a mano
+    con ``POST /api/recepcion/evento/{id}/enviar/``.
+    """
+    from apps.recepcion import eventos
+    from apps.recepcion.models import Evento
+
+    evento = (
+        Evento.objects.select_related("documento", "emisor", "evento_radian")
+        .filter(pk=evento_id).first()
+    )
+    if evento is None:
+        return
+    try:
+        eventos.enviar(evento)
+    except eventos.ErrorTransitorio as error:
+        eventos.marcar_error(evento, str(error))

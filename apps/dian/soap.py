@@ -12,6 +12,8 @@ Operaciones soportadas:
   - SendBillSync     : envío síncrono (producción) -> DianResponse.
   - GetStatus        : consulta de estado por trackId -> DianResponse.
   - GetNumberingRange: consulta de rangos de numeración (resoluciones) -> RangoNumeracion[].
+  - SendEventUpdateStatus: registro de un evento RADIAN (030–033) -> DianResponse.
+  - GetStatusEvent   : eventos registrados sobre una factura, por CUFE -> RespuestaEventos.
 
 La firma del sobre (WS-Security) y el empaquetado son independientes del envío
 HTTP, de modo que pueden probarse sin conexión.
@@ -334,6 +336,60 @@ class RespuestaRangos:
 
 
 # ===========================================================================
+# Eventos RADIAN (GetStatusEvent)
+# ===========================================================================
+@dataclass
+class EventoRegistrado:
+    """Un evento que la DIAN tiene registrado sobre una factura.
+
+    Sale de un ``cac:DocumentResponse`` del ApplicationResponse que devuelve
+    GetStatusEvent. ⚠ No hay un ejemplo oficial de esa respuesta: se leen
+    solo el código y la descripción, que el XSD fija en todo
+    ``DocumentResponse``, y el resto se confirma con la primera consulta real
+    en habilitación (``docs/recepcion.md``, R3).
+    """
+
+    codigo: str = ""
+    descripcion: str = ""
+
+    @classmethod
+    def lista_desde_xml(cls, xml: bytes | str) -> list["EventoRegistrado"]:
+        """Los eventos del ApplicationResponse incrustado; [] si no viene."""
+        application_response = extraer_application_response(xml)
+        if not application_response:
+            return []
+        try:
+            raiz = etree.fromstring(application_response)
+        except etree.XMLSyntaxError:
+            return []
+
+        eventos = []
+        for nodo in raiz.xpath("//*[local-name()='DocumentResponse']"
+                               "/*[local-name()='Response']"):
+            def texto(local_name):
+                hijos = nodo.xpath(f"./*[local-name()='{local_name}']")
+                return hijos[0].text.strip() if hijos and hijos[0].text else ""
+
+            eventos.append(cls(codigo=texto("ResponseCode"), descripcion=texto("Description")))
+        return eventos
+
+
+@dataclass
+class RespuestaEventos:
+    """Respuesta de GetStatusEvent: la de siempre más los eventos registrados."""
+
+    respuesta: RespuestaDian
+    eventos: list[EventoRegistrado] = field(default_factory=list)
+
+    @classmethod
+    def desde_xml(cls, xml: bytes | str) -> "RespuestaEventos":
+        return cls(
+            respuesta=RespuestaDian.desde_xml(xml),
+            eventos=EventoRegistrado.lista_desde_xml(xml),
+        )
+
+
+# ===========================================================================
 # Firma WS-Security del sobre SOAP
 # ===========================================================================
 class FirmanteWSSecurity:
@@ -513,6 +569,29 @@ class ClienteDian:
         respuesta = self._post(sobre, f"{ACCION_BASE}/GetNumberingRange")
         return RespuestaRangos.desde_xml(respuesta)
 
+    def enviar_evento(self, xml_firmado: bytes, nombre_archivo: str) -> RespuestaDian:
+        """SendEventUpdateStatus: registra un evento RADIAN (030 a 033).
+
+        Síncrono, con el mismo endpoint y el mismo sobre que la factura. Como
+        SendNominaSync, **solo recibe el contenido**: un ZIP con un único
+        ApplicationResponse firmado; ``nombre_archivo`` nombra al XML dentro
+        del ZIP. Responde como SendBillSync: el CUDE en ``XmlDocumentKey``
+        (``track_id``) y el ApplicationResponse de la DIAN en
+        ``XmlBase64Bytes`` (``extraer_application_response``).
+        """
+        contenido = empaquetar_base64(nombre_archivo, xml_firmado)
+        return self._invocar("SendEventUpdateStatus", {"contentFile": contenido})
+
+    def consultar_eventos(self, cufe: str) -> RespuestaEventos:
+        """GetStatusEvent: los eventos que la DIAN registró sobre una factura.
+
+        El ``trackId`` es el **CUFE de la factura**, no el CUDE de un evento.
+        Sirve para conciliar los eventos de nobelio con los de la DIAN.
+        """
+        return self._invocar(
+            "GetStatusEvent", {"trackId": cufe}, lector=RespuestaEventos.desde_xml,
+        )
+
     # -- Internos -----------------------------------------------------------
 
     def construir_sobre(self, operacion: str, parametros: dict) -> bytes:
@@ -530,12 +609,13 @@ class ClienteDian:
         self.firmante.firmar(envelope)
         return etree.tostring(envelope, xml_declaration=True, encoding="UTF-8")
 
-    def _invocar(self, operacion: str, parametros: dict) -> RespuestaDian:
+    def _invocar(self, operacion: str, parametros: dict, *,
+                 lector=RespuestaDian.desde_xml):
         sobre = self.construir_sobre(operacion, parametros)
         accion = f"{ACCION_BASE}/{operacion}"
         respuesta = self._post(sobre, accion)
         _capturar(operacion, sobre, respuesta)
-        return RespuestaDian.desde_xml(respuesta)
+        return lector(respuesta)
 
     def _post(self, sobre: bytes, accion: str) -> bytes:
         """Realiza el POST HTTP. Aislado para facilitar las pruebas."""

@@ -53,6 +53,12 @@ paths:
 
         **Lista DIAN:** `ConceptoReclamo`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023), RADIAN v1.1 (Resolución 000085 de 2022).
 
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/recepcion/documento/{id}/evento/` | `concepto_reclamo` | `codigo` |
+
         Paginado; `search` busca por código y nombre.
       summary: Listar conceptos de reclamo
       parameters:
@@ -92,6 +98,12 @@ paths:
         Por qué se reclama una factura en el evento 031: inconsistencias, mercancía no entregada total o parcialmente, servicio no prestado.
 
         **Lista DIAN:** `ConceptoReclamo`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023), RADIAN v1.1 (Resolución 000085 de 2022).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/recepcion/documento/{id}/evento/` | `concepto_reclamo` | `codigo` |
       summary: Consultar concepto de reclamo
       parameters:
       - in: path
@@ -133,6 +145,12 @@ paths:
         Por qué se reclama una factura en el evento 031: inconsistencias, mercancía no entregada total o parcialmente, servicio no prestado.
 
         **Lista DIAN:** `ConceptoReclamo`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023), RADIAN v1.1 (Resolución 000085 de 2022).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/recepcion/documento/{id}/evento/` | `concepto_reclamo` | `codigo` |
 
         El catálogo entero en una respuesta, sin paginar y con los mismos campos que el detalle. Admite `search`.
       summary: Exportar conceptos de reclamo
@@ -1850,8 +1868,10 @@ paths:
         |---|---|---|
         | `/api/documentos/documento/` | `adquiriente.tipo_identificacion` | `id` |
         | `/api/emisores/emisor/` | `tipo_identificacion` | `id` |
+        | `/api/emisores/emisor/` | `recibe_tipo_identificacion` | `id` |
         | `/api/nomina/empleado/` | `tipo_identificacion` | `id` |
         | `/api/nomina/nomina/` | `empleado.tipo_identificacion` | `id` |
+        | `/api/recepcion/documento/{id}/evento/` | `persona.tipo_identificacion` | `id` |
 
         Paginado; `search` busca por código y nombre.
       summary: Listar tipos de identificación
@@ -1899,8 +1919,10 @@ paths:
         |---|---|---|
         | `/api/documentos/documento/` | `adquiriente.tipo_identificacion` | `id` |
         | `/api/emisores/emisor/` | `tipo_identificacion` | `id` |
+        | `/api/emisores/emisor/` | `recibe_tipo_identificacion` | `id` |
         | `/api/nomina/empleado/` | `tipo_identificacion` | `id` |
         | `/api/nomina/nomina/` | `empleado.tipo_identificacion` | `id` |
+        | `/api/recepcion/documento/{id}/evento/` | `persona.tipo_identificacion` | `id` |
       summary: Consultar tipo de identificación
       parameters:
       - in: path
@@ -1949,8 +1971,10 @@ paths:
         |---|---|---|
         | `/api/documentos/documento/` | `adquiriente.tipo_identificacion` | `id` |
         | `/api/emisores/emisor/` | `tipo_identificacion` | `id` |
+        | `/api/emisores/emisor/` | `recibe_tipo_identificacion` | `id` |
         | `/api/nomina/empleado/` | `tipo_identificacion` | `id` |
         | `/api/nomina/nomina/` | `empleado.tipo_identificacion` | `id` |
+        | `/api/recepcion/documento/{id}/evento/` | `persona.tipo_identificacion` | `id` |
 
         El catálogo entero en una respuesta, sin paginar y con los mismos campos que el detalle. Admite `search`.
       summary: Exportar tipos de identificación
@@ -6881,7 +6905,8 @@ paths:
 
         Filtros: ``?emisor=<id>``, ``?correo=<id>``,
         ``?documento_tipo=factura_venta|nota_credito|nota_debito``,
-        ``?proveedor=<NIT sin DV>``, ``?verificacion_estado=valido|invalido|...``
+        ``?proveedor=<NIT sin DV>``, ``?verificacion_estado=valido|invalido|...``,
+        ``?radian_estado=sin_eventos|acuse|recibo|aceptada|reclamada``
         y ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD`` sobre la fecha de
         emisión, ambos inclusive. ``?ordering=`` ordena por
         ``fecha_emision``, ``numero``, ``total_a_pagar`` o ``creado_en``.
@@ -6902,6 +6927,10 @@ paths:
         Cada documento nuevo se verifica solo contra la DIAN (``GetStatus`` por su
         CUFE, en segundo plano): ``verificacion_estado`` dice si la DIAN lo tiene
         como válido. ``POST {id}/verificar/`` repite la consulta en el momento.
+
+        ``POST {id}/evento/`` pide un evento RADIAN sobre la factura (030, 031,
+        032 o 033); ``radian_estado`` resume el último que la DIAN registró, y el
+        detalle está en ``/api/recepcion/evento/?documento=<uuid>``.
 
         Los archivos se bajan con ``xml/`` (el XML tal como llegó), ``xml-factura/``
         (el documento, sin el AttachedDocument) y ``pdf/``. Son ``Adjunto`` del
@@ -6964,7 +6993,8 @@ paths:
 
         Filtros: ``?emisor=<id>``, ``?correo=<id>``,
         ``?documento_tipo=factura_venta|nota_credito|nota_debito``,
-        ``?proveedor=<NIT sin DV>``, ``?verificacion_estado=valido|invalido|...``
+        ``?proveedor=<NIT sin DV>``, ``?verificacion_estado=valido|invalido|...``,
+        ``?radian_estado=sin_eventos|acuse|recibo|aceptada|reclamada``
         y ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD`` sobre la fecha de
         emisión, ambos inclusive. ``?ordering=`` ordena por
         ``fecha_emision``, ``numero``, ``total_a_pagar`` o ``creado_en``.
@@ -6985,6 +7015,10 @@ paths:
         Cada documento nuevo se verifica solo contra la DIAN (``GetStatus`` por su
         CUFE, en segundo plano): ``verificacion_estado`` dice si la DIAN lo tiene
         como válido. ``POST {id}/verificar/`` repite la consulta en el momento.
+
+        ``POST {id}/evento/`` pide un evento RADIAN sobre la factura (030, 031,
+        032 o 033); ``radian_estado`` resume el último que la DIAN registró, y el
+        detalle está en ``/api/recepcion/evento/?documento=<uuid>``.
 
         Los archivos se bajan con ``xml/`` (el XML tal como llegó), ``xml-factura/``
         (el documento, sin el AttachedDocument) y ``pdf/``. Son ``Adjunto`` del
@@ -7007,6 +7041,76 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DocumentoRecibido'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/recepcion/documento/{id}/evento/:
+    post:
+      operationId: recepcion_documento_evento_create
+      description: |-
+        Pide un evento RADIAN sobre la factura y lo envía a la DIAN.
+
+        ``{"codigo": "030"|"031"|"032"|"033"}``, con ``persona`` en el 030 y el
+        032 (si no viene, la configurada en el emisor) y ``concepto_reclamo``
+        en el 031. Responde 201 con el evento ``pendiente``: se envía en segundo
+        plano y su estado se consulta en ``/api/recepcion/evento/{id}/``.
+
+        400 si no cabe: no es una factura de venta, la DIAN no la tiene
+        verificada como válida, ya tiene ese evento, falta el anterior
+        (030 → 032 → 033 o 031), el 033 y el 031 se excluyen, o venció el
+        plazo de 3 días hábiles desde el 032.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este documento recibido.
+        required: true
+      tags:
+      - recepcion
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitudEventoRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SolicitudEventoRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SolicitudEventoRequest'
+        required: true
+      security:
+      - LlaveApi: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Evento'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: ''
         '429':
           description: Error
@@ -7282,6 +7386,269 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/recepcion/evento/:
+    get:
+      operationId: recepcion_evento_list
+      description: |-
+        Los eventos RADIAN que los emisores registraron sobre sus facturas recibidas.
+
+        Se piden con ``POST /api/recepcion/documento/{id}/evento/`` (o salen solos:
+        el acuse 030 automático) y se envían a la DIAN en segundo plano. Aquí se
+        consultan: ``estado`` dice si la DIAN lo registró (``registrado``), lo
+        rechazó (``rechazado``, con el motivo en ``respuesta_descripcion``) o no se
+        pudo enviar (``error``).
+
+        Filtros: ``?documento=<uuid>``, ``?emisor=<id>``, ``?estado=`` y
+        ``?codigo=030|031|032|033``. ``?ordering=`` por ``creado_en`` o ``numero``.
+
+        ``POST {id}/enviar/`` reenvía uno en ``error``, con el mismo XML.
+        ``xml/`` baja el evento firmado y ``respuesta/`` el ApplicationResponse
+        con el que la DIAN respondió.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Qué campo usar para ordenar los resultados.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: Un número de página dentro del conjunto de resultados paginado.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Número de resultados a devolver por página.
+        schema:
+          type: integer
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEventoList'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/recepcion/evento/{id}/:
+    get:
+      operationId: recepcion_evento_retrieve
+      description: |-
+        Los eventos RADIAN que los emisores registraron sobre sus facturas recibidas.
+
+        Se piden con ``POST /api/recepcion/documento/{id}/evento/`` (o salen solos:
+        el acuse 030 automático) y se envían a la DIAN en segundo plano. Aquí se
+        consultan: ``estado`` dice si la DIAN lo registró (``registrado``), lo
+        rechazó (``rechazado``, con el motivo en ``respuesta_descripcion``) o no se
+        pudo enviar (``error``).
+
+        Filtros: ``?documento=<uuid>``, ``?emisor=<id>``, ``?estado=`` y
+        ``?codigo=030|031|032|033``. ``?ordering=`` por ``creado_en`` o ``numero``.
+
+        ``POST {id}/enviar/`` reenvía uno en ``error``, con el mismo XML.
+        ``xml/`` baja el evento firmado y ``respuesta/`` el ApplicationResponse
+        con el que la DIAN respondió.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este evento RADIAN.
+        required: true
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Evento'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/recepcion/evento/{id}/enviar/:
+    post:
+      operationId: recepcion_evento_enviar_create
+      description: |-
+        Reenvía a la DIAN un evento en ``error``, ahora mismo.
+
+        Con el mismo XML y el mismo CUDE. Si vuelve a fallar, queda en
+        ``error`` con el detalle y responde 200 igual: lo que se pidió
+        —enviarlo— se intentó.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este evento RADIAN.
+        required: true
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Evento'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/recepcion/evento/{id}/respuesta/:
+    get:
+      operationId: recepcion_evento_respuesta_retrieve
+      description: El ApplicationResponse con el que la DIAN respondió al evento.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este evento RADIAN.
+        required: true
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/xml:
+              schema:
+                type: string
+                format: binary
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/recepcion/evento/{id}/xml/:
+    get:
+      operationId: recepcion_evento_xml_retrieve
+      description: El evento firmado, tal como se envió a la DIAN.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este evento RADIAN.
+        required: true
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/xml:
+              schema:
+                type: string
+                format: binary
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
           description: Error
           content:
             application/json:
@@ -7706,6 +8073,18 @@ components:
       - archivo
       - clave
       - emisor
+    CodigoEnum:
+      enum:
+      - '030'
+      - '031'
+      - '032'
+      - '033'
+      type: string
+      description: |-
+        * `030` - 030
+        * `031` - 031
+        * `032` - 032
+        * `033` - 033
     ConceptoEnum:
       enum:
       - basico
@@ -9430,6 +9809,16 @@ components:
           type: string
           readOnly: true
           title: Razón social del proveedor
+        proveedor_tipo_identificacion:
+          type: string
+          readOnly: true
+          title: Tipo de identificación del proveedor
+          description: schemeName del CompanyID (31 = NIT, 13 = cédula).
+        proveedor_tipo_organizacion:
+          type: string
+          readOnly: true
+          title: Tipo de organización del proveedor
+          description: AdditionalAccountID (1 = jurídica, 2 = natural).
         receptor_numero_identificacion:
           type: string
           readOnly: true
@@ -9502,6 +9891,19 @@ components:
           format: date-time
           readOnly: true
           nullable: true
+        radian_estado:
+          allOf:
+          - $ref: '#/components/schemas/RadianEstadoEnum'
+          readOnly: true
+          title: Estado RADIAN
+          description: |-
+            El último evento registrado en RADIAN. El detalle está en rec_evento.
+
+            * `sin_eventos` - Sin eventos
+            * `acuse` - Acuse de recibo (030)
+            * `recibo` - Recibo del bien o servicio (032)
+            * `aceptada` - Aceptación expresa (033)
+            * `reclamada` - Reclamo (031)
         tiene_xml_factura:
           type: boolean
           readOnly: true
@@ -9528,6 +9930,9 @@ components:
       - proveedor_digito_verificacion
       - proveedor_numero_identificacion
       - proveedor_razon_social
+      - proveedor_tipo_identificacion
+      - proveedor_tipo_organizacion
+      - radian_estado
       - receptor_numero_identificacion
       - tiene_pdf
       - tiene_xml_factura
@@ -9608,6 +10013,19 @@ components:
           - $ref: '#/components/schemas/VerificacionEstadoEnum'
           readOnly: true
           title: Verificación DIAN
+        radian_estado:
+          allOf:
+          - $ref: '#/components/schemas/RadianEstadoEnum'
+          readOnly: true
+          title: Estado RADIAN
+          description: |-
+            El último evento registrado en RADIAN. El detalle está en rec_evento.
+
+            * `sin_eventos` - Sin eventos
+            * `acuse` - Acuse de recibo (030)
+            * `recibo` - Recibo del bien o servicio (032)
+            * `aceptada` - Aceptación expresa (033)
+            * `reclamada` - Reclamo (031)
       required:
       - cufe_cude
       - documento_tipo
@@ -9617,6 +10035,7 @@ components:
       - numero
       - proveedor_numero_identificacion
       - proveedor_razon_social
+      - radian_estado
       - total_a_pagar
       - validacion_codigo
       - verificacion_estado
@@ -9912,6 +10331,40 @@ components:
           title: El certificado vence el
           description: Fin de la vigencia del .p12 cargado, tal y como viene dentro
             del propio certificado. Nulo si no hay certificado.
+        acuse_automatico:
+          type: boolean
+          title: Acuse de recibo automático
+          description: 'Emite el 030 solo, cuando una factura recibida se verifica
+            como válida ante la DIAN. Apagado por defecto: lo enciende el emisor.
+            Necesita la persona que recibe.'
+        recibe_tipo_identificacion:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+          nullable: true
+          x-catalogo: tipo-identificacion
+          x-catalogo-valor: id
+        recibe_numero_identificacion:
+          type: string
+          title: Identificación de quien recibe
+          maxLength: 20
+        recibe_nombres:
+          type: string
+          title: Nombres de quien recibe
+          maxLength: 100
+        recibe_apellidos:
+          type: string
+          title: Apellidos de quien recibe
+          maxLength: 100
+        recibe_cargo:
+          type: string
+          title: Cargo de quien recibe
+          maxLength: 100
+        recibe_area:
+          type: string
+          title: Área de quien recibe
+          maxLength: 100
         resoluciones:
           type: array
           items:
@@ -10076,6 +10529,40 @@ components:
           title: El certificado vence el
           description: Fin de la vigencia del .p12 cargado, tal y como viene dentro
             del propio certificado. Nulo si no hay certificado.
+        acuse_automatico:
+          type: boolean
+          title: Acuse de recibo automático
+          description: 'Emite el 030 solo, cuando una factura recibida se verifica
+            como válida ante la DIAN. Apagado por defecto: lo enciende el emisor.
+            Necesita la persona que recibe.'
+        recibe_tipo_identificacion:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+          nullable: true
+          x-catalogo: tipo-identificacion
+          x-catalogo-valor: id
+        recibe_numero_identificacion:
+          type: string
+          title: Identificación de quien recibe
+          maxLength: 20
+        recibe_nombres:
+          type: string
+          title: Nombres de quien recibe
+          maxLength: 100
+        recibe_apellidos:
+          type: string
+          title: Apellidos de quien recibe
+          maxLength: 100
+        recibe_cargo:
+          type: string
+          title: Cargo de quien recibe
+          maxLength: 100
+        recibe_area:
+          type: string
+          title: Área de quien recibe
+          maxLength: 100
         municipio_id:
           type: integer
           readOnly: true
@@ -10231,6 +10718,40 @@ components:
             * `2` - Habilitación
           minimum: 0
           maximum: 32767
+        acuse_automatico:
+          type: boolean
+          title: Acuse de recibo automático
+          description: 'Emite el 030 solo, cuando una factura recibida se verifica
+            como válida ante la DIAN. Apagado por defecto: lo enciende el emisor.
+            Necesita la persona que recibe.'
+        recibe_tipo_identificacion:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+          nullable: true
+          x-catalogo: tipo-identificacion
+          x-catalogo-valor: id
+        recibe_numero_identificacion:
+          type: string
+          title: Identificación de quien recibe
+          maxLength: 20
+        recibe_nombres:
+          type: string
+          title: Nombres de quien recibe
+          maxLength: 100
+        recibe_apellidos:
+          type: string
+          title: Apellidos de quien recibe
+          maxLength: 100
+        recibe_cargo:
+          type: string
+          title: Cargo de quien recibe
+          maxLength: 100
+        recibe_area:
+          type: string
+          title: Área de quien recibe
+          maxLength: 100
       required:
       - correo
       - departamento
@@ -10959,6 +11480,155 @@ components:
       required:
       - detail
       - errores
+    Evento:
+      type: object
+      description: Un evento. Los XML se bajan por sus rutas (``xml/`` y ``respuesta/``).
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        documento:
+          type: string
+          format: uuid
+          readOnly: true
+        emisor:
+          type: integer
+          readOnly: true
+        codigo:
+          type: string
+          readOnly: true
+        descripcion:
+          type: string
+          readOnly: true
+        numero:
+          type: string
+          readOnly: true
+          title: Número
+          description: cbc:ID del evento.
+        estado:
+          allOf:
+          - $ref: '#/components/schemas/EventoEstadoEnum'
+          readOnly: true
+        ambiente:
+          allOf:
+          - $ref: '#/components/schemas/AmbienteEnum'
+          readOnly: true
+        cude:
+          type: string
+          readOnly: true
+        fecha:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        hora:
+          type: string
+          format: time
+          readOnly: true
+          nullable: true
+        persona_tipo_identificacion:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+          readOnly: true
+          nullable: true
+          title: Tipo de identificación de quien recibe
+        persona_numero_identificacion:
+          type: string
+          readOnly: true
+          title: Identificación de quien recibe
+        persona_nombres:
+          type: string
+          readOnly: true
+          title: Nombres de quien recibe
+        persona_apellidos:
+          type: string
+          readOnly: true
+          title: Apellidos de quien recibe
+        persona_cargo:
+          type: string
+          readOnly: true
+          title: Cargo de quien recibe
+        persona_area:
+          type: string
+          readOnly: true
+          title: Área de quien recibe
+        concepto_reclamo:
+          type: string
+          title: Código
+          readOnly: true
+        respuesta_codigo:
+          type: string
+          readOnly: true
+          title: Código de la respuesta
+        respuesta_descripcion:
+          type: string
+          readOnly: true
+          title: Detalle de la respuesta
+        enviado_en:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        intentos:
+          type: integer
+          readOnly: true
+          title: Intentos de envío
+        usuario:
+          type: integer
+          readOnly: true
+          nullable: true
+        tiene_xml:
+          type: boolean
+          readOnly: true
+        tiene_respuesta:
+          type: boolean
+          readOnly: true
+        creado_en:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - ambiente
+      - codigo
+      - concepto_reclamo
+      - creado_en
+      - cude
+      - descripcion
+      - documento
+      - emisor
+      - enviado_en
+      - estado
+      - fecha
+      - hora
+      - id
+      - intentos
+      - numero
+      - persona_apellidos
+      - persona_area
+      - persona_cargo
+      - persona_nombres
+      - persona_numero_identificacion
+      - persona_tipo_identificacion
+      - respuesta_codigo
+      - respuesta_descripcion
+      - tiene_respuesta
+      - tiene_xml
+      - usuario
+    EventoEstadoEnum:
+      enum:
+      - pendiente
+      - registrado
+      - rechazado
+      - error
+      type: string
+      description: |-
+        * `pendiente` - Pendiente
+        * `registrado` - Registrado
+        * `rechazado` - Rechazado
+        * `error` - Error al enviar
     GrupoEnum:
       enum:
       - devengado
@@ -12574,6 +13244,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Empleado'
+    PaginatedEventoList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Evento'
     PaginatedMunicipioList:
       type: object
       required:
@@ -12871,6 +13564,40 @@ components:
             * `2` - Habilitación
           minimum: 0
           maximum: 32767
+        acuse_automatico:
+          type: boolean
+          title: Acuse de recibo automático
+          description: 'Emite el 030 solo, cuando una factura recibida se verifica
+            como válida ante la DIAN. Apagado por defecto: lo enciende el emisor.
+            Necesita la persona que recibe.'
+        recibe_tipo_identificacion:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+          nullable: true
+          x-catalogo: tipo-identificacion
+          x-catalogo-valor: id
+        recibe_numero_identificacion:
+          type: string
+          title: Identificación de quien recibe
+          maxLength: 20
+        recibe_nombres:
+          type: string
+          title: Nombres de quien recibe
+          maxLength: 100
+        recibe_apellidos:
+          type: string
+          title: Apellidos de quien recibe
+          maxLength: 100
+        recibe_cargo:
+          type: string
+          title: Cargo de quien recibe
+          maxLength: 100
+        recibe_area:
+          type: string
+          title: Área de quien recibe
+          maxLength: 100
     PatchedEmpleadoRequest:
       type: object
       description: |-
@@ -13132,6 +13859,59 @@ components:
           type: string
           writeOnly: true
           maxLength: 255
+    PersonaQueRecibeRequest:
+      type: object
+      description: Quien recibió la factura o la mercancía (030 y 032).
+      properties:
+        tipo_identificacion:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+          description: Id del catálogo de tipos de identificación (13 = cédula).
+          x-catalogo: tipo-identificacion
+          x-catalogo-valor: id
+        numero_identificacion:
+          type: string
+          minLength: 1
+          maxLength: 20
+        nombres:
+          type: string
+          minLength: 1
+          maxLength: 100
+        apellidos:
+          type: string
+          minLength: 1
+          maxLength: 100
+        cargo:
+          type: string
+          minLength: 1
+          default: ''
+          maxLength: 100
+        area:
+          type: string
+          minLength: 1
+          default: ''
+          maxLength: 100
+      required:
+      - apellidos
+      - nombres
+      - numero_identificacion
+      - tipo_identificacion
+    RadianEstadoEnum:
+      enum:
+      - sin_eventos
+      - acuse
+      - recibo
+      - aceptada
+      - reclamada
+      type: string
+      description: |-
+        * `sin_eventos` - Sin eventos
+        * `acuse` - Acuse de recibo (030)
+        * `recibo` - Recibo del bien o servicio (032)
+        * `aceptada` - Aceptación expresa (033)
+        * `reclamada` - Reclamo (031)
     RechazoCarga:
       type: object
       properties:
@@ -13442,6 +14222,33 @@ components:
         * `facturacion` - Facturación electrónica
         * `nomina` - Nómina electrónica
         * `documento_equivalente` - Documento equivalente electrónico
+    SolicitudEventoRequest:
+      type: object
+      description: La entrada de ``POST /api/recepcion/documento/{id}/evento/``.
+      properties:
+        codigo:
+          allOf:
+          - $ref: '#/components/schemas/CodigoEnum'
+          description: |-
+            030 acuse, 031 reclamo, 032 recibo del bien o servicio, 033 aceptación.
+
+            * `030` - 030
+            * `031` - 031
+            * `032` - 032
+            * `033` - 033
+        persona:
+          allOf:
+          - $ref: '#/components/schemas/PersonaQueRecibeRequest'
+          description: Solo 030 y 032. Sin ella, va la persona que recibe configurada
+            en el emisor.
+        concepto_reclamo:
+          type: string
+          minLength: 1
+          title: Código
+          description: 'Solo 031, y obligatorio ahí: el código de la lista de conceptos
+            de reclamo.'
+      required:
+      - codigo
     TipoCuentaEnum:
       enum:
       - ahorros

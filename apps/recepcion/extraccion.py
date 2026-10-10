@@ -90,6 +90,11 @@ class DatosDocumento:
     proveedor_numero_identificacion: str
     proveedor_digito_verificacion: str
     proveedor_razon_social: str
+    # El schemeName del CompanyID (31 NIT, 13 cédula...) y el
+    # AdditionalAccountID (1 jurídica, 2 natural). Los eventos RADIAN los
+    # repiten en el ReceiverParty.
+    proveedor_tipo_identificacion: str
+    proveedor_tipo_organizacion: str
     receptor_numero_identificacion: str
     valor_bruto: Decimal | None
     total_impuestos: Decimal | None
@@ -340,8 +345,8 @@ def _leer_documento(raiz):
 
     proveedor = raiz.find("cac:AccountingSupplierParty/cac:Party", NS)
     receptor = raiz.find("cac:AccountingCustomerParty/cac:Party", NS)
-    nit_proveedor, dv_proveedor = _nit(proveedor)
-    nit_receptor, _ = _nit(receptor)
+    nit_proveedor, dv_proveedor, tipo_proveedor = _nit(proveedor)
+    nit_receptor, _, _ = _nit(receptor)
     numero = _texto(raiz, "cbc:ID")
     cufe = _texto(raiz, "cbc:UUID")
     fecha = _fecha(_texto(raiz, "cbc:IssueDate"))
@@ -364,6 +369,10 @@ def _leer_documento(raiz):
         proveedor_numero_identificacion=nit_proveedor,
         proveedor_digito_verificacion=dv_proveedor,
         proveedor_razon_social=_razon_social(proveedor)[:450],
+        proveedor_tipo_identificacion=tipo_proveedor,
+        proveedor_tipo_organizacion=_texto(
+            raiz, "cac:AccountingSupplierParty/cbc:AdditionalAccountID",
+        )[:1],
         receptor_numero_identificacion=nit_receptor,
         valor_bruto=_decimal(_texto(totales, "cbc:LineExtensionAmount")),
         total_impuestos=sum(impuestos) if impuestos else None,
@@ -393,15 +402,19 @@ def _texto(nodo, ruta):
 
 
 def _nit(parte):
-    """El NIT (solo dígitos, sin DV) y el DV de una parte del documento."""
+    """El NIT (solo dígitos, sin DV), el DV y el tipo de identificación
+    (``schemeName``) de una parte del documento."""
     for ruta in ("cac:PartyTaxScheme/cbc:CompanyID", "cac:PartyLegalEntity/cbc:CompanyID"):
         nodo = parte.find(ruta, NS) if parte is not None else None
         if nodo is not None and nodo.text:
             # Hay quien manda "900123456-7": el DV va después del guion.
             numero = re.sub(r"\D", "", nodo.text.split("-")[0])[:20]
             if numero:
-                return numero, (nodo.get("schemeID") or "")[:1]
-    return "", ""
+                return (
+                    numero, (nodo.get("schemeID") or "")[:1],
+                    (nodo.get("schemeName") or "")[:2],
+                )
+    return "", "", ""
 
 
 def _razon_social(parte):

@@ -218,3 +218,134 @@ class RangoNumeracionTests(SimpleTestCase):
         self.assertEqual(resp.codigo, "302")
         self.assertIn("No registra prefijos", resp.descripcion)
         self.assertEqual(resp.rangos, [])
+
+
+class EventosRadianTests(SimpleTestCase):
+    """SendEventUpdateStatus y GetStatusEvent, sin red: se intercepta ``_post``."""
+
+    CUFE = "a" * 96
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.llave, cls.cert = _generar_certificado()
+
+    def _cliente(self, respuesta):
+        cliente = soap.ClienteDian(
+            "https://vpfe-hab.dian.gov.co/WcfDianCustomerServices.svc",
+            self.llave, self.cert,
+        )
+        self.enviados = []
+
+        def post(sobre, accion):
+            self.enviados.append((etree.fromstring(sobre), accion))
+            return respuesta.encode()
+
+        cliente._post = post
+        return cliente
+
+    @staticmethod
+    def _respuesta(operacion, cuerpo):
+        return f"""<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope">
+          <s:Body><{operacion}Response xmlns="http://wcf.dian.colombia">
+            <{operacion}Result xmlns:a="x" xmlns:b="y">{cuerpo}</{operacion}Result>
+          </{operacion}Response></s:Body></s:Envelope>"""
+
+    @staticmethod
+    def _application_response(*respuestas):
+        documentos = "".join(
+            "<cac:DocumentResponse><cac:Response>"
+            f"<cbc:ResponseCode>{codigo}</cbc:ResponseCode>"
+            f"<cbc:Description>{descripcion}</cbc:Description>"
+            "</cac:Response></cac:DocumentResponse>"
+            for codigo, descripcion in respuestas
+        )
+        xml = (
+            '<ApplicationResponse xmlns="urn:oasis:names:specification:ubl:schema:xsd:ApplicationResponse-2"'
+            ' xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"'
+            ' xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">'
+            f"{documentos}</ApplicationResponse>"
+        )
+        return base64.b64encode(xml.encode()).decode()
+
+    def _operacion(self, nombre):
+        arbol, accion = self.enviados[0]
+        ns = soap.NS
+        self.assertEqual(accion, f"{soap.ACCION_BASE}/{nombre}")
+        self.assertEqual(
+            arbol.findtext(f"{{{ns['soap']}}}Header/{{{ns['wsa']}}}Action"), accion,
+        )
+        return arbol.find(f"{{{ns['soap']}}}Body/{{{ns['wcf']}}}{nombre}")
+
+    def test_enviar_evento_manda_solo_el_zip(self):
+        cliente = self._cliente(self._respuesta("SendEventUpdateStatus", ""))
+        cliente.enviar_evento(b"<ApplicationResponse/>", "ar0901192048000000001.xml")
+
+        operacion = self._operacion("SendEventUpdateStatus")
+        ns = soap.NS
+        self.assertEqual(
+            [etree.QName(h).localname for h in operacion], ["contentFile"],
+        )
+        zip_bytes = base64.b64decode(operacion.findtext(f"{{{ns['wcf']}}}contentFile"))
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            self.assertEqual(zf.namelist(), ["ar0901192048000000001.xml"])
+            self.assertEqual(zf.read("ar0901192048000000001.xml"), b"<ApplicationResponse/>")
+
+    def test_enviar_evento_lee_la_respuesta_como_sendbillsync(self):
+        cude = "c" * 96
+        cliente = self._cliente(self._respuesta("SendEventUpdateStatus", f"""
+            <a:IsValid>false</a:IsValid>
+            <a:StatusCode>99</a:StatusCode>
+            <a:StatusDescription>Validación contiene errores en campos mandatorios.</a:StatusDescription>
+            <a:ErrorMessage><b:string>Regla: AAH09, Rechazo: evento repetido</b:string></a:ErrorMessage>
+            <a:XmlDocumentKey>{cude}</a:XmlDocumentKey>"""))
+        r = cliente.enviar_evento(b"<ApplicationResponse/>", "ar.xml")
+
+        self.assertFalse(r.es_valido)
+        self.assertEqual(r.codigo_estado, "99")
+        self.assertEqual(r.track_id, cude)
+        self.assertEqual(r.errores, ["Regla: AAH09, Rechazo: evento repetido"])
+
+    def test_consultar_eventos_usa_el_cufe_como_track_id(self):
+        cliente = self._cliente(self._respuesta("GetStatusEvent", ""))
+        cliente.consultar_eventos(self.CUFE)
+
+        operacion = self._operacion("GetStatusEvent")
+        self.assertEqual(operacion.findtext(f"{{{soap.NS['wcf']}}}trackId"), self.CUFE)
+
+    def test_consultar_eventos_lee_los_eventos_del_application_response(self):
+        b64 = self._application_response(
+            ("030", "Acuse de recibo de Factura Electrónica de Venta"),
+            ("032", "Recibo del bien y/o prestación del servicio"),
+        )
+        cliente = self._cliente(self._respuesta("GetStatusEvent", f"""
+            <a:IsValid>true</a:IsValid>
+            <a:StatusCode>00</a:StatusCode>
+            <a:XmlBase64Bytes>{b64}</a:XmlBase64Bytes>"""))
+        r = cliente.consultar_eventos(self.CUFE)
+
+        self.assertTrue(r.respuesta.es_valido)
+        self.assertEqual(r.respuesta.codigo_estado, "00")
+        self.assertEqual(
+            [(e.codigo, e.descripcion) for e in r.eventos],
+            [
+                ("030", "Acuse de recibo de Factura Electrónica de Venta"),
+                ("032", "Recibo del bien y/o prestación del servicio"),
+            ],
+        )
+
+    def test_consultar_eventos_sin_application_response(self):
+        cliente = self._cliente(self._respuesta("GetStatusEvent", """
+            <a:IsValid>false</a:IsValid>
+            <a:StatusCode>66</a:StatusCode>"""))
+        r = cliente.consultar_eventos(self.CUFE)
+
+        self.assertEqual(r.respuesta.codigo_estado, "66")
+        self.assertEqual(r.eventos, [])
+
+    def test_application_response_ilegible_no_rompe_la_consulta(self):
+        basura = base64.b64encode(b"esto no es XML").decode()
+        r = soap.RespuestaEventos.desde_xml(self._respuesta(
+            "GetStatusEvent", f"<a:XmlBase64Bytes>{basura}</a:XmlBase64Bytes>",
+        ))
+        self.assertEqual(r.eventos, [])

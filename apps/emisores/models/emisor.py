@@ -113,6 +113,29 @@ class Emisor(ModeloConFechas):
         "ambientes independientes, no uno del despliegue.",
     )
 
+    # --- Eventos RADIAN de las facturas recibidas ---
+    # Con qué se emiten los eventos del emisor como adquiriente
+    # (`apps.recepcion.eventos`). La persona que recibe va en el 030 y el 032;
+    # la petición de un evento puede traer otra.
+    acuse_automatico = models.BooleanField(
+        "acuse de recibo automático", default=False,
+        help_text="Emite el 030 solo, cuando una factura recibida se verifica "
+        "como válida ante la DIAN. Apagado por defecto: lo enciende el emisor. "
+        "Necesita la persona que recibe.",
+    )
+    recibe_tipo_identificacion = models.ForeignKey(
+        "catalogos.TipoIdentificacion", on_delete=models.PROTECT,
+        null=True, blank=True, related_name="+",
+        verbose_name="tipo de identificación de quien recibe",
+    )
+    recibe_numero_identificacion = models.CharField(
+        "identificación de quien recibe", max_length=20, blank=True,
+    )
+    recibe_nombres = models.CharField("nombres de quien recibe", max_length=100, blank=True)
+    recibe_apellidos = models.CharField("apellidos de quien recibe", max_length=100, blank=True)
+    recibe_cargo = models.CharField("cargo de quien recibe", max_length=100, blank=True)
+    recibe_area = models.CharField("área de quien recibe", max_length=100, blank=True)
+
     # --- Relaciones ---
     # Dueño del emisor. PROTECT y no CASCADE: de aquí cuelgan documentos
     # fiscales de terceros, así que borrar a una persona no puede llevarse por

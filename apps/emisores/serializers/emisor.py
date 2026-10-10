@@ -10,6 +10,7 @@ from apps.catalogos.models import (
     Municipio,
     Pais,
     ResponsabilidadFiscal,
+    TipoIdentificacion,
 )
 from apps.catalogos.models.municipio import mensaje_municipio_de_otro_departamento
 from apps.emisores.models import Emisor, ambiente_por_defecto
@@ -75,6 +76,21 @@ CAMPOS_ACTUALIZABLES = (
     "departamento",
     "municipio",
     "correo",
+    # La configuración de los eventos RADIAN de las facturas recibidas.
+    "acuse_automatico",
+    "recibe_tipo_identificacion",
+    "recibe_numero_identificacion",
+    "recibe_nombres",
+    "recibe_apellidos",
+    "recibe_cargo",
+    "recibe_area",
+)
+# La persona que recibe va completa o no va: el 030 y el 032 la llevan entera.
+CAMPOS_PERSONA_QUE_RECIBE = (
+    "recibe_tipo_identificacion",
+    "recibe_numero_identificacion",
+    "recibe_nombres",
+    "recibe_apellidos",
 )
 CODIGO_NO_ACTUALIZABLE = "campo_no_actualizable"
 MENSAJE_NO_ACTUALIZABLE = (
@@ -91,6 +107,10 @@ class EmisorSerializer(TiposEstrictos, serializers.ModelSerializer):
     pais = RelacionDeCatalogo(queryset=Pais.objects.all())
     departamento = RelacionDeCatalogo(queryset=Departamento.objects.all())
     municipio = RelacionDeCatalogo(queryset=Municipio.objects.all())
+    # La persona que recibe por defecto en los eventos RADIAN (030 y 032).
+    recibe_tipo_identificacion = RelacionDeCatalogo(
+        queryset=TipoIdentificacion.objects.all(), required=False, allow_null=True,
+    )
     # Igual que la ubicación: por su código de la lista TipoResponsabilidad
     # ('O-13', 'O-15', 'O-23', 'O-47', 'R-99-PN'), que es lo que viaja en el
     # TaxLevelCode del XML y lo que el ERP conoce. Sin ninguna, el XML sale con
@@ -177,6 +197,14 @@ class EmisorSerializer(TiposEstrictos, serializers.ModelSerializer):
                 )
             })
 
+        presentes = [campo for campo in CAMPOS_PERSONA_QUE_RECIBE if valor(campo)]
+        if presentes and len(presentes) < len(CAMPOS_PERSONA_QUE_RECIBE):
+            raise serializers.ValidationError({
+                campo: "La persona que recibe va completa: tipo y número de "
+                "identificación, nombres y apellidos."
+                for campo in CAMPOS_PERSONA_QUE_RECIBE if campo not in presentes
+            })
+
         tipo = valor("tipo_identificacion")
         numero = valor("numero_identificacion")
         if not (tipo and numero):
@@ -261,6 +289,9 @@ class EmisorSerializer(TiposEstrictos, serializers.ModelSerializer):
             "ambiente_facturacion", "ambiente_nomina",
             "ambiente_documento_equivalente",
             "certificado_activo", "certificado_vence",
+            "acuse_automatico", "recibe_tipo_identificacion",
+            "recibe_numero_identificacion", "recibe_nombres", "recibe_apellidos",
+            "recibe_cargo", "recibe_area",
             "resoluciones",
         ]
         # El dueño no se manda: lo pone la vista con quien hace la petición.

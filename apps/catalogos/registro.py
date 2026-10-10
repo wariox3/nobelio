@@ -62,6 +62,7 @@ EMISOR = "/api/emisores/emisor/"
 RESOLUCION = "/api/emisores/resolucion/"
 EMPLEADO = "/api/nomina/empleado/"
 NOMINA_RUTA = "/api/nomina/nomina/"
+EVENTO = "/api/recepcion/documento/{id}/evento/"
 
 
 def _id(ruta, *campos):
@@ -90,9 +91,10 @@ CATALOGOS = (
         "13, 31 NIT = 31).",
         "TipoIdentificacion", (FACTURA,),
         _id(DOCUMENTO, "adquiriente.tipo_identificacion")
-        + _id(EMISOR, "tipo_identificacion")
+        + _id(EMISOR, "tipo_identificacion", "recibe_tipo_identificacion")
         + _id(EMPLEADO, "tipo_identificacion")
-        + _id(NOMINA_RUTA, "empleado.tipo_identificacion"),
+        + _id(NOMINA_RUTA, "empleado.tipo_identificacion")
+        + _id(EVENTO, "persona.tipo_identificacion"),
     ),
     Catalogo(
         "tipo-organizacion", models.TipoOrganizacion,
@@ -223,6 +225,7 @@ CATALOGOS = (
         "Por qué se reclama una factura en el evento 031: inconsistencias, "
         "mercancía no entregada total o parcialmente, servicio no prestado.",
         "ConceptoReclamo", (FACTURA, RADIAN),
+        _codigo(EVENTO, "concepto_reclamo"),
     ),
 )
 

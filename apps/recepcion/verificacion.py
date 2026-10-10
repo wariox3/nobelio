@@ -60,7 +60,14 @@ def verificar(documento, *, cliente=None):
         raise ErrorTransitorio(f"La DIAN no respondió: {error}.")
     estado = EstadoVerificacion.VALIDO if respuesta.es_valido else EstadoVerificacion.INVALIDO
     detalle = " ".join(filter(None, [respuesta.descripcion_estado, *respuesta.errores]))
-    return _guardar(documento, estado, respuesta.codigo_estado, detalle)
+    documento = _guardar(documento, estado, respuesta.codigo_estado, detalle)
+    if estado == EstadoVerificacion.VALIDO:
+        # Con la factura confirmada, el acuse de recibo (030) si el emisor lo
+        # tiene automático. No falla: lo que lo impida queda en el log.
+        from apps.recepcion import eventos
+
+        eventos.acuse_automatico(documento)
+    return documento
 
 
 def marcar_error(documento, detalle):

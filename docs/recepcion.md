@@ -238,16 +238,17 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
     Desplegado y verificado el 2026-10-03: los correos entran con `201`.
   - El paso a paso está en «Montaje en Cloudflare», más abajo, y el código del
     Worker en `cloudflare/recepcion/`.
+- **Cloudflare (producción, `rededoc.co`)** ✅ (2026-10-09): montado con
+  «Montaje en Cloudflare» (Worker `nobelio-recepcion-produccion`). Verificado
+  de punta a punta: los correos a `<nit>@recepcion.rededoc.co` se registran y
+  Celery los procesa (asunto, adjuntos, documentos).
+  - Pendiente: dejar `NOBELIO_URL` del Worker en el dominio definitivo,
+    `https://api.rededoc.co/recepcion/inbound`.
 
 ## Siguientes pasos
 
-En orden. Cada uno se cierra (código, tests, despliegue en pruebas) antes de
-empezar el siguiente.
-
-1. **Producción**: seguir «Montaje en Cloudflare» con la columna de
-   producción (zona `rededoc.co`, Worker `nobelio-recepcion-produccion`).
-
-Después siguen los eventos RADIAN (sección siguiente, pasos R1 a R5).
+Los eventos RADIAN (sección siguiente): R1, R2 y R4 hechos; R3 espera la prueba
+real. R5 se descartó.
 
 ## Eventos RADIAN (análisis, 2026-10-06)
 
@@ -314,7 +315,7 @@ y no nos toca.
 - **Entrega a la contraparte**: por correo, con el asunto
   `Evento;<factura>;<NIT>;<nombre>;<número evento>;<código>;<línea opcional>`
   y un ZIP de máximo 2 MB con el `AttachedDocument` (el evento y la respuesta
-  de la DIAN). Sale por Zinc, como las facturas.
+  de la DIAN). nobelio no la hace: R5 se descartó (2026-10-09).
 - **Software**: se envía con el `SoftwareDian` de facturación del emisor. Hay
   que confirmar si la DIAN exige una habilitación aparte para eventos ⚠: se
   sabrá al enviar el primero en habilitación (R3).
@@ -325,17 +326,18 @@ y no nos toca.
 |---|---|
 | Firma XAdES, sobre WS-Security, ZIP, `SoftwareSecurityCode` | Hay. Se reusan |
 | XSD de `ApplicationResponse` y ejemplos 030–033 | Hay |
-| CUDE del evento | Falta. Composición y vector confirmados |
+| CUDE del evento | Hecho (R2): `calcular_cude_evento`, probado con el vector del anexo |
+| XML del evento (`ApplicationResponse`) | Hecho (R2): `ConstructorEvento`, firmado y validado contra el XSD |
 | `AttachedDocument` | Hay el de las facturas. Hay que adaptarlo al evento |
 | Catálogo de eventos | Hecho (R1): `EventoRadian`, transcrito de los ejemplos, porque ninguna lista `.gc` trae los 030–033 vigentes |
 | Conceptos de reclamo | Hecho (R1): `ConceptoReclamo` |
-| `SendEventUpdateStatus` / `GetStatusEvent` | Faltan |
+| `SendEventUpdateStatus` / `GetStatusEvent` | Hecho (R3): `enviar_evento` y `consultar_eventos` en `soap.py`, sin probar aún contra la DIAN |
 | Días hábiles con festivos de Colombia | Hecho (R1): catálogo `Festivo` y `calendario.py` |
 
 ### Pasos
 
-Van después del punto 1 de arriba, con la misma regla: cada paso se cierra
-antes de empezar el siguiente.
+En orden: cada paso se cierra (código, tests, despliegue en pruebas) antes de
+empezar el siguiente.
 
 - **R1. Catálogos** ✅ (2026-10-06): `EventoRadian` (030–033, id = código),
   `ConceptoReclamo` (lista oficial, id = código) y `Festivo` (propio: código =
@@ -359,23 +361,70 @@ antes de empezar el siguiente.
     no en cédulas. Los ejemplos ponen `4` de relleno en casi todas, también en
     NIT donde no cuadra. ⚠ Confirmarlo en habilitación (R3).
   - Tests en `apps/dian/tests_evento.py`.
-- **R3. WS**: `enviar_evento` (`SendEventUpdateStatus`) y `consultar_eventos`
-  (`GetStatusEvent`) en `soap.py`, con tests del sobre. Prueba real en
-  habilitación: un 030 sobre una factura validada.
-- **R4. Eventos del adquiriente**: modelo `rec_evento` (FK a `rec_documento`)
-  con código, número, CUDE, fecha y hora, persona que recibe, concepto del
-  reclamo, estado ante la DIAN, XML firmado y respuesta. El servicio valida el
-  orden, los plazos y la exclusión entre 031 y 033 antes de ir a la DIAN.
-  - Numeración: consecutivo por emisor y tipo de evento, con prefijo por código.
-  - El 030 se emite solo al registrar el documento (en `procesar_correo`), salvo
-    que el emisor lo tenga apagado.
-  - El emisor configura una persona que recibe por defecto (030 y 032). La
-    petición puede reemplazarla.
-  - API: `POST /api/recepcion/documento/<id>/evento/` con `{codigo, ...}` y
-    `GET /api/recepcion/evento/`.
-  - `rec_documento` gana un resumen del estado RADIAN.
-- **R5. Notificación al proveedor**: el `AttachedDocument` del evento por Zinc,
-  con el asunto reglamentario.
+- **R3. WS** (en curso): `enviar_evento` (`SendEventUpdateStatus`) y
+  `consultar_eventos` (`GetStatusEvent`) en `soap.py`, con tests del sobre ✅
+  (2026-10-09, `apps/dian/tests_soap.py`, `EventosRadianTests`).
+  - `enviar_evento` manda solo `contentFile` y lee la respuesta como
+    `SendBillSync` (`RespuestaDian`, el CUDE en `track_id`).
+  - `consultar_eventos(cufe)` devuelve `RespuestaEventos`: la respuesta y los
+    eventos (`codigo`, `descripcion`) de los `cac:DocumentResponse` del
+    ApplicationResponse. ⚠ Sin ejemplo oficial de esa respuesta: confirmar con
+    la primera consulta real.
+  - Prueba real: en **producción**, un 030 sobre una factura de proveedor ya
+    recibida (decidido 2026-10-09; el acuse es legítimo, pero queda en RADIAN
+    y no se deshace). Se hace con la API de R4 (`POST .../evento/`), y la
+    consulta con el comando `consultar_eventos --id <uuid>`
+    (`apps/recepcion/management/commands/`), que no guarda nada en la base y
+    deja la respuesta cruda de `GetStatusEvent` en `capturas/eventos/`.
+    Hubo un comando `probar_evento` que mandaba el 030 con un número a mano;
+    se quitó porque chocaba con la numeración de R4.
+  - Falta: correr la prueba y confirmar con las respuestas reales los ⚠ (forma
+    de `GetStatusEvent`, si los eventos piden habilitación aparte, el DV).
+- **R4. Eventos del adquiriente** ✅ (2026-10-09, sin probar aún contra la
+  DIAN): modelo `Evento` (`rec_evento`, FK a `rec_documento`) y servicio
+  `apps/recepcion/eventos.py`. Tests en `apps/recepcion/tests_eventos.py`.
+  - `solicitar` valida antes de ir a la DIAN: solo facturas de venta con
+    `verificacion_estado = valido`; orden 030 → 032 → 033 o 031; el 033 y el
+    031 se excluyen; los dos van dentro de 3 días hábiles del 032 (fecha de
+    su firma); un evento no se repite si está pendiente, registrado o en
+    error (uno rechazado sí se puede volver a pedir, con otro número). Crea
+    el evento `pendiente` y encola `enviar_evento` (cola `recepcion`).
+  - Numeración: consecutivo por emisor y tipo, con prefijo `ACR` (030),
+    `REC` (031), `RBS` (032) y `ACE` (033). Bajo candado del emisor, para que
+    dos peticiones no saquen el mismo número.
+  - `enviar` genera el XML (fecha, hora y CUDE del momento), lo firma, lo
+    manda y guarda la respuesta: `registrado` o `rechazado`, y en B2 el XML
+    firmado y el ApplicationResponse de la DIAN. Al registrarse, actualiza
+    `Documento.radian_estado` (`sin_eventos`, `acuse`, `recibo`, `aceptada`,
+    `reclamada`).
+  - Sin reintentos automáticos: si la DIAN no responde, puede que sí lo haya
+    registrado. Queda en `error` y se reenvía con
+    `POST /api/recepcion/evento/<id>/enviar/`, con el mismo XML y CUDE. ⚠ Si
+    la DIAN ya lo tenía, lo rechazará como repetido; conciliar con
+    `GetStatusEvent` queda para cuando se conozca su respuesta.
+  - Acuse automático: al verificarse una factura como válida
+    (`verificacion.verificar`), si el emisor tiene `acuse_automatico`
+    encendido (apagado por defecto) y la persona que recibe configurada. Lo
+    que lo impida queda en el log y la factura sigue su camino.
+  - Emisor: `acuse_automatico` y la persona que recibe por defecto
+    (`recibe_tipo_identificacion`, `recibe_numero_identificacion`,
+    `recibe_nombres`, `recibe_apellidos`, `recibe_cargo`, `recibe_area`),
+    actualizables por `PATCH /api/emisores/emisor/<id>/`. La persona va
+    completa o no va. La petición del evento puede traer otra.
+  - El documento guarda ahora el tipo de identificación y de organización del
+    proveedor (`proveedor_tipo_identificacion`, `proveedor_tipo_organizacion`),
+    que el evento repite en el `ReceiverParty`. Los documentos de antes los
+    tienen vacíos y salen como NIT y persona jurídica.
+  - API: `POST /api/recepcion/documento/<id>/evento/` (`{codigo, persona?,
+    concepto_reclamo?}`, 201 con el evento pendiente o 400 con el motivo);
+    `GET /api/recepcion/evento/` (filtros `documento`, `emisor`, `estado`,
+    `codigo`), `enviar/`, `xml/` y `respuesta/`; `?radian_estado=` en los
+    documentos.
+  - El borrado forzado del correo (`eliminar-admin/`) se lleva sus eventos y
+    los archivos de B2; en RADIAN siguen registrados.
+- **R5. Notificación al proveedor** ❌ descartado (2026-10-09): nobelio no le
+  manda al proveedor el `AttachedDocument` del evento por correo. El evento
+  queda registrado en RADIAN, donde el proveedor lo consulta.
 
 ## Decisiones
 
@@ -391,8 +440,11 @@ antes de empezar el siguiente.
 | Idempotencia del endpoint | SHA-256 del body. `X-Raw-Key` no sirve porque cambia en cada entrega |
 | CUFE repetido | Se ignora: CUFE único en `rec_documento` y, si ya existe, no se crea nada ni se marca (decidido 2026-10-03) |
 | Carpeta en R2 | Fecha en UTC (`AAAA-MM-DD/<uuid>.eml`): un correo después de las 19:00 de Colombia cae en la del día siguiente. Solo organiza; la fecha que cuenta es `recibido_en` |
-| Numeración de eventos RADIAN | Consecutivo en nobelio por emisor y tipo de evento, con prefijo por código. (decidido 2026-10-06) |
-| Acuse (030) | Automático al recibir la factura, con opción en el emisor para apagarlo |
+| Numeración de eventos RADIAN | Consecutivo en nobelio por emisor y tipo de evento, con prefijo por código: `ACR`, `REC`, `RBS`, `ACE` (decidido 2026-10-06) |
+| Notificación del evento al proveedor | No se hace: R5 descartado. El evento vale con el registro en RADIAN (2026-10-09) |
+| Reenvío de eventos | Sin reintentos automáticos: un evento sin respuesta queda en `error` y se reenvía a mano con el mismo XML (2026-10-09) |
+| Eventos sobre facturas no verificadas | No: la DIAN tiene que tener la factura como válida (`verificacion_estado`) antes de cualquier evento (2026-10-09) |
+| Acuse (030) | Automático al verificarse la factura como válida, si el emisor lo enciende: apagado por defecto (decidido 2026-10-09) |
 | Persona que recibe (030/032) | Un valor por defecto en el emisor que la petición puede reemplazar |
 | Alcance RADIAN | Solo como adquiriente (030–033 sobre `rec_documento`), operado desde nobelio, sin ERP ni webhook. Nada sobre las facturas emitidas: ni 034, ni consulta de eventos de los clientes, ni bloqueo de notas (decidido 2026-10-06) |
 | Tabla de eventos RADIAN | `rec_evento`, con FK a `rec_documento`. `doc_documento_evento` no tiene nada que ver: es la bitácora de estados de la emisión ante la DIAN |

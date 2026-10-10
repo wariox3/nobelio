@@ -20,6 +20,20 @@ class EstadoVerificacion(models.TextChoices):
     ERROR = "error", "Error al consultar"
 
 
+class EstadoRadian(models.TextChoices):
+    """El último evento RADIAN que el emisor registró sobre la factura.
+
+    Es un resumen de ``rec_evento`` para filtrar la bandeja: lo reescribe
+    ``apps.recepcion.eventos`` cada vez que la DIAN registra uno.
+    """
+
+    SIN_EVENTOS = "sin_eventos", "Sin eventos"
+    ACUSE = "acuse", "Acuse de recibo (030)"
+    RECIBO = "recibo", "Recibo del bien o servicio (032)"
+    ACEPTADA = "aceptada", "Aceptación expresa (033)"
+    RECLAMADA = "reclamada", "Reclamo (031)"
+
+
 class Documento(ModeloUUID, ModeloConFechas):
     """Factura, nota crédito o nota débito que un proveedor le mandó a un emisor.
 
@@ -56,6 +70,16 @@ class Documento(ModeloUUID, ModeloConFechas):
         "DV del proveedor", max_length=1, blank=True,
     )
     proveedor_razon_social = models.CharField("razón social del proveedor", max_length=450, blank=True)
+    # Los repiten los eventos RADIAN, que se le dirigen al proveedor. Vacíos en
+    # los documentos de antes: se asume NIT y persona jurídica.
+    proveedor_tipo_identificacion = models.CharField(
+        "tipo de identificación del proveedor", max_length=2, blank=True,
+        help_text="schemeName del CompanyID (31 = NIT, 13 = cédula).",
+    )
+    proveedor_tipo_organizacion = models.CharField(
+        "tipo de organización del proveedor", max_length=1, blank=True,
+        help_text="AdditionalAccountID (1 = jurídica, 2 = natural).",
+    )
     receptor_numero_identificacion = models.CharField("NIT del receptor", max_length=20)
 
     # Valores
@@ -99,6 +123,12 @@ class Documento(ModeloUUID, ModeloConFechas):
         help_text="StatusDescription y errores de la DIAN, o por qué no se pudo consultar.",
     )
     verificado_en = models.DateTimeField("verificado en", null=True, blank=True)
+
+    radian_estado = models.CharField(
+        "estado RADIAN", max_length=20, choices=EstadoRadian.choices,
+        default=EstadoRadian.SIN_EVENTOS,
+        help_text="El último evento registrado en RADIAN. El detalle está en rec_evento.",
+    )
 
     # Relaciones
     documento_tipo = models.ForeignKey(

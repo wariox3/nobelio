@@ -19,7 +19,7 @@ from django.db import transaction
 
 from apps.nucleo.registro import campos
 from apps.recepcion import r2
-from apps.recepcion.models import Adjunto, Correo, Documento
+from apps.recepcion.models import Adjunto, Correo, Documento, Evento
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +77,8 @@ def borrar_subidos(subidos):
 
 
 def eliminar_correo(correo):
-    """Borra el correo, sus documentos, sus adjuntos en B2 y su MIME en R2.
+    """Borra el correo, sus documentos con sus eventos, sus adjuntos en B2 y
+    su MIME en R2.
 
     Devuelve ``(documentos, adjuntos)``: cuántos se borraron. Lanza
     ``r2.R2NoConfigurado`` antes de tocar nada si faltan las ``R2_*``, y deja
@@ -89,13 +90,20 @@ def eliminar_correo(correo):
     with transaction.atomic():
         correo = Correo.objects.select_for_update().get(pk=correo.pk)
         adjuntos = list(Adjunto.objects.filter(correo=correo))
-        # Los adjuntos primero: protegen a documentos y correo.
+        eventos = list(Evento.objects.filter(documento__correo=correo))
+        # Adjuntos y eventos primero: protegen a documentos y correo. Los
+        # eventos registrados siguen en RADIAN; aquí solo se borra la copia.
         Adjunto.objects.filter(correo=correo).delete()
+        Evento.objects.filter(documento__correo=correo).delete()
         documentos, _ = Documento.objects.filter(correo=correo).delete()
         raw_key = correo.raw_key
         correo.delete()
         for adjunto in adjuntos:
             adjunto.archivo.storage.delete(adjunto.archivo.name)
+        for evento in eventos:
+            for archivo in (evento.xml_archivo, evento.respuesta_archivo):
+                if archivo:
+                    archivo.storage.delete(archivo.name)
         if raw_key:
             r2.borrar_mime(raw_key)
     return documentos, len(adjuntos)

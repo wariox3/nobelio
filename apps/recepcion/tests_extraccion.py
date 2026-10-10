@@ -37,6 +37,8 @@ class ExtraccionTests(SimpleTestCase):
         self.assertEqual(doc.proveedor_numero_identificacion, "800123456")
         self.assertEqual(doc.proveedor_digito_verificacion, "7")
         self.assertEqual(doc.proveedor_razon_social, "Proveedor Ejemplo S.A.S.")
+        self.assertEqual(doc.proveedor_tipo_identificacion, "31")
+        self.assertEqual(doc.proveedor_tipo_organizacion, "1")
         self.assertEqual(doc.receptor_numero_identificacion, "901192048")
         self.assertEqual(doc.valor_bruto, Decimal("100000.00"))
         self.assertEqual(doc.total_impuestos, Decimal("19800.00"))
@@ -53,6 +55,13 @@ class ExtraccionTests(SimpleTestCase):
         self.assertEqual(doc.numero, "FE-100")
         self.assertEqual(doc.xml_documento, b"")
         self.assertIsNone(doc.pdf)
+
+    def test_proveedor_persona_natural(self):
+        xml = xml_documento(tipo_proveedor="13", organizacion_proveedor="2")
+        [doc] = documentos(correo_con(("FE-100.xml", xml, "application/xml")))
+
+        self.assertEqual(doc.proveedor_tipo_identificacion, "13")
+        self.assertEqual(doc.proveedor_tipo_organizacion, "2")
 
     def test_notas_credito_y_debito(self):
         mime = correo_con(

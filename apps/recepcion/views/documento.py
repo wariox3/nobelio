@@ -15,7 +15,7 @@ from apps.nucleo.api import (
     fecha_de_query,
 )
 from apps.nucleo.esquema import ErrorSerializer
-from apps.recepcion import procesamiento, serializers, verificacion
+from apps.recepcion import eventos, procesamiento, serializers, verificacion
 from apps.recepcion.models import Adjunto, Documento
 from apps.recepcion.views.adjunto import descarga
 from apps.seguridad.alcance import AlcanceEmisorMixin, usuario_del_request
@@ -31,7 +31,8 @@ class DocumentoRecibidoViewSet(AlcanceEmisorMixin, viewsets.ReadOnlyModelViewSet
 
     Filtros: ``?emisor=<id>``, ``?correo=<id>``,
     ``?documento_tipo=factura_venta|nota_credito|nota_debito``,
-    ``?proveedor=<NIT sin DV>``, ``?verificacion_estado=valido|invalido|...``
+    ``?proveedor=<NIT sin DV>``, ``?verificacion_estado=valido|invalido|...``,
+    ``?radian_estado=sin_eventos|acuse|recibo|aceptada|reclamada``
     y ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD`` sobre la fecha de
     emisión, ambos inclusive. ``?ordering=`` ordena por
     ``fecha_emision``, ``numero``, ``total_a_pagar`` o ``creado_en``.
@@ -53,6 +54,10 @@ class DocumentoRecibidoViewSet(AlcanceEmisorMixin, viewsets.ReadOnlyModelViewSet
     CUFE, en segundo plano): ``verificacion_estado`` dice si la DIAN lo tiene
     como válido. ``POST {id}/verificar/`` repite la consulta en el momento.
 
+    ``POST {id}/evento/`` pide un evento RADIAN sobre la factura (030, 031,
+    032 o 033); ``radian_estado`` resume el último que la DIAN registró, y el
+    detalle está en ``/api/recepcion/evento/?documento=<uuid>``.
+
     Los archivos se bajan con ``xml/`` (el XML tal como llegó), ``xml-factura/``
     (el documento, sin el AttachedDocument) y ``pdf/``. Son ``Adjunto`` del
     correo; también salen en ``/api/recepcion/adjunto/?documento=<uuid>``.
@@ -69,6 +74,11 @@ class DocumentoRecibidoViewSet(AlcanceEmisorMixin, viewsets.ReadOnlyModelViewSet
         "=cufe_cude", "^proveedor_numero_identificacion", "numero", "proveedor_razon_social",
     ]
     ordering_fields = ["fecha_emision", "numero", "total_a_pagar", "creado_en"]
+
+    def get_serializer_class(self):
+        if self.action == "evento":
+            return serializers.SolicitudEventoSerializer
+        return super().get_serializer_class()
 
     def get_queryset(self):
         """Los filtros acotan dentro del alcance, nunca lo amplían: el mixin ya
@@ -95,6 +105,8 @@ class DocumentoRecibidoViewSet(AlcanceEmisorMixin, viewsets.ReadOnlyModelViewSet
             qs = qs.filter(fecha_emision__lte=hasta)
         if estado := params.get("verificacion_estado"):
             qs = qs.filter(verificacion_estado=estado)
+        if radian := params.get("radian_estado"):
+            qs = qs.filter(radian_estado=radian)
         return qs
 
     @extend_schema(
@@ -169,6 +181,40 @@ class DocumentoRecibidoViewSet(AlcanceEmisorMixin, viewsets.ReadOnlyModelViewSet
         except verificacion.ErrorTransitorio as error:
             verificacion.marcar_error(documento, str(error))
         return Response(self.get_serializer(self.get_object()).data)
+
+    @extend_schema(
+        request=serializers.SolicitudEventoSerializer,
+        responses={201: serializers.EventoSerializer, 400: ErrorSerializer},
+    )
+    @action(detail=True, methods=["post"])
+    def evento(self, request, pk=None):
+        """Pide un evento RADIAN sobre la factura y lo envía a la DIAN.
+
+        ``{"codigo": "030"|"031"|"032"|"033"}``, con ``persona`` en el 030 y el
+        032 (si no viene, la configurada en el emisor) y ``concepto_reclamo``
+        en el 031. Responde 201 con el evento ``pendiente``: se envía en segundo
+        plano y su estado se consulta en ``/api/recepcion/evento/{id}/``.
+
+        400 si no cabe: no es una factura de venta, la DIAN no la tiene
+        verificada como válida, ya tiene ese evento, falta el anterior
+        (030 → 032 → 033 o 031), el 033 y el 031 se excluyen, o venció el
+        plazo de 3 días hábiles desde el 032.
+        """
+        documento = self.get_object()
+        entrada = self.get_serializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        datos = entrada.validated_data
+        try:
+            evento = eventos.solicitar(
+                documento, datos["codigo"], usuario=usuario_del_request(request),
+                persona=datos.get("persona"), concepto_reclamo=datos.get("concepto_reclamo"),
+            )
+        except eventos.EventoInvalido as error:
+            raise ErrorSolicitud(str(error))
+        return Response(
+            serializers.EventoSerializer(evento, context=self.get_serializer_context()).data,
+            status=status.HTTP_201_CREATED,
+        )
 
     @extend_schema(responses=RESPUESTA_XML)
     @action(detail=True, methods=["get"])

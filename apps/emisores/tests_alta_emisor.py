@@ -260,6 +260,13 @@ class ActualizacionEmisorTests(APITestCase):
             "departamento": c["antioquia"].id,
             "municipio": c["medellin"].id,
             "correo": "otro@empresa.co",
+            "acuse_automatico": True,
+            "recibe_tipo_identificacion": c["nit"].id,
+            "recibe_numero_identificacion": "1020304050",
+            "recibe_nombres": "Ana",
+            "recibe_apellidos": "Pérez",
+            "recibe_cargo": "Contadora",
+            "recibe_area": "Contabilidad",
         }
         self.assertEqual(set(cambios), set(CAMPOS_ACTUALIZABLES))
         resp = self.client.patch(self.url, cambios, format="json")
@@ -268,6 +275,16 @@ class ActualizacionEmisorTests(APITestCase):
         self.assertEqual(emisor.razon_social, "Semantica Digital SAS")
         self.assertEqual(emisor.direccion, "Calle 10 # 20-30")
         self.assertEqual(emisor.correo, "otro@empresa.co")
+        self.assertTrue(emisor.acuse_automatico)
+        self.assertEqual(emisor.recibe_nombres, "Ana")
+
+    def test_la_persona_que_recibe_va_completa(self):
+        resp = self.client.patch(self.url, {"recibe_nombres": "Ana"}, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            set(errores_por_campo(resp)),
+            {"recibe_tipo_identificacion", "recibe_numero_identificacion", "recibe_apellidos"},
+        )
 
     def test_el_resto_de_campos_no_se_actualiza(self):
         for campo, valor in (

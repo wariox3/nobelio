@@ -13,5 +13,6 @@ router.register("adjunto", views.AdjuntoViewSet, basename="adjunto")
 # `basename` propio: el de por defecto (`documento`) choca con el de
 # apps.documentos, que se usa en `reverse("documento-detail")`.
 router.register("documento", views.DocumentoRecibidoViewSet, basename="documento-recibido")
+router.register("evento", views.EventoViewSet, basename="evento-recibido")
 
 urlpatterns = router.urls

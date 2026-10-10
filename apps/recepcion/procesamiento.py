@@ -377,6 +377,8 @@ def _crear_documento(datos, emisor, correo):
                 tipo_codigo_dian=datos.tipo_codigo_dian,
                 proveedor_numero_identificacion=datos.proveedor_numero_identificacion,
                 proveedor_digito_verificacion=datos.proveedor_digito_verificacion,
+                proveedor_tipo_identificacion=datos.proveedor_tipo_identificacion,
+                proveedor_tipo_organizacion=datos.proveedor_tipo_organizacion,
                 proveedor_razon_social=datos.proveedor_razon_social,
                 receptor_numero_identificacion=datos.receptor_numero_identificacion,
                 valor_bruto=datos.valor_bruto,
