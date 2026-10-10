@@ -5184,6 +5184,84 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/emisores/software/{id}/desactivar/:
+    post:
+      operationId: emisores_software_desactivar_create
+      description: |-
+        Deja el software y al emisor sin habilitar para esa operación.
+
+        ``POST /api/emisores/software/{id}/desactivar/``, sin cuerpo.
+
+        Baja ``set_pruebas_aceptado`` del software y la bandera de habilitación
+        del emisor que le corresponde (``habilitado_facturacion``,
+        ``habilitado_nomina`` o ``habilitado_documento_equivalente``). Las
+        otras operaciones no se tocan. Es lo contrario de lo que hace el
+        backend cuando la DIAN acepta el Set de Pruebas, y la única forma de
+        deshacerlo por la API: las dos banderas son de solo lectura.
+
+        Con ellas abajo los envíos vuelven al Set de Pruebas, y el software se
+        puede modificar o borrar otra vez.
+
+        **No en producción.** Un emisor en producción para esa operación tiene
+        que estar habilitado —es lo que exige su propio serializer para nómina
+        y documento equivalente—, así que antes hay que devolverlo a pruebas.
+
+        Es idempotente: sobre un software que ya está sin habilitar responde
+        200 igual.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este software DIAN.
+        required: true
+      tags:
+      - emisores
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SoftwareDianRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SoftwareDianRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SoftwareDianRequest'
+        required: true
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoftwareDian'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/emisores/webhook/:
     get:
       operationId: emisores_webhook_list
@@ -13890,6 +13968,12 @@ components:
           maximum: 9223372036854775807
           minimum: 0
           format: int64
+        consecutivo_actual:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Siguiente consecutivo a usar. Vacío toma el rango desde.
         vigente_desde:
           type: string
           format: date
@@ -14084,6 +14168,12 @@ components:
           maximum: 9223372036854775807
           minimum: 0
           format: int64
+        consecutivo_actual:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Siguiente consecutivo a usar. Vacío toma el rango desde.
         vigente_desde:
           type: string
           format: date
@@ -14136,6 +14226,12 @@ components:
           maximum: 9223372036854775807
           minimum: 0
           format: int64
+        consecutivo_actual:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          description: Siguiente consecutivo a usar. Vacío toma el rango desde.
         vigente_desde:
           type: string
           format: date

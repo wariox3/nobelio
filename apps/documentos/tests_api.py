@@ -188,6 +188,8 @@ class DocumentoAPITests(APITestCase):
 
         self.emisor.referencia_externa = "12"
         self.emisor.save(update_fields=["referencia_externa"])
+        # Ya habilitado: lo que sale por el Set de Pruebas no avisa.
+        self.emisor.softwares.update(set_pruebas_aceptado=True)
         Webhook.objects.create(
             emisor=self.emisor, nombre="torio", url="https://torio.co/hook",
             estado_validado=True, secreto="s3creto",

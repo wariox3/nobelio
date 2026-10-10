@@ -113,7 +113,14 @@ def _crear_avisos(documento, tipo):
     Los que no se pueden mandar —webhook sin secreto, emisor sin referencia
     externa— quedan ya `fallido`, con el motivo, para que se vea por qué no
     salió nada.
+
+    Los documentos que salieron por el Set de Pruebas no avisan a nadie: son
+    material de la habilitación, no documentos del cliente, y el receptor no
+    tiene a qué aplicarlos. Se comportan como un emisor sin webhooks.
     """
+    if documento.envio == Documento.Envio.SET_PRUEBAS:
+        return []
+
     webhooks = list(documento.emisor.webhooks.filter(**{BANDERA_POR_TIPO[tipo]: True}))
     if not webhooks:
         return []

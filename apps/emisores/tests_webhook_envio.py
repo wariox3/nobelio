@@ -20,7 +20,7 @@ from rest_framework.test import APITestCase
 from rest_framework.throttling import SimpleRateThrottle
 
 from apps.dian.servicios import registrar_cambio_de_estado
-from apps.documentos.models import DocumentoEstado
+from apps.documentos.models import Documento, DocumentoEstado
 from apps.documentos.servicios import marcar_notificado
 from apps.documentos.tests_utils import crear_documento_factura
 from apps.emisores.models import Webhook, WebhookAviso
@@ -305,6 +305,36 @@ class DisparadoresTests(TestCase):
 
         post.assert_not_called()
         self.assertEqual(WebhookAviso.objects.get().error, webhooks.MENSAJE_SIN_REFERENCIA)
+
+    def test_el_set_de_pruebas_no_avisa_la_validacion(self):
+        self.documento.envio = Documento.Envio.SET_PRUEBAS
+
+        with mock.patch(POST) as post, self.captureOnCommitCallbacks(execute=True):
+            self._validar()
+
+        post.assert_not_called()
+        self.assertFalse(WebhookAviso.objects.exists())
+        # Como sin webhooks: no queda pendiente de una respuesta que no llegará.
+        self.assertTrue(self._respondido())
+
+    def test_el_set_de_pruebas_no_avisa_la_notificacion(self):
+        self.documento.envio = Documento.Envio.SET_PRUEBAS
+        self.documento.save(update_fields=["envio"])
+
+        with mock.patch(POST) as post, self.captureOnCommitCallbacks(execute=True):
+            marcar_notificado(self.documento)
+
+        post.assert_not_called()
+        self.assertFalse(WebhookAviso.objects.exists())
+
+    def test_el_envio_sincrono_si_avisa(self):
+        self.documento.envio = Documento.Envio.SINCRONO
+
+        with mock.patch(POST, return_value=_respuesta(200)) as post, \
+                self.captureOnCommitCallbacks(execute=True):
+            self._validar()
+
+        self.assertEqual(post.call_count, 1)
 
     def test_sin_webhooks_queda_respondido_sin_enviar(self):
         Webhook.objects.all().delete()
