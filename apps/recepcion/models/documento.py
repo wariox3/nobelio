@@ -139,6 +139,13 @@ class Documento(ModeloUUID, ModeloConFechas):
         "catalogos.Moneda", on_delete=models.PROTECT, null=True, blank=True,
         related_name="documentos_recibidos", verbose_name="moneda",
     )
+    # cac:PaymentMeans/cbc:ID. Los eventos RADIAN solo caben en las facturas a
+    # crédito (LGC62). Vacía en los documentos de antes: se lee del XML la
+    # primera vez que hace falta (`apps.recepcion.eventos`).
+    forma_pago = models.ForeignKey(
+        "catalogos.FormaPago", on_delete=models.PROTECT, null=True, blank=True,
+        related_name="documentos_recibidos", verbose_name="forma de pago",
+    )
     # El emisor que lo recibe: el del NIT receptor del XML, que puede no ser el
     # del buzón al que llegó el correo.
     # Sin índice propio: lo cubre `rec_doc_emisor_recientes`, que empieza por

@@ -26,6 +26,7 @@ class DocumentoRecibidoSerializer(serializers.ModelSerializer):
 
     documento_tipo = serializers.SlugRelatedField(slug_field="codigo", read_only=True)
     moneda = serializers.SlugRelatedField(slug_field="codigo", read_only=True)
+    forma_pago = serializers.SlugRelatedField(slug_field="codigo", read_only=True)
     # Los anota la vista con EXISTS (`DocumentoRecibidoViewSet.get_queryset`).
     tiene_xml_factura = serializers.BooleanField(read_only=True)
     tiene_pdf = serializers.BooleanField(read_only=True)
@@ -38,6 +39,7 @@ class DocumentoRecibidoSerializer(serializers.ModelSerializer):
             "proveedor_numero_identificacion", "proveedor_digito_verificacion",
             "proveedor_razon_social", "proveedor_tipo_identificacion",
             "proveedor_tipo_organizacion", "receptor_numero_identificacion", "moneda",
+            "forma_pago",
             "valor_bruto", "total_impuestos", "total_a_pagar",
             "validacion_codigo", "fecha_validacion", "ambiente",
             "verificacion_estado", "verificacion_codigo", "verificacion_descripcion",

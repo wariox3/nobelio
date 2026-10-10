@@ -9827,6 +9827,10 @@ components:
           type: string
           title: Código
           readOnly: true
+        forma_pago:
+          type: string
+          title: Código
+          readOnly: true
         valor_bruto:
           type: string
           format: decimal
@@ -9923,6 +9927,7 @@ components:
       - emisor
       - fecha_emision
       - fecha_validacion
+      - forma_pago
       - hora_emision
       - id
       - moneda

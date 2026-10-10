@@ -30,7 +30,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.utils import timezone
 
-from apps.catalogos.models import Moneda
+from apps.catalogos.models import FormaPago, Moneda
 from apps.documentos.models import DocumentoTipo
 from apps.emisores.models import Emisor
 from apps.nucleo.colas import encolar
@@ -388,6 +388,10 @@ def _crear_documento(datos, emisor, correo):
                 fecha_validacion=datos.fecha_validacion,
                 ambiente=datos.ambiente,
                 documento_tipo=DocumentoTipo.objects.get(codigo=datos.tipo),
+                forma_pago=(
+                    FormaPago.objects.filter(codigo=datos.forma_pago).first()
+                    if datos.forma_pago else None
+                ),
                 moneda=(
                     Moneda.objects.filter(codigo=datos.moneda).first() if datos.moneda else None
                 ),

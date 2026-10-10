@@ -134,7 +134,7 @@ Crear un documento encola su emisión, y al aceptarse la DIAN se encola el aviso
 los webhooks. Con broker, eso lo corre el worker, en otra terminal:
 
 ```bash
-.venv/bin/celery -A config worker -l info -Q emitir_documento,avisos_webhook,celery \
+.venv/bin/celery -A config worker -l info -Q emitir_documento,avisos_webhook,recepcion,celery \
     --without-gossip --without-mingle --without-heartbeat
 ```
 

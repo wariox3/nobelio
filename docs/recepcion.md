@@ -210,9 +210,13 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
     pendientes, en error y no verificables. Sirve para los documentos que
     llegaron antes de esto y para los de un emisor que acaba de cargar su
     certificado.
-  - ⚠ Falta confirmar con un documento real en producción que `GetStatus`
-    responde por un CUFE que emitió otro (el proveedor), y qué `StatusCode`
-    devuelve uno inexistente. Las pruebas suponen `66`.
+  - Confirmado en producción (2026-10-09): `GetStatus` responde por un CUFE
+    que emitió otro (el proveedor). Una factura real dio `valido`, «Procesado
+    Correctamente», con las notificaciones de la validación del proveedor
+    (RUT01, FAK08) en `verificacion_descripcion`: son del XML del proveedor,
+    no errores, y no cambian el estado.
+  - ⚠ Falta saber qué `StatusCode` devuelve un CUFE inexistente. Las pruebas
+    suponen `66`.
 - **Comando `reprocesar_correos`** (`apps/recepcion/management/commands/`):
   `--id <n>` o `--todos`. Corre en el mismo proceso, no en Celery, y muestra
   cómo quedó cada correo.
@@ -287,8 +291,10 @@ y no nos toca.
 - Con aceptación (033 o 034), el proveedor ya no puede emitir notas crédito ni
   débito sobre esa factura.
 - El anexo dice que estos eventos son para facturas **a crédito** que se
-  quieren usar como título valor. Los eventos de título valor (035–051) **quedan
-  fuera de alcance**.
+  quieren usar como título valor, y la DIAN lo exige: un 030 sobre una factura
+  de contado se rechazó en producción con la regla LGC62 («La factura
+  referenciada no es de tipo crédito, PaymentMeansID=2», 2026-10-09). Los
+  eventos de título valor (035–051) **quedan fuera de alcance**.
 - Las reglas campo a campo de los eventos (`AAxx`) no están en este anexo sino
   en el **Anexo Técnico FE 1.9**, que no tenemos ⚠. Con los ejemplos y el
   encabezado común alcanza para construirlos; los rechazos en habilitación
@@ -383,7 +389,8 @@ empezar el siguiente.
 - **R4. Eventos del adquiriente** ✅ (2026-10-09, sin probar aún contra la
   DIAN): modelo `Evento` (`rec_evento`, FK a `rec_documento`) y servicio
   `apps/recepcion/eventos.py`. Tests en `apps/recepcion/tests_eventos.py`.
-  - `solicitar` valida antes de ir a la DIAN: solo facturas de venta con
+  - `solicitar` valida antes de ir a la DIAN: solo facturas de venta **a
+    crédito** (`forma_pago` 2; una de contado responde 400) con
     `verificacion_estado = valido`; orden 030 → 032 → 033 o 031; el 033 y el
     031 se excluyen; los dos van dentro de 3 días hábiles del 032 (fecha de
     su firma); un evento no se repite si está pendiente, registrado o en
@@ -420,6 +427,11 @@ empezar el siguiente.
     `GET /api/recepcion/evento/` (filtros `documento`, `emisor`, `estado`,
     `codigo`), `enviar/`, `xml/` y `respuesta/`; `?radian_estado=` en los
     documentos.
+  - El documento guarda la forma de pago (`forma_pago`, FK al catálogo, de
+    `cac:PaymentMeans/cbc:ID`; migración `recepcion/0008`). Los documentos de
+    antes la tienen vacía: se lee de su XML en B2 la primera vez que se pide
+    un evento, y se guarda. Si no se puede saber, el evento sigue y decide la
+    DIAN. Una factura de contado tampoco saca acuse automático.
   - El borrado forzado del correo (`eliminar-admin/`) se lleva sus eventos y
     los archivos de B2; en RADIAN siguen registrados.
 - **R5. Notificación al proveedor** ❌ descartado (2026-10-09): nobelio no le
@@ -449,7 +461,7 @@ empezar el siguiente.
 | Alcance RADIAN | Solo como adquiriente (030–033 sobre `rec_documento`), operado desde nobelio, sin ERP ni webhook. Nada sobre las facturas emitidas: ni 034, ni consulta de eventos de los clientes, ni bloqueo de notas (decidido 2026-10-06) |
 | Tabla de eventos RADIAN | `rec_evento`, con FK a `rec_documento`. `doc_documento_evento` no tiene nada que ver: es la bitácora de estados de la emisión ante la DIAN |
 | Festivos | Catálogo propio (`Festivo`), mantenido a mano cada año. Se descartó la librería `holidays` |
-| Facturas con eventos | Cualquier factura 01, sin filtrar por forma de pago. Si la DIAN rechaza, se ajusta en habilitación |
+| Facturas con eventos | Solo facturas 01 **a crédito**: la DIAN rechaza las de contado (LGC62, confirmado en producción el 2026-10-09). Antes era cualquier factura 01, a la espera de lo que dijera la DIAN |
 | MIME crudo | En R2 (vinculación nativa del Worker), no en B2. Se evaluó B2 vía API S3 desde el Worker y se descartó (2026-10-03) |
 | Token | Obligatorio y falla cerrado. La primera versión fue abierta, a propósito, para probar el flujo |
 | Asociación con la empresa | El buzón es el NIT del emisor sin DV (`901192048@recepcion.rededoc.co`). Se asocia en el endpoint; sin campo ni tabla aparte |

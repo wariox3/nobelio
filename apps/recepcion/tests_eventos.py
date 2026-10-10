@@ -11,7 +11,9 @@ from rest_framework.test import APITestCase
 
 from apps.catalogos.calendario import sumar_dias_habiles
 from apps.catalogos.carga import cargar
-from apps.catalogos.models import ConceptoReclamo, EventoRadian, Festivo, TipoIdentificacion
+from apps.catalogos.models import (
+    ConceptoReclamo, EventoRadian, Festivo, FormaPago, TipoIdentificacion,
+)
 from apps.dian import firma, soap
 from apps.dian.tests_firma import _generar_certificado
 from apps.documentos.models import DocumentoTipo
@@ -21,7 +23,7 @@ from apps.recepcion import adjuntos, eventos, tareas, verificacion
 from apps.recepcion.models import (
     Correo, Documento, EstadoEvento, EstadoRadian, EstadoVerificacion, Evento,
 )
-from apps.recepcion.tests_utils import crear_documento_recibido
+from apps.recepcion.tests_utils import crear_documento_recibido, xml_documento
 
 ESQUEMA = etree.XMLSchema(etree.parse(
     str(settings.DIAN_XSD_DIR / "maindoc" / "UBL-ApplicationResponse-2.1.xsd")
@@ -169,6 +171,33 @@ class SolicitarTests(BaseEventos, TestCase):
         with self.assertRaisesMessage(eventos.EventoInvalido, "verificada la factura como válida"):
             eventos.solicitar(pendiente, "030")
 
+    def test_solo_sobre_facturas_a_credito(self):
+        contado = FormaPago.objects.create(id=1, codigo="1", nombre="Contado")
+        Documento.objects.filter(pk=self.factura.pk).update(forma_pago=contado)
+        factura = Documento.objects.select_related("emisor", "documento_tipo").get(pk=self.factura.pk)
+        with self.assertRaisesMessage(eventos.EventoInvalido, "La factura es de contado"):
+            eventos.solicitar(factura, "030")
+
+    def test_la_forma_de_pago_de_un_documento_viejo_se_lee_del_xml(self):
+        FormaPago.objects.create(id=1, codigo="1", nombre="Contado")
+        documento = crear_documento_recibido(
+            self.correo, self.emisor, "3",
+            xml_documento=xml_documento(cufe="3" * 96, forma_pago="1"),
+        )
+        Documento.objects.filter(pk=documento.pk).update(
+            verificacion_estado=EstadoVerificacion.VALIDO,
+        )
+        documento = Documento.objects.select_related("emisor", "documento_tipo").get(pk=documento.pk)
+        self.assertIsNone(documento.forma_pago)
+        with self.assertRaisesMessage(eventos.EventoInvalido, "La factura es de contado"):
+            eventos.solicitar(documento, "030")
+        documento.refresh_from_db()
+        self.assertEqual(documento.forma_pago.codigo, "1")
+
+    def test_sin_forma_de_pago_conocida_decide_la_dian(self):
+        # El XML del documento de prueba no la trae: no se bloquea.
+        self.assertEqual(eventos.solicitar(self.factura, "030").numero, "ACR1")
+
     def test_un_evento_no_se_repite_salvo_que_lo_hayan_rechazado(self):
         primero = eventos.solicitar(self.factura, "030")
         with self.assertRaisesMessage(eventos.EventoInvalido, "ya tiene el acuse de recibo"):
@@ -180,7 +209,7 @@ class SolicitarTests(BaseEventos, TestCase):
 
     def test_el_recibo_va_despues_del_acuse_registrado(self):
         eventos.solicitar(self.factura, "030")
-        with self.assertRaisesMessage(eventos.EventoInvalido, "después de el acuse"):
+        with self.assertRaisesMessage(eventos.EventoInvalido, "después del acuse"):
             eventos.solicitar(self.factura, "032")
 
         Evento.objects.update(estado=EstadoEvento.REGISTRADO)
@@ -190,7 +219,7 @@ class SolicitarTests(BaseEventos, TestCase):
 
     def test_la_aceptacion_va_despues_del_recibo(self):
         self.registrado("030")
-        with self.assertRaisesMessage(eventos.EventoInvalido, "después de el recibo"):
+        with self.assertRaisesMessage(eventos.EventoInvalido, "después del recibo"):
             eventos.solicitar(self.factura, "033")
 
     def test_aceptacion_y_reclamo_se_excluyen(self):
@@ -365,7 +394,7 @@ class EventoApiTests(BaseEventos, APITestCase):
             f"{URL_DOCUMENTO}{self.factura.pk}/evento/", {"codigo": "032"}, format="json",
         )
         self.assertEqual(resp.status_code, 400)
-        self.assertIn("después de el acuse", resp.data["detail"])
+        self.assertIn("después del acuse", resp.data["detail"])
 
     def test_el_documento_de_otro_emisor_no_existe(self):
         self.client.force_authenticate(crear_usuario(nombre="Otro", email="otro@x.co"))

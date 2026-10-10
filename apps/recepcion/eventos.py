@@ -11,7 +11,9 @@ Dos pasos, como la emisión de documentos:
 Las reglas son las de ``docs/recepcion.md`` («Eventos RADIAN»):
 
 - Solo sobre facturas de venta que la DIAN tiene como válidas
-  (``verificacion_estado = valido``).
+  (``verificacion_estado = valido``) y que son **a crédito**: la DIAN rechaza
+  los eventos sobre una de contado (regla LGC62, confirmado en producción el
+  2026-10-09).
 - Orden: 030 → 032 → 033 o 031. El 033 y el 031 se excluyen entre sí y van
   dentro de los 3 días hábiles siguientes al 032. ⚠ El plazo del 031 sale del
   Código de Comercio: el anexo RADIAN no trae regla propia.
@@ -36,7 +38,7 @@ from django.utils import timezone
 from lxml import etree
 
 from apps.catalogos.calendario import FestivosNoCargados, sumar_dias_habiles
-from apps.catalogos.models import EventoRadian
+from apps.catalogos.models import EventoRadian, FormaPago
 from apps.dian import firma, soap
 from apps.dian.servicios import (
     ErrorEmision, construir_cliente_emisor, construir_firmador_emisor,
@@ -48,8 +50,9 @@ from apps.emisores.servicios import motivo_no_puede_emitir
 from apps.nucleo.colas import encolar
 from apps.nucleo.models import Ambiente
 from apps.nucleo.registro import campos
+from apps.recepcion import extraccion
 from apps.recepcion.models import (
-    EstadoEvento, EstadoRadian, EstadoVerificacion, Evento,
+    Adjunto, EstadoEvento, EstadoRadian, EstadoVerificacion, Evento,
 )
 
 logger = logging.getLogger(__name__)
@@ -75,6 +78,8 @@ NOMBRES = {
 }
 # El 033 y el 031 van dentro de los 3 días hábiles siguientes al 032 (DC24c).
 PLAZO_DIAS_HABILES = 3
+# cac:PaymentMeans/cbc:ID de una factura de contado (FormasPago-2.1.gc).
+CONTADO = "1"
 # Los que cuentan para el orden, las exclusiones y las repeticiones.
 VIGENTES = (EstadoEvento.PENDIENTE, EstadoEvento.REGISTRADO, EstadoEvento.ERROR)
 LARGO_CODIGO = 10
@@ -191,10 +196,49 @@ def _validar_documento(documento):
             f"(verificación: {documento.get_verificacion_estado_display().lower()}). "
             "Verifícala antes con verificar/."
         )
+    if _forma_pago(documento) == CONTADO:
+        raise EventoInvalido(
+            "La factura es de contado: la DIAN solo admite eventos RADIAN sobre "
+            "facturas a crédito (regla LGC62)."
+        )
     if documento.fecha_emision > _hoy():
         # DC24a: el 030 no se firma antes de la fecha de la factura; los
         # demás van después del 030.
         raise EventoInvalido("La factura tiene fecha futura: todavía no admite eventos.")
+
+
+def _forma_pago(documento):
+    """El código de la forma de pago, o ``""`` si no se sabe.
+
+    Los documentos de antes no la tienen guardada: se lee de su XML en B2 y se
+    guarda, una sola vez. Si no se puede leer, no se sabe, y el evento sigue:
+    que decida la DIAN.
+    """
+    if documento.forma_pago_id is None:
+        codigo = _forma_pago_del_xml(documento)
+        documento.forma_pago = FormaPago.objects.filter(codigo=codigo).first() if codigo else None
+        if documento.forma_pago is not None:
+            documento.save(update_fields=["forma_pago", "actualizado_en"])
+    return documento.forma_pago.codigo if documento.forma_pago else ""
+
+
+def _forma_pago_del_xml(documento):
+    for rol in (Adjunto.Rol.XML_DOCUMENTO, Adjunto.Rol.XML):
+        adjunto = documento.adjuntos.filter(rol=rol).first()
+        if adjunto is None:
+            continue
+        try:
+            with adjunto.archivo.open("rb") as fh:
+                extraido = extraccion.extraer_archivo(adjunto.nombre, fh.read())
+        except (BotoCoreError, ClientError, extraccion.ContenidoExcesivo) as error:
+            logger.warning("recepcion.forma_pago_ilegible %s", campos(
+                documento=documento.pk, error=str(error),
+            ))
+            return ""
+        for datos in extraido.documentos:
+            if datos.cufe_cude == documento.cufe_cude:
+                return datos.forma_pago
+    return ""
 
 
 def _validar_orden(documento, codigo):
@@ -226,10 +270,15 @@ def _exigir_registrado(vigentes, previo, codigo):
     evento = vigentes.get(previo)
     if evento is None or evento.estado != EstadoEvento.REGISTRADO:
         raise EventoInvalido(
-            f"{NOMBRES[codigo].capitalize()} va después de {NOMBRES[previo]} "
+            f"{NOMBRES[codigo].capitalize()} va después {_de(NOMBRES[previo])} "
             "registrado en RADIAN."
         )
     return evento
+
+
+def _de(nombre):
+    """``de`` + ``nombre``, con la contracción: «del acuse», «de la aceptación»."""
+    return f"del {nombre[3:]}" if nombre.startswith("el ") else f"de {nombre}"
 
 
 def _validar_plazo(recibo, codigo):

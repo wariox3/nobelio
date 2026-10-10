@@ -39,6 +39,7 @@ class ExtraccionTests(SimpleTestCase):
         self.assertEqual(doc.proveedor_razon_social, "Proveedor Ejemplo S.A.S.")
         self.assertEqual(doc.proveedor_tipo_identificacion, "31")
         self.assertEqual(doc.proveedor_tipo_organizacion, "1")
+        self.assertEqual(doc.forma_pago, "2")
         self.assertEqual(doc.receptor_numero_identificacion, "901192048")
         self.assertEqual(doc.valor_bruto, Decimal("100000.00"))
         self.assertEqual(doc.total_impuestos, Decimal("19800.00"))

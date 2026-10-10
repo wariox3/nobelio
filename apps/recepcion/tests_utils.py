@@ -9,7 +9,7 @@ CUFE = "a" * 96
 def xml_documento(
     raiz="Invoice", *, numero="FE-100", cufe=CUFE, tipo="01", nit_proveedor="800123456",
     nit_receptor="901192048", fecha="2026-10-01", totales="LegalMonetaryTotal",
-    ambiente=None, tipo_proveedor="31", organizacion_proveedor="1",
+    ambiente=None, tipo_proveedor="31", organizacion_proveedor="1", forma_pago="2",
 ):
     codigo = {"Invoice": "InvoiceTypeCode", "CreditNote": "CreditNoteTypeCode",
               "DebitNote": "DebitNoteTypeCode"}[raiz]
@@ -38,6 +38,7 @@ def xml_documento(
       <cbc:CompanyID schemeID="3" schemeName="31">{nit_receptor}</cbc:CompanyID>
     </cac:PartyTaxScheme>
   </cac:Party></cac:AccountingCustomerParty>
+  <cac:PaymentMeans><cbc:ID>{forma_pago}</cbc:ID><cbc:PaymentMeansCode>10</cbc:PaymentMeansCode></cac:PaymentMeans>
   <cac:TaxTotal><cbc:TaxAmount currencyID="COP">19000.00</cbc:TaxAmount></cac:TaxTotal>
   <cac:TaxTotal><cbc:TaxAmount currencyID="COP">800.00</cbc:TaxAmount></cac:TaxTotal>
   <cac:{totales}>

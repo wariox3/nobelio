@@ -95,6 +95,9 @@ class DatosDocumento:
     # repiten en el ReceiverParty.
     proveedor_tipo_identificacion: str
     proveedor_tipo_organizacion: str
+    # cac:PaymentMeans/cbc:ID: 1 contado, 2 crédito. Los eventos RADIAN son
+    # solo sobre facturas a crédito (regla LGC62 de la DIAN).
+    forma_pago: str
     receptor_numero_identificacion: str
     valor_bruto: Decimal | None
     total_impuestos: Decimal | None
@@ -374,6 +377,7 @@ def _leer_documento(raiz):
             raiz, "cac:AccountingSupplierParty/cbc:AdditionalAccountID",
         )[:1],
         receptor_numero_identificacion=nit_receptor,
+        forma_pago=_texto(raiz, "cac:PaymentMeans/cbc:ID")[:2],
         valor_bruto=_decimal(_texto(totales, "cbc:LineExtensionAmount")),
         total_impuestos=sum(impuestos) if impuestos else None,
         total_a_pagar=_decimal(_texto(totales, "cbc:PayableAmount")),

@@ -13,8 +13,10 @@ con ``GetStatus``, que responde si lo tiene registrado y válido.
 - La DIAN caída, un fallo de red o de B2 al leer el certificado son
   transitorios: la tarea reintenta y, agotados los reintentos, queda ``error``.
 
-⚠ Pendiente de confirmar con un documento real en producción que ``GetStatus``
-responde por un CUFE que emitió otro (el proveedor) y no solo por los propios.
+``GetStatus`` responde por un CUFE que emitió otro (el proveedor), no solo
+por los propios: confirmado en producción el 2026-10-09. Las notificaciones que
+trae (RUT01, FAK08...) son de la validación del proveedor y van a la
+descripción sin cambiar el estado.
 """
 import logging
 
