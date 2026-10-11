@@ -32,7 +32,8 @@ import logging
 import uuid
 from datetime import date
 
-from rest_framework.exceptions import APIException
+from django.http import Http404
+from rest_framework.exceptions import APIException, NotFound
 from rest_framework.filters import OrderingFilter
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.settings import api_settings
@@ -207,6 +208,12 @@ def exception_handler(exc, context):
         # nunca en la respuesta.
         logger.exception("Fallo del almacenamiento de archivos: %s", exc)
         exc = ErrorPasarela(motivo)
+
+    if isinstance(exc, Http404):
+        # `get_object_or_404` trae su propio mensaje, en inglés y con el nombre
+        # de la clase ("No Emisor matches the given query."), y DRF lo pasa tal
+        # cual. Se cambia por el 404 de DRF, que sale traducido.
+        exc = NotFound()
 
     respuesta = drf_exception_handler(exc, context)
     if respuesta is None:

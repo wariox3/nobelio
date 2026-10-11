@@ -7,7 +7,7 @@ from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers as drf_serializers
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.response import Response
 
 from apps.catalogos.models import TipoFactura
@@ -300,9 +300,12 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
             pk = int(valor)
         except (TypeError, ValueError):
             raise ValidationError({"software": "Debe ser un número entero."})
-        software = get_object_or_404(
-            models.SoftwareDian.objects.select_related("emisor"), pk=pk
+        software = (
+            models.SoftwareDian.objects.select_related("emisor")
+            .filter(pk=pk).first()
         )
+        if software is None:
+            raise NotFound(f"No existe un software con id {pk}.")
         exigir_alcance(self.request, software.emisor)
         return software, self._codigo_tipo_factura(software)
 
@@ -320,7 +323,9 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
             pk = int(valor)
         except (TypeError, ValueError):
             raise ValidationError({"emisor": "Debe ser un número entero."})
-        emisor = get_object_or_404(models.Emisor, pk=pk)
+        emisor = models.Emisor.objects.filter(pk=pk).first()
+        if emisor is None:
+            raise NotFound(f"No existe un emisor con id {pk}.")
         exigir_alcance(self.request, emisor)
         softwares = list(
             models.SoftwareDian.objects
