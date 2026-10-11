@@ -1,4 +1,4 @@
-"""Pruebas de `consulta-dian` e `importar-dian`, las acciones de la resolución."""
+"""Pruebas de `consulta-dian`, `importar-dian` y `validar`, las acciones de la resolución."""
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -42,6 +42,7 @@ def _rango(prefijo="FE", numero="18764000001"):
 class ResolucionDianTests(APITestCase):
     url_consulta = "/api/emisores/resolucion/consulta-dian/"
     url_importar = "/api/emisores/resolucion/importar-dian/"
+    url_validar = "/api/emisores/resolucion/validar/"
 
     def setUp(self):
         self.cat = crear_catalogos_minimos()
@@ -199,3 +200,130 @@ class ResolucionDianTests(APITestCase):
         resp = self.client.post(self.url_importar, {}, format="json")
 
         self.assertEqual(resp.status_code, 400, resp.data)
+
+    # --- validar ------------------------------------------------------------
+
+    def _validar(self, numero="18764000001", tipo="facturacion", emisor=None):
+        return self.client.post(
+            self.url_validar,
+            {
+                "emisor": (emisor or self.emisor).pk,
+                "tipo_software": tipo,
+                "numero_resolucion": numero,
+            },
+            format="json",
+        )
+
+    def _aceptar(self, software):
+        software.set_pruebas_aceptado = True
+        software.save(update_fields=["set_pruebas_aceptado"])
+
+    def test_valida_importa_y_devuelve_la_resolucion(self):
+        self._aceptar(self.facturacion)
+        rangos = _respuesta(_rango(), _rango("FE2", "18764000002"))
+        with patch(CONSULTAR, return_value=rangos) as consultar:
+            resp = self._validar()
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        consultar.assert_called_once_with(
+            self.emisor, software=self.facturacion, ambiente=Ambiente.PRUEBAS,
+        )
+        self.assertEqual(len(resp.data), 1)
+        self.assertEqual(resp.data[0]["numero_resolucion"], "18764000001")
+        self.assertEqual(resp.data[0]["prefijo"], "FE")
+        self.assertNotIn("clave_tecnica", resp.data[0])
+        # Hace el importar completo: entra también la que no se preguntó.
+        self.assertEqual(Resolucion.objects.count(), 2)
+        self.assertEqual(
+            Resolucion.objects.get(prefijo="FE").clave_tecnica, "clave-secreta"
+        )
+
+    def test_valida_la_que_ya_estaba_importada_sin_duplicarla(self):
+        self._aceptar(self.facturacion)
+        with patch(CONSULTAR, return_value=_respuesta(_rango())):
+            self._validar()
+            resp = self._validar()
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(Resolucion.objects.count(), 1)
+
+    def test_devuelve_todos_los_prefijos_de_la_resolucion(self):
+        self._aceptar(self.facturacion)
+        with patch(CONSULTAR, return_value=_respuesta(_rango(), _rango("FE2"))):
+            resp = self._validar()
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual([r["prefijo"] for r in resp.data], ["FE", "FE2"])
+
+    def test_sin_software_aceptado_de_ese_tipo_es_400(self):
+        # El emisor tiene el software, pero sin el Set de Pruebas aceptado.
+        with patch(CONSULTAR) as consultar:
+            resp = self._validar()
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertEqual(resp.data["errores"][0]["codigo"], "software_no_aceptado")
+        self.assertIn("facturación electrónica", resp.data["detail"])
+        consultar.assert_not_called()
+
+    def test_el_software_aceptado_de_otro_tipo_no_sirve(self):
+        self._aceptar(self.pos)
+        with patch(CONSULTAR) as consultar:
+            resp = self._validar()
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertEqual(resp.data["errores"][0]["codigo"], "software_no_aceptado")
+        consultar.assert_not_called()
+
+    def test_resolucion_que_la_dian_no_devuelve_es_400(self):
+        self._aceptar(self.facturacion)
+        with patch(CONSULTAR, return_value=_respuesta(_rango())):
+            resp = self._validar(numero="99999")
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertEqual(
+            resp.data["errores"][0]["codigo"], "resolucion_no_asociada"
+        )
+        self.assertIn("99999", resp.data["detail"])
+        self.assertFalse(Resolucion.objects.exists())
+
+    def test_la_guardada_que_la_dian_ya_no_devuelve_no_valida(self):
+        self._aceptar(self.facturacion)
+        with patch(CONSULTAR, return_value=_respuesta(_rango())):
+            self._validar()
+        sin_rangos = soap.RespuestaRangos(
+            codigo="301", descripcion="No registra prefijos asociados", rangos=[],
+        )
+        with patch(CONSULTAR, return_value=sin_rangos):
+            resp = self._validar()
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertEqual(
+            resp.data["errores"][0]["codigo"], "resolucion_no_asociada"
+        )
+
+    def test_validar_con_nomina_es_400(self):
+        self._aceptar(self._software(SoftwareDian.Tipo.NOMINA, "sw-nomina"))
+        with patch(CONSULTAR) as consultar:
+            resp = self._validar(tipo="nomina")
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        consultar.assert_not_called()
+
+    def test_validar_con_emisor_fuera_del_alcance_es_400(self):
+        ajeno = _crear_emisor(self.cat, nit="900123456")
+        self._aceptar(self._software(
+            SoftwareDian.Tipo.FACTURACION, "sw-ajeno", emisor=ajeno,
+        ))
+        with patch(CONSULTAR) as consultar:
+            resp = self._validar(emisor=ajeno)
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        consultar.assert_not_called()
+
+    def test_validar_exige_sus_tres_campos(self):
+        resp = self.client.post(self.url_validar, {}, format="json")
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        mensajes = " ".join(e["mensaje"] for e in resp.data["errores"])
+        for campo in ("emisor", "tipo_software", "numero_resolucion"):
+            self.assertIn(campo, mensajes)

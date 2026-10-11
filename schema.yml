@@ -4732,6 +4732,78 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/emisores/resolucion/validar/:
+    post:
+      operationId: emisores_resolucion_validar_create
+      description: |-
+        Comprueba en la DIAN que una resolución está asociada al emisor.
+
+        ``POST /api/emisores/resolucion/validar/`` con ``{"emisor": <id>,
+        "tipo_software": "facturacion", "numero_resolucion": "18764..."}``.
+
+        Busca el software de ese tipo que el emisor tiene con el Set de Pruebas
+        aceptado; si no lo hay responde 400 (``software_no_aceptado``). Con él
+        hace lo mismo que ``importar-dian`` —consulta GetNumberingRange y crea
+        las resoluciones que falten, con su ``clave_tecnica``— y busca el
+        número entre lo que devolvió la DIAN.
+
+        Si está, responde 200 con las resoluciones de ese número, ya guardadas:
+        es una lista porque la DIAN puede autorizar varios prefijos con una
+        misma resolución. Si no está, 400 (``resolucion_no_asociada``).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un número de página dentro del conjunto de resultados paginado.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - emisores
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidarResolucionRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ValidarResolucionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ValidarResolucionRequest'
+        required: true
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResolucionList'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/emisores/software/:
     get:
       operationId: emisores_software_list
@@ -14454,6 +14526,22 @@ components:
       - campo
       - ruta
       - valor
+    ValidarResolucionRequest:
+      type: object
+      description: 'Lo que recibe ``validar``: de quién, con qué software y qué número.'
+      properties:
+        emisor:
+          type: integer
+        tipo_software:
+          $ref: '#/components/schemas/SoftwareDianTipoEnum'
+        numero_resolucion:
+          type: string
+          minLength: 1
+          maxLength: 50
+      required:
+      - emisor
+      - numero_resolucion
+      - tipo_software
     ValorCatalogoEnum:
       enum:
       - id

@@ -198,6 +198,13 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
       resoluciones que falten, guardando la `clave_tecnica` en el servidor. El
       tipo de factura lo decide el software: `01` con el de facturación, `20`
       con el de documento equivalente. Requiere que el emisor tenga certificado.
+- [ ] `POST /api/emisores/resolucion/validar/` con `{"emisor": <id>,
+      "tipo_software": "facturacion", "numero_resolucion": "<número>"}` →
+      comprueba que esa resolución está asociada en la DIAN. Usa el software de
+      ese tipo con el Set de Pruebas aceptado (sin él, 400
+      `software_no_aceptado`), hace el mismo `importar-dian` y responde 200 con
+      las resoluciones de ese número —una por prefijo— o 400
+      `resolucion_no_asociada` si la DIAN no la devuelve.
 
 - [ ] *(alternativa manual)* `POST /api/emisores/resolucion/` → número y fecha de
       resolución, `prefijo`, `rango_desde`/`rango_hasta`, vigencias y `tipo_factura`.

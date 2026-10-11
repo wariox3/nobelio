@@ -742,6 +742,9 @@ SPECTACULAR_SETTINGS = {
         # Los eventos de documento y de nómina tienen la misma lista, y `tipo` es
         # un nombre de campo que usan otros modelos con otras.
         "TipoEventoEnum": "apps.documentos.models.DocumentoEvento.Tipo",
+        # El tipo de software sale como `tipo` en el software y como
+        # `tipo_software` al validar una resolución: una lista, un nombre.
+        "SoftwareDianTipoEnum": "apps.emisores.models.SoftwareDian.Tipo",
         # `valor` es un nombre demasiado común para quedarse con el enum.
         "ValorCatalogoEnum": "apps.catalogos.serializers.resumen.VALORES",
     },

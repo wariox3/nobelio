@@ -2,7 +2,7 @@
 from .certificado import CertificadoSerializer
 from .cuenta import CuentaSerializer
 from .emisor import EmisorListaSerializer, EmisorSerializer
-from .resolucion import ResolucionSerializer
+from .resolucion import ResolucionSerializer, ValidarResolucionSerializer
 from .software import SoftwareDianSerializer
 from .webhook import WebhookSerializer
 from .webhook_aviso import WebhookAvisoSerializer
@@ -14,6 +14,7 @@ __all__ = [
     "SoftwareDianSerializer",
     "CertificadoSerializer",
     "ResolucionSerializer",
+    "ValidarResolucionSerializer",
     "WebhookSerializer",
     "WebhookAvisoSerializer",
 ]

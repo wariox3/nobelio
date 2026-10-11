@@ -3,6 +3,7 @@ from datetime import date
 
 import requests
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -170,7 +171,6 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         software, codigo_tipo_factura = self._software_a_consultar(
             request.data.get("software")
         )
-        emisor = software.emisor
         tipo_factura = get_object_or_404(TipoFactura, codigo=codigo_tipo_factura)
 
         respuesta = self._consultar(software)
@@ -183,38 +183,71 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
                 or "La DIAN no devolvió rangos de numeración para este software."
             )
 
-        # Se mira el emisor entero, sin filtrar por tipo de factura: una misma
-        # resolución no se importa dos veces por estar registrada bajo otro tipo.
-        existentes = set(
-            models.Resolucion.objects
-            .filter(emisor=emisor)
-            .values_list("prefijo", "numero_resolucion")
-        )
-        nuevos = [
-            r for r in respuesta.rangos
-            if (r.prefijo or "", r.numero_resolucion) not in existentes
-        ]
-
-        creadas = [
-            models.Resolucion.objects.create(
-                emisor=emisor,
-                tipo_factura=tipo_factura,
-                prefijo=r.prefijo,
-                numero_resolucion=r.numero_resolucion,
-                fecha_resolucion=_a_fecha(r.fecha_resolucion),
-                rango_desde=r.rango_desde,
-                rango_hasta=r.rango_hasta,
-                vigente_desde=_a_fecha(r.vigente_desde),
-                vigente_hasta=_a_fecha(r.vigente_hasta),
-                clave_tecnica=r.clave_tecnica,
-                activa=True,
-            )
-            for r in nuevos
-        ]
+        creadas = self._crear_las_que_falten(software, tipo_factura, respuesta)
 
         serializer = self.get_serializer(creadas, many=True)
         codigo = status.HTTP_201_CREATED if creadas else status.HTTP_200_OK
         return Response(serializer.data, status=codigo)
+
+    @extend_schema(
+        request=serializers.ValidarResolucionSerializer,
+        responses=serializers.ResolucionSerializer(many=True),
+    )
+    @action(detail=False, methods=["post"], url_path="validar")
+    def validar(self, request):
+        """Comprueba en la DIAN que una resolución está asociada al emisor.
+
+        ``POST /api/emisores/resolucion/validar/`` con ``{"emisor": <id>,
+        "tipo_software": "facturacion", "numero_resolucion": "18764..."}``.
+
+        Busca el software de ese tipo que el emisor tiene con el Set de Pruebas
+        aceptado; si no lo hay responde 400 (``software_no_aceptado``). Con él
+        hace lo mismo que ``importar-dian`` —consulta GetNumberingRange y crea
+        las resoluciones que falten, con su ``clave_tecnica``— y busca el
+        número entre lo que devolvió la DIAN.
+
+        Si está, responde 200 con las resoluciones de ese número, ya guardadas:
+        es una lista porque la DIAN puede autorizar varios prefijos con una
+        misma resolución. Si no está, 400 (``resolucion_no_asociada``).
+        """
+        entrada = serializers.ValidarResolucionSerializer(
+            data=request.data, context=self.get_serializer_context(),
+        )
+        entrada.is_valid(raise_exception=True)
+        emisor = entrada.validated_data["emisor"]
+        tipo = entrada.validated_data["tipo_software"]
+        numero = entrada.validated_data["numero_resolucion"].strip()
+
+        software = models.SoftwareDian.objects.filter(
+            emisor=emisor, tipo=tipo, set_pruebas_aceptado=True,
+        ).select_related("emisor").first()
+        if software is None:
+            nombre = models.SoftwareDian.Tipo(tipo).label.lower()
+            raise ErrorSolicitud(
+                f"El emisor no tiene un software de {nombre} aceptado por la "
+                f"DIAN.",
+                code="software_no_aceptado",
+            )
+        codigo_tipo_factura = self._codigo_tipo_factura(software)
+        tipo_factura = get_object_or_404(TipoFactura, codigo=codigo_tipo_factura)
+
+        respuesta = self._consultar(software)
+        prefijos = [
+            r.prefijo or "" for r in respuesta.rangos
+            if r.numero_resolucion == numero
+        ]
+        if not prefijos:
+            raise ErrorSolicitud(
+                f"La resolución {numero} no está asociada en la DIAN al "
+                f"software de {software.get_tipo_display().lower()} del emisor.",
+                code="resolucion_no_asociada",
+            )
+
+        self._crear_las_que_falten(software, tipo_factura, respuesta)
+        resoluciones = self.get_queryset().filter(
+            emisor=emisor, numero_resolucion=numero, prefijo__in=prefijos,
+        ).order_by("prefijo")
+        return Response(self.get_serializer(resoluciones, many=True).data)
 
     # -- Internos -----------------------------------------------------------
 
@@ -236,13 +269,48 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
             models.SoftwareDian.objects.select_related("emisor"), pk=pk
         )
         exigir_alcance(self.request, software.emisor)
+        return software, self._codigo_tipo_factura(software)
+
+    def _codigo_tipo_factura(self, software):
+        """El código de tipo de factura con el que entran los rangos del software."""
         receta = RESOLUCION_POR_TIPO_DE_SOFTWARE.get(software.tipo)
         if receta is None:
             raise ErrorSolicitud(
                 f"El software de {software.get_tipo_display().lower()} no se "
                 f"numera con resolución: no tiene rangos que consultar."
             )
-        return software, receta["codigo_tipo_factura"]
+        return receta["codigo_tipo_factura"]
+
+    def _crear_las_que_falten(self, software, tipo_factura, respuesta):
+        """Crea las resoluciones de ``respuesta`` que el emisor aún no tiene."""
+        emisor = software.emisor
+        # Se mira el emisor entero, sin filtrar por tipo de factura: una misma
+        # resolución no se importa dos veces por estar registrada bajo otro tipo.
+        existentes = set(
+            models.Resolucion.objects
+            .filter(emisor=emisor)
+            .values_list("prefijo", "numero_resolucion")
+        )
+        nuevos = [
+            r for r in respuesta.rangos
+            if (r.prefijo or "", r.numero_resolucion) not in existentes
+        ]
+        return [
+            models.Resolucion.objects.create(
+                emisor=emisor,
+                tipo_factura=tipo_factura,
+                prefijo=r.prefijo,
+                numero_resolucion=r.numero_resolucion,
+                fecha_resolucion=_a_fecha(r.fecha_resolucion),
+                rango_desde=r.rango_desde,
+                rango_hasta=r.rango_hasta,
+                vigente_desde=_a_fecha(r.vigente_desde),
+                vigente_hasta=_a_fecha(r.vigente_hasta),
+                clave_tecnica=r.clave_tecnica,
+                activa=True,
+            )
+            for r in nuevos
+        ]
 
     def _consultar(self, software):
         """Llama a la DIAN; devuelve un ``RespuestaRangos`` o lanza la excepción."""

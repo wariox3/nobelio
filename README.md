@@ -342,6 +342,9 @@ Luego registra para ese emisor (ver
 - **Resolución de facturación** — `POST /api/emisores/resolucion/importar-dian/`
   con `{"software": <id>}` trae de la DIAN las de ese software con su
   `clave_tecnica` (o `POST /api/emisores/resolucion/` para cargarla a mano).
+  `POST /api/emisores/resolucion/validar/` con `emisor`, `tipo_software` y
+  `numero_resolucion` hace esa misma importación con el software aceptado de
+  ese tipo y confirma que el número está asociado en la DIAN.
 
 ### 3. Crear el documento (con receptor, líneas e impuestos)
 

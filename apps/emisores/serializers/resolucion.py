@@ -1,7 +1,8 @@
 """Serializer de resoluciones de numeración."""
 from rest_framework import serializers
 
-from apps.emisores.models import Resolucion
+from apps.emisores.models import Emisor, Resolucion, SoftwareDian
+from apps.seguridad.alcance import RelacionDelAlcance
 
 
 class ResolucionSerializer(serializers.ModelSerializer):
@@ -20,3 +21,11 @@ class ResolucionSerializer(serializers.ModelSerializer):
             "vigente_desde", "vigente_hasta",
             "clave_tecnica", "activa",
         ]
+
+
+class ValidarResolucionSerializer(serializers.Serializer):
+    """Lo que recibe ``validar``: de quién, con qué software y qué número."""
+
+    emisor = RelacionDelAlcance(queryset=Emisor.objects.all(), campo_emisor="id")
+    tipo_software = serializers.ChoiceField(choices=SoftwareDian.Tipo.choices)
+    numero_resolucion = serializers.CharField(max_length=50)
