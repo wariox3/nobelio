@@ -39,7 +39,7 @@ class ValidarResolucionesSerializer(serializers.Serializer):
     """Lo que recibe ``validar``: el emisor y sus resoluciones a contrastar."""
 
     emisor = serializers.IntegerField()
-    resoluciones = ResolucionAValidarSerializer(many=True, allow_empty=False)
+    resoluciones = ResolucionAValidarSerializer(many=True, default=list)
 
 
 class ResolucionValidadaSerializer(serializers.Serializer):

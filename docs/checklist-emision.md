@@ -209,7 +209,8 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
       emisor. Responde una entrada por resolución con `validado` (el emisor la
       tiene), `inconsistencia` (la tiene, pero algún rango o vigencia enviado no
       coincide) y los datos registrados. Solo `numero_resolucion` es
-      obligatorio; lo demás se compara si se envía.
+      obligatorio; lo demás se compara si se envía. Sin `resoluciones`, o con
+      la lista vacía, no hace nada y responde `[]`.
 
 - [ ] *(alternativa manual)* `POST /api/emisores/resolucion/` → número y fecha de
       resolución, `prefijo`, `rango_desde`/`rango_hasta`, vigencias y `tipo_factura`.

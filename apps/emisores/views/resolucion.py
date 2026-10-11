@@ -217,6 +217,9 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
                 "vigente_desde": "2019-01-19", "vigente_hasta": "2030-01-19"
             }]}
 
+        ``resoluciones`` es opcional: sin ella, o vacía, no hace nada y responde
+        200 con una lista vacía, sin consultar a la DIAN.
+
         Primero corre el mismo proceso que ``importar-dian`` —y responde sus
         mismos errores—, para comparar contra lo que la DIAN tiene hoy. Después
         busca cada resolución de la lista entre las del emisor, por número y,
@@ -236,6 +239,13 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         entrada = serializers.ValidarResolucionesSerializer(data=request.data)
         entrada.is_valid(raise_exception=True)
 
+        pedidas = entrada.validated_data["resoluciones"]
+        if not pedidas:
+            # Sin nada que contrastar no se molesta a la DIAN: solo se comprueba
+            # que el emisor exista y esté al alcance.
+            self._emisor_indicado(entrada.validated_data["emisor"])
+            return Response([])
+
         emisor, _ = self._importar(entrada.validated_data["emisor"])
 
         registradas = {}
@@ -244,7 +254,7 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
 
         resultado = [
             self._validar_una(pedida, registradas)
-            for pedida in entrada.validated_data["resoluciones"]
+            for pedida in pedidas
         ]
         return Response(
             serializers.ResolucionValidadaSerializer(resultado, many=True).data
