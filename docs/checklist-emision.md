@@ -203,12 +203,13 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
       400 `software_no_aceptado`. Responde `{"creadas": <n>}`, sin las
       resoluciones: esas se leen con `GET /api/emisores/resolucion/?emisor=<id>`.
 - [ ] `POST /api/emisores/resolucion/validar/` con `{"emisor": <id>,
-      "tipo_software": "facturacion", "numero_resolucion": "<número>"}` →
-      comprueba que esa resolución está asociada en la DIAN. Usa el software de
-      ese tipo con el Set de Pruebas aceptado (sin él, 400
-      `software_no_aceptado`), hace el mismo `importar-dian` y responde 200 con
-      las resoluciones de ese número —una por prefijo— o 400
-      `resolucion_no_asociada` si la DIAN no la devuelve.
+      "resoluciones": [{"numero_resolucion", "prefijo", "rango_desde",
+      "rango_hasta", "vigente_desde", "vigente_hasta"}]}` → corre el mismo
+      `importar-dian` y contrasta cada resolución de la lista con las del
+      emisor. Responde una entrada por resolución con `validado` (el emisor la
+      tiene), `inconsistencia` (la tiene, pero algún rango o vigencia enviado no
+      coincide) y los datos registrados. Solo `numero_resolucion` es
+      obligatorio; lo demás se compara si se envía.
 
 - [ ] *(alternativa manual)* `POST /api/emisores/resolucion/` → número y fecha de
       resolución, `prefijo`, `rango_desde`/`rango_hasta`, vigencias y `tipo_factura`.

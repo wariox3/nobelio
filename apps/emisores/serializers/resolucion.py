@@ -1,8 +1,7 @@
 """Serializer de resoluciones de numeración."""
 from rest_framework import serializers
 
-from apps.emisores.models import Emisor, Resolucion, SoftwareDian
-from apps.seguridad.alcance import RelacionDelAlcance
+from apps.emisores.models import Resolucion
 
 
 class ResolucionSerializer(serializers.ModelSerializer):
@@ -23,9 +22,38 @@ class ResolucionSerializer(serializers.ModelSerializer):
         ]
 
 
-class ValidarResolucionSerializer(serializers.Serializer):
-    """Lo que recibe ``validar``: de quién, con qué software y qué número."""
+class ResolucionAValidarSerializer(serializers.Serializer):
+    """Una resolución como la tiene quien llama, para contrastarla."""
 
-    emisor = RelacionDelAlcance(queryset=Emisor.objects.all(), campo_emisor="id")
-    tipo_software = serializers.ChoiceField(choices=SoftwareDian.Tipo.choices)
     numero_resolucion = serializers.CharField(max_length=50)
+    prefijo = serializers.CharField(
+        max_length=10, required=False, allow_blank=True,
+    )
+    rango_desde = serializers.IntegerField(required=False, min_value=0)
+    rango_hasta = serializers.IntegerField(required=False, min_value=0)
+    vigente_desde = serializers.DateField(required=False)
+    vigente_hasta = serializers.DateField(required=False)
+
+
+class ValidarResolucionesSerializer(serializers.Serializer):
+    """Lo que recibe ``validar``: el emisor y sus resoluciones a contrastar."""
+
+    emisor = serializers.IntegerField()
+    resoluciones = ResolucionAValidarSerializer(many=True, allow_empty=False)
+
+
+class ResolucionValidadaSerializer(serializers.Serializer):
+    """El resultado de ``validar`` para una resolución.
+
+    ``prefijo``, los rangos y las vigencias son los registrados, no los que se
+    enviaron; van en ``null`` cuando el emisor no tiene la resolución.
+    """
+
+    numero_resolucion = serializers.CharField()
+    validado = serializers.BooleanField()
+    inconsistencia = serializers.BooleanField()
+    prefijo = serializers.CharField(allow_null=True, allow_blank=True)
+    rango_desde = serializers.IntegerField(allow_null=True)
+    rango_hasta = serializers.IntegerField(allow_null=True)
+    vigente_desde = serializers.DateField(allow_null=True)
+    vigente_hasta = serializers.DateField(allow_null=True)
