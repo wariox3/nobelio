@@ -194,10 +194,14 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
       El parámetro `software` es obligatorio: la DIAN asocia los prefijos al
       software, y de él salen el emisor y el ambiente.
 - [ ] `POST /api/emisores/resolucion/importar-dian/` con
-      `{"software": <id>}` → consulta `GetNumberingRange` y crea las
-      resoluciones que falten, guardando la `clave_tecnica` en el servidor. El
-      tipo de factura lo decide el software: `01` con el de facturación, `20`
-      con el de documento equivalente. Requiere que el emisor tenga certificado.
+      `{"emisor": <id>}` → recorre los softwares del emisor con el Set de
+      Pruebas aceptado, consulta `GetNumberingRange` con cada uno (la DIAN solo
+      responde por software) y crea las resoluciones que falten, guardando la
+      `clave_tecnica` en el servidor. El tipo de factura lo decide el software:
+      `01` con el de facturación, `20` con el de documento equivalente. Requiere
+      que el emisor tenga certificado; sin ningún software aceptado responde
+      400 `software_no_aceptado`. Responde `{"creadas": <n>}`, sin las
+      resoluciones: esas se leen con `GET /api/emisores/resolucion/?emisor=<id>`.
 - [ ] `POST /api/emisores/resolucion/validar/` con `{"emisor": <id>,
       "tipo_software": "facturacion", "numero_resolucion": "<número>"}` →
       comprueba que esa resolución está asociada en la DIAN. Usa el software de

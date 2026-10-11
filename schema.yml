@@ -4678,15 +4678,24 @@ paths:
     post:
       operationId: emisores_resolucion_importar_dian_create
       description: |-
-        Importa los rangos de un software y crea las resoluciones que falten.
+        Importa de la DIAN los rangos y crea las resoluciones que falten.
 
-        ``POST /api/emisores/resolucion/importar-dian/`` con ``{"software": <id>}``.
+        ``POST /api/emisores/resolucion/importar-dian/`` con ``{"emisor": <id>}``.
 
-        Consulta GetNumberingRange con ese software y crea solo las resoluciones
-        que su emisor todavía no tiene (se comparan prefijo + número de
-        resolución), guardando la ``clave_tecnica`` en el servidor. Las que ya
-        existen no se tocan: si la DIAN cambió un rango se edita a mano. No
-        devuelve la clave técnica.
+        La DIAN solo responde por software (GetNumberingRange no trae las de
+        todo el emisor), así que se recorren los softwares del emisor con el
+        Set de Pruebas aceptado —facturación y documento equivalente; el de
+        nómina no se numera con resolución— y se importan las de todos. Sin
+        ninguno aceptado responde 400 (``software_no_aceptado``).
+
+        Crea solo las resoluciones que el emisor todavía no tiene (se comparan
+        prefijo + número de resolución), guardando la ``clave_tecnica`` en el
+        servidor. Las que ya existen no se tocan: si la DIAN cambió un rango se
+        edita a mano. No devuelve la clave técnica.
+
+        Si la DIAN no devuelve rangos para ninguno de los softwares consultados
+        responde 400 con su mensaje; si los devuelve para alguno, se importa lo
+        de ese.
 
         **El tipo de factura lo decide el software**: lo importado con el de
         facturación entra como factura de venta (``01``) y lo del documento

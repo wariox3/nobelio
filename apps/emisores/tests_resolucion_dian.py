@@ -1,6 +1,7 @@
 """Pruebas de `consulta-dian`, `importar-dian` y `validar`, las acciones de la resolución."""
 from unittest.mock import patch
 
+import requests
 from django.contrib.auth import get_user_model
 from django.test import override_settings
 from rest_framework.test import APITestCase
@@ -66,6 +67,10 @@ class ResolucionDianTests(APITestCase):
             emisor=emisor or self.emisor, tipo=tipo,
             identificador=identificador, pin="12345", **extra,
         )
+
+    def _aceptar(self, software):
+        software.set_pruebas_aceptado = True
+        software.save(update_fields=["set_pruebas_aceptado"])
 
     # --- consulta-dian ------------------------------------------------------
 
@@ -144,11 +149,107 @@ class ResolucionDianTests(APITestCase):
 
     # --- importar-dian ------------------------------------------------------
 
-    def test_importa_con_facturacion_como_tipo_01(self):
+    def _importar_emisor(self, emisor=None):
+        return self.client.post(
+            self.url_importar, {"emisor": (emisor or self.emisor).pk},
+            format="json",
+        )
+
+    def _por_software(self, respuestas):
+        """``consultar_rangos_numeracion`` que responde según el software."""
+        return lambda emisor, software, ambiente: respuestas[software.pk]
+
+    def test_importa_las_de_todos_los_softwares_aceptados(self):
+        self._aceptar(self.facturacion)
+        self._aceptar(self.pos)
+        respuestas = {
+            self.facturacion.pk: _respuesta(_rango()),
+            self.pos.pk: _respuesta(_rango("POS", "18764000009")),
+        }
+        with patch(CONSULTAR, side_effect=self._por_software(respuestas)) as consultar:
+            resp = self._importar_emisor()
+
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(consultar.call_count, 2)
+        self.assertEqual(
+            {r.prefijo: r.tipo_factura.codigo for r in Resolucion.objects.all()},
+            {"FE": "01", "POS": "20"},
+        )
+
+    def test_por_emisor_solo_consulta_los_aceptados(self):
+        self._aceptar(self.facturacion)
+        self._aceptar(self._software(SoftwareDian.Tipo.NOMINA, "sw-nomina"))
         with patch(CONSULTAR, return_value=_respuesta(_rango())) as consultar:
-            resp = self.client.post(
-                self.url_importar, {"software": self.facturacion.pk}, format="json",
-            )
+            resp = self._importar_emisor()
+
+        self.assertEqual(resp.status_code, 201, resp.data)
+        consultar.assert_called_once_with(
+            self.emisor, software=self.facturacion, ambiente=Ambiente.PRUEBAS,
+        )
+
+    def test_por_emisor_sin_software_aceptado_es_400(self):
+        with patch(CONSULTAR) as consultar:
+            resp = self._importar_emisor()
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertEqual(resp.data["errores"][0]["codigo"], "software_no_aceptado")
+        consultar.assert_not_called()
+
+    def test_por_emisor_importa_lo_del_software_que_si_trae_rangos(self):
+        self._aceptar(self.facturacion)
+        self._aceptar(self.pos)
+        respuestas = {
+            self.facturacion.pk: _respuesta(_rango()),
+            self.pos.pk: soap.RespuestaRangos(
+                codigo="301", descripcion="No registra prefijos asociados",
+                rangos=[],
+            ),
+        }
+        with patch(CONSULTAR, side_effect=self._por_software(respuestas)):
+            resp = self._importar_emisor()
+
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual([r["prefijo"] for r in resp.data], ["FE"])
+
+    def test_por_emisor_sin_rangos_en_ninguno_devuelve_el_mensaje(self):
+        self._aceptar(self.facturacion)
+        self._aceptar(self.pos)
+        sin_rangos = soap.RespuestaRangos(
+            codigo="301", descripcion="No registra prefijos asociados", rangos=[],
+        )
+        with patch(CONSULTAR, return_value=sin_rangos):
+            resp = self._importar_emisor()
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertEqual(resp.data["detail"], "No registra prefijos asociados")
+
+    def test_si_la_dian_falla_con_un_software_no_se_importa_nada(self):
+        self._aceptar(self.facturacion)
+        self._aceptar(self.pos)
+
+        def consultar(emisor, software, ambiente):
+            if software.pk == self.facturacion.pk:
+                raise requests.ConnectionError("sin red")
+            return _respuesta(_rango("POS"))
+
+        with patch(CONSULTAR, side_effect=consultar):
+            resp = self._importar_emisor()
+
+        self.assertEqual(resp.status_code, 502, resp.data)
+        self.assertFalse(Resolucion.objects.exists())
+
+    def test_por_emisor_fuera_del_alcance_es_403(self):
+        ajeno = _crear_emisor(self.cat, nit="900123456")
+        with patch(CONSULTAR) as consultar:
+            resp = self._importar_emisor(ajeno)
+
+        self.assertEqual(resp.status_code, 403, resp.data)
+        consultar.assert_not_called()
+
+    def test_importa_con_facturacion_como_tipo_01(self):
+        self._aceptar(self.facturacion)
+        with patch(CONSULTAR, return_value=_respuesta(_rango())) as consultar:
+            resp = self._importar_emisor()
 
         self.assertEqual(resp.status_code, 201, resp.data)
         consultar.assert_called_once_with(
@@ -161,45 +262,34 @@ class ResolucionDianTests(APITestCase):
         self.assertEqual(resolucion.consecutivo_actual, 1)
         self.assertNotIn("clave_tecnica", resp.data[0])
 
-    def test_importa_con_documento_equivalente_como_tipo_20(self):
-        with patch(CONSULTAR, return_value=_respuesta(_rango(prefijo="POS"))):
-            resp = self.client.post(
-                self.url_importar, {"software": self.pos.pk}, format="json",
-            )
-
-        self.assertEqual(resp.status_code, 201, resp.data)
-        self.assertEqual(Resolucion.objects.get().tipo_factura.codigo, "20")
-
     def test_no_reimporta_las_que_ya_existen(self):
+        self._aceptar(self.facturacion)
         with patch(CONSULTAR, return_value=_respuesta(_rango())):
-            self.client.post(
-                self.url_importar, {"software": self.facturacion.pk}, format="json",
-            )
+            self._importar_emisor()
+            repetida = self._importar_emisor()
         with patch(CONSULTAR, return_value=_respuesta(_rango(), _rango("FE2"))):
-            resp = self.client.post(
-                self.url_importar, {"software": self.facturacion.pk}, format="json",
-            )
+            resp = self._importar_emisor()
 
+        self.assertEqual(repetida.status_code, 200, repetida.data)
+        self.assertEqual(repetida.data, [])
         self.assertEqual(resp.status_code, 201, resp.data)
         self.assertEqual([r["prefijo"] for r in resp.data], ["FE2"])
         self.assertEqual(Resolucion.objects.count(), 2)
 
-    def test_importar_sin_rangos_devuelve_el_mensaje_de_la_dian(self):
-        respuesta = soap.RespuestaRangos(
-            codigo="301", descripcion="No registra prefijos asociados", rangos=[],
-        )
-        with patch(CONSULTAR, return_value=respuesta):
-            resp = self.client.post(
-                self.url_importar, {"software": self.pos.pk}, format="json",
-            )
-
-        self.assertEqual(resp.status_code, 400, resp.data)
-        self.assertIn("No registra prefijos", resp.data["detail"])
-
-    def test_importar_sin_software_es_400(self):
+    def test_importar_sin_emisor_es_400(self):
         resp = self.client.post(self.url_importar, {}, format="json")
 
         self.assertEqual(resp.status_code, 400, resp.data)
+
+    def test_importar_ya_no_recibe_software(self):
+        self._aceptar(self.facturacion)
+        with patch(CONSULTAR) as consultar:
+            resp = self.client.post(
+                self.url_importar, {"software": self.facturacion.pk}, format="json",
+            )
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        consultar.assert_not_called()
 
     # --- validar ------------------------------------------------------------
 
@@ -213,10 +303,6 @@ class ResolucionDianTests(APITestCase):
             },
             format="json",
         )
-
-    def _aceptar(self, software):
-        software.set_pruebas_aceptado = True
-        software.save(update_fields=["set_pruebas_aceptado"])
 
     def test_valida_importa_y_devuelve_la_resolucion(self):
         self._aceptar(self.facturacion)
