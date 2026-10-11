@@ -13,11 +13,13 @@ from apps.dian import servicios as dian
 from apps.dian import soap
 from apps.emisores import models, serializers
 from apps.emisores.servicios import crear_documento_de_prueba
+from apps.emisores.servicios.resolucion_pruebas import (
+    RESOLUCION_POR_TIPO_DE_SOFTWARE,
+)
 from apps.nucleo.api import ErrorPasarela, ErrorSolicitud, entero_de_query
 from apps.seguridad.alcance import AlcanceEmisorMixin, exigir_alcance
 
-# GetNumberingRange solo devuelve numeración de facturación de venta.
-CODIGO_FACTURA_VENTA = "01"
+from .software import CAMPO_AMBIENTE_POR_SOFTWARE
 
 
 def _a_fecha(valor: str):
@@ -110,20 +112,22 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="consulta-dian")
     def consulta_dian(self, request):
-        """Consulta en la DIAN los rangos de numeración del emisor (GetNumberingRange).
+        """Consulta en la DIAN los rangos de numeración de un software (GetNumberingRange).
 
-        ``GET /api/emisores/resolucion/consulta-dian/?emisor=<id>``
+        ``GET /api/emisores/resolucion/consulta-dian/?software=<id>``
+
+        La DIAN asocia los prefijos al software, no al emisor: cada software
+        (facturación, documento equivalente) tiene los suyos, así que se indica
+        cuál consultar. El emisor y el ambiente salen de él.
 
         Solo para previsualizar: devuelve los rangos autorizados sin persistir.
         La clave técnica no se expone (es sensible); se indica únicamente si
         está presente. Para guardarla usa ``importar-dian``.
         """
-        emisor_id = entero_de_query(request.query_params, "emisor")
-        if emisor_id is None:
-            raise ValidationError({"emisor": "El parámetro 'emisor' es obligatorio."})
-        emisor = get_object_or_404(models.Emisor, pk=emisor_id)
-        exigir_alcance(request, emisor)
-        respuesta = self._consultar(emisor)
+        software, _ = self._software_a_consultar(
+            entero_de_query(request.query_params, "software")
+        )
+        respuesta = self._consultar(software)
         datos = [
             {
                 "prefijo": r.prefijo,
@@ -147,30 +151,34 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"], url_path="importar-dian")
     def importar_dian(self, request):
-        """Importa los rangos de la DIAN y crea/actualiza las resoluciones.
+        """Importa los rangos de un software y crea las resoluciones que falten.
 
-        ``POST /api/emisores/resolucion/importar-dian/`` con ``{"emisor": <id>}``.
+        ``POST /api/emisores/resolucion/importar-dian/`` con ``{"software": <id>}``.
 
-        Consulta GetNumberingRange y crea solo las resoluciones que el emisor
-        todavía no tiene (se comparan prefijo + número de resolución), guardando
-        la ``clave_tecnica`` en el servidor. Las que ya existen no se tocan: si
-        la DIAN cambió un rango se edita a mano. No devuelve la clave técnica.
+        Consulta GetNumberingRange con ese software y crea solo las resoluciones
+        que su emisor todavía no tiene (se comparan prefijo + número de
+        resolución), guardando la ``clave_tecnica`` en el servidor. Las que ya
+        existen no se tocan: si la DIAN cambió un rango se edita a mano. No
+        devuelve la clave técnica.
 
-        Todo lo importado entra como factura de venta (tipo ``01``), que es la
-        numeración que devuelve esta operación.
+        **El tipo de factura lo decide el software**: lo importado con el de
+        facturación entra como factura de venta (``01``) y lo del documento
+        equivalente, como P.O.S. (``20``).
         """
-        emisor = get_object_or_404(models.Emisor, pk=request.data.get("emisor"))
-        exigir_alcance(request, emisor)
-        tipo_factura = get_object_or_404(TipoFactura, codigo=CODIGO_FACTURA_VENTA)
+        software, codigo_tipo_factura = self._software_a_consultar(
+            request.data.get("software")
+        )
+        emisor = software.emisor
+        tipo_factura = get_object_or_404(TipoFactura, codigo=codigo_tipo_factura)
 
-        respuesta = self._consultar(emisor)
+        respuesta = self._consultar(software)
 
         # Si la DIAN no devuelve rangos, no hay nada que importar: devolvemos su
         # mensaje (p. ej. software sin prefijos asociados) en lugar de 0 cambios.
         if not respuesta.rangos:
             raise ErrorSolicitud(
                 respuesta.descripcion
-                or "La DIAN no devolvió rangos de numeración para este emisor."
+                or "La DIAN no devolvió rangos de numeración para este software."
             )
 
         # Se mira el emisor entero, sin filtrar por tipo de factura: una misma
@@ -208,10 +216,41 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
 
     # -- Internos -----------------------------------------------------------
 
-    def _consultar(self, emisor):
-        """Llama a la DIAN; devuelve un ``RespuestaRangos`` o lanza la excepción."""
+    def _software_a_consultar(self, valor):
+        """El software indicado y el código de tipo de factura de sus rangos.
+
+        Rechaza el de nómina: esa operación no se numera con resolución, así
+        que no tiene rangos que consultar.
+        """
+        if valor in (None, ""):
+            raise ValidationError(
+                {"software": "El parámetro 'software' es obligatorio."}
+            )
         try:
-            return dian.consultar_rangos_numeracion(emisor)
+            pk = int(valor)
+        except (TypeError, ValueError):
+            raise ValidationError({"software": "Debe ser un número entero."})
+        software = get_object_or_404(
+            models.SoftwareDian.objects.select_related("emisor"), pk=pk
+        )
+        exigir_alcance(self.request, software.emisor)
+        receta = RESOLUCION_POR_TIPO_DE_SOFTWARE.get(software.tipo)
+        if receta is None:
+            raise ErrorSolicitud(
+                f"El software de {software.get_tipo_display().lower()} no se "
+                f"numera con resolución: no tiene rangos que consultar."
+            )
+        return software, receta["codigo_tipo_factura"]
+
+    def _consultar(self, software):
+        """Llama a la DIAN; devuelve un ``RespuestaRangos`` o lanza la excepción."""
+        emisor = software.emisor
+        # Cada operación tiene su ambiente y pueden no coincidir.
+        ambiente = getattr(emisor, CAMPO_AMBIENTE_POR_SOFTWARE[software.tipo])
+        try:
+            return dian.consultar_rangos_numeracion(
+                emisor, software=software, ambiente=ambiente,
+            )
         except dian.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))
         except requests.HTTPError as exc:

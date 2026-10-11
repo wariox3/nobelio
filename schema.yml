@@ -4637,9 +4637,13 @@ paths:
     get:
       operationId: emisores_resolucion_consulta_dian_retrieve
       description: |-
-        Consulta en la DIAN los rangos de numeración del emisor (GetNumberingRange).
+        Consulta en la DIAN los rangos de numeración de un software (GetNumberingRange).
 
-        ``GET /api/emisores/resolucion/consulta-dian/?emisor=<id>``
+        ``GET /api/emisores/resolucion/consulta-dian/?software=<id>``
+
+        La DIAN asocia los prefijos al software, no al emisor: cada software
+        (facturación, documento equivalente) tiene los suyos, así que se indica
+        cuál consultar. El emisor y el ambiente salen de él.
 
         Solo para previsualizar: devuelve los rangos autorizados sin persistir.
         La clave técnica no se expone (es sensible); se indica únicamente si
@@ -4671,17 +4675,19 @@ paths:
     post:
       operationId: emisores_resolucion_importar_dian_create
       description: |-
-        Importa los rangos de la DIAN y crea/actualiza las resoluciones.
+        Importa los rangos de un software y crea las resoluciones que falten.
 
-        ``POST /api/emisores/resolucion/importar-dian/`` con ``{"emisor": <id>}``.
+        ``POST /api/emisores/resolucion/importar-dian/`` con ``{"software": <id>}``.
 
-        Consulta GetNumberingRange y crea solo las resoluciones que el emisor
-        todavía no tiene (se comparan prefijo + número de resolución), guardando
-        la ``clave_tecnica`` en el servidor. Las que ya existen no se tocan: si
-        la DIAN cambió un rango se edita a mano. No devuelve la clave técnica.
+        Consulta GetNumberingRange con ese software y crea solo las resoluciones
+        que su emisor todavía no tiene (se comparan prefijo + número de
+        resolución), guardando la ``clave_tecnica`` en el servidor. Las que ya
+        existen no se tocan: si la DIAN cambió un rango se edita a mano. No
+        devuelve la clave técnica.
 
-        Todo lo importado entra como factura de venta (tipo ``01``), que es la
-        numeración que devuelve esta operación.
+        **El tipo de factura lo decide el software**: lo importado con el de
+        facturación entra como factura de venta (``01``) y lo del documento
+        equivalente, como P.O.S. (``20``).
       tags:
       - emisores
       requestBody:

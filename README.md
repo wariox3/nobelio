@@ -339,8 +339,8 @@ Luego registra para ese emisor (ver
   endpoints de documentos.
   El `ProviderID` del XML no se guarda: en software propio es el NIT del emisor.
 - **Resolución de facturación** — `POST /api/emisores/resolucion/importar-dian/`
-  la trae de la DIAN con su `clave_tecnica` (o `POST /api/emisores/resolucion/`
-  para cargarla a mano).
+  con `{"software": <id>}` trae de la DIAN las de ese software con su
+  `clave_tecnica` (o `POST /api/emisores/resolucion/` para cargarla a mano).
 
 ### 3. Crear el documento (con receptor, líneas e impuestos)
 

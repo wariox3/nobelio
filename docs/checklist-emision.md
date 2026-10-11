@@ -188,14 +188,16 @@ sin certificado cargado y vigente responde 400.
 Hay dos vías. La recomendada es traer los datos directamente de la DIAN
 (incluida la **clave técnica**, que no se puede cargar manualmente por la API):
 
-- [ ] `GET /api/emisores/resolucion/consulta-dian/?emisor=<id>` → consulta
+- [ ] `GET /api/emisores/resolucion/consulta-dian/?software=<id>` → consulta
       `GetNumberingRange` y **previsualiza** los rangos autorizados (sin guardar;
       la clave técnica no se expone, solo se indica si está presente).
-      El parámetro `emisor` es obligatorio.
+      El parámetro `software` es obligatorio: la DIAN asocia los prefijos al
+      software, y de él salen el emisor y el ambiente.
 - [ ] `POST /api/emisores/resolucion/importar-dian/` con
-      `{"emisor": <id>, "tipo_factura": <id>}` → consulta `GetNumberingRange` y
-      crea/actualiza las resoluciones, guardando la `clave_tecnica` en el servidor.
-      Requiere que el emisor tenga certificado y software DIAN registrados.
+      `{"software": <id>}` → consulta `GetNumberingRange` y crea las
+      resoluciones que falten, guardando la `clave_tecnica` en el servidor. El
+      tipo de factura lo decide el software: `01` con el de facturación, `20`
+      con el de documento equivalente. Requiere que el emisor tenga certificado.
 
 - [ ] *(alternativa manual)* `POST /api/emisores/resolucion/` → número y fecha de
       resolución, `prefijo`, `rango_desde`/`rango_hasta`, vigencias y `tipo_factura`.
