@@ -123,6 +123,7 @@ class ExtensionesPOSTests(TestCase):
             codigo_proveedor_tecnologico="007",
         )
         cls.tiquete = doc.Documento.objects.create(
+            ambiente=2,
             documento_tipo=doc.DocumentoTipo.objects.get(
                 codigo=doc.DocumentoTipo.Codigo.DOCUMENTO_EQUIVALENTE_POS
             ),

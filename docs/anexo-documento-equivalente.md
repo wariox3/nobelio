@@ -209,8 +209,7 @@ pasa a producción en operación.
 - `DocumentoTipo.Codigo.DOCUMENTO_EQUIVALENTE_POS` con `codigo_dian = "20"`, y
   alta en `CODIGOS_CON_RESOLUCION`.
 - `SoftwareDian.Tipo.DOCUMENTO_EQUIVALENTE`, los tres campos del fabricante y
-  el `codigo_proveedor_tecnologico`; `Emisor.ambiente_documento_equivalente` y
-  `habilitado_documento_equivalente`.
+  el `codigo_proveedor_tecnologico`; `Emisor.habilitado_documento_equivalente`.
 - `ConstructorDocumentoEquivalentePOS` (`apps/dian/ubl.py`), con las tres
   extensiones propias.
 - `DocumentoPOS`, satélite 1:1 con todo lo de la venta: la caja (placa,
@@ -223,8 +222,8 @@ pasa a producción en operación.
 - `nombre_archivo_documento_equivalente` —reproduce el ejemplo del anexo— y
   `ConsecutivoArchivoDocumentoEquivalente`, su numerador anual.
 - El enganche del envío: `_software_de` elige el software por tipo de
-  documento, `Documento.save` toma el ambiente de
-  `ambiente_documento_equivalente`, y `_marcar_habilitacion_superada` sabe cuál
+  documento, el ambiente lo trae el propio documento
+  (campo `ambiente`), y `_marcar_habilitacion_superada` sabe cuál
   de las tres banderas marcar. El P.O.S. sale por `SendTestSetAsync` mientras
   su Set de Pruebas no esté aceptado y por `SendBillSync` después, con la misma
   bifurcación que ya tenía la factura.

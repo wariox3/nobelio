@@ -10,7 +10,6 @@ from apps.catalogos.models import TipoFactura
 from apps.emisores.models import Emisor, Resolucion, SoftwareDian
 from apps.emisores.servicios import RESOLUCION_SET_PRUEBAS
 from apps.nomina.tests_utils import cargar_catalogos_de_nomina
-from apps.nucleo.models import Ambiente
 from apps.nucleo.tests_utils import errores_por_campo
 
 
@@ -285,14 +284,14 @@ class SoftwareDianAPITests(APITestCase):
         self.assertEqual(resolucion.tipo_factura.codigo, "01")
         self.assertTrue(resolucion.activa)
 
-    def test_no_la_siembra_si_el_emisor_ya_esta_en_produccion(self):
-        """Es la resolución del sandbox: numerar con ella en producción es
+    def test_no_la_siembra_si_el_emisor_ya_esta_habilitado(self):
+        """Es la resolución del sandbox: a un emisor ya habilitado no se le
 
-        gastar consecutivos de un rango que no es del emisor. El software sí se
-        registra —eso es normal en producción—; lo que no se hace es sembrar.
+        siembra, porque numera con su rango real. El software sí se registra;
+        lo que no se hace es sembrar.
         """
-        self.emisor.ambiente_facturacion = Ambiente.PRODUCCION
-        self.emisor.save(update_fields=["ambiente_facturacion"])
+        self.emisor.habilitado_facturacion = True
+        self.emisor.save(update_fields=["habilitado_facturacion"])
 
         resp = self.client.post(self.url, self._payload(), format="json")
 
@@ -366,9 +365,9 @@ class SoftwareDianAPITests(APITestCase):
         )
 
     def test_sin_resolucion_no_hay_facturas(self):
-        """En producción no se siembra resolución, así que tampoco facturas."""
-        self.emisor.ambiente_facturacion = Ambiente.PRODUCCION
-        self.emisor.save(update_fields=["ambiente_facturacion"])
+        """Habilitado no se siembra resolución, así que tampoco facturas."""
+        self.emisor.habilitado_facturacion = True
+        self.emisor.save(update_fields=["habilitado_facturacion"])
 
         resp = self.client.post(self.url, self._payload(), format="json")
 
@@ -423,9 +422,9 @@ class SoftwareDianAPITests(APITestCase):
             # Sin el satélite no hay extensiones de caja y la DIAN lo rechaza.
             self.assertEqual(documento.pos.codigo_venta, documento.numero)
 
-    def test_no_siembra_pos_si_ya_esta_en_produccion_para_documento_equivalente(self):
-        self.emisor.ambiente_documento_equivalente = Ambiente.PRODUCCION
-        self.emisor.save(update_fields=["ambiente_documento_equivalente"])
+    def test_no_siembra_pos_si_ya_esta_habilitado_para_documento_equivalente(self):
+        self.emisor.habilitado_documento_equivalente = True
+        self.emisor.save(update_fields=["habilitado_documento_equivalente"])
 
         resp = self.client.post(self.url, self._payload_pos(), format="json")
 
@@ -491,11 +490,11 @@ class SoftwareDianAPITests(APITestCase):
             1,
         )
 
-    def test_no_deja_nominas_si_ya_esta_en_produccion_para_nomina(self):
+    def test_no_deja_nominas_si_ya_esta_habilitado_para_nomina(self):
         from apps.nomina.models import Nomina
 
-        self.emisor.ambiente_nomina = Ambiente.PRODUCCION
-        self.emisor.save(update_fields=["ambiente_nomina"])
+        self.emisor.habilitado_nomina = True
+        self.emisor.save(update_fields=["habilitado_nomina"])
 
         resp = self.client.post(self.url, self._payload_nomina(), format="json")
 
@@ -544,22 +543,22 @@ class SoftwareDianAPITests(APITestCase):
         self.assertIn("Set de Pruebas", resp.data["detail"])
         self.assertTrue(SoftwareDian.objects.filter(pk=alta.data["id"]).exists())
 
-    def test_no_borra_el_software_de_un_emisor_en_produccion(self):
+    def test_no_borra_el_software_de_un_emisor_habilitado(self):
         alta = self.client.post(self.url, self._payload(), format="json")
-        self.emisor.ambiente_facturacion = Ambiente.PRODUCCION
-        self.emisor.save(update_fields=["ambiente_facturacion"])
+        self.emisor.habilitado_facturacion = True
+        self.emisor.save(update_fields=["habilitado_facturacion"])
 
         resp = self.client.delete(f"{self.url}{alta.data['id']}/")
 
         self.assertEqual(resp.status_code, 400, resp.data)
-        self.assertIn("producción", resp.data["detail"])
+        self.assertIn("habilitado", resp.data["detail"])
         self.assertTrue(SoftwareDian.objects.filter(pk=alta.data["id"]).exists())
 
-    def test_la_produccion_de_otra_operacion_no_bloquea_el_borrado(self):
-        """Cada operación tiene su ambiente: la nómina no frena la factura."""
+    def test_la_habilitacion_de_otra_operacion_no_bloquea_el_borrado(self):
+        """Cada operación se habilita aparte: la nómina no frena la factura."""
         alta = self.client.post(self.url, self._payload(), format="json")
-        self.emisor.ambiente_nomina = Ambiente.PRODUCCION
-        self.emisor.save(update_fields=["ambiente_nomina"])
+        self.emisor.habilitado_nomina = True
+        self.emisor.save(update_fields=["habilitado_nomina"])
 
         resp = self.client.delete(f"{self.url}{alta.data['id']}/")
 
@@ -609,21 +608,6 @@ class SoftwareDianAPITests(APITestCase):
 
         self.assertEqual(resp.status_code, 200, resp.data)
         self.assertFalse(resp.data["set_pruebas_aceptado"])
-
-    def test_no_desactiva_en_produccion(self):
-        alta = self.client.post(self.url, self._payload(), format="json")
-        self._habilitar(alta.data["id"], "habilitado_facturacion")
-        self.emisor.ambiente_facturacion = Ambiente.PRODUCCION
-        self.emisor.save(update_fields=["ambiente_facturacion"])
-
-        resp = self.client.post(f"{self.url}{alta.data['id']}/desactivar/")
-
-        self.assertEqual(resp.status_code, 400, resp.data)
-        self.assertTrue(
-            SoftwareDian.objects.get(pk=alta.data["id"]).set_pruebas_aceptado
-        )
-        self.emisor.refresh_from_db()
-        self.assertTrue(self.emisor.habilitado_facturacion)
 
     def test_desactivado_se_puede_borrar(self):
         alta = self.client.post(self.url, self._payload(), format="json")
@@ -719,19 +703,19 @@ class SoftwareDianAPITests(APITestCase):
         self.assertIn("no de nómina", resp.data["detail"])
         self.assertFalse(Nomina.objects.filter(emisor=self.emisor).exists())
 
-    def test_rechaza_si_el_emisor_ya_esta_en_produccion(self):
+    def test_rechaza_si_el_emisor_ya_esta_habilitado(self):
         from apps.nomina.models import Nomina
 
         software = self._alta_nomina()
-        self.emisor.ambiente_nomina = Ambiente.PRODUCCION
-        self.emisor.save(update_fields=["ambiente_nomina"])
+        self.emisor.habilitado_nomina = True
+        self.emisor.save(update_fields=["habilitado_nomina"])
 
         resp = self.client.post(
             f"{self.url}{software}/crear-nomina-prueba/", {}, format="json"
         )
 
         self.assertEqual(resp.status_code, 400, resp.data)
-        self.assertIn("producción", resp.data["detail"])
+        self.assertIn("habilitado", resp.data["detail"])
         self.assertEqual(Nomina.objects.filter(emisor=self.emisor).count(), 10)
 
     def test_no_alcanza_el_software_de_otro_emisor(self):

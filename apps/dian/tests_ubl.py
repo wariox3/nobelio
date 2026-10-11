@@ -54,6 +54,7 @@ class GeneracionUBLTests(TestCase):
             vigente_hasta=date(2030, 1, 19),
         )
         cls.documento = doc.Documento.objects.create(
+            ambiente=2,
             documento_tipo=doc.DocumentoTipo.objects.get(codigo=doc.DocumentoTipo.Codigo.FACTURA_VENTA),
             emisor=cls.emisor,
             resolucion=cls.resolucion,

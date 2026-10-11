@@ -276,11 +276,11 @@ def _comprobar_software_de_nomina(software):
         )
 
     emisor = software.emisor
-    if emisor.ambiente_nomina != Ambiente.PRUEBAS:
+    if emisor.habilitado_nomina:
         # La nómina sale sellada como de pruebas —lo fija `crear_nomina_prueba`—
         # pero gastaría un consecutivo de la numeración real de nómina.
         raise ValueError(
-            f"El emisor {emisor.razon_social} ya está en producción para "
+            f"El emisor {emisor.razon_social} ya está habilitado para "
             f"nómina. Una nómina de prueba consumiría un consecutivo de su "
             f"numeración real, que no se recupera."
         )

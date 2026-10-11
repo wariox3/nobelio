@@ -34,6 +34,8 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.serialization import Encoding
 from lxml import etree
 
+from apps.nucleo.entorno import exigir_envio_permitido
+
 # --- Namespaces -------------------------------------------------------------
 NS = {
     "soap": "http://www.w3.org/2003/05/soap-envelope",
@@ -491,8 +493,10 @@ def _instante(momento: datetime) -> str:
 class ClienteDian:
     """Cliente HTTP para los Web Services de la DIAN."""
 
-    def __init__(self, url: str, llave_privada, certificado, *, timeout: int = 60):
+    def __init__(self, url: str, llave_privada, certificado, *,
+                 timeout: int = 60, ambiente: int | None = None):
         self.url = url
+        self.ambiente = ambiente
         self.firmante = FirmanteWSSecurity(llave_privada, certificado)
         self.llave = llave_privada
         self.cert = certificado
@@ -511,6 +515,7 @@ class ClienteDian:
         dos nombres por separado (numerales 3.3 a 3.5), así que ahí se pasa
         cada uno en su sitio.
         """
+        exigir_envio_permitido(self.url, self.ambiente)
         contenido = empaquetar_base64(nombre_archivo, xml_firmado)
         cuerpo = {
             "fileName": nombre_zip or nombre_archivo,
@@ -521,6 +526,7 @@ class ClienteDian:
 
     def enviar_factura_sincrono(self, xml_firmado: bytes, nombre_archivo: str) -> RespuestaDian:
         """SendBillSync: envío síncrono (producción)."""
+        exigir_envio_permitido(self.url, self.ambiente)
         contenido = empaquetar_base64(nombre_archivo, xml_firmado)
         cuerpo = {"fileName": nombre_archivo, "contentFile": contenido}
         return self._invocar("SendBillSync", cuerpo)
@@ -536,6 +542,7 @@ class ClienteDian:
         No tiene equivalente asíncrono: la habilitación de nómina se hace
         contra este mismo método, no contra un Set de Pruebas.
         """
+        exigir_envio_permitido(self.url, self.ambiente)
         contenido = empaquetar_base64(nombre_archivo, xml_firmado)
         return self._invocar("SendNominaSync", {"contentFile": contenido})
 
@@ -579,6 +586,7 @@ class ClienteDian:
         (``track_id``) y el ApplicationResponse de la DIAN en
         ``XmlBase64Bytes`` (``extraer_application_response``).
         """
+        exigir_envio_permitido(self.url, self.ambiente)
         contenido = empaquetar_base64(nombre_archivo, xml_firmado)
         return self._invocar("SendEventUpdateStatus", {"contentFile": contenido})
 

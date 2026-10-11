@@ -48,7 +48,6 @@ def crear_emisor_de_nomina(catalogos=None, *, nit="901192048"):
         digito_verificacion="1", tipo_organizacion=c["juridica"],
         pais=c["colombia"], departamento=c["antioquia"], municipio=c["medellin"],
         direccion="Calle 1 # 2-3", telefono="6041234567", correo="demo@empresa.co",
-        ambiente_nomina=2,
     )
     software = SoftwareDian.objects.create(
         emisor=emisor, tipo=SoftwareDian.Tipo.NOMINA,

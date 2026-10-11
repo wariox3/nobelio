@@ -8,6 +8,11 @@ import tempfile
 
 from .base import *  # noqa: F401,F403
 
+# La suite nunca es producción, traiga lo que traiga el .env: así ninguna prueba
+# puede crear ni enviar nada al ambiente 1 (ver `apps/nucleo/entorno.py`). Las
+# que prueban el camino de producción lo piden con `override_settings(ENV="prod")`.
+ENV = "test"
+
 # Sin credenciales B2 -> almacenamiento_backblaze() usa el storage local.
 B2_BUCKET = ""
 B2_ENDPOINT_URL = ""

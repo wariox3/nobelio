@@ -68,6 +68,7 @@ class PDFPorTipoTests(TestCase):
         cls.base = crear_documento_factura()
         c = cls.base["catalogos"]
         cls.ds = doc.Documento.objects.create(
+            ambiente=2,
             documento_tipo=doc.DocumentoTipo.objects.get(
                 codigo=doc.DocumentoTipo.Codigo.DOCUMENTO_SOPORTE
             ),

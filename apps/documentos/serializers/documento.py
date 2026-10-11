@@ -9,6 +9,7 @@ from apps.catalogos.memoria import RelacionDeCatalogo
 from apps.documentos import models
 from apps.emisores.models import Emisor, Resolucion
 from apps.emisores.servicios import motivo_no_puede_emitir
+from apps.nucleo.entorno import validar_ambiente_de_creacion
 from apps.nucleo.serializers import EstructuraEstricta
 from apps.seguridad.alcance import RelacionDelAlcance
 
@@ -336,7 +337,7 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
     class Meta:
         model = models.Documento
         fields = [
-            "id", "documento_tipo", "emisor", "numero_resolucion",
+            "id", "documento_tipo", "emisor", "ambiente", "numero_resolucion",
             "adquiriente", "prefijo", "consecutivo", "numero",
             "fecha_emision", "moneda", "forma_pago", "medio_pago",
             "total_descuentos", "descuentos_motivo",
@@ -362,7 +363,12 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
         # aplicarse. `fecha_vencimiento` es obligatoria como clave pero admite
         # null: una nota tiene que mandarlo así, y en un contado la fecha que
         # venga se descarta (`_validar_vencimiento`).
+        #
+        # `ambiente` es obligatorio: ya no se hereda del emisor, lo dice quien
+        # crea el documento (1 producción, 2 habilitación). Qué valores se
+        # admiten lo comprueba `validate()`.
         extra_kwargs = {
+            "ambiente": {"required": True},
             "prefijo": {"required": True, "allow_blank": True},
             # Los descuentos y cargos globales pueden ser cero, no negativos: un
             # descuento negativo es un cargo con otro nombre, y al revés.
@@ -423,6 +429,10 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
             # Falta el emisor: ya lo reporta la validación de campo obligatorio.
             return attrs
         tipo = attrs.get("documento_tipo") or getattr(self.instance, "documento_tipo", None)
+        validar_ambiente_de_creacion(
+            self, attrs, emisor,
+            models.Documento.operacion_de(tipo.codigo if tipo else ""),
+        )
         # Una nota con resolución no es un dato de más que se pueda ignorar: se
         # buscaba, se le asociaba y su prefijo y rango se validaban contra ella,
         # cuando la nota tiene su propia numeración.

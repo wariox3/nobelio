@@ -7,7 +7,7 @@ técnica).
 """
 from .certificado import Certificado
 from .cuenta import Cuenta
-from .emisor import Emisor, ambiente_por_defecto
+from .emisor import Emisor
 from .resolucion import Resolucion
 from .software import SoftwareDian
 from .webhook import Webhook
@@ -16,7 +16,6 @@ from .webhook_aviso import WebhookAviso
 __all__ = [
     "Cuenta",
     "Emisor",
-    "ambiente_por_defecto",
     "SoftwareDian",
     "Certificado",
     "Resolucion",

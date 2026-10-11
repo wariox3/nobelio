@@ -269,10 +269,11 @@ NUM_PROXIES=1
 # dieron en el paso 2. `sslmode=require` si el servicio lo admite.
 DATABASE_URL=postgres://usuario:clave@host-de-la-base:5432/nobelio?sslmode=require
 
-# Ambiente con el que NACE un emisor nuevo (2 = habilitación, 1 = producción).
-# No decide contra qué servidor se emite: eso lo dicen los campos del propio
-# emisor. Ver el paso 12.
-DIAN_ENVIRONMENT=2
+# Entorno del despliegue: dev, test o prod. OBLIGATORIO en producción: si falta
+# vale dev, y fuera de prod no se crea ningún documento en el ambiente 1 ni se
+# envía nada a la DIAN de producción.
+ENV=prod
+
 DIAN_WSDL_HABILITACION=https://vpfe-hab.dian.gov.co/WcfDianCustomerServices.svc?wsdl
 DIAN_WSDL_PRODUCCION=https://vpfe.dian.gov.co/WcfDianCustomerServices.svc?wsdl
 DIAN_POLICY_ID=https://facturaelectronica.dian.gov.co/politicadefirma/v2/politicadefirmav2.pdf
@@ -925,14 +926,16 @@ no se ve hasta que vence esa memoria o se hace `systemctl restart nobelio`.
 
 ## 12. Paso a producción ante la DIAN
 
-**El paso a producción es por emisor, no del despliegue.** Contra qué servidor
-de la DIAN sale cada documento lo deciden `ambiente_facturacion`,
-`ambiente_nomina` y `ambiente_documento_equivalente` **del emisor**, y el
-documento se lleva el valor al crearse y lo sella al firmar. `DIAN_ENVIRONMENT`
-del `.env` solo fija con cuál nace un emisor nuevo: cambiarlo a `1` no mueve a
-nadie que ya esté dado de alta. Son tres habilitaciones independientes, así que
-el mismo emisor puede facturar en producción y seguir en habilitación para
-nómina.
+**El paso a producción es por documento, no del despliegue ni del emisor.**
+Contra qué servidor de la DIAN sale cada documento o nómina lo dice su campo
+`ambiente` (`1` producción, `2` habilitación), que es **obligatorio** al crearlo
+por la API: lo manda el ERP, queda sellado al firmar y no se puede cambiar
+después. El emisor ya no guarda ningún ambiente.
+
+Por encima está `ENV` del `.env` (`dev`, `test` o `prod`): solo con `ENV=prod`
+se admite el ambiente `1`. En `dev` y `test` crear un documento o una nómina con
+ambiente `1` responde 400, y el cliente SOAP se niega a enviar nada al servidor
+de producción de la DIAN.
 
 Cuando la DIAN acepte el Set de Pruebas de una operación, el sistema lo detecta
 solo: `_marcar_habilitacion_superada` (`apps/dian/servicios.py`) pone
@@ -940,27 +943,20 @@ solo: `_marcar_habilitacion_superada` (`apps/dian/servicios.py`) pone
 `SendTestSetAsync` a `SendBillSync`— y marca la bandera `habilitado_*` que
 corresponda. No hay que tocar ninguna de las dos a mano.
 
-Lo que sí es una decisión tuya es mover el ambiente del emisor, y solo después
-de esa habilitación. Los ambientes **no se pueden cambiar por la API** (el PATCH
-del emisor solo acepta los campos de `CAMPOS_ACTUALIZABLES`, ver
-`apps/emisores/serializers/emisor.py`), así que se mueven por backend:
+Esas banderas deciden tres cosas:
 
-```bash
-cd /opt/nobelio && DJANGO_SETTINGS_MODULE=config.settings.prod \
-  .venv/bin/python manage.py shell -c "
-from apps.emisores.models import Emisor
-Emisor.objects.filter(numero_identificacion='900123456').update(ambiente_facturacion=1)
-"
-```
-
-Ojo: por aquí no pasa la validación del serializer, así que nada impide poner
-`ambiente_nomina` o `ambiente_documento_equivalente` en `1` sin la bandera
-`habilitado_*` correspondiente. Compruébala antes; sin ella la DIAN rechaza con
-la regla 92.
+- Una nómina o un documento equivalente con ambiente `1` solo se crea si el
+  emisor está habilitado para esa operación; sin el trámite la DIAN rechaza con
+  la regla 92. A la facturación no se le exige.
+- La consulta de resoluciones (`consulta-dian` / `importar-dian`) va contra
+  producción si el emisor está habilitado para la operación del software, y
+  contra habilitación si no (en `dev` y `test`, siempre habilitación).
+- A un emisor habilitado ya no se le siembran ni se le crean documentos de
+  prueba, y su software no se puede borrar sin desactivarlo antes.
 
 Las tres banderas `habilitado_*` son de **solo lectura** en la API: constatan un
 hecho que declara la DIAN, no una decisión del cliente, y como además condicionan
-el paso a producción de nómina y documento equivalente, poder escribirlas era
+la salida a producción de nómina y documento equivalente, poder escribirlas era
 poder saltarse la habilitación entera. Si la DIAN habilita por fuera del
 automatismo, se marcan por backend:
 

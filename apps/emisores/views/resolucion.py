@@ -17,9 +17,8 @@ from apps.emisores.servicios.resolucion_pruebas import (
     RESOLUCION_POR_TIPO_DE_SOFTWARE,
 )
 from apps.nucleo.api import ErrorPasarela, ErrorSolicitud, entero_de_query
+from apps.nucleo.entorno import ambiente_segun_habilitacion
 from apps.seguridad.alcance import AlcanceEmisorMixin, exigir_alcance
-
-from .software import CAMPO_AMBIENTE_POR_SOFTWARE
 
 
 def _a_fecha(valor: str):
@@ -118,7 +117,10 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
 
         La DIAN asocia los prefijos al software, no al emisor: cada software
         (facturación, documento equivalente) tiene los suyos, así que se indica
-        cuál consultar. El emisor y el ambiente salen de él.
+        cuál consultar. El emisor sale de él, y el ambiente también: producción
+        si el emisor ya está habilitado para esa operación y habilitación si
+        no. En los entornos ``dev`` y ``test`` se consulta siempre en
+        habilitación.
 
         Solo para previsualizar: devuelve los rangos autorizados sin persistir.
         La clave técnica no se expone (es sensible); se indica únicamente si
@@ -245,8 +247,11 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
     def _consultar(self, software):
         """Llama a la DIAN; devuelve un ``RespuestaRangos`` o lanza la excepción."""
         emisor = software.emisor
-        # Cada operación tiene su ambiente y pueden no coincidir.
-        ambiente = getattr(emisor, CAMPO_AMBIENTE_POR_SOFTWARE[software.tipo])
+        # Habilitado para esa operación, sus prefijos están en producción;
+        # mientras no, en habilitación. En dev y test se consulta siempre ahí.
+        ambiente = ambiente_segun_habilitacion(
+            emisor.habilitado_para(software.tipo)
+        )
         try:
             return dian.consultar_rangos_numeracion(
                 emisor, software=software, ambiente=ambiente,

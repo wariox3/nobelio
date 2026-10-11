@@ -2,6 +2,7 @@
 from django.conf import settings
 from django.db import models
 
+from apps.nucleo.entorno import exigir_ambiente_permitido
 from apps.nucleo.models import Ambiente as AmbienteDian, ModeloConFechas, ModeloUUID
 from apps.utilidades.almacenamiento import almacenamiento_backblaze
 
@@ -9,9 +10,9 @@ from apps.utilidades.almacenamiento import almacenamiento_backblaze
 def ambiente_por_defecto():
     """El ambiente DIAN configurado en el servidor.
 
-    Ya no es el default del campo: la nómina hereda el ambiente de su emisor
-    (ver ``save``), que lo tiene aparte del de facturación. Se conserva porque
-    las migraciones ya hechas la referencian por su ruta de import.
+    Ya no es el default del campo: el ambiente lo trae cada nómina al crearse.
+    Se conserva porque las migraciones ya hechas la referencian por su ruta de
+    import.
     """
     return settings.DIAN_ENVIRONMENT
 
@@ -128,10 +129,8 @@ class Nomina(ModeloUUID, ModeloConFechas):
     # --- Identificadores DIAN ---
     ambiente = models.PositiveSmallIntegerField(
         "ambiente DIAN", choices=Ambiente.choices,
-        help_text="Se hereda del ``ambiente_nomina`` del emisor al crear y se "
-        "sella al firmar: la DIAN habilita la nómina aparte de la facturación, "
-        "así que un emisor puede estar en producción para una y en "
-        "habilitación para la otra.",
+        help_text="Lo indica quien crea la nómina y se sella al firmar; no se "
+        "hereda del emisor.",
     )
     tipo_xml = models.CharField(
         "tipo de XML", max_length=3, choices=TipoXML.choices,
@@ -285,12 +284,12 @@ class Nomina(ModeloUUID, ModeloConFechas):
     def save(self, *args, **kwargs):
         if not self.numero:
             self.numero = f"{self.prefijo}{self.consecutivo}"
-        # Del emisor y de su ambiente **de nómina**, que la DIAN habilita
-        # aparte del de facturación. Se resuelve al crear y la nómina se lo
-        # queda: entra en el CUNE y decide el servidor de envío, así que
-        # cambiarlo después descuadraría uno con el otro.
+        # El ambiente lo trae la nómina: entra en el CUNE y decide el servidor
+        # de envío, así que tiene que venir dicho y no deducido.
         if self.ambiente is None:
-            self.ambiente = self.emisor.ambiente_nomina
+            raise ValueError("La nómina necesita su ambiente DIAN.")
+        if self._state.adding:
+            exigir_ambiente_permitido(self.ambiente, "crear nóminas")
         if not self.estado_id:
             from apps.documentos.models import DocumentoEstado
             self.estado = DocumentoEstado.objects.get(

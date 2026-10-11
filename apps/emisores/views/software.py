@@ -13,17 +13,7 @@ from apps.emisores.servicios import (
     sembrar_resolucion_de_pruebas,
 )
 from apps.nucleo.api import ErrorSolicitud, entero_de_query
-from apps.nucleo.models import Ambiente
 from apps.seguridad.alcance import AlcanceEmisorMixin
-
-
-# El ambiente del emisor que le toca a cada software: cada operación tiene el
-# suyo y pueden no coincidir.
-CAMPO_AMBIENTE_POR_SOFTWARE = {
-    models.SoftwareDian.Tipo.FACTURACION: "ambiente_facturacion",
-    models.SoftwareDian.Tipo.NOMINA: "ambiente_nomina",
-    models.SoftwareDian.Tipo.DOCUMENTO_EQUIVALENTE: "ambiente_documento_equivalente",
-}
 
 
 class SoftwareDianViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
@@ -201,13 +191,12 @@ class SoftwareDianViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
                 f"se perdería. Si de verdad hay que rehacerla, desactívelo "
                 f"antes (POST .../software/{instance.pk}/desactivar/)."
             )
-        campo = CAMPO_AMBIENTE_POR_SOFTWARE[instance.tipo]
-        if getattr(instance.emisor, campo) == Ambiente.PRODUCCION:
+        if instance.emisor.habilitado_para(instance.tipo):
             raise ErrorSolicitud(
-                f"El emisor está en producción para {etiqueta} y su software "
-                f"no se puede borrar: se quedaría sin poder emitir. Para "
-                f"cambiar el SoftwareID o el PIN, actualice el que hay (PATCH) "
-                f"en vez de borrarlo."
+                f"El emisor está habilitado para {etiqueta} y su software no "
+                f"se puede borrar: se quedaría sin poder emitir. Para cambiar "
+                f"el SoftwareID o el PIN, actualice el que hay (PATCH) en vez "
+                f"de borrarlo."
             )
         instance.delete()
 
@@ -227,24 +216,12 @@ class SoftwareDianViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         Con ellas abajo los envíos vuelven al Set de Pruebas, y el software se
         puede modificar o borrar otra vez.
 
-        **No en producción.** Un emisor en producción para esa operación tiene
-        que estar habilitado —es lo que exige su propio serializer para nómina
-        y documento equivalente—, así que antes hay que devolverlo a pruebas.
-
         Es idempotente: sobre un software que ya está sin habilitar responde
         200 igual.
         """
         software = self.get_object()
         emisor = software.emisor
         etiqueta = software.get_tipo_display().lower()
-
-        campo_ambiente = CAMPO_AMBIENTE_POR_SOFTWARE[software.tipo]
-        if getattr(emisor, campo_ambiente) == Ambiente.PRODUCCION:
-            raise ErrorSolicitud(
-                f"El emisor está en producción para {etiqueta}: no se puede "
-                f"desactivar su habilitación mientras emite ahí. Páselo antes "
-                f"a pruebas ('{campo_ambiente}')."
-            )
 
         with transaction.atomic():
             campo = dian.desmarcar_habilitacion(software)

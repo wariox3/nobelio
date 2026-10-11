@@ -17,7 +17,6 @@ from apps.documentos.models import (
     DocumentoPOS,
     DocumentoTipo,
 )
-from apps.nucleo.models import Ambiente
 
 from .emision import motivo_no_puede_emitir
 
@@ -241,10 +240,10 @@ def sembrar_documentos_de_prueba(emisor, tipo_software, resolucion):
     - **Facturación**: facturas sobre la resolución. ``resolucion`` a ``None``
       es la señal de que no hay nada que hacer —sin numeración no hay documento
       posible—, y es lo que devuelve ``sembrar_resolucion_de_pruebas`` cuando
-      el emisor ya está en producción.
+      el emisor ya está habilitado.
     - **Nómina**: no se numera con resolución sino con prefijo y consecutivo
-      propios, así que no hay `resolucion` que mirar y el ambiente se comprueba
-      aquí, contra `ambiente_nomina` —cada operación tiene el suyo—.
+      propios, así que no hay `resolucion` que mirar y la habilitación se
+      comprueba aquí, contra `habilitado_nomina` —cada operación tiene la suya—.
     - **Documento equivalente**: P.O.S. sobre su resolución, con la misma
       señal que en facturación: sin ``resolucion`` no hay nada que hacer.
 
@@ -264,7 +263,7 @@ def sembrar_documentos_de_prueba(emisor, tipo_software, resolucion):
                     return []
                 return crear_facturas_de_prueba(emisor, resolucion)
             if tipo == "nomina":
-                if emisor.ambiente_nomina != Ambiente.PRUEBAS:
+                if emisor.habilitado_nomina:
                     return []
                 return crear_nominas_de_prueba(emisor)
             if tipo == "documento_equivalente":
@@ -353,14 +352,11 @@ def crear_documento_de_prueba(resolucion, consecutivo=None):
         )
 
     emisor = resolucion.emisor
-    campo = Documento.CAMPO_AMBIENTE_EMISOR.get(
-        documento_tipo.codigo, "ambiente_facturacion"
-    )
-    if getattr(emisor, campo) != Ambiente.PRUEBAS:
+    if emisor.habilitado_para(Documento.operacion_de(documento_tipo.codigo)):
         # El documento sale sellado como de pruebas —lo fija `_crear_documento`—
         # pero gastaría un consecutivo del rango real, y esos no se recuperan.
         raise ValueError(
-            f"El emisor {emisor.razon_social} ya está en producción para esta "
+            f"El emisor {emisor.razon_social} ya está habilitado para esta "
             f"operación. Un documento de prueba consumiría un consecutivo de "
             f"su numeración real, que no se recupera."
         )

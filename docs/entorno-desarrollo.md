@@ -77,9 +77,10 @@ quedan vacías, el almacenamiento de archivos (XML, certificados `.p12`, PDF)
 cae automáticamente a disco local (`MEDIA_ROOT`). Solo son obligatorias en
 producción y para que la API acepte subir certificados `.p12`.
 
-Las variables `DIAN_*` ya traen valores por defecto razonables para
-habilitación (`DIAN_ENVIRONMENT=2`) — no hace falta tocarlas para desarrollar
-localmente.
+Las variables `DIAN_*` ya traen valores por defecto razonables y no hace falta
+tocarlas para desarrollar localmente. Con `ENV=dev` (el valor por defecto) solo
+se pueden crear documentos con `ambiente` 2 y nada sale hacia la DIAN de
+producción.
 
 Las de **Celery** deciden qué pasa al crear un documento (ver el paso 6.1):
 

@@ -222,6 +222,7 @@ class AlcanceDeDocumentosTests(AlcanceBase):
     def _payload_documento(self, emisor_id):
         c = self.cat
         return {
+            "ambiente": 2,
             "documento_tipo": DocumentoTipo.objects.get(
                 codigo=DocumentoTipo.Codigo.FACTURA_VENTA
             ).id,

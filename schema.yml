@@ -4643,7 +4643,10 @@ paths:
 
         La DIAN asocia los prefijos al software, no al emisor: cada software
         (facturación, documento equivalente) tiene los suyos, así que se indica
-        cuál consultar. El emisor y el ambiente salen de él.
+        cuál consultar. El emisor sale de él, y el ambiente también: producción
+        si el emisor ya está habilitado para esa operación y habilitación si
+        no. En los entornos ``dev`` y ``test`` se consulta siempre en
+        habilitación.
 
         Solo para previsualizar: devuelve los rangos autorizados sin persistir.
         La clave técnica no se expone (es sensible); se indica únicamente si
@@ -5207,10 +5210,6 @@ paths:
 
         Con ellas abajo los envíos vuelven al Set de Pruebas, y el software se
         puede modificar o borrar otra vez.
-
-        **No en producción.** Un emisor en producción para esa operación tiene
-        que estar habilitado —es lo que exige su propio serializer para nómina
-        y documento equivalente—, así que antes hay que devolverlo a pruebas.
 
         Es idempotente: sobre un software que ya está sin habilitar responde
         200 igual.
@@ -8630,7 +8629,7 @@ components:
           readOnly: true
           title: Ambiente DIAN
           description: |-
-            ProfileExecutionID del XML: 1 producción, 2 habilitación. Se hereda del emisor al crear y se sella al firmar; no lo decide el ajuste del servidor.
+            ProfileExecutionID del XML: 1 producción, 2 habilitación. Lo indica quien crea el documento y se sella al firmar; no se hereda del emisor ni lo decide el ajuste del servidor.
 
             * `1` - Producción
             * `2` - Habilitación
@@ -8842,6 +8841,17 @@ components:
           title: Tipo de documento
         emisor:
           type: integer
+        ambiente:
+          allOf:
+          - $ref: '#/components/schemas/AmbienteEnum'
+          title: Ambiente DIAN
+          description: |-
+            ProfileExecutionID del XML: 1 producción, 2 habilitación. Lo indica quien crea el documento y se sella al firmar; no se hereda del emisor ni lo decide el ajuste del servidor.
+
+            * `1` - Producción
+            * `2` - Habilitación
+          minimum: 0
+          maximum: 32767
         adquiriente:
           $ref: '#/components/schemas/Adquiriente'
         prefijo:
@@ -8957,6 +8967,7 @@ components:
           $ref: '#/components/schemas/DocumentoPOS'
       required:
       - adquiriente
+      - ambiente
       - consecutivo
       - detalles
       - documento_tipo
@@ -8992,6 +9003,17 @@ components:
           title: Tipo de documento
         emisor:
           type: integer
+        ambiente:
+          allOf:
+          - $ref: '#/components/schemas/AmbienteEnum'
+          title: Ambiente DIAN
+          description: |-
+            ProfileExecutionID del XML: 1 producción, 2 habilitación. Lo indica quien crea el documento y se sella al firmar; no se hereda del emisor ni lo decide el ajuste del servidor.
+
+            * `1` - Producción
+            * `2` - Habilitación
+          minimum: 0
+          maximum: 32767
         numero_resolucion:
           type: string
           writeOnly: true
@@ -9110,6 +9132,7 @@ components:
           $ref: '#/components/schemas/DocumentoPOSRequest'
       required:
       - adquiriente
+      - ambiente
       - consecutivo
       - detalles
       - documento_tipo
@@ -9537,7 +9560,7 @@ components:
           readOnly: true
           title: Ambiente DIAN
           description: |-
-            ProfileExecutionID del XML: 1 producción, 2 habilitación. Se hereda del emisor al crear y se sella al firmar; no lo decide el ajuste del servidor.
+            ProfileExecutionID del XML: 1 producción, 2 habilitación. Lo indica quien crea el documento y se sella al firmar; no se hereda del emisor ni lo decide el ajuste del servidor.
 
             * `1` - Producción
             * `2` - Habilitación
@@ -10487,39 +10510,6 @@ components:
         habilitado_documento_equivalente:
           type: boolean
           readOnly: true
-        ambiente_facturacion:
-          allOf:
-          - $ref: '#/components/schemas/AmbienteEnum'
-          title: Ambiente DIAN de facturación
-          description: |-
-            Contra qué servidor de la DIAN salen las facturas, notas y documentos soporte de este emisor. Es por emisor y no del despliegue: unos pueden seguir en habilitación mientras otros ya están en producción.
-
-            * `1` - Producción
-            * `2` - Habilitación
-          minimum: 0
-          maximum: 32767
-        ambiente_nomina:
-          allOf:
-          - $ref: '#/components/schemas/AmbienteEnum'
-          title: Ambiente DIAN de nómina
-          description: |-
-            Lo mismo para la nómina, que la DIAN habilita aparte: el mismo emisor puede estar en producción para factura y todavía en habilitación para nómina.
-
-            * `1` - Producción
-            * `2` - Habilitación
-          minimum: 0
-          maximum: 32767
-        ambiente_documento_equivalente:
-          allOf:
-          - $ref: '#/components/schemas/AmbienteEnum'
-          title: Ambiente DIAN de documento equivalente
-          description: |-
-            Y lo mismo para el documento equivalente P.O.S., que tiene su propia habilitación (Res. 000165/2023, numeral 4). Son tres ambientes independientes, no uno del despliegue.
-
-            * `1` - Producción
-            * `2` - Habilitación
-          minimum: 0
-          maximum: 32767
         certificado_activo:
           type: boolean
           readOnly: true
@@ -10685,39 +10675,6 @@ components:
         habilitado_documento_equivalente:
           type: boolean
           readOnly: true
-        ambiente_facturacion:
-          allOf:
-          - $ref: '#/components/schemas/AmbienteEnum'
-          title: Ambiente DIAN de facturación
-          description: |-
-            Contra qué servidor de la DIAN salen las facturas, notas y documentos soporte de este emisor. Es por emisor y no del despliegue: unos pueden seguir en habilitación mientras otros ya están en producción.
-
-            * `1` - Producción
-            * `2` - Habilitación
-          minimum: 0
-          maximum: 32767
-        ambiente_nomina:
-          allOf:
-          - $ref: '#/components/schemas/AmbienteEnum'
-          title: Ambiente DIAN de nómina
-          description: |-
-            Lo mismo para la nómina, que la DIAN habilita aparte: el mismo emisor puede estar en producción para factura y todavía en habilitación para nómina.
-
-            * `1` - Producción
-            * `2` - Habilitación
-          minimum: 0
-          maximum: 32767
-        ambiente_documento_equivalente:
-          allOf:
-          - $ref: '#/components/schemas/AmbienteEnum'
-          title: Ambiente DIAN de documento equivalente
-          description: |-
-            Y lo mismo para el documento equivalente P.O.S., que tiene su propia habilitación (Res. 000165/2023, numeral 4). Son tres ambientes independientes, no uno del despliegue.
-
-            * `1` - Producción
-            * `2` - Habilitación
-          minimum: 0
-          maximum: 32767
         certificado_activo:
           type: boolean
           readOnly: true
@@ -10890,39 +10847,6 @@ components:
             el id del cliente). Viaja como `cliente` en los avisos de webhook; sin
             él no se envían.
           maxLength: 100
-        ambiente_facturacion:
-          allOf:
-          - $ref: '#/components/schemas/AmbienteEnum'
-          title: Ambiente DIAN de facturación
-          description: |-
-            Contra qué servidor de la DIAN salen las facturas, notas y documentos soporte de este emisor. Es por emisor y no del despliegue: unos pueden seguir en habilitación mientras otros ya están en producción.
-
-            * `1` - Producción
-            * `2` - Habilitación
-          minimum: 0
-          maximum: 32767
-        ambiente_nomina:
-          allOf:
-          - $ref: '#/components/schemas/AmbienteEnum'
-          title: Ambiente DIAN de nómina
-          description: |-
-            Lo mismo para la nómina, que la DIAN habilita aparte: el mismo emisor puede estar en producción para factura y todavía en habilitación para nómina.
-
-            * `1` - Producción
-            * `2` - Habilitación
-          minimum: 0
-          maximum: 32767
-        ambiente_documento_equivalente:
-          allOf:
-          - $ref: '#/components/schemas/AmbienteEnum'
-          title: Ambiente DIAN de documento equivalente
-          description: |-
-            Y lo mismo para el documento equivalente P.O.S., que tiene su propia habilitación (Res. 000165/2023, numeral 4). Son tres ambientes independientes, no uno del despliegue.
-
-            * `1` - Producción
-            * `2` - Habilitación
-          minimum: 0
-          maximum: 32767
         acuse_automatico:
           type: boolean
           title: Acuse de recibo automático
@@ -12036,7 +11960,7 @@ components:
           - $ref: '#/components/schemas/AmbienteEnum'
           title: Ambiente DIAN
           description: |-
-            Se hereda del ``ambiente_nomina`` del emisor al crear y se sella al firmar: la DIAN habilita la nómina aparte de la facturación, así que un emisor puede estar en producción para una y en habilitación para la otra.
+            Lo indica quien crea la nómina y se sella al firmar; no se hereda del emisor.
 
             * `1` - Producción
             * `2` - Habilitación
@@ -12341,6 +12265,17 @@ components:
           readOnly: true
         emisor:
           type: integer
+        ambiente:
+          allOf:
+          - $ref: '#/components/schemas/AmbienteEnum'
+          title: Ambiente DIAN
+          description: |-
+            Lo indica quien crea la nómina y se sella al firmar; no se hereda del emisor.
+
+            * `1` - Producción
+            * `2` - Habilitación
+          minimum: 0
+          maximum: 32767
         empleado:
           $ref: '#/components/schemas/EmpleadoAnidado'
         prefijo:
@@ -12553,6 +12488,7 @@ components:
           nullable: true
           title: Fecha de retiro
       required:
+      - ambiente
       - consecutivo
       - emisor
       - empleado
@@ -12582,6 +12518,17 @@ components:
       properties:
         emisor:
           type: integer
+        ambiente:
+          allOf:
+          - $ref: '#/components/schemas/AmbienteEnum'
+          title: Ambiente DIAN
+          description: |-
+            Lo indica quien crea la nómina y se sella al firmar; no se hereda del emisor.
+
+            * `1` - Producción
+            * `2` - Habilitación
+          minimum: 0
+          maximum: 32767
         empleado:
           $ref: '#/components/schemas/EmpleadoAnidadoRequest'
         prefijo:
@@ -12790,6 +12737,7 @@ components:
           nullable: true
           title: Fecha de retiro
       required:
+      - ambiente
       - consecutivo
       - emisor
       - empleado
@@ -12983,7 +12931,7 @@ components:
           - $ref: '#/components/schemas/AmbienteEnum'
           title: Ambiente DIAN
           description: |-
-            Se hereda del ``ambiente_nomina`` del emisor al crear y se sella al firmar: la DIAN habilita la nómina aparte de la facturación, así que un emisor puede estar en producción para una y en habilitación para la otra.
+            Lo indica quien crea la nómina y se sella al firmar; no se hereda del emisor.
 
             * `1` - Producción
             * `2` - Habilitación
@@ -13736,39 +13684,6 @@ components:
             el id del cliente). Viaja como `cliente` en los avisos de webhook; sin
             él no se envían.
           maxLength: 100
-        ambiente_facturacion:
-          allOf:
-          - $ref: '#/components/schemas/AmbienteEnum'
-          title: Ambiente DIAN de facturación
-          description: |-
-            Contra qué servidor de la DIAN salen las facturas, notas y documentos soporte de este emisor. Es por emisor y no del despliegue: unos pueden seguir en habilitación mientras otros ya están en producción.
-
-            * `1` - Producción
-            * `2` - Habilitación
-          minimum: 0
-          maximum: 32767
-        ambiente_nomina:
-          allOf:
-          - $ref: '#/components/schemas/AmbienteEnum'
-          title: Ambiente DIAN de nómina
-          description: |-
-            Lo mismo para la nómina, que la DIAN habilita aparte: el mismo emisor puede estar en producción para factura y todavía en habilitación para nómina.
-
-            * `1` - Producción
-            * `2` - Habilitación
-          minimum: 0
-          maximum: 32767
-        ambiente_documento_equivalente:
-          allOf:
-          - $ref: '#/components/schemas/AmbienteEnum'
-          title: Ambiente DIAN de documento equivalente
-          description: |-
-            Y lo mismo para el documento equivalente P.O.S., que tiene su propia habilitación (Res. 000165/2023, numeral 4). Son tres ambientes independientes, no uno del despliegue.
-
-            * `1` - Producción
-            * `2` - Habilitación
-          minimum: 0
-          maximum: 32767
         acuse_automatico:
           type: boolean
           title: Acuse de recibo automático

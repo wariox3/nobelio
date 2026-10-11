@@ -2,6 +2,7 @@
 from django.conf import settings
 from django.db import models
 
+from apps.nucleo.entorno import exigir_ambiente_permitido
 from apps.nucleo.models import Ambiente as AmbienteDian, ModeloConFechas, ModeloUUID
 from apps.utilidades.almacenamiento import almacenamiento_backblaze
 
@@ -9,10 +10,9 @@ from apps.utilidades.almacenamiento import almacenamiento_backblaze
 def ambiente_por_defecto():
     """El ambiente DIAN configurado en el servidor.
 
-    Ya no es el default del campo: el documento hereda el ambiente de su emisor
-    (ver ``save``), que es quien sabe si está en habilitación o en producción, y
-    para cada operación por separado. Se conserva porque las migraciones ya
-    hechas la referencian por su ruta de import y borrarla las rompería.
+    Ya no es el default del campo: el ambiente lo trae cada documento al
+    crearse. Se conserva porque las migraciones ya hechas la referencian por su
+    ruta de import y borrarla las rompería.
     """
     return settings.DIAN_ENVIRONMENT
 
@@ -125,8 +125,8 @@ class Documento(ModeloUUID, ModeloConFechas):
     ambiente = models.PositiveSmallIntegerField(
         "ambiente DIAN", choices=Ambiente.choices,
         help_text="ProfileExecutionID del XML: 1 producción, 2 habilitación. "
-        "Se hereda del emisor al crear y se sella al firmar; no lo decide el "
-        "ajuste del servidor.",
+        "Lo indica quien crea el documento y se sella al firmar; no se hereda "
+        "del emisor ni lo decide el ajuste del servidor.",
     )
     cufe_cude = models.CharField(
         "CUFE/CUDE", max_length=96, blank=True,
@@ -279,15 +279,19 @@ class Documento(ModeloUUID, ModeloConFechas):
         "en lo que no es nota.",
     )
 
-    # De qué campo del emisor sale el ambiente de cada tipo. La DIAN habilita
-    # cada operación por separado, así que el mismo emisor puede estar en
-    # producción para factura y todavía en habilitación para P.O.S. Lo que no
-    # esté aquí usa el de facturación, que es lo que se ha hecho siempre.
-    CAMPO_AMBIENTE_EMISOR = {
-        "documento_equivalente_pos": "ambiente_documento_equivalente",
-        "nota_ajuste_de_credito": "ambiente_documento_equivalente",
-        "nota_ajuste_de_debito": "ambiente_documento_equivalente",
+    # A qué operación pertenece cada tipo. La DIAN habilita cada una por
+    # separado, así que el mismo emisor puede estar habilitado para factura y
+    # todavía no para P.O.S. Lo que no esté aquí es de facturación.
+    OPERACION_POR_TIPO = {
+        "documento_equivalente_pos": "documento_equivalente",
+        "nota_ajuste_de_credito": "documento_equivalente",
+        "nota_ajuste_de_debito": "documento_equivalente",
     }
+
+    @classmethod
+    def operacion_de(cls, codigo_tipo) -> str:
+        """La operación (tipo de software) a la que pertenece ese tipo."""
+        return cls.OPERACION_POR_TIPO.get(codigo_tipo, "facturacion")
 
     class Meta:
         db_table = "doc_documento"
@@ -321,19 +325,13 @@ class Documento(ModeloUUID, ModeloConFechas):
         # explícitamente (p. ej. para reproducir un número específico).
         if not self.numero:
             self.numero = f"{self.prefijo}{self.consecutivo}"
-        # El ambiente lo pone el emisor, no el ajuste global: puede haber unos
-        # en habilitación y otros en producción a la vez. Se resuelve al crear
-        # y el documento se lo queda, porque es lo que entra en el CUFE y lo
-        # que decide a qué servidor se envía; si cambiara después, el
-        # identificador y el destino dejarían de corresponderse. Un valor
-        # explícito manda (lo usa la factura de prueba).
+        # El ambiente lo trae el documento: no se hereda del emisor. Es lo que
+        # entra en el CUFE y lo que decide a qué servidor se envía, así que
+        # tiene que venir dicho y no deducido.
         if self.ambiente is None:
-            self.ambiente = getattr(
-                self.emisor, self.CAMPO_AMBIENTE_EMISOR.get(
-                    self.documento_tipo.codigo if self.documento_tipo_id else "",
-                    "ambiente_facturacion",
-                )
-            )
+            raise ValueError("El documento necesita su ambiente DIAN.")
+        if self._state.adding:
+            exigir_ambiente_permitido(self.ambiente, "crear documentos")
         # Estado inicial por defecto: borrador.
         if not self.estado_id:
             from .documento_estado import DocumentoEstado

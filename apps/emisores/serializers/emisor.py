@@ -13,8 +13,7 @@ from apps.catalogos.models import (
     TipoIdentificacion,
 )
 from apps.catalogos.models.municipio import mensaje_municipio_de_otro_departamento
-from apps.emisores.models import Emisor, ambiente_por_defecto
-from apps.nucleo.models import Ambiente
+from apps.emisores.models import Emisor
 from apps.nucleo.serializers import TiposEstrictos
 
 from .resolucion import ResolucionSerializer
@@ -45,28 +44,8 @@ MENSAJE_DUPLICADO = (
 )
 CODIGO_DUPLICADO = "emisor_duplicado"
 
-# La DIAN rechaza con la regla 92 ("El Emisor del Documento no se encuentra
-# Habilitado"), un mensaje que hace buscar el error dentro de la nómina cuando
-# lo que falta es el trámite. Mejor decirlo aquí, que es donde se decide.
-MENSAJE_NOMINA_SIN_HABILITAR = (
-    "El emisor no está habilitado para nómina electrónica, así que no puede "
-    "emitirla en producción. La bandera se marca sola al cerrarse el Set de "
-    "Pruebas de nómina y no se puede escribir por la API."
-)
-
-
-# Mismo caso que la nómina: sin la habilitación del documento equivalente, la
-# DIAN rechaza en producción y el mensaje manda a buscar el error dentro del
-# tiquete cuando lo que falta es el trámite.
-MENSAJE_DOCUMENTO_EQUIVALENTE_SIN_HABILITAR = (
-    "El emisor no está habilitado para documento equivalente, así que no puede "
-    "emitirlo en producción. La bandera se marca sola al cerrarse su Set de "
-    "Pruebas y no se puede escribir por la API."
-)
-
-
 # Lo único que se puede cambiar de un emisor ya dado de alta. El resto —la
-# identificación, la cuenta, la referencia externa, los ambientes…— se fija en
+# identificación, la cuenta, la referencia externa…— se fija en
 # el alta, y mandarlo en un PATCH responde 400 en vez de ignorarse en silencio.
 CAMPOS_ACTUALIZABLES = (
     "razon_social",
@@ -126,19 +105,15 @@ class EmisorSerializer(TiposEstrictos, serializers.ModelSerializer):
     # operación —hay uno por operación, la nómina incluida—, y cada una se
     # habilita por separado.
     #
-    # Que además condicionen el paso a producción (ver `validate`) es la razón
-    # de peso: de escritura, cualquier cliente se saltaba la habilitación
-    # entera marcando la bandera en el mismo PATCH que pone el ambiente en
-    # producción. Si hay que ponerlas a mano —porque la DIAN habilitó por fuera
+    # Que además condicionen el paso a producción (un documento equivalente o
+    # una nómina con ambiente 1 las exigen al crearse) es la razón de peso: de
+    # escritura, cualquier cliente se saltaba la habilitación entera marcando
+    # la bandera. Si hay que ponerlas a mano —porque la DIAN habilitó por fuera
     # del automatismo, o porque cambió el texto que reconoce
     # `_set_pruebas_cerrado`—, se hace por backend.
     habilitado_facturacion = serializers.BooleanField(read_only=True)
     habilitado_nomina = serializers.BooleanField(read_only=True)
     habilitado_documento_equivalente = serializers.BooleanField(read_only=True)
-    # Los ambientes sí son de escritura, y ahí está la diferencia con las
-    # banderas: 'estoy habilitado' es un hecho que constata la DIAN, mientras
-    # que 'emite contra producción' es una decisión nuestra sobre este emisor.
-    # Es lo que permite pasar a uno a producción sin mover a los demás.
 
     def to_internal_value(self, data):
         """Al editar, rechaza cualquier campo fuera de ``CAMPOS_ACTUALIZABLES``.
@@ -167,27 +142,6 @@ class EmisorSerializer(TiposEstrictos, serializers.ModelSerializer):
         def valor(campo):
             return attrs.get(campo, getattr(self.instance, campo, None))
 
-        # En un alta que no trae `ambiente_nomina` el valor lo pone el default
-        # del modelo, así que es el que hay que comprobar: con el servidor ya
-        # en producción, un emisor nuevo nacería en producción sin haber hecho
-        # el trámite y sin pasar por ninguna validación.
-        ambiente_nomina = valor("ambiente_nomina")
-        if ambiente_nomina is None:
-            ambiente_nomina = ambiente_por_defecto()
-        self.exigir_habilitacion_de_nomina(
-            ambiente_nomina, valor("habilitado_nomina"),
-        )
-
-        # Lo mismo para el documento equivalente, y por el mismo motivo: su
-        # habilitación es un trámite aparte y salir a producción sin ella es la
-        # regla 92 otra vez.
-        ambiente_de = valor("ambiente_documento_equivalente")
-        if ambiente_de is None:
-            ambiente_de = ambiente_por_defecto()
-        self.exigir_habilitacion_de_documento_equivalente(
-            ambiente_de, valor("habilitado_documento_equivalente"),
-        )
-
         departamento = valor("departamento")
         municipio = valor("municipio")
         if departamento and municipio and not municipio.es_de(departamento):
@@ -214,37 +168,6 @@ class EmisorSerializer(TiposEstrictos, serializers.ModelSerializer):
 
         self.exigir_no_duplicado(tipo, numero)
         return attrs
-
-    def exigir_habilitacion_de_nomina(self, ambiente, habilitado):
-        """Producción de nómina solo después del trámite ante la DIAN.
-
-        Es lo único que ata las dos parejas de campos: el ambiente decide contra
-        qué servidor se emite y la bandera dice si la DIAN ya habilitó a este
-        emisor para nómina. Sin el trámite, todo lo que salga a producción se
-        rechaza, así que dejarlo pasar solo aplaza el fallo hasta la primera
-        nómina y lo disfraza de error del documento.
-
-        No existe la simétrica para facturación a propósito: no se ha pedido
-        cerrar ese paso, y hacerlo ahora dejaría en habilitación a los emisores
-        que ya están facturando en producción con la bandera sin marcar.
-        """
-        if ambiente == Ambiente.PRODUCCION and not habilitado:
-            raise serializers.ValidationError(
-                {"ambiente_nomina": MENSAJE_NOMINA_SIN_HABILITAR}
-            )
-
-    def exigir_habilitacion_de_documento_equivalente(self, ambiente, habilitado):
-        """Producción de documento equivalente solo después de su habilitación.
-
-        Gemela de ``exigir_habilitacion_de_nomina``: cada operación se habilita
-        por separado, así que estar en producción para factura no dice nada del
-        tiquete P.O.S.
-        """
-        if ambiente == Ambiente.PRODUCCION and not habilitado:
-            raise serializers.ValidationError(
-                {"ambiente_documento_equivalente":
-                    MENSAJE_DOCUMENTO_EQUIVALENTE_SIN_HABILITAR}
-            )
 
     def exigir_no_duplicado(self, tipo, numero):
         """La unicidad del emisor, que ahora es global.
@@ -286,8 +209,6 @@ class EmisorSerializer(TiposEstrictos, serializers.ModelSerializer):
             "telefono", "correo", "activo", "referencia_externa",
             "habilitado_facturacion", "habilitado_nomina",
             "habilitado_documento_equivalente",
-            "ambiente_facturacion", "ambiente_nomina",
-            "ambiente_documento_equivalente",
             "certificado_activo", "certificado_vence",
             "acuse_automatico", "recibe_tipo_identificacion",
             "recibe_numero_identificacion", "recibe_nombres", "recibe_apellidos",

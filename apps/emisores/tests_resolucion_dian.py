@@ -2,6 +2,7 @@
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.test import override_settings
 from rest_framework.test import APITestCase
 
 from apps.catalogos.models import TipoFactura
@@ -44,11 +45,7 @@ class ResolucionDianTests(APITestCase):
 
     def setUp(self):
         self.cat = crear_catalogos_minimos()
-        self.emisor = _crear_emisor(
-            self.cat,
-            ambiente_facturacion=Ambiente.PRODUCCION,
-            ambiente_documento_equivalente=Ambiente.PRUEBAS,
-        )
+        self.emisor = _crear_emisor(self.cat, habilitado_facturacion=True)
         self.usuario = get_user_model().objects.create_user(
             email="staff@nobelio.co", password="x"
         )
@@ -63,15 +60,15 @@ class ResolucionDianTests(APITestCase):
         self.facturacion = self._software(SoftwareDian.Tipo.FACTURACION, "sw-fe")
         self.pos = self._software(SoftwareDian.Tipo.DOCUMENTO_EQUIVALENTE, "sw-pos")
 
-    def _software(self, tipo, identificador, emisor=None):
+    def _software(self, tipo, identificador, emisor=None, **extra):
         return SoftwareDian.objects.create(
             emisor=emisor or self.emisor, tipo=tipo,
-            identificador=identificador, pin="12345",
+            identificador=identificador, pin="12345", **extra,
         )
 
     # --- consulta-dian ------------------------------------------------------
 
-    def test_consulta_con_el_software_y_el_ambiente_indicados(self):
+    def test_consulta_con_el_software_indicado(self):
         with patch(CONSULTAR, return_value=_respuesta(_rango())) as consultar:
             resp = self.client.get(self.url_consulta, {"software": self.pos.pk})
 
@@ -84,6 +81,36 @@ class ResolucionDianTests(APITestCase):
         self.assertTrue(rango["tiene_clave_tecnica"])
         self.assertNotIn("clave_tecnica", rango)
         self.assertFalse(Resolucion.objects.exists())
+
+    @override_settings(ENV="prod")
+    def test_en_prod_la_operacion_habilitada_consulta_en_produccion(self):
+        with patch(CONSULTAR, return_value=_respuesta()) as consultar:
+            self.client.get(self.url_consulta, {"software": self.facturacion.pk})
+
+        consultar.assert_called_once_with(
+            self.emisor, software=self.facturacion, ambiente=Ambiente.PRODUCCION,
+        )
+
+    @override_settings(ENV="prod")
+    def test_en_prod_la_operacion_sin_habilitar_consulta_en_pruebas(self):
+        with patch(CONSULTAR, return_value=_respuesta()) as consultar:
+            self.client.get(self.url_consulta, {"software": self.pos.pk})
+
+        consultar.assert_called_once_with(
+            self.emisor, software=self.pos, ambiente=Ambiente.PRUEBAS,
+        )
+
+    def test_fuera_de_prod_consulta_siempre_en_pruebas(self):
+        for entorno in ("dev", "test"):
+            with self.subTest(entorno=entorno), override_settings(ENV=entorno):
+                with patch(CONSULTAR, return_value=_respuesta()) as consultar:
+                    self.client.get(
+                        self.url_consulta, {"software": self.facturacion.pk}
+                    )
+                consultar.assert_called_once_with(
+                    self.emisor, software=self.facturacion,
+                    ambiente=Ambiente.PRUEBAS,
+                )
 
     def test_consulta_sin_software_es_400(self):
         resp = self.client.get(self.url_consulta)
@@ -124,7 +151,7 @@ class ResolucionDianTests(APITestCase):
 
         self.assertEqual(resp.status_code, 201, resp.data)
         consultar.assert_called_once_with(
-            self.emisor, software=self.facturacion, ambiente=Ambiente.PRODUCCION,
+            self.emisor, software=self.facturacion, ambiente=Ambiente.PRUEBAS,
         )
         resolucion = Resolucion.objects.get()
         self.assertEqual(resolucion.emisor, self.emisor)

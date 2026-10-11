@@ -6,7 +6,6 @@ from apps.catalogos.models import TipoFactura
 from apps.documentos.models import Documento, DocumentoEstado, DocumentoTipo
 from apps.documentos.tests_utils import crear_catalogos_minimos, crear_certificado
 from apps.emisores.models import Emisor, Resolucion
-from apps.nucleo.models import Ambiente
 
 
 def _crear_emisor(cat, nit="901192048"):
@@ -169,15 +168,15 @@ class CrearDocumentoPruebaTests(APITestCase):
         self.assertEqual(resp.status_code, 400, resp.data)
         self.assertIn("inactiva", resp.data["detail"])
 
-    def test_rechaza_si_el_emisor_ya_esta_en_produccion(self):
+    def test_rechaza_si_el_emisor_ya_esta_habilitado(self):
         """Gastaría un consecutivo de la numeración real, que no se recupera."""
-        self.emisor.ambiente_facturacion = Ambiente.PRODUCCION
-        self.emisor.save(update_fields=["ambiente_facturacion"])
+        self.emisor.habilitado_facturacion = True
+        self.emisor.save(update_fields=["habilitado_facturacion"])
 
         resp = self.client.post(self._url(), {}, format="json")
 
         self.assertEqual(resp.status_code, 400, resp.data)
-        self.assertIn("producción", resp.data["detail"])
+        self.assertIn("habilitado", resp.data["detail"])
         self.assertFalse(Documento.objects.exists())
 
     def test_rechaza_una_numeracion_que_no_lleva_documento_propio(self):

@@ -29,6 +29,7 @@ class NotasTestBase(TestCase):
 
     def _crear_nota(self, codigo, numero, consecutivo):
         nota = doc.Documento.objects.create(
+            ambiente=2,
             documento_tipo=doc.DocumentoTipo.objects.get(codigo=codigo),
             emisor=self.base["emisor"],
             documento_referencia=self.factura, prefijo="NC", consecutivo=consecutivo,
@@ -109,6 +110,7 @@ class NotaDebitoTests(NotasTestBase):
 class DocumentoSoporteTests(NotasTestBase):
     def _xml(self):
         ds = doc.Documento.objects.create(
+            ambiente=2,
             documento_tipo=doc.DocumentoTipo.objects.get(codigo=doc.DocumentoTipo.Codigo.DOCUMENTO_SOPORTE),
             emisor=self.base["emisor"],
             prefijo="DS", consecutivo=1, numero="DS1",

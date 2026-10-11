@@ -27,7 +27,7 @@ puede faltar. Las rutas cuelgan de `/api/`.
       (tipos de identificación, organización, tributos, países, municipios, …).
 - [ ] **Backblaze B2 configurado** (`B2_*` en `.env`): obligatorio para subir
       certificados; el `.p12` se guarda siempre en B2, nunca en disco.
-- [ ] **Ambiente DIAN** definido (`DIAN_ENVIRONMENT`: `2` habilitación / `1` producción).
+- [ ] **Entorno** definido (`ENV`: `dev`, `test` o `prod`). El ambiente DIAN (`2` habilitación / `1` producción) lo manda cada documento en su campo `ambiente`; fuera de `ENV=prod` solo se admite `2`.
 - [ ] **Usuario staff** inicial para poder crear usuarios y llaves.
 
 ## 1. Cuenta (opcional)

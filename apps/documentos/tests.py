@@ -47,6 +47,7 @@ class GrafoDocumentoTests(TestCase):
 
     def test_crear_documento_con_linea_e_impuesto(self):
         documento = doc.Documento.objects.create(
+            ambiente=2,
             documento_tipo=doc.DocumentoTipo.objects.get(codigo=doc.DocumentoTipo.Codigo.FACTURA_VENTA),
             emisor=self.emisor,
             prefijo="SETP",

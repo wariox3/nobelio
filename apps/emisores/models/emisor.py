@@ -2,17 +2,16 @@
 from django.conf import settings
 from django.db import models
 
-from apps.nucleo.models import Ambiente, ModeloConFechas
+from apps.nucleo.models import ModeloConFechas
 from apps.utilidades.nit import dv_de_entidad
 
 
 def ambiente_por_defecto():
-    """El ambiente configurado en el servidor al dar de alta al emisor.
+    """El ambiente configurado en el servidor.
 
-    El ajuste global pasa a decidir solo con qué ambiente **nace** un emisor;
-    contra qué servidor se emite lo dice ya el emisor, y el documento se lo
-    queda al crearse. Callable y no el valor a secas para que la migración
-    guarde la referencia a la función.
+    El emisor ya no tiene ambiente: lo trae cada documento o nómina. Se conserva
+    porque las migraciones ya hechas la referencian por su ruta de import y
+    borrarla las rompería.
     """
     return settings.DIAN_ENVIRONMENT
 
@@ -88,29 +87,6 @@ class Emisor(ModeloConFechas):
         "el certificado vence el", null=True, blank=True,
         help_text="Fin de la vigencia del .p12 cargado, tal y como viene "
         "dentro del propio certificado. Nulo si no hay certificado.",
-    )
-
-    ambiente_facturacion = models.PositiveSmallIntegerField(
-        "ambiente DIAN de facturación", choices=Ambiente.choices,
-        default=ambiente_por_defecto,
-        help_text="Contra qué servidor de la DIAN salen las facturas, notas y "
-        "documentos soporte de este emisor. Es por emisor y no del despliegue: "
-        "unos pueden seguir en habilitación mientras otros ya están en "
-        "producción.",
-    )
-    ambiente_nomina = models.PositiveSmallIntegerField(
-        "ambiente DIAN de nómina", choices=Ambiente.choices,
-        default=ambiente_por_defecto,
-        help_text="Lo mismo para la nómina, que la DIAN habilita aparte: el "
-        "mismo emisor puede estar en producción para factura y todavía en "
-        "habilitación para nómina.",
-    )
-    ambiente_documento_equivalente = models.PositiveSmallIntegerField(
-        "ambiente DIAN de documento equivalente", choices=Ambiente.choices,
-        default=ambiente_por_defecto,
-        help_text="Y lo mismo para el documento equivalente P.O.S., que tiene "
-        "su propia habilitación (Res. 000165/2023, numeral 4). Son tres "
-        "ambientes independientes, no uno del despliegue.",
     )
 
     # --- Eventos RADIAN de las facturas recibidas ---
@@ -193,6 +169,15 @@ class Emisor(ModeloConFechas):
         related_name="emisores",
         verbose_name="municipio",
     )
+
+    def habilitado_para(self, operacion) -> bool:
+        """Si la DIAN ya habilitó al emisor para esa operación.
+
+        ``operacion`` es el tipo de software (``facturacion``, ``nomina`` o
+        ``documento_equivalente``): cada una se habilita por separado y tiene
+        su bandera.
+        """
+        return getattr(self, f"habilitado_{str(operacion)}")
 
     def save(self, *args, **kwargs):
         # El DV se calcula, no se recibe: la DIAN lo comprueba contra el NIT y

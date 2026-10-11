@@ -33,6 +33,7 @@ from apps.emisores.servicios import (
     motivo_no_puede_emitir,
     webhooks,
 )
+from apps.nucleo.entorno import ambiente_segun_habilitacion
 from apps.nucleo.registro import campos
 
 # La traza del pipeline. Deja una línea por transición de estado —firmado,
@@ -256,8 +257,7 @@ def desmarcar_habilitacion(software):
     ellas abajo los envíos vuelven al Set de Pruebas y el software se puede
     modificar o borrar otra vez.
 
-    Es idempotente. Quien llama decide si procede (ver la acción `desactivar`
-    del software, que lo impide en producción).
+    Es idempotente.
     """
     emisor = software.emisor
     if software.set_pruebas_aceptado:
@@ -573,7 +573,7 @@ def construir_cliente_emisor(emisor, ambiente, *, llave=None, certificado=None):
         with cert_modelo.archivo.open("rb") as fh:
             llave, certificado, _ = firma.cargar_pkcs12(fh.read(), cert_modelo.clave)
     url = settings.DIAN_WSDL[ambiente].replace("?wsdl", "")
-    return soap.ClienteDian(url, llave, certificado)
+    return soap.ClienteDian(url, llave, certificado, ambiente=ambiente)
 
 
 def construir_cliente(documento, ambiente, *, llave=None, certificado=None):
@@ -592,12 +592,14 @@ def consultar_rangos_numeracion(emisor, *, cliente=None, ambiente=None,
     va el del emisor en los dos. Devuelve un ``soap.RespuestaRangos`` con el
     código/descripción de la DIAN y los rangos (cada uno con su clave técnica).
     """
-    # Aquí no hay documento del que heredar: la consulta es del emisor y de sus
-    # resoluciones, así que manda su ambiente de facturación.
-    ambiente = (
-        ambiente if ambiente is not None else emisor.ambiente_facturacion
-    )
     software = software or _software_del_emisor(emisor)
+    # Aquí no hay documento del que tomar el ambiente: habilitado para esa
+    # operación, los prefijos están en producción; mientras no, en
+    # habilitación (y fuera de ENV=prod, siempre ahí).
+    if ambiente is None:
+        ambiente = ambiente_segun_habilitacion(
+            emisor.habilitado_para(software.tipo)
+        )
     if cliente is None:
         cliente = construir_cliente_emisor(emisor, ambiente, **cred)
     return cliente.consultar_rangos_numeracion(

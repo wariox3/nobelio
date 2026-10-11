@@ -153,7 +153,7 @@ def crear_documento_factura(catalogos=None):
     )
     documento = doc.Documento.objects.create(
         documento_tipo=doc.DocumentoTipo.objects.get(codigo=doc.DocumentoTipo.Codigo.FACTURA_VENTA), emisor=emisor,
-        resolucion=resolucion, prefijo="SETP",
+        resolucion=resolucion, prefijo="SETP", ambiente=2,
         consecutivo=990000129, numero="323200000129",
         fecha_emision=date(2019, 1, 16), hora_emision=time(10, 53, 10),
         moneda=c["cop"], valor_bruto=Decimal("1500000.00"),

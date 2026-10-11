@@ -14,8 +14,6 @@ todos. Por eso solo se siembra en ambiente de pruebas; ver
 import logging
 from datetime import date
 
-from apps.nucleo.models import Ambiente
-
 logger = logging.getLogger(__name__)
 
 # Los datos que la DIAN publica para su Set de Pruebas de facturación.
@@ -45,9 +43,7 @@ RESOLUCION_SET_PRUEBAS_POS = {
     "vigente_hasta": date(2030, 1, 19),
 }
 
-# Qué resolución de pruebas le toca a cada tipo de software, y contra qué
-# ambiente del emisor se decide (cada operación tiene el suyo y pueden no
-# coincidir: se puede estar en producción para factura y en pruebas para POS).
+# Qué resolución de pruebas le toca a cada tipo de software.
 #
 # - `facturacion`: la del Set de Pruebas, sobre el tipo de factura 01.
 #
@@ -65,12 +61,10 @@ RESOLUCION_SET_PRUEBAS_POS = {
 RESOLUCION_POR_TIPO_DE_SOFTWARE = {
     "facturacion": {
         "codigo_tipo_factura": "01",
-        "campo_ambiente": "ambiente_facturacion",
         "datos": RESOLUCION_SET_PRUEBAS,
     },
     "documento_equivalente": {
         "codigo_tipo_factura": "20",
-        "campo_ambiente": "ambiente_documento_equivalente",
         "datos": RESOLUCION_SET_PRUEBAS_POS,
     },
 }
@@ -81,9 +75,9 @@ def sembrar_resolucion_de_pruebas(emisor, tipo_software):
 
     Devuelve ``(resolucion, creada)``, o ``(None, False)`` cuando no hay nada
     que sembrar: porque esa operación no se numera con resolución (nómina) o
-    porque el emisor ya está en producción para ella.
+    porque el emisor ya está habilitado para ella.
 
-    **Solo en ambiente de pruebas.** Lo que escribe son datos del sandbox de la
+    **Solo mientras no esté habilitado.** Lo que escribe son datos del sandbox de la
     DIAN: una resolución que no es del emisor y una clave técnica pública. En
     un emisor que ya emite en producción eso significa numerar con un rango que
     no le pertenece, y los consecutivos que se gasten por el camino no se
@@ -101,7 +95,7 @@ def sembrar_resolucion_de_pruebas(emisor, tipo_software):
     if receta is None:
         return None, False
 
-    if getattr(emisor, receta["campo_ambiente"]) != Ambiente.PRUEBAS:
+    if emisor.habilitado_para(tipo_software):
         return None, False
 
     try:

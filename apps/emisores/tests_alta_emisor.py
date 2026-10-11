@@ -176,7 +176,6 @@ class AltaSinValidarRuesTests(APITestCase):
             ("direccion", ["Calle 1"], str),
             ("activo", "true", bool),
             ("activo", 1, bool),
-            ("ambiente_facturacion", "2", int),
         ):
             with self.subTest(campo=campo, valor=valor):
                 resp = self.client.post(
@@ -297,7 +296,6 @@ class ActualizacionEmisorTests(APITestCase):
             ("correo_copia", "copia@empresa.co"),
             ("responsabilidades", []),
             ("activo", False),
-            ("ambiente_facturacion", 2),
             ("habilitado_nomina", True),
             ("usuario", 1),
             ("no_existe", "x"),

@@ -8,6 +8,7 @@ from rest_framework.validators import UniqueTogetherValidator
 from apps.catalogos.memoria import RelacionDeCatalogo
 from apps.emisores.models import Emisor
 from apps.nomina import models
+from apps.nucleo.entorno import validar_ambiente_de_creacion
 from apps.nucleo.serializers import EstructuraEstricta
 from apps.seguridad.alcance import RelacionDelAlcance
 
@@ -180,8 +181,8 @@ class NominaCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
     class Meta:
         model = models.Nomina
         fields = [
-            "id", "emisor", "empleado", "prefijo", "consecutivo", "numero",
-            "tipo_xml", "tipo_nota", "nomina_predecesora",
+            "id", "emisor", "ambiente", "empleado", "prefijo", "consecutivo",
+            "numero", "tipo_xml", "tipo_nota", "nomina_predecesora",
             "periodo_nomina", "fecha_liquidacion_inicio", "fecha_liquidacion_fin",
             "tiempo_laborado", "fecha_generacion", "hora_generacion", "fecha_pago",
             "moneda", "trm", "notas", "novedad", "cune_novedad",
@@ -194,8 +195,12 @@ class NominaCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
         ]
         read_only_fields = ["numero"]
         # Todas opcionales: se heredan del empleado si no vienen.
+        #
+        # `ambiente` es obligatorio: ya no se hereda del emisor, lo dice quien
+        # crea la nómina (1 producción, 2 habilitación).
         extra_kwargs = {
-            campo: {"required": False} for campo in CONDICIONES_DEL_EMPLEADO
+            **{campo: {"required": False} for campo in CONDICIONES_DEL_EMPLEADO},
+            "ambiente": {"required": True},
         }
         validators = [
             UniqueTogetherValidator(
@@ -211,6 +216,11 @@ class NominaCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
         if self.instance is not None and not self.instance.es_borrador:
             raise serializers.ValidationError(MENSAJE_NOMINA_NO_EDITABLE)
 
+        validar_ambiente_de_creacion(
+            self, attrs,
+            attrs.get("emisor") or getattr(self.instance, "emisor", None),
+            "nomina",
+        )
         self._heredar_condiciones(attrs)
         self._validar_periodo(attrs)
         self._validar_retiro(attrs)

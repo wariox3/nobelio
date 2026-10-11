@@ -101,7 +101,8 @@ Variables principales (`config/settings/base.py` las lee con `django-environ`):
 | `DATABASE_URL` | Conexión PostgreSQL (obligatorio) | — |
 | `DB_CONN_MAX_AGE` | Segundos que se reutiliza una conexión a la base (`0` = una por petición) | `60` |
 | `CATALOGOS_EN_MEMORIA_SEGUNDOS` | Segundos que cada proceso guarda los catálogos DIAN antes de releerlos (`0` = sin memoria) | `300` |
-| `DIAN_ENVIRONMENT` | `2` habilitación / `1` producción | `2` |
+| `ENV` | Entorno del despliegue: `dev`, `test` o `prod`. Fuera de `prod` no se crea ningún documento ni nómina en el ambiente 1, ni se envía nada a la DIAN de producción | `dev` |
+| `DIAN_ENVIRONMENT` | En desuso: el ambiente lo trae cada documento o nómina en su campo `ambiente` | `2` |
 | `DIAN_POLICY_ID` | URL de la política de firma | política v2 DIAN |
 | `DIAN_POLICY_HASH` | SHA-256 (base64) del PDF de la política | el de la política v2 |
 | `CERT_ENCRYPTION_KEY` | Clave Fernet que cifra la clave del `.p12` (**obligatoria**) | — |
@@ -297,7 +298,7 @@ crear y para editar.
 
 Se puede mandar cualquier subconjunto. Cualquier otro campo —identificación,
 `referencia_externa`, `cuenta`, teléfono, código postal, correo en copia,
-responsabilidades, `activo`, ambientes…— responde 400 con código
+responsabilidades, `activo`…— responde 400 con código
 `campo_no_actualizable` y no se guarda nada del PATCH. Esos se fijan en el alta.
 
 El **dueño no se envía**: el emisor queda a nombre de quien hace la petición
@@ -406,7 +407,7 @@ caído— se termina con `emitir/`, que hace exactamente lo mismo en la petició
 
 `emitir/` es una sola llamada: genera el XML UBL, calcula el CUFE, firma y envía. Se usa
 `SendTestSetAsync` (con el `test_set_id` del software) solo mientras se está en
-habilitación (`DIAN_ENVIRONMENT=2`) **y** el Set de Pruebas todavía no ha sido
+habilitación (documento con `ambiente` 2) **y** el Set de Pruebas todavía no ha sido
 aceptado. En cuanto la DIAN lo acepta hay que marcar
 `SoftwareDian.set_pruebas_aceptado` a mano, y a partir de ahí —o en producción—
 se usa `SendBillSync` (síncrono).

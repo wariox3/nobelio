@@ -13,6 +13,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
+from django.core.exceptions import ImproperlyConfigured
 
 from config import observabilidad
 
@@ -28,6 +29,22 @@ environ.Env.read_env(BASE_DIR / ".env")
 SECRET_KEY = env("DJANGO_SECRET_KEY", default="dev-insecure-change-me")
 DEBUG = env("DEBUG", default=False)
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[])
+
+# --- Entorno del despliegue -------------------------------------------------
+# Dónde corre nobelio: `dev`, `test` o `prod`. No es el ambiente DIAN, que es de
+# cada emisor: es el seguro que va por encima. Fuera de `prod` no se crea ningún
+# documento en el ambiente 1 ni se le envía nada a la DIAN de producción, diga
+# lo que diga el emisor (ver `apps/nucleo/entorno.py`).
+#
+# Sin definir vale `dev`, el lado seguro: un servidor de producción al que le
+# falte `ENV=prod` rechaza los envíos con un error claro en vez de que uno de
+# desarrollo emita en real por descuido.
+ENTORNOS = ("dev", "test", "prod")
+ENV = env("ENV", default="dev")
+if ENV not in ENTORNOS:
+    raise ImproperlyConfigured(
+        f"ENV='{ENV}' no es válido: tiene que ser uno de {', '.join(ENTORNOS)}."
+    )
 
 # Clave Fernet con la que se cifra la clave del .p12 en la base
 # (`Certificado.clave`; ver apps/utilidades/cifrado.py). Se genera con:
@@ -585,11 +602,10 @@ CORS_ALLOW_CREDENTIALS = env.bool("CORS_ALLOW_CREDENTIALS", default=False)
 # ===========================================================================
 # Configuración DIAN
 # ===========================================================================
-# Ambiente con el que nace un emisor nuevo (2 = habilitación, 1 = producción).
-# Ya no gobierna la emisión: contra qué servidor se emite lo dicen los campos
-# `ambiente_facturacion` y `ambiente_nomina` del emisor, y el documento se lleva
-# el valor al crearse y lo sella al firmar. Solo lo lee `ambiente_por_defecto()`
-# de `apps.emisores.models.emisor`.
+# Ya no gobierna nada: el ambiente lo trae cada documento o nómina al crearse
+# (campo `ambiente`, obligatorio en la API) y lo sella al firmar. Se conserva
+# porque lo leen las `ambiente_por_defecto()` que las migraciones antiguas
+# referencian como default.
 DIAN_ENVIRONMENT = env.int("DIAN_ENVIRONMENT", default=2)
 
 # Endpoints de los Web Services de la DIAN por ambiente.

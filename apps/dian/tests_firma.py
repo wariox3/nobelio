@@ -68,6 +68,7 @@ class FirmaXAdESTests(TestCase):
             vigente_desde=date(2019, 1, 19), vigente_hasta=date(2030, 1, 19),
         )
         cls.documento = doc.Documento.objects.create(
+            ambiente=2,
             documento_tipo=doc.DocumentoTipo.objects.get(codigo=doc.DocumentoTipo.Codigo.FACTURA_VENTA), emisor=emisor,
             resolucion=cls.resolucion, prefijo="SETP",
             consecutivo=990000129, numero="323200000129",

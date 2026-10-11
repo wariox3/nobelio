@@ -326,6 +326,7 @@ class NominaEstructuraTests(NominaAPIBase):
         """
         resp = self.client.post("/api/nomina/nomina/", {
             "emisor": self.emisor.id,
+            "ambiente": 2,
             "sueldoo": "1500000",
             "empleado": {"numero_documento": "123", "sueldoo": "1500000"},
             "conceptos": [{"grupo": "no-existe", "valorr": "1500000"}],
@@ -389,6 +390,36 @@ class NominaCreacionTests(NominaAPIBase):
             resp.data["empleado"]["tipo_identificacion_codigo"],
             self.nomina.empleado.tipo_identificacion.codigo,
         )
+
+    def test_el_ambiente_es_obligatorio(self):
+        payload = self._payload(901)
+        del payload["ambiente"]
+
+        resp = self.client.post("/api/nomina/nomina/", payload, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(Nomina.objects.count(), 1)
+
+    def test_fuera_de_prod_no_crea_con_ambiente_1(self):
+        payload = {**self._payload(902), "ambiente": 1}
+
+        resp = self.client.post("/api/nomina/nomina/", payload, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(Nomina.objects.count(), 1)
+
+    @override_settings(ENV="prod")
+    def test_en_prod_el_ambiente_1_exige_estar_habilitado_para_nomina(self):
+        payload = {**self._payload(903), "ambiente": 1}
+
+        resp = self.client.post("/api/nomina/nomina/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+
+        self.emisor.habilitado_nomina = True
+        self.emisor.save(update_fields=["habilitado_nomina"])
+        resp = self.client.post("/api/nomina/nomina/", payload, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(Nomina.objects.get(pk=resp.data["id"]).ambiente, 1)
 
     @override_settings(CATALOGOS_EN_MEMORIA_SEGUNDOS=300)
     def test_con_los_catalogos_en_memoria_crear_no_los_consulta(self):

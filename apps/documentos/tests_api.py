@@ -431,9 +431,46 @@ class DocumentoAPITests(APITestCase):
         resp = self.client.get(self._url("pdf/"))
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
+    # --- El ambiente lo trae el documento -----------------------------------
+
+    def test_el_ambiente_es_obligatorio(self):
+        payload = self._payload_documento()
+        del payload["ambiente"]
+
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertIn("ambiente", errores_por_campo(resp))
+
+    def test_fuera_de_prod_no_crea_con_ambiente_1(self):
+        payload = self._payload_documento()
+        payload["ambiente"] = 1
+
+        for entorno in ("dev", "test"):
+            with self.subTest(entorno=entorno), override_settings(ENV=entorno):
+                resp = self.client.post(
+                    "/api/documentos/documento/", payload, format="json"
+                )
+                self.assertEqual(
+                    resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data
+                )
+                self.assertIn("ambiente", errores_por_campo(resp))
+                self.assertIn("ambiente_bloqueado", codigos(resp))
+
+    @override_settings(ENV="prod")
+    def test_en_prod_crea_con_el_ambiente_que_venga(self):
+        payload = self._payload_documento()
+        payload["ambiente"] = 1
+
+        resp = self.client.post("/api/documentos/documento/", payload, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(Documento.objects.get(pk=resp.data["id"]).ambiente, 1)
+
     def _payload_documento(self):
         c = self.cat
         return {
+            "ambiente": 2,
             "documento_tipo": DocumentoTipo.objects.get(
                 codigo=DocumentoTipo.Codigo.FACTURA_VENTA
             ).id,
@@ -1009,6 +1046,7 @@ class DocumentoAPITests(APITestCase):
         tipo = DocumentoTipo.objects.get(codigo=DocumentoTipo.Codigo.NOTA_CREDITO)
         payload = self._payload_documento()
         payload.update({
+            "ambiente": 2,
             "documento_tipo": tipo.id,
             "numero_resolucion": "",
             "documento_referencia": str(self.documento.id),
@@ -1258,6 +1296,7 @@ class DocumentoAPITests(APITestCase):
         tipo = DocumentoTipo.objects.get(codigo=DocumentoTipo.Codigo.NOTA_CREDITO)
         payload = self._payload_documento()
         payload.update({
+            "ambiente": 2,
             "documento_tipo": tipo.id,
             "numero_resolucion": "",
             "documento_referencia": str(self.documento.id),
@@ -1278,6 +1317,7 @@ class DocumentoAPITests(APITestCase):
         tipo = DocumentoTipo.objects.get(codigo=DocumentoTipo.Codigo.NOTA_CREDITO)
         payload = self._payload_documento()
         payload.update({
+            "ambiente": 2,
             "documento_tipo": tipo.id,
             "numero_resolucion": "",
             "documento_referencia": str(self.documento.id),
@@ -1648,6 +1688,7 @@ class DocumentoAPITests(APITestCase):
         """La nota no se numera con resolución: manda la clave vacía y se crea."""
         payload = self._payload_documento()
         payload.update({
+            "ambiente": 2,
             "documento_tipo": DocumentoTipo.objects.get(
                 codigo=DocumentoTipo.Codigo.NOTA_CREDITO
             ).id,
@@ -1666,6 +1707,7 @@ class DocumentoAPITests(APITestCase):
         payload = self._payload_documento()
         tipo = DocumentoTipo.objects.get(codigo=DocumentoTipo.Codigo.NOTA_CREDITO)
         payload.update({
+            "ambiente": 2,
             "documento_tipo": tipo.id,
             "documento_referencia": str(self.documento.id),
             "concepto_correccion": Documento.ConceptoNotaCredito.ANULACION,

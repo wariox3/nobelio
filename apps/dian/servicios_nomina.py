@@ -120,8 +120,7 @@ def generar_y_firmar_nomina(nomina, *, firmador=None, ambiente=None, **cred):
     from apps.nomina import models as nom
     from apps.dian import nomina as xml_nomina
 
-    # El de la nómina, que lo heredó del ``ambiente_nomina`` de su emisor —la
-    # DIAN habilita la nómina aparte de la facturación—. Antes se resolvía con
+    # El de la nómina, que lo trae desde que se creó. Antes se resolvía con
     # el ajuste global y se escribía encima del campo, así que una nómina
     # creada como de prueba se firmaba como producción en cuanto el despliegue
     # pasaba a producción.
