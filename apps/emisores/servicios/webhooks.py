@@ -30,7 +30,7 @@ import requests
 from django.utils import timezone
 
 from apps.documentos.models import Documento, DocumentoEstado
-from apps.emisores.models import WebhookAviso
+from apps.emisores.models import Webhook, WebhookAviso
 from apps.nucleo.colas import encolar
 from apps.nucleo.registro import campos
 
@@ -60,6 +60,11 @@ BANDERA_POR_TIPO = {
 TIPO_PRUEBA = "prueba"
 
 MENSAJE_SIN_SECRETO = "El webhook no tiene secreto: sin él no se puede firmar."
+MENSAJE_PRUEBA_SIN_EMISOR = (
+    "El webhook es de una cuenta: indique en 'emisor' con cuál de sus emisores "
+    "probarlo."
+)
+MENSAJE_PRUEBA_EMISOR_AJENO = "Ese emisor no es de la cuenta del webhook."
 MENSAJE_SIN_REFERENCIA = (
     "El emisor no tiene referencia externa: el aviso no puede decir de qué "
     "cliente es."
@@ -108,7 +113,7 @@ def armar_cuerpo(documento, tipo) -> str:
 
 
 def _crear_avisos(documento, tipo):
-    """Un aviso por cada webhook del emisor que lo pide.
+    """Un aviso por cada webhook que lo pide: los del emisor y los de su cuenta.
 
     Los que no se pueden mandar —webhook sin secreto, emisor sin referencia
     externa— quedan ya `fallido`, con el motivo, para que se vea por qué no
@@ -121,7 +126,9 @@ def _crear_avisos(documento, tipo):
     if documento.envio == Documento.Envio.SET_PRUEBAS:
         return []
 
-    webhooks = list(documento.emisor.webhooks.filter(**{BANDERA_POR_TIPO[tipo]: True}))
+    webhooks = list(
+        Webhook.de(documento.emisor).filter(**{BANDERA_POR_TIPO[tipo]: True})
+    )
     if not webhooks:
         return []
 
@@ -302,7 +309,7 @@ class PruebaImposible(Exception):
     """El webhook no se puede probar: le falta algo del lado de nobelio."""
 
 
-def probar(webhook, *, sesion=None):
+def probar(webhook, *, emisor=None, sesion=None):
     """Manda un aviso de ``tipo: prueba`` al webhook y devuelve lo que respondió.
 
     Va a la misma URL y con la misma firma que los avisos reales; el receptor
@@ -310,15 +317,24 @@ def probar(webhook, *, sesion=None):
     nada. No lleva `documento` ni deja ``WebhookAviso``: el historial es de
     los avisos de verdad.
 
+    El `cliente` es el emisor del webhook. El de una cuenta no tiene uno
+    propio, así que se indica en ``emisor`` con cuál de los suyos probar.
+
     Lanza ``PruebaImposible`` si no hay secreto o el emisor no tiene
     referencia externa: sin eso ni siquiera un aviso real saldría.
     """
-    if not webhook.emisor.referencia_externa.strip():
+    if webhook.emisor_id:
+        emisor = webhook.emisor
+    elif emisor is None:
+        raise PruebaImposible(MENSAJE_PRUEBA_SIN_EMISOR)
+    elif emisor.cuenta_id != webhook.cuenta_id:
+        raise PruebaImposible(MENSAJE_PRUEBA_EMISOR_AJENO)
+    if not emisor.referencia_externa.strip():
         raise PruebaImposible(MENSAJE_SIN_REFERENCIA)
     if not webhook.secreto:
         raise PruebaImposible(MENSAJE_SIN_SECRETO)
 
-    cuerpo = json.dumps({"tipo": TIPO_PRUEBA, "cliente": _cliente(webhook.emisor)})
+    cuerpo = json.dumps({"tipo": TIPO_PRUEBA, "cliente": _cliente(emisor)})
     inicio = time.monotonic()
     try:
         respuesta = _enviar(webhook, cuerpo.encode(), sesion=sesion)

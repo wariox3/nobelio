@@ -1,10 +1,11 @@
-"""Webhooks del emisor."""
+"""Webhooks del emisor o de la cuenta que lo agrupa."""
 from django.core.validators import URLValidator
 from django.db import models
 
 from apps.nucleo.models import ModeloConFechas
 from apps.utilidades.cifrado import ClaveCifradaField
 
+from .cuenta import Cuenta
 from .emisor import Emisor
 
 MENSAJE_URL_WEB = "Tiene que ser una URL http:// o https:// válida."
@@ -15,10 +16,15 @@ validar_url_web = URLValidator(schemes=["http", "https"], message=MENSAJE_URL_WE
 
 
 class Webhook(ModeloConFechas):
-    """Una URL del emisor a la que se le avisa de lo que pasa con sus documentos.
+    """Una URL a la que se le avisa de lo que pasa con los documentos.
 
-    Un emisor puede tener varios. Las banderas dicen de qué se le avisa a cada
-    uno: de la validación de la DIAN y de la notificación al adquiriente.
+    Es de un emisor o de una cuenta, nunca de los dos (``Meta.constraints``).
+    El de la cuenta vale para todos sus emisores, los de hoy y los que entren
+    después: es la URL del ERP que los integra, registrada una sola vez. Se
+    **suma** a los del emisor: un documento avisa a los dos.
+
+    Puede haber varios. Las banderas dicen de qué se le avisa a cada uno: de
+    la validación de la DIAN y de la notificación al adquiriente.
     """
 
     nombre = models.CharField("nombre", max_length=150)
@@ -40,8 +46,18 @@ class Webhook(ModeloConFechas):
     emisor = models.ForeignKey(
         Emisor,
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="webhooks",
         verbose_name="emisor",
+    )
+    cuenta = models.ForeignKey(
+        Cuenta,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="webhooks",
+        verbose_name="cuenta",
     )
 
     class Meta:
@@ -49,6 +65,23 @@ class Webhook(ModeloConFechas):
         verbose_name = "webhook"
         verbose_name_plural = "webhooks"
         ordering = ["-creado_en"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(emisor__isnull=False, cuenta__isnull=True)
+                    | models.Q(emisor__isnull=True, cuenta__isnull=False)
+                ),
+                name="emi_webhook_de_emisor_o_de_cuenta",
+            ),
+        ]
 
     def __str__(self):
-        return f"{self.nombre} ({self.emisor})"
+        return f"{self.nombre} ({self.emisor or self.cuenta})"
+
+    @classmethod
+    def de(cls, emisor):
+        """Los webhooks que aplican a ``emisor``: los suyos y los de su cuenta."""
+        filtro = models.Q(emisor=emisor)
+        if emisor.cuenta_id:
+            filtro |= models.Q(cuenta_id=emisor.cuenta_id)
+        return cls.objects.filter(filtro)

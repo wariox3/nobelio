@@ -48,7 +48,8 @@ la nómina que la DIAN aceptó.
 - **API REST** (DRF) que orquesta todo el ciclo de vida.
 - **Emisión en segundo plano** con Celery y RabbitMQ: crear un documento lo
   encola para firmarlo y enviarlo, y al aceptarse se avisa a los webhooks del
-  emisor.
+  emisor y a los de su cuenta (`/api/emisores/webhook/` con `cuenta` en vez de
+  `emisor`: uno solo vale para todos los emisores que agrupa).
 
 ---
 
@@ -404,7 +405,7 @@ curl -X POST http://localhost:8000/api/documentos/documento/ \
 **Crear el documento ya lo emite**: el 201 sale en `borrador` y un worker de
 Celery lo firma y lo envía (`DOCUMENTOS_EMITIR_AL_CREAR`). El resultado se lee
 en el documento (`GET …/documento/<id>/`, o filtrando la lista por `estado`), y
-si el emisor tiene webhooks, llega por el aviso de validación. La tarea no
+si el emisor o su cuenta tienen webhooks, llega por el aviso de validación. La tarea no
 reintenta: lo que se quede a medias —la DIAN no respondió, el broker estaba
 caído— se termina con `emitir/`, que hace exactamente lo mismo en la petición.
 
