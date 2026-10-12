@@ -8880,6 +8880,12 @@ components:
           type: boolean
           readOnly: true
           title: Respuesta de validado
+        referencia_externa:
+          type: string
+          description: 'Id del documento en el sistema que lo creó (el ERP que integra).
+            Opcional y sin formato fijo: nobelio solo lo guarda, lo devuelve y deja
+            buscar por él.'
+          maxLength: 100
         errores:
           type: array
           items:
@@ -9081,6 +9087,12 @@ components:
             * `2` - Habilitación
           minimum: 0
           maximum: 32767
+        referencia_externa:
+          type: string
+          description: 'Id del documento en el sistema que lo creó (el ERP que integra).
+            Opcional y sin formato fijo: nobelio solo lo guarda, lo devuelve y deja
+            buscar por él.'
+          maxLength: 100
         adquiriente:
           $ref: '#/components/schemas/Adquiriente'
         prefijo:
@@ -9246,6 +9258,12 @@ components:
         numero_resolucion:
           type: string
           writeOnly: true
+        referencia_externa:
+          type: string
+          description: 'Id del documento en el sistema que lo creó (el ERP que integra).
+            Opcional y sin formato fijo: nobelio solo lo guarda, lo devuelve y deja
+            buscar por él.'
+          maxLength: 100
         adquiriente:
           $ref: '#/components/schemas/AdquirienteRequest'
         prefijo:
@@ -9811,6 +9829,12 @@ components:
           type: boolean
           readOnly: true
           title: Respuesta de validado
+        referencia_externa:
+          type: string
+          description: 'Id del documento en el sistema que lo creó (el ERP que integra).
+            Opcional y sin formato fijo: nobelio solo lo guarda, lo devuelve y deja
+            buscar por él.'
+          maxLength: 100
         concepto_correccion:
           type: string
           title: Concepto de corrección

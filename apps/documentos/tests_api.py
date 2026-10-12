@@ -523,6 +523,37 @@ class DocumentoAPITests(APITestCase):
             "/api/documentos/documento/", self._payload_documento(), format="json"
         )
 
+    # --- Referencia externa --------------------------------------------------
+
+    def test_la_referencia_externa_se_guarda_y_se_devuelve(self):
+        datos = {**self._payload_documento(), "referencia_externa": "FAC-4821"}
+
+        resp = self.client.post("/api/documentos/documento/", datos, format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["referencia_externa"], "FAC-4821")
+        pk = resp.data["id"]
+        self.assertEqual(Documento.objects.get(pk=pk).referencia_externa, "FAC-4821")
+        detalle = self.client.get(f"/api/documentos/documento/{pk}/")
+        self.assertEqual(detalle.data["referencia_externa"], "FAC-4821")
+
+    def test_la_referencia_externa_es_opcional(self):
+        resp = self._crear()
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["referencia_externa"], "")
+
+    def test_se_busca_por_referencia_externa(self):
+        datos = {**self._payload_documento(), "referencia_externa": "FAC-4821"}
+        pk = self.client.post("/api/documentos/documento/", datos, format="json").data["id"]
+
+        con = self.client.get("/api/documentos/documento/?referencia_externa=FAC-4821")
+        parecida = self.client.get("/api/documentos/documento/?referencia_externa=FAC-48")
+
+        self.assertEqual([d["id"] for d in con.data["results"]], [pk])
+        self.assertEqual(con.data["results"][0]["referencia_externa"], "FAC-4821")
+        self.assertEqual(parecida.data["results"], [])
+
     # --- Emisión en segundo plano (Celery) ----------------------------------
     # La suite apaga DOCUMENTOS_EMITIR_AL_CREAR y corre las tareas en el acto;
     # estas pruebas lo encienden. La DIAN va simulada siempre.

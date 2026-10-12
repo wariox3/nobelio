@@ -9,7 +9,7 @@ from apps.documentos.models import DocumentoNotificacion
 from apps.documentos.servicios import (
     ErrorEnvioCorreo, ErrorNotificacion, empaquetar_notificacion, enviar_notificacion,
 )
-from apps.documentos.servicios.notificacion import Paquete
+from apps.documentos.servicios.notificacion import Paquete, payload_zinc
 from apps.documentos.tests_utils import crear_documento_factura
 from apps.nucleo.tests_utils import errores_por_campo
 from apps.utilidades.zinc import ZincNoDisponible
@@ -106,6 +106,34 @@ class RegistroTests(TestCase):
             list(DocumentoNotificacion.objects.values_list("estado", flat=True)),
             ["fallido", "enviado"],
         )
+
+
+class IdentificacionEnZincTests(TestCase):
+    """Con qué ids se identifica el documento en el cuerpo que va a Zinc."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.documento = crear_documento_factura()["documento"]
+
+    def _cuerpo(self):
+        return payload_zinc(self.documento, _paquete(), asunto="a", html="<p>h</p>")
+
+    def test_lleva_la_referencia_externa_y_el_id_de_nobelio(self):
+        self.documento.referencia_externa = "FAC-4821"
+
+        cuerpo = self._cuerpo()
+
+        self.assertEqual(cuerpo["documentoId"], "FAC-4821")
+        self.assertEqual(cuerpo["documentoUUID"], str(self.documento.pk))
+        self.assertEqual(cuerpo["operador"], self.documento.emisor_id)
+        self.assertEqual(cuerpo["documentoNumero"], self.documento.numero)
+
+    def test_sin_referencia_externa_el_id_va_nulo(self):
+        cuerpo = self._cuerpo()
+
+        self.assertIn("documentoId", cuerpo)
+        self.assertIsNone(cuerpo["documentoId"])
+        self.assertEqual(cuerpo["documentoUUID"], str(self.documento.pk))
 
 
 class CorreoTests(TestCase):
