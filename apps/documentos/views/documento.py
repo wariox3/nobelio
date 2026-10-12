@@ -81,6 +81,10 @@ RESPUESTA_NOTIFICACION = inline_serializer(
         "respuesta": campos.DictField(help_text="Respuesta cruda de la pasarela de correo."),
     },
 )
+RESPUESTA_DESMARCADO = inline_serializer(
+    name="DesmarcarRespuestaValidadoRespuesta",
+    fields={"respuesta_validado": campos.BooleanField()},
+)
 RESPUESTA_VALIDADO = inline_serializer(
     name="RespuestaValidadoRespuesta",
     fields={
@@ -94,6 +98,9 @@ MENSAJE_RESPUESTA_NO_ACEPTADO = (
     "está '{estado}'."
 )
 MENSAJE_RESPUESTA_YA_VALIDADO = "La validación de este documento ya fue respondida."
+MENSAJE_DESMARCAR_SIN_RESPUESTA = (
+    "Este documento no tiene respuesta de validado: no hay nada que desmarcar."
+)
 MENSAJE_RESPUESTA_SIN_200 = (
     "Ningún webhook respondió 200 ({resultados}). El documento sigue sin "
     "respuesta de validado; el detalle de cada aviso está en "
@@ -462,6 +469,34 @@ class DocumentoViewSet(
             "respuesta_validado": True,
             "avisos": WebhookAvisoSerializer(avisos, many=True).data,
         })
+
+    @extend_schema(
+        request=None,
+        responses={200: RESPUESTA_DESMARCADO, 400: ErrorSerializer},
+    )
+    @action(detail=True, methods=["post"], url_path="desmarcar-respuesta-validado")
+    def desmarcar_respuesta_validado(self, request, pk=None):
+        """Quita la marca `respuesta_validado` para poder avisar la validación otra vez.
+
+        ``POST /api/documentos/documento/{id}/desmarcar-respuesta-validado/``,
+        sin cuerpo. El documento tiene que tener `respuesta_validado = true`;
+        si no, responde 400.
+
+        Solo quita la marca: no envía nada ni toca los avisos ya enviados, que
+        siguen en ``/api/emisores/webhook-aviso/``. El documento vuelve a salir
+        con ``?respuesta_validado=false`` y ``respuesta-validado/`` lo avisa de
+        nuevo.
+
+        Si el emisor no tiene webhook de validación, ese ``respuesta-validado/``
+        lo vuelve a marcar sin enviar nada: no hay a quién avisar.
+        """
+        documento = self.get_object()
+        if not documento.respuesta_validado:
+            raise ErrorSolicitud(MENSAJE_DESMARCAR_SIN_RESPUESTA)
+
+        documento.respuesta_validado = False
+        documento.save(update_fields=["respuesta_validado", "actualizado_en"])
+        return Response({"respuesta_validado": False})
 
     @extend_schema(
         responses={(200, "application/xml"): OpenApiTypes.BINARY, 400: ErrorSerializer},
