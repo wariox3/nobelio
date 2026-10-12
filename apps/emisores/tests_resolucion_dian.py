@@ -127,6 +127,7 @@ class ResolucionDianTests(APITestCase):
         resp = self.client.get(self.url_consulta, {"software": 999999})
 
         self.assertEqual(resp.status_code, 404, resp.data)
+        self.assertEqual(resp.data["detail"], "No existe un software con id 999999.")
 
     def test_consulta_con_software_fuera_del_alcance_es_403(self):
         ajeno = self._software(
@@ -169,7 +170,8 @@ class ResolucionDianTests(APITestCase):
         with patch(CONSULTAR, side_effect=self._por_software(respuestas)) as consultar:
             resp = self._importar_emisor()
 
-        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data, {"creadas": 2})
         self.assertEqual(consultar.call_count, 2)
         self.assertEqual(
             {r.prefijo: r.tipo_factura.codigo for r in Resolucion.objects.all()},
@@ -182,7 +184,7 @@ class ResolucionDianTests(APITestCase):
         with patch(CONSULTAR, return_value=_respuesta(_rango())) as consultar:
             resp = self._importar_emisor()
 
-        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(resp.status_code, 200, resp.data)
         consultar.assert_called_once_with(
             self.emisor, software=self.facturacion, ambiente=Ambiente.PRUEBAS,
         )
@@ -208,8 +210,9 @@ class ResolucionDianTests(APITestCase):
         with patch(CONSULTAR, side_effect=self._por_software(respuestas)):
             resp = self._importar_emisor()
 
-        self.assertEqual(resp.status_code, 201, resp.data)
-        self.assertEqual([r["prefijo"] for r in resp.data], ["FE"])
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data, {"creadas": 1})
+        self.assertEqual(Resolucion.objects.get().prefijo, "FE")
 
     def test_por_emisor_sin_rangos_en_ninguno_devuelve_el_mensaje(self):
         self._aceptar(self.facturacion)
@@ -251,7 +254,7 @@ class ResolucionDianTests(APITestCase):
         with patch(CONSULTAR, return_value=_respuesta(_rango())) as consultar:
             resp = self._importar_emisor()
 
-        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(resp.status_code, 200, resp.data)
         consultar.assert_called_once_with(
             self.emisor, software=self.facturacion, ambiente=Ambiente.PRUEBAS,
         )
@@ -260,7 +263,6 @@ class ResolucionDianTests(APITestCase):
         self.assertEqual(resolucion.tipo_factura.codigo, "01")
         self.assertEqual(resolucion.clave_tecnica, "clave-secreta")
         self.assertEqual(resolucion.consecutivo_actual, 1)
-        self.assertNotIn("clave_tecnica", resp.data[0])
 
     def test_no_reimporta_las_que_ya_existen(self):
         self._aceptar(self.facturacion)
@@ -271,10 +273,15 @@ class ResolucionDianTests(APITestCase):
             resp = self._importar_emisor()
 
         self.assertEqual(repetida.status_code, 200, repetida.data)
-        self.assertEqual(repetida.data, [])
-        self.assertEqual(resp.status_code, 201, resp.data)
-        self.assertEqual([r["prefijo"] for r in resp.data], ["FE2"])
+        self.assertEqual(repetida.data, {"creadas": 0})
+        self.assertEqual(resp.data, {"creadas": 1})
         self.assertEqual(Resolucion.objects.count(), 2)
+
+    def test_importar_con_emisor_inexistente_es_404_con_su_id(self):
+        resp = self.client.post(self.url_importar, {"emisor": 999999}, format="json")
+
+        self.assertEqual(resp.status_code, 404, resp.data)
+        self.assertEqual(resp.data["detail"], "No existe un emisor con id 999999.")
 
     def test_importar_sin_emisor_es_400(self):
         resp = self.client.post(self.url_importar, {}, format="json")
@@ -293,123 +300,178 @@ class ResolucionDianTests(APITestCase):
 
     # --- validar ------------------------------------------------------------
 
-    def _validar(self, numero="18764000001", tipo="facturacion", emisor=None):
+    def _validar(self, *resoluciones, emisor=None):
         return self.client.post(
             self.url_validar,
             {
                 "emisor": (emisor or self.emisor).pk,
-                "tipo_software": tipo,
-                "numero_resolucion": numero,
+                "resoluciones": list(resoluciones),
             },
             format="json",
         )
 
-    def test_valida_importa_y_devuelve_la_resolucion(self):
+    def _pedida(self, **cambios):
+        """La resolución de `_rango()` tal como la mandaría el ERP."""
+        return {
+            "numero_resolucion": "18764000001", "prefijo": "FE",
+            "rango_desde": 1, "rango_hasta": 5000,
+            "vigente_desde": "2026-01-10", "vigente_hasta": "2028-01-10",
+            **cambios,
+        }
+
+    def test_valida_importando_antes_y_devuelve_lo_registrado(self):
         self._aceptar(self.facturacion)
-        rangos = _respuesta(_rango(), _rango("FE2", "18764000002"))
-        with patch(CONSULTAR, return_value=rangos) as consultar:
-            resp = self._validar()
+        with patch(CONSULTAR, return_value=_respuesta(_rango())) as consultar:
+            resp = self._validar(self._pedida())
 
         self.assertEqual(resp.status_code, 200, resp.data)
         consultar.assert_called_once_with(
             self.emisor, software=self.facturacion, ambiente=Ambiente.PRUEBAS,
         )
-        self.assertEqual(len(resp.data), 1)
-        self.assertEqual(resp.data[0]["numero_resolucion"], "18764000001")
-        self.assertEqual(resp.data[0]["prefijo"], "FE")
-        self.assertNotIn("clave_tecnica", resp.data[0])
-        # Hace el importar completo: entra también la que no se preguntó.
-        self.assertEqual(Resolucion.objects.count(), 2)
-        self.assertEqual(
-            Resolucion.objects.get(prefijo="FE").clave_tecnica, "clave-secreta"
-        )
-
-    def test_valida_la_que_ya_estaba_importada_sin_duplicarla(self):
-        self._aceptar(self.facturacion)
-        with patch(CONSULTAR, return_value=_respuesta(_rango())):
-            self._validar()
-            resp = self._validar()
-
-        self.assertEqual(resp.status_code, 200, resp.data)
         self.assertEqual(Resolucion.objects.count(), 1)
+        self.assertEqual(resp.json(), [{
+            "numero_resolucion": "18764000001",
+            "validado": True,
+            "inconsistencia": False,
+            "prefijo": "FE",
+            "rango_desde": 1, "rango_hasta": 5000,
+            "vigente_desde": "2026-01-10", "vigente_hasta": "2028-01-10",
+        }])
 
-    def test_devuelve_todos_los_prefijos_de_la_resolucion(self):
+    def test_cada_dato_que_no_coincide_marca_inconsistencia(self):
         self._aceptar(self.facturacion)
-        with patch(CONSULTAR, return_value=_respuesta(_rango(), _rango("FE2"))):
-            resp = self._validar()
+        distintos = {
+            "rango_desde": 2, "rango_hasta": 4000,
+            "vigente_desde": "2026-01-11", "vigente_hasta": "2029-01-10",
+        }
+        for campo, valor in distintos.items():
+            with self.subTest(campo=campo):
+                with patch(CONSULTAR, return_value=_respuesta(_rango())):
+                    resp = self._validar(self._pedida(**{campo: valor}))
 
-        self.assertEqual(resp.status_code, 200, resp.data)
-        self.assertEqual([r["prefijo"] for r in resp.data], ["FE", "FE2"])
+                self.assertEqual(resp.status_code, 200, resp.data)
+                entrada = resp.json()[0]
+                self.assertTrue(entrada["validado"])
+                self.assertTrue(entrada["inconsistencia"])
+                # Se devuelve lo registrado, no lo que se envió.
+                self.assertEqual(entrada[campo], self._pedida()[campo])
 
-    def test_sin_software_aceptado_de_ese_tipo_es_400(self):
-        # El emisor tiene el software, pero sin el Set de Pruebas aceptado.
-        with patch(CONSULTAR) as consultar:
-            resp = self._validar()
-
-        self.assertEqual(resp.status_code, 400, resp.data)
-        self.assertEqual(resp.data["errores"][0]["codigo"], "software_no_aceptado")
-        self.assertIn("facturación electrónica", resp.data["detail"])
-        consultar.assert_not_called()
-
-    def test_el_software_aceptado_de_otro_tipo_no_sirve(self):
-        self._aceptar(self.pos)
-        with patch(CONSULTAR) as consultar:
-            resp = self._validar()
-
-        self.assertEqual(resp.status_code, 400, resp.data)
-        self.assertEqual(resp.data["errores"][0]["codigo"], "software_no_aceptado")
-        consultar.assert_not_called()
-
-    def test_resolucion_que_la_dian_no_devuelve_es_400(self):
+    def test_solo_se_compara_lo_que_se_envia(self):
         self._aceptar(self.facturacion)
         with patch(CONSULTAR, return_value=_respuesta(_rango())):
-            resp = self._validar(numero="99999")
+            resp = self._validar({"numero_resolucion": "18764000001"})
 
-        self.assertEqual(resp.status_code, 400, resp.data)
-        self.assertEqual(
-            resp.data["errores"][0]["codigo"], "resolucion_no_asociada"
+        entrada = resp.json()[0]
+        self.assertTrue(entrada["validado"])
+        self.assertFalse(entrada["inconsistencia"])
+        self.assertEqual(entrada["prefijo"], "FE")
+        self.assertEqual(entrada["rango_hasta"], 5000)
+
+    def test_la_que_el_emisor_no_tiene_no_valida(self):
+        self._aceptar(self.facturacion)
+        with patch(CONSULTAR, return_value=_respuesta(_rango())):
+            resp = self._validar(
+                self._pedida(), self._pedida(numero_resolucion="99999"),
+            )
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        valida, ausente = resp.json()
+        self.assertTrue(valida["validado"])
+        self.assertEqual(ausente, {
+            "numero_resolucion": "99999",
+            "validado": False,
+            "inconsistencia": False,
+            "prefijo": "FE",
+            "rango_desde": None, "rango_hasta": None,
+            "vigente_desde": None, "vigente_hasta": None,
+        })
+
+    def test_el_prefijo_enviado_tiene_que_coincidir(self):
+        self._aceptar(self.facturacion)
+        with patch(CONSULTAR, return_value=_respuesta(_rango())):
+            resp = self._validar(self._pedida(prefijo="OTRO"))
+
+        self.assertFalse(resp.json()[0]["validado"])
+
+    def test_sin_prefijo_prefiere_el_registro_que_coincide(self):
+        self._aceptar(self.facturacion)
+        otro = _rango("AA")
+        otro.rango_hasta = 9000
+        with patch(CONSULTAR, return_value=_respuesta(otro, _rango())):
+            pedida = self._pedida()
+            del pedida["prefijo"]
+            resp = self._validar(pedida)
+
+        entrada = resp.json()[0]
+        self.assertEqual(entrada["prefijo"], "FE")
+        self.assertFalse(entrada["inconsistencia"])
+
+    def test_valida_la_registrada_que_la_dian_no_devuelve(self):
+        """Se contrasta con la base: una cargada a mano también cuenta."""
+        self._aceptar(self.facturacion)
+        Resolucion.objects.create(
+            emisor=self.emisor, tipo_factura=TipoFactura.objects.get(codigo="01"),
+            prefijo="MAN", numero_resolucion="555", fecha_resolucion="2026-01-01",
+            rango_desde=1, rango_hasta=100,
+            vigente_desde="2026-01-01", vigente_hasta="2027-01-01",
         )
-        self.assertIn("99999", resp.data["detail"])
+        with patch(CONSULTAR, return_value=_respuesta(_rango())):
+            resp = self._validar({"numero_resolucion": "555"})
+
+        self.assertTrue(resp.json()[0]["validado"])
+
+    def test_sin_resoluciones_no_hace_nada(self):
+        self._aceptar(self.facturacion)
+        with patch(CONSULTAR) as consultar:
+            vacia = self._validar()
+            ausente = self.client.post(
+                self.url_validar, {"emisor": self.emisor.pk}, format="json",
+            )
+
+        for resp in (vacia, ausente):
+            self.assertEqual(resp.status_code, 200, resp.data)
+            self.assertEqual(resp.json(), [])
+        consultar.assert_not_called()
         self.assertFalse(Resolucion.objects.exists())
 
-    def test_la_guardada_que_la_dian_ya_no_devuelve_no_valida(self):
+    def test_validar_sin_software_aceptado_es_400(self):
+        with patch(CONSULTAR) as consultar:
+            resp = self._validar(self._pedida())
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertEqual(resp.data["errores"][0]["codigo"], "software_no_aceptado")
+        consultar.assert_not_called()
+
+    def test_validar_sin_rangos_en_la_dian_devuelve_su_mensaje(self):
         self._aceptar(self.facturacion)
-        with patch(CONSULTAR, return_value=_respuesta(_rango())):
-            self._validar()
         sin_rangos = soap.RespuestaRangos(
             codigo="301", descripcion="No registra prefijos asociados", rangos=[],
         )
         with patch(CONSULTAR, return_value=sin_rangos):
-            resp = self._validar()
+            resp = self._validar(self._pedida())
 
         self.assertEqual(resp.status_code, 400, resp.data)
-        self.assertEqual(
-            resp.data["errores"][0]["codigo"], "resolucion_no_asociada"
-        )
+        self.assertEqual(resp.data["detail"], "No registra prefijos asociados")
 
-    def test_validar_con_nomina_es_400(self):
-        self._aceptar(self._software(SoftwareDian.Tipo.NOMINA, "sw-nomina"))
-        with patch(CONSULTAR) as consultar:
-            resp = self._validar(tipo="nomina")
-
-        self.assertEqual(resp.status_code, 400, resp.data)
-        consultar.assert_not_called()
-
-    def test_validar_con_emisor_fuera_del_alcance_es_400(self):
+    def test_validar_con_emisor_fuera_del_alcance_es_403(self):
         ajeno = _crear_emisor(self.cat, nit="900123456")
-        self._aceptar(self._software(
-            SoftwareDian.Tipo.FACTURACION, "sw-ajeno", emisor=ajeno,
-        ))
         with patch(CONSULTAR) as consultar:
-            resp = self._validar(emisor=ajeno)
+            con_lista = self._validar(self._pedida(), emisor=ajeno)
+            sin_lista = self._validar(emisor=ajeno)
 
-        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertEqual(con_lista.status_code, 403, con_lista.data)
+        self.assertEqual(sin_lista.status_code, 403, sin_lista.data)
         consultar.assert_not_called()
 
-    def test_validar_exige_sus_tres_campos(self):
-        resp = self.client.post(self.url_validar, {}, format="json")
+    def test_validar_con_emisor_inexistente_es_404(self):
+        resp = self.client.post(self.url_validar, {"emisor": 999999}, format="json")
 
-        self.assertEqual(resp.status_code, 400, resp.data)
-        mensajes = " ".join(e["mensaje"] for e in resp.data["errores"])
-        for campo in ("emisor", "tipo_software", "numero_resolucion"):
-            self.assertIn(campo, mensajes)
+        self.assertEqual(resp.status_code, 404, resp.data)
+
+    def test_validar_exige_emisor_y_numero_de_resolucion(self):
+        sin_emisor = self.client.post(self.url_validar, {}, format="json")
+        sin_numero = self._validar({"prefijo": "FE"})
+
+        self.assertEqual(sin_emisor.status_code, 400, sin_emisor.data)
+        self.assertEqual(sin_numero.status_code, 400, sin_numero.data)
+        self.assertIn("numero_resolucion", sin_numero.data["errores"][0]["mensaje"])

@@ -1,5 +1,6 @@
 """Pruebas del manejo homogéneo de errores de la API."""
 from botocore.exceptions import ClientError, EndpointConnectionError
+from django.http import Http404
 from django.test import SimpleTestCase
 from rest_framework import serializers
 from rest_framework.exceptions import ErrorDetail, NotFound, ValidationError
@@ -125,6 +126,19 @@ def _client_error(codigo, http, mensaje="denegado"):
         },
         "HeadObject",
     )
+
+
+class NoEncontradoDeDjangoTests(SimpleTestCase):
+    """El 404 de `get_object_or_404` no sale con su mensaje en inglés."""
+
+    def test_se_cambia_por_el_404_de_drf(self):
+        respuesta = exception_handler(
+            Http404("No Emisor matches the given query."), {},
+        )
+
+        self.assertEqual(respuesta.status_code, 404)
+        self.assertEqual(respuesta.data["errores"][0]["codigo"], "not_found")
+        self.assertNotIn("matches", respuesta.data["detail"])
 
 
 class ErroresDeAlmacenamientoTests(SimpleTestCase):

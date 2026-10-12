@@ -4691,7 +4691,11 @@ paths:
         Crea solo las resoluciones que el emisor todavía no tiene (se comparan
         prefijo + número de resolución), guardando la ``clave_tecnica`` en el
         servidor. Las que ya existen no se tocan: si la DIAN cambió un rango se
-        edita a mano. No devuelve la clave técnica.
+        edita a mano.
+
+        Responde 200 con ``{"creadas": <n>}``: confirma que el proceso corrió y
+        cuántas resoluciones nuevas dejó. No las devuelve; se leen con el
+        listado, ``GET /api/emisores/resolucion/?emisor=<id>``.
 
         Si la DIAN no devuelve rangos para ninguno de los softwares consultados
         responde 400 con su mensaje; si los devuelve para alguno, se importa lo
@@ -4706,13 +4710,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ResolucionRequest'
+              $ref: '#/components/schemas/ImportarResolucionesSolicitudRequest'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/ResolucionRequest'
+              $ref: '#/components/schemas/ImportarResolucionesSolicitudRequest'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/ResolucionRequest'
+              $ref: '#/components/schemas/ImportarResolucionesSolicitudRequest'
         required: true
       security:
       - LlaveApi: []
@@ -4721,7 +4725,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Resolucion'
+                $ref: '#/components/schemas/ImportarResolucionesRespuesta'
           description: ''
         '429':
           description: Error
@@ -4745,20 +4749,34 @@ paths:
     post:
       operationId: emisores_resolucion_validar_create
       description: |-
-        Comprueba en la DIAN que una resolución está asociada al emisor.
+        Contrasta una lista de resoluciones con las que el emisor tiene.
 
-        ``POST /api/emisores/resolucion/validar/`` con ``{"emisor": <id>,
-        "tipo_software": "facturacion", "numero_resolucion": "18764..."}``.
+        ``POST /api/emisores/resolucion/validar/`` con::
 
-        Busca el software de ese tipo que el emisor tiene con el Set de Pruebas
-        aceptado; si no lo hay responde 400 (``software_no_aceptado``). Con él
-        hace lo mismo que ``importar-dian`` —consulta GetNumberingRange y crea
-        las resoluciones que falten, con su ``clave_tecnica``— y busca el
-        número entre lo que devolvió la DIAN.
+            {"emisor": <id>, "resoluciones": [{
+                "numero_resolucion": "18764...", "prefijo": "FE",
+                "rango_desde": 990000000, "rango_hasta": 995000000,
+                "vigente_desde": "2019-01-19", "vigente_hasta": "2030-01-19"
+            }]}
 
-        Si está, responde 200 con las resoluciones de ese número, ya guardadas:
-        es una lista porque la DIAN puede autorizar varios prefijos con una
-        misma resolución. Si no está, 400 (``resolucion_no_asociada``).
+        ``resoluciones`` es opcional: sin ella, o vacía, no hace nada y responde
+        200 con una lista vacía, sin consultar a la DIAN.
+
+        Primero corre el mismo proceso que ``importar-dian`` —y responde sus
+        mismos errores—, para comparar contra lo que la DIAN tiene hoy. Después
+        busca cada resolución de la lista entre las del emisor, por número y,
+        si se indica, por prefijo.
+
+        Responde 200 con una entrada por cada resolución recibida, en el mismo
+        orden:
+
+        - ``validado``: si el emisor tiene esa resolución.
+        - ``inconsistencia``: si la tiene pero alguno de los cuatro datos
+          enviados (``rango_desde``, ``rango_hasta``, ``vigente_desde``,
+          ``vigente_hasta``) no coincide con el registrado. Solo se comparan
+          los que se envían.
+        - ``prefijo`` y esos cuatro datos **tal como están registrados**;
+          ``null`` si no se tiene.
       parameters:
       - name: page
         required: false
@@ -4778,13 +4796,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ValidarResolucionRequest'
+              $ref: '#/components/schemas/ValidarResolucionesRequest'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/ValidarResolucionRequest'
+              $ref: '#/components/schemas/ValidarResolucionesRequest'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/ValidarResolucionRequest'
+              $ref: '#/components/schemas/ValidarResolucionesRequest'
         required: true
       security:
       - LlaveApi: []
@@ -4793,7 +4811,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedResolucionList'
+                $ref: '#/components/schemas/PaginatedResolucionValidadaList'
           description: ''
         '429':
           description: Error
@@ -11847,6 +11865,20 @@ components:
       description: |-
         * `devengado` - Devengado
         * `deduccion` - Deducción
+    ImportarResolucionesRespuesta:
+      type: object
+      properties:
+        creadas:
+          type: integer
+      required:
+      - creadas
+    ImportarResolucionesSolicitudRequest:
+      type: object
+      properties:
+        emisor:
+          type: integer
+      required:
+      - emisor
     ModuloEnum:
       enum:
       - facturacion
@@ -13593,6 +13625,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Resolucion'
+    PaginatedResolucionValidadaList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResolucionValidada'
     PaginatedSoftwareDianList:
       type: object
       required:
@@ -14195,6 +14250,31 @@ components:
       - tipo_factura
       - vigente_desde
       - vigente_hasta
+    ResolucionAValidarRequest:
+      type: object
+      description: Una resolución como la tiene quien llama, para contrastarla.
+      properties:
+        numero_resolucion:
+          type: string
+          minLength: 1
+          maxLength: 50
+        prefijo:
+          type: string
+          maxLength: 10
+        rango_desde:
+          type: integer
+          minimum: 0
+        rango_hasta:
+          type: integer
+          minimum: 0
+        vigente_desde:
+          type: string
+          format: date
+        vigente_hasta:
+          type: string
+          format: date
+      required:
+      - numero_resolucion
     ResolucionRequest:
       type: object
       properties:
@@ -14253,6 +14333,46 @@ components:
       - rango_desde
       - rango_hasta
       - tipo_factura
+      - vigente_desde
+      - vigente_hasta
+    ResolucionValidada:
+      type: object
+      description: |-
+        El resultado de ``validar`` para una resolución.
+
+        ``prefijo``, los rangos y las vigencias son los registrados, no los que se
+        enviaron; van en ``null`` cuando el emisor no tiene la resolución.
+      properties:
+        numero_resolucion:
+          type: string
+        validado:
+          type: boolean
+        inconsistencia:
+          type: boolean
+        prefijo:
+          type: string
+          nullable: true
+        rango_desde:
+          type: integer
+          nullable: true
+        rango_hasta:
+          type: integer
+          nullable: true
+        vigente_desde:
+          type: string
+          format: date
+          nullable: true
+        vigente_hasta:
+          type: string
+          format: date
+          nullable: true
+      required:
+      - inconsistencia
+      - numero_resolucion
+      - prefijo
+      - rango_desde
+      - rango_hasta
+      - validado
       - vigente_desde
       - vigente_hasta
     RespuestaValidadoRespuesta:
@@ -14535,22 +14655,18 @@ components:
       - campo
       - ruta
       - valor
-    ValidarResolucionRequest:
+    ValidarResolucionesRequest:
       type: object
-      description: 'Lo que recibe ``validar``: de quién, con qué software y qué número.'
+      description: 'Lo que recibe ``validar``: el emisor y sus resoluciones a contrastar.'
       properties:
         emisor:
           type: integer
-        tipo_software:
-          $ref: '#/components/schemas/SoftwareDianTipoEnum'
-        numero_resolucion:
-          type: string
-          minLength: 1
-          maxLength: 50
+        resoluciones:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResolucionAValidarRequest'
       required:
       - emisor
-      - numero_resolucion
-      - tipo_software
     ValorCatalogoEnum:
       enum:
       - id
