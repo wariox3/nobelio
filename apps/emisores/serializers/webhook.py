@@ -3,7 +3,7 @@ from rest_framework import serializers
 
 from apps.emisores.models import Cuenta, Emisor, Webhook
 from apps.emisores.models.webhook import validar_url_web
-from apps.seguridad.alcance import RelacionDelAlcance, es_staff
+from apps.seguridad.alcance import RelacionDelAlcance, alcance_total
 
 MENSAJE_EMISOR_INMUTABLE = (
     "Un webhook no cambia de emisor: bórrelo y créelo en el otro."
@@ -14,8 +14,9 @@ MENSAJE_CUENTA_INMUTABLE = (
 MENSAJE_EMISOR_O_CUENTA = (
     "Indique el 'emisor' o la 'cuenta' del webhook: uno de los dos, no ambos."
 )
-MENSAJE_CUENTA_SOLO_STAFF = (
-    "Solo el staff de la plataforma registra webhooks de una cuenta."
+MENSAJE_CUENTA_SOLO_ALCANCE_TOTAL = (
+    "Solo el staff o una llave de alcance global registran webhooks de una "
+    "cuenta."
 )
 
 
@@ -27,7 +28,8 @@ class WebhookSerializer(serializers.ModelSerializer):
         required=False, allow_null=True,
     )
     # En vez de `emisor`: el webhook vale para todos los emisores de la cuenta
-    # y se suma a los que cada uno tenga. Solo staff, como las propias cuentas.
+    # y se suma a los que cada uno tenga. Solo para quien alcanza todos los
+    # emisores, como las propias cuentas.
     cuenta = serializers.PrimaryKeyRelatedField(
         queryset=Cuenta.objects.all(), required=False, allow_null=True,
     )
@@ -71,8 +73,11 @@ class WebhookSerializer(serializers.ModelSerializer):
             request = self.context.get("request")
             # Un webhook de cuenta recibe los avisos de todos sus emisores:
             # quien solo alcanza a uno no puede ponerlo.
-            if cuenta is not None and request is not None and not es_staff(request):
+            if (
+                cuenta is not None and request is not None
+                and not alcance_total(request)
+            ):
                 raise serializers.ValidationError(
-                    {"cuenta": MENSAJE_CUENTA_SOLO_STAFF}
+                    {"cuenta": MENSAJE_CUENTA_SOLO_ALCANCE_TOTAL}
                 )
         return attrs

@@ -46,6 +46,11 @@ def es_llave_global(request):
     return bool(llave is not None and llave.alcance_global)
 
 
+def alcance_total(request):
+    """¿El solicitante alcanza todos los emisores? Staff o llave global."""
+    return es_staff(request) or es_llave_global(request)
+
+
 class AlcanceTotal(BasePermission):
     """Solo quien alcanza todos los emisores: el staff o una llave de alcance
     global. Para las operaciones de administración de la plataforma que no
@@ -54,7 +59,7 @@ class AlcanceTotal(BasePermission):
     message = "Solo el staff o una llave de alcance global pueden hacer esto."
 
     def has_permission(self, request, view):
-        return es_staff(request) or es_llave_global(request)
+        return alcance_total(request)
 
 
 def usuario_del_request(request):

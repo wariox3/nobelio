@@ -9,7 +9,7 @@ from apps.emisores import models, serializers
 from apps.emisores.servicios import webhooks
 from apps.nucleo.api import ErrorSolicitud, entero_de_query
 from apps.nucleo.esquema import ErrorSerializer
-from apps.seguridad.alcance import AlcanceEmisorMixin, es_staff
+from apps.seguridad.alcance import AlcanceEmisorMixin
 
 RESPUESTA_PRUEBA = inline_serializer(
     name="WebhookPruebaRespuesta",
@@ -28,7 +28,8 @@ class WebhookViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
     Un webhook es de un `emisor` o de una `cuenta`, uno de los dos. El de la
     cuenta vale para todos sus emisores —también los que entren después— y se
     **suma** a los de cada emisor: un documento avisa a unos y a otros. Los de
-    cuenta solo los ve y los administra el staff.
+    cuenta solo los ve y los administra quien alcanza todos los emisores: el
+    staff o una llave de alcance global.
 
     Puede haber varios. `estado_validado` y `estado_notificado` dicen
     si a ese webhook se le avisa de la validación de la DIAN y de la
@@ -48,10 +49,6 @@ class WebhookViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
-        # Los de cuenta, solo staff, como las cuentas: el mixin ya se los quita
-        # a quien tiene alcance por emisor, pero no a una llave global.
-        if not es_staff(self.request):
-            qs = qs.filter(cuenta__isnull=True)
         params = self.request.query_params
         if emisor := entero_de_query(params, "emisor"):
             qs = qs.filter(emisor=emisor)

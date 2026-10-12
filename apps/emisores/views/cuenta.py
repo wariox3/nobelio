@@ -1,9 +1,9 @@
 """API de las cuentas (agrupadores de emisores)."""
 from rest_framework import viewsets
-from rest_framework.permissions import IsAdminUser
 
 from apps.emisores import models, serializers
 from apps.nucleo.api import ErrorSolicitud
+from apps.seguridad.alcance import AlcanceTotal
 
 MENSAJE_CUENTA_CON_EMISORES = (
     "La cuenta tiene emisores. Sácalos de la cuenta antes de borrarla."
@@ -11,15 +11,17 @@ MENSAJE_CUENTA_CON_EMISORES = (
 
 
 class CuentaViewSet(viewsets.ModelViewSet):
-    """CRUD de cuentas. Solo staff: las cuentas son de toda la plataforma y
-    listarlas revelaría qué integraciones la usan.
+    """CRUD de cuentas. Solo quien alcanza todos los emisores —el staff o una
+    llave de alcance global, como la de la aplicación administrativa—: las
+    cuentas son de toda la plataforma y listarlas revelaría qué integraciones
+    la usan.
 
     Una cuenta con emisores no se puede borrar (400): hay que sacarlos antes.
     """
 
     queryset = models.Cuenta.objects.all()
     serializer_class = serializers.CuentaSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [AlcanceTotal]
     search_fields = ["nombre"]
 
     def perform_destroy(self, instance):
