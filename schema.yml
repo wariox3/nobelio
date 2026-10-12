@@ -3097,6 +3097,66 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/documentos/documento/{id}/desmarcar-respuesta-validado/:
+    post:
+      operationId: documentos_documento_desmarcar_respuesta_validado_create
+      description: |-
+        Quita la marca `respuesta_validado` para poder avisar la validación otra vez.
+
+        ``POST /api/documentos/documento/{id}/desmarcar-respuesta-validado/``,
+        sin cuerpo. El documento tiene que tener `respuesta_validado = true`;
+        si no, responde 400.
+
+        Solo quita la marca: no envía nada ni toca los avisos ya enviados, que
+        siguen en ``/api/emisores/webhook-aviso/``. El documento vuelve a salir
+        con ``?respuesta_validado=false`` y ``respuesta-validado/`` lo avisa de
+        nuevo.
+
+        Si el emisor no tiene webhook de validación, ese ``respuesta-validado/``
+        lo vuelve a marcar sin enviar nada: no hay a quién avisar.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este documento electrónico.
+        required: true
+      tags:
+      - documentos
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesmarcarRespuestaValidadoRespuesta'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/documentos/documento/{id}/emitir/:
     post:
       operationId: documentos_documento_emitir_create
@@ -3666,8 +3726,10 @@ paths:
     get:
       operationId: emisores_cuenta_list
       description: |-
-        CRUD de cuentas. Solo staff: las cuentas son de toda la plataforma y
-        listarlas revelaría qué integraciones la usan.
+        CRUD de cuentas. Solo quien alcanza todos los emisores —el staff o una
+        llave de alcance global, como la de la aplicación administrativa—: las
+        cuentas son de toda la plataforma y listarlas revelaría qué integraciones
+        la usan.
 
         Una cuenta con emisores no se puede borrar (400): hay que sacarlos antes.
       parameters:
@@ -3709,8 +3771,10 @@ paths:
     post:
       operationId: emisores_cuenta_create
       description: |-
-        CRUD de cuentas. Solo staff: las cuentas son de toda la plataforma y
-        listarlas revelaría qué integraciones la usan.
+        CRUD de cuentas. Solo quien alcanza todos los emisores —el staff o una
+        llave de alcance global, como la de la aplicación administrativa—: las
+        cuentas son de toda la plataforma y listarlas revelaría qué integraciones
+        la usan.
 
         Una cuenta con emisores no se puede borrar (400): hay que sacarlos antes.
       tags:
@@ -3758,8 +3822,10 @@ paths:
     get:
       operationId: emisores_cuenta_retrieve
       description: |-
-        CRUD de cuentas. Solo staff: las cuentas son de toda la plataforma y
-        listarlas revelaría qué integraciones la usan.
+        CRUD de cuentas. Solo quien alcanza todos los emisores —el staff o una
+        llave de alcance global, como la de la aplicación administrativa—: las
+        cuentas son de toda la plataforma y listarlas revelaría qué integraciones
+        la usan.
 
         Una cuenta con emisores no se puede borrar (400): hay que sacarlos antes.
       parameters:
@@ -3801,8 +3867,10 @@ paths:
     put:
       operationId: emisores_cuenta_update
       description: |-
-        CRUD de cuentas. Solo staff: las cuentas son de toda la plataforma y
-        listarlas revelaría qué integraciones la usan.
+        CRUD de cuentas. Solo quien alcanza todos los emisores —el staff o una
+        llave de alcance global, como la de la aplicación administrativa—: las
+        cuentas son de toda la plataforma y listarlas revelaría qué integraciones
+        la usan.
 
         Una cuenta con emisores no se puede borrar (400): hay que sacarlos antes.
       parameters:
@@ -3862,8 +3930,10 @@ paths:
     patch:
       operationId: emisores_cuenta_partial_update
       description: |-
-        CRUD de cuentas. Solo staff: las cuentas son de toda la plataforma y
-        listarlas revelaría qué integraciones la usan.
+        CRUD de cuentas. Solo quien alcanza todos los emisores —el staff o una
+        llave de alcance global, como la de la aplicación administrativa—: las
+        cuentas son de toda la plataforma y listarlas revelaría qué integraciones
+        la usan.
 
         Una cuenta con emisores no se puede borrar (400): hay que sacarlos antes.
       parameters:
@@ -3922,8 +3992,10 @@ paths:
     delete:
       operationId: emisores_cuenta_destroy
       description: |-
-        CRUD de cuentas. Solo staff: las cuentas son de toda la plataforma y
-        listarlas revelaría qué integraciones la usan.
+        CRUD de cuentas. Solo quien alcanza todos los emisores —el staff o una
+        llave de alcance global, como la de la aplicación administrativa—: las
+        cuentas son de toda la plataforma y listarlas revelaría qué integraciones
+        la usan.
 
         Una cuenta con emisores no se puede borrar (400): hay que sacarlos antes.
       parameters:
@@ -5370,16 +5442,22 @@ paths:
     get:
       operationId: emisores_webhook_list
       description: |-
-        Los webhooks del emisor: a qué URL avisarle, y de qué.
+        Los webhooks: a qué URL avisar de lo que pasa con los documentos, y de qué.
 
-        Un emisor puede tener varios. `estado_validado` y `estado_notificado` dicen
+        Un webhook es de un `emisor` o de una `cuenta`, uno de los dos. El de la
+        cuenta vale para todos sus emisores —también los que entren después— y se
+        **suma** a los de cada emisor: un documento avisa a unos y a otros. Los de
+        cuenta solo los ve y los administra quien alcanza todos los emisores: el
+        staff o una llave de alcance global.
+
+        Puede haber varios. `estado_validado` y `estado_notificado` dicen
         si a ese webhook se le avisa de la validación de la DIAN y de la
         notificación al adquiriente. El aviso sale firmado con el `secreto` del
         webhook, una sola vez y sin reintentos; lo que respondió cada uno está en
         ``/api/emisores/webhook-aviso/``. Sin secreto, o si el emisor no tiene
         `referencia_externa`, no se manda: el aviso queda fallido con el motivo.
 
-        Filtro: ``?emisor=<id>``.
+        Filtros: ``?emisor=<id>``, ``?cuenta=<id>``.
       parameters:
       - name: page
         required: false
@@ -5419,16 +5497,22 @@ paths:
     post:
       operationId: emisores_webhook_create
       description: |-
-        Los webhooks del emisor: a qué URL avisarle, y de qué.
+        Los webhooks: a qué URL avisar de lo que pasa con los documentos, y de qué.
 
-        Un emisor puede tener varios. `estado_validado` y `estado_notificado` dicen
+        Un webhook es de un `emisor` o de una `cuenta`, uno de los dos. El de la
+        cuenta vale para todos sus emisores —también los que entren después— y se
+        **suma** a los de cada emisor: un documento avisa a unos y a otros. Los de
+        cuenta solo los ve y los administra quien alcanza todos los emisores: el
+        staff o una llave de alcance global.
+
+        Puede haber varios. `estado_validado` y `estado_notificado` dicen
         si a ese webhook se le avisa de la validación de la DIAN y de la
         notificación al adquiriente. El aviso sale firmado con el `secreto` del
         webhook, una sola vez y sin reintentos; lo que respondió cada uno está en
         ``/api/emisores/webhook-aviso/``. Sin secreto, o si el emisor no tiene
         `referencia_externa`, no se manda: el aviso queda fallido con el motivo.
 
-        Filtro: ``?emisor=<id>``.
+        Filtros: ``?emisor=<id>``, ``?cuenta=<id>``.
       tags:
       - emisores
       requestBody:
@@ -5570,16 +5654,22 @@ paths:
     get:
       operationId: emisores_webhook_retrieve
       description: |-
-        Los webhooks del emisor: a qué URL avisarle, y de qué.
+        Los webhooks: a qué URL avisar de lo que pasa con los documentos, y de qué.
 
-        Un emisor puede tener varios. `estado_validado` y `estado_notificado` dicen
+        Un webhook es de un `emisor` o de una `cuenta`, uno de los dos. El de la
+        cuenta vale para todos sus emisores —también los que entren después— y se
+        **suma** a los de cada emisor: un documento avisa a unos y a otros. Los de
+        cuenta solo los ve y los administra quien alcanza todos los emisores: el
+        staff o una llave de alcance global.
+
+        Puede haber varios. `estado_validado` y `estado_notificado` dicen
         si a ese webhook se le avisa de la validación de la DIAN y de la
         notificación al adquiriente. El aviso sale firmado con el `secreto` del
         webhook, una sola vez y sin reintentos; lo que respondió cada uno está en
         ``/api/emisores/webhook-aviso/``. Sin secreto, o si el emisor no tiene
         `referencia_externa`, no se manda: el aviso queda fallido con el motivo.
 
-        Filtro: ``?emisor=<id>``.
+        Filtros: ``?emisor=<id>``, ``?cuenta=<id>``.
       parameters:
       - in: path
         name: id
@@ -5619,16 +5709,22 @@ paths:
     put:
       operationId: emisores_webhook_update
       description: |-
-        Los webhooks del emisor: a qué URL avisarle, y de qué.
+        Los webhooks: a qué URL avisar de lo que pasa con los documentos, y de qué.
 
-        Un emisor puede tener varios. `estado_validado` y `estado_notificado` dicen
+        Un webhook es de un `emisor` o de una `cuenta`, uno de los dos. El de la
+        cuenta vale para todos sus emisores —también los que entren después— y se
+        **suma** a los de cada emisor: un documento avisa a unos y a otros. Los de
+        cuenta solo los ve y los administra quien alcanza todos los emisores: el
+        staff o una llave de alcance global.
+
+        Puede haber varios. `estado_validado` y `estado_notificado` dicen
         si a ese webhook se le avisa de la validación de la DIAN y de la
         notificación al adquiriente. El aviso sale firmado con el `secreto` del
         webhook, una sola vez y sin reintentos; lo que respondió cada uno está en
         ``/api/emisores/webhook-aviso/``. Sin secreto, o si el emisor no tiene
         `referencia_externa`, no se manda: el aviso queda fallido con el motivo.
 
-        Filtro: ``?emisor=<id>``.
+        Filtros: ``?emisor=<id>``, ``?cuenta=<id>``.
       parameters:
       - in: path
         name: id
@@ -5686,16 +5782,22 @@ paths:
     patch:
       operationId: emisores_webhook_partial_update
       description: |-
-        Los webhooks del emisor: a qué URL avisarle, y de qué.
+        Los webhooks: a qué URL avisar de lo que pasa con los documentos, y de qué.
 
-        Un emisor puede tener varios. `estado_validado` y `estado_notificado` dicen
+        Un webhook es de un `emisor` o de una `cuenta`, uno de los dos. El de la
+        cuenta vale para todos sus emisores —también los que entren después— y se
+        **suma** a los de cada emisor: un documento avisa a unos y a otros. Los de
+        cuenta solo los ve y los administra quien alcanza todos los emisores: el
+        staff o una llave de alcance global.
+
+        Puede haber varios. `estado_validado` y `estado_notificado` dicen
         si a ese webhook se le avisa de la validación de la DIAN y de la
         notificación al adquiriente. El aviso sale firmado con el `secreto` del
         webhook, una sola vez y sin reintentos; lo que respondió cada uno está en
         ``/api/emisores/webhook-aviso/``. Sin secreto, o si el emisor no tiene
         `referencia_externa`, no se manda: el aviso queda fallido con el motivo.
 
-        Filtro: ``?emisor=<id>``.
+        Filtros: ``?emisor=<id>``, ``?cuenta=<id>``.
       parameters:
       - in: path
         name: id
@@ -5752,16 +5854,22 @@ paths:
     delete:
       operationId: emisores_webhook_destroy
       description: |-
-        Los webhooks del emisor: a qué URL avisarle, y de qué.
+        Los webhooks: a qué URL avisar de lo que pasa con los documentos, y de qué.
 
-        Un emisor puede tener varios. `estado_validado` y `estado_notificado` dicen
+        Un webhook es de un `emisor` o de una `cuenta`, uno de los dos. El de la
+        cuenta vale para todos sus emisores —también los que entren después— y se
+        **suma** a los de cada emisor: un documento avisa a unos y a otros. Los de
+        cuenta solo los ve y los administra quien alcanza todos los emisores: el
+        staff o una llave de alcance global.
+
+        Puede haber varios. `estado_validado` y `estado_notificado` dicen
         si a ese webhook se le avisa de la validación de la DIAN y de la
         notificación al adquiriente. El aviso sale firmado con el `secreto` del
         webhook, una sola vez y sin reintentos; lo que respondió cada uno está en
         ``/api/emisores/webhook-aviso/``. Sin secreto, o si el emisor no tiene
         `referencia_externa`, no se manda: el aviso queda fallido con el motivo.
 
-        Filtro: ``?emisor=<id>``.
+        Filtros: ``?emisor=<id>``, ``?cuenta=<id>``.
       parameters:
       - in: path
         name: id
@@ -5812,6 +5920,10 @@ paths:
         motivo va en `detalle`). Es **400** si el webhook no tiene secreto o el
         emisor no tiene `referencia_externa`: entonces no se manda nada.
 
+        El webhook de una cuenta no tiene un emisor propio: hay que indicar con
+        cuál de los suyos probar, ``{"emisor": <id>}``. En el de un emisor ese
+        campo no se usa.
+
         No deja registro en ``/api/emisores/webhook-aviso/``.
       parameters:
       - in: path
@@ -5822,6 +5934,17 @@ paths:
         required: true
       tags:
       - emisores
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookPruebaSolicitudRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/WebhookPruebaSolicitudRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/WebhookPruebaSolicitudRequest'
       security:
       - LlaveApi: []
       responses:
@@ -8651,6 +8774,13 @@ components:
           maxLength: 150
       required:
       - nombre
+    DesmarcarRespuestaValidadoRespuesta:
+      type: object
+      properties:
+        respuesta_validado:
+          type: boolean
+      required:
+      - respuesta_validado
     Documento:
       type: object
       description: Serializer de lectura del documento, con detalles anidados.
@@ -14102,6 +14232,10 @@ components:
       properties:
         emisor:
           type: integer
+          nullable: true
+        cuenta:
+          type: integer
+          nullable: true
         nombre:
           type: string
           minLength: 1
@@ -14697,6 +14831,10 @@ components:
           readOnly: true
         emisor:
           type: integer
+          nullable: true
+        cuenta:
+          type: integer
+          nullable: true
         nombre:
           type: string
           maxLength: 150
@@ -14721,7 +14859,6 @@ components:
       required:
       - actualizado_en
       - creado_en
-      - emisor
       - id
       - nombre
       - url
@@ -14812,11 +14949,20 @@ components:
       - detalle
       - duracion_ms
       - entregado
+    WebhookPruebaSolicitudRequest:
+      type: object
+      properties:
+        emisor:
+          type: integer
     WebhookRequest:
       type: object
       properties:
         emisor:
           type: integer
+          nullable: true
+        cuenta:
+          type: integer
+          nullable: true
         nombre:
           type: string
           minLength: 1
@@ -14837,7 +14983,6 @@ components:
           writeOnly: true
           maxLength: 255
       required:
-      - emisor
       - nombre
       - url
   securitySchemes:

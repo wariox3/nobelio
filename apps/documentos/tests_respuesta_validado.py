@@ -10,7 +10,10 @@ from rest_framework.test import APITestCase
 
 from apps.documentos.models import DocumentoEstado
 from apps.documentos.tests_utils import crear_documento_factura
-from apps.documentos.views.documento import MENSAJE_RESPUESTA_YA_VALIDADO
+from apps.documentos.views.documento import (
+    MENSAJE_DESMARCAR_SIN_RESPUESTA,
+    MENSAJE_RESPUESTA_YA_VALIDADO,
+)
 from apps.emisores.models import Webhook, WebhookAviso
 
 POST = "apps.emisores.servicios.webhooks.requests.post"
@@ -128,6 +131,52 @@ class RespuestaValidadoTests(APITestCase):
         self.assertTrue(self._respondido())
         post.assert_not_called()
         self.assertFalse(WebhookAviso.objects.exists())
+
+    # --- desmarcar-respuesta-validado ---------------------------------------
+
+    def _desmarcar(self):
+        return self.client.post(
+            f"/api/documentos/documento/{self.documento.pk}/desmarcar-respuesta-validado/"
+        )
+
+    def test_desmarcar_quita_la_marca_sin_enviar_nada(self):
+        with mock.patch(POST, return_value=_respuesta(200)):
+            self._llamar()
+
+        with mock.patch(POST) as post:
+            resp = self._desmarcar()
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertEqual(resp.data, {"respuesta_validado": False})
+        self.assertFalse(self._respondido())
+        post.assert_not_called()
+        # El aviso del primer envío sigue en el historial.
+        self.assertEqual(WebhookAviso.objects.count(), 1)
+
+    def test_tras_desmarcar_se_vuelve_a_avisar(self):
+        with mock.patch(POST, return_value=_respuesta(200)):
+            self._llamar()
+            self._desmarcar()
+            resp = self._llamar()
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertTrue(self._respondido())
+        self.assertEqual(WebhookAviso.objects.count(), 2)
+
+    def test_desmarcar_uno_sin_marca_es_400(self):
+        resp = self._desmarcar()
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(resp.data["detail"], MENSAJE_DESMARCAR_SIN_RESPUESTA)
+
+    def test_desmarcar_un_documento_ajeno_es_404(self):
+        self.documento.respuesta_validado = True
+        self.documento.save(update_fields=["respuesta_validado"])
+        otro = get_user_model().objects.create_user(email="ajeno2@nobelio.co", password="x")
+        self.client.force_authenticate(otro)
+
+        self.assertEqual(self._desmarcar().status_code, status.HTTP_404_NOT_FOUND)
+        self.assertTrue(self._respondido())
 
     def test_documento_ajeno_es_404(self):
         otro = get_user_model().objects.create_user(email="ajeno@nobelio.co", password="x")

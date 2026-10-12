@@ -237,7 +237,7 @@ class DocumentoSerializer(serializers.ModelSerializer):
             "emisor", "resolucion", "resolucion_numero", "adquiriente",
             "prefijo", "consecutivo", "numero", "cufe_cude", "track_id",
             "envio", "ambiente", "fecha_validacion", "notificado",
-            "respuesta_validado", "errores",
+            "respuesta_validado", "referencia_externa", "errores",
             "concepto_correccion", "fecha_vencimiento",
             "orden_compra", "orden_compra_fecha", "orden_compra_tipo",
             "orden_compra_documento",
@@ -338,6 +338,7 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
         model = models.Documento
         fields = [
             "id", "documento_tipo", "emisor", "ambiente", "numero_resolucion",
+            "referencia_externa",
             "adquiriente", "prefijo", "consecutivo", "numero",
             "fecha_emision", "moneda", "forma_pago", "medio_pago",
             "total_descuentos", "descuentos_motivo",

@@ -285,6 +285,10 @@ def payload_zinc(documento, paquete, *, asunto=None, html=None):
         "aplicacion": APLICACION,
         # Identifica al emisor en el registro de envíos de la pasarela.
         "operador": documento.emisor_id,
+        # El id del documento en el sistema que lo creó, si lo mandó, y el de
+        # nobelio, que está siempre.
+        "documentoId": documento.referencia_externa or None,
+        "documentoUUID": str(documento.pk),
         "documentoNumero": documento.numero,
         "documentoFecha": documento.fecha_emision.isoformat(),
         "adjuntos": [{

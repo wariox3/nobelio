@@ -224,6 +224,10 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
       `documento_tipo`, `emisor`, `numero_resolucion`, `adquiriente`, `moneda`,
       formas/medios de pago, y `detalles` (cada uno con sus `impuestos`/tributos).
       Los totales se calculan al crear.
+      `referencia_externa` es opcional: el id del documento en el sistema que
+      lo crea. Se guarda tal cual, se devuelve, se busca con
+      `?referencia_externa=<id>` y va a Zinc como `documentoId` al notificar
+      (junto con `documentoUUID`, el id de nobelio).
 - La estructura es **estricta**: una clave que no sea un campo escribible —en
   el documento, el `adquiriente`, los `detalles`, sus `impuestos` o el bloque
   `pos`— responde 400 con el código `campo_desconocido` o `campo_solo_lectura`,

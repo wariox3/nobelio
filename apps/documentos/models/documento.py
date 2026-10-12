@@ -199,6 +199,12 @@ class Documento(ModeloUUID, ModeloConFechas):
         "que el paquete se armó y se entregó a quien lo pidió.",
     )
     respuesta_validado = models.BooleanField("respuesta de validado", default=False)
+    referencia_externa = models.CharField(
+        "referencia externa", max_length=100, blank=True,
+        help_text="Id del documento en el sistema que lo creó (el ERP que "
+        "integra). Opcional y sin formato fijo: nobelio solo lo guarda, lo "
+        "devuelve y deja buscar por él.",
+    )
     fecha_validacion = models.DateTimeField(
         "fecha y hora de validación DIAN", null=True, blank=True,
         help_text="Momento en que la DIAN aceptó el documento.",
@@ -311,6 +317,12 @@ class Documento(ModeloUUID, ModeloConFechas):
             models.Index(
                 fields=["emisor", "-fecha_emision", "-consecutivo"],
                 name="doc_emisor_recientes",
+            ),
+            # Para que el sistema de origen encuentre el documento por su
+            # propio id (`?referencia_externa=`), siempre dentro de un emisor.
+            models.Index(
+                fields=["emisor", "referencia_externa"],
+                name="doc_emisor_referencia",
             ),
         ]
         constraints = [

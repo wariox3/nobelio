@@ -277,6 +277,8 @@ class DocumentoViewSet(
         ``respuesta_validado`` (true/false): p. ej.
         ``?emisor=2&estado=aceptado&documento_tipo=factura_venta``, o
         ``?estado=aceptado&notificado=false`` para lo que falta por entregar.
+        ``?referencia_externa=<id>`` busca por el id que le dio el sistema que
+        lo creó (coincidencia exacta).
 
         El filtro por ``emisor`` acota dentro del alcance, nunca lo amplía: el
         mixin ya restringió el queryset antes de llegar aquí.
@@ -308,6 +310,8 @@ class DocumentoViewSet(
             qs = qs.filter(estado__nombre=estado)
         if tipo := params.get("documento_tipo"):
             qs = qs.filter(documento_tipo__codigo=tipo)
+        if referencia := params.get("referencia_externa"):
+            qs = qs.filter(referencia_externa=referencia)
         for bandera in ("notificado", "respuesta_validado"):
             if (valor := params.get(bandera)) is not None:
                 qs = qs.filter(**{bandera: valor.lower() in ("1", "true", "si", "sí")})
