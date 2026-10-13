@@ -1,7 +1,7 @@
 """Resolución de numeración (autorización de rango y clave técnica)."""
 from django.db import models
 
-from apps.nucleo.models import ModeloConFechas
+from apps.nucleo.models import Ambiente, ModeloConFechas
 
 from .emisor import Emisor
 
@@ -34,6 +34,16 @@ class Resolucion(ModeloConFechas):
     vigente_hasta = models.DateField("vigente hasta")
 
     activa = models.BooleanField("activa", default=True)
+
+    # De qué ambiente de la DIAN es la numeración. No se deduce del número: la
+    # del Set de Pruebas (18760000001) es de habilitación, pero también lo es
+    # cualquier rango que la DIAN devuelva mientras el emisor no esté habilitado.
+    ambiente = models.PositiveSmallIntegerField(
+        "ambiente DIAN", choices=Ambiente.choices,
+        help_text="1 producción, 2 habilitación. Lo pone la siembra del Set de "
+        "Pruebas y la importación desde la DIAN; en el alta manual lo indica "
+        "quien la crea.",
+    )
 
     # --- Relaciones ---
     emisor = models.ForeignKey(

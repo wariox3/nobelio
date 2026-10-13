@@ -18,7 +18,7 @@ class ResolucionSerializer(serializers.ModelSerializer):
             "id", "emisor", "tipo_factura", "numero_resolucion", "fecha_resolucion",
             "prefijo", "rango_desde", "rango_hasta", "consecutivo_actual",
             "vigente_desde", "vigente_hasta",
-            "clave_tecnica", "activa",
+            "clave_tecnica", "activa", "ambiente",
         ]
 
 

@@ -42,10 +42,19 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
     serializer_class = serializers.ResolucionSerializer
 
     def get_queryset(self):
-        """Permite filtrar por emisor: ``/api/emisores/resolucion/?emisor=<id>``."""
+        """Permite filtrar por emisor y por ambiente DIAN.
+
+        ``/api/emisores/resolucion/?emisor=<id>&ambiente=<1|2>``: 1 producción,
+        2 habilitación. Los dos son opcionales y se combinan.
+        """
         qs = super().get_queryset()
         emisor = entero_de_query(self.request.query_params, "emisor")
-        return qs.filter(emisor=emisor) if emisor else qs
+        if emisor:
+            qs = qs.filter(emisor=emisor)
+        ambiente = entero_de_query(self.request.query_params, "ambiente")
+        if ambiente:
+            qs = qs.filter(ambiente=ambiente)
+        return qs
 
     def perform_destroy(self, instance):
         # Comprobado antes de borrar y no capturando el ProtectedError: así el
@@ -422,21 +431,28 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
                 vigente_hasta=_a_fecha(r.vigente_hasta),
                 clave_tecnica=r.clave_tecnica,
                 activa=True,
+                # El mismo con el que se consultó: de ahí salieron estos rangos.
+                ambiente=self._ambiente_de(software),
             )
             for r in nuevos
         ]
 
+    def _ambiente_de(self, software):
+        """El ambiente DIAN en el que están los rangos de ese software.
+
+        Habilitado para esa operación, sus prefijos están en producción;
+        mientras no, en habilitación. En dev y test se consulta siempre ahí.
+        """
+        return ambiente_segun_habilitacion(
+            software.emisor.habilitado_para(software.tipo)
+        )
+
     def _consultar(self, software):
         """Llama a la DIAN; devuelve un ``RespuestaRangos`` o lanza la excepción."""
-        emisor = software.emisor
-        # Habilitado para esa operación, sus prefijos están en producción;
-        # mientras no, en habilitación. En dev y test se consulta siempre ahí.
-        ambiente = ambiente_segun_habilitacion(
-            emisor.habilitado_para(software.tipo)
-        )
         try:
             return dian.consultar_rangos_numeracion(
-                emisor, software=software, ambiente=ambiente,
+                software.emisor, software=software,
+                ambiente=self._ambiente_de(software),
             )
         except dian.ErrorEmision as exc:
             raise ErrorSolicitud(str(exc))

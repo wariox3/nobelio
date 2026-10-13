@@ -202,6 +202,9 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
       que el emisor tenga certificado; sin ningún software aceptado responde
       400 `software_no_aceptado`. Responde `{"creadas": <n>}`, sin las
       resoluciones: esas se leen con `GET /api/emisores/resolucion/?emisor=<id>`.
+      Cada una queda con el `ambiente` con el que se consultó a la DIAN: `2`
+      (habilitación) mientras el emisor no esté habilitado para esa operación,
+      `1` (producción) después.
 - [ ] `POST /api/emisores/resolucion/validar/` con `{"emisor": <id>,
       "resoluciones": [{"numero_resolucion", "prefijo", "rango_desde",
       "rango_hasta", "vigente_desde", "vigente_hasta"}]}` → corre el mismo
@@ -213,10 +216,16 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
       la lista vacía, no hace nada y responde `[]`.
 
 - [ ] *(alternativa manual)* `POST /api/emisores/resolucion/` → número y fecha de
-      resolución, `prefijo`, `rango_desde`/`rango_hasta`, vigencias y `tipo_factura`.
+      resolución, `prefijo`, `rango_desde`/`rango_hasta`, vigencias, `tipo_factura`
+      y `ambiente` (`1` producción, `2` habilitación; obligatorio).
       La numeración **no la lleva la resolución**: el consecutivo de cada
       documento llega en su propio campo `consecutivo` y solo se valida que caiga
       dentro del rango autorizado.
+
+El `ambiente` de la resolución dice de cuál de los dos es la numeración. Las del
+Set de Pruebas que siembra el alta del software (18760000001, prefijos SETP y
+EPOS) nacen en `2`. El listado se filtra por él, solo o junto con el emisor:
+`GET /api/emisores/resolucion/?emisor=<id>&ambiente=<1|2>`.
 
 ## 7. Documento electrónico
 

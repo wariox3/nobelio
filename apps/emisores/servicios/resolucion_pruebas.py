@@ -90,6 +90,7 @@ def sembrar_resolucion_de_pruebas(emisor, tipo_software):
     """
     from apps.catalogos.models import TipoFactura
     from apps.emisores.models import Resolucion
+    from apps.nucleo.models import Ambiente
 
     receta = RESOLUCION_POR_TIPO_DE_SOFTWARE.get(str(tipo_software))
     if receta is None:
@@ -126,5 +127,6 @@ def sembrar_resolucion_de_pruebas(emisor, tipo_software):
                 if k not in ("prefijo", "numero_resolucion")
             },
             "activa": True,
+            "ambiente": Ambiente.PRUEBAS,
         },
     )

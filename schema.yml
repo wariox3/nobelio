@@ -14196,6 +14196,17 @@ components:
           writeOnly: true
         activa:
           type: boolean
+        ambiente:
+          allOf:
+          - $ref: '#/components/schemas/AmbienteEnum'
+          title: Ambiente DIAN
+          description: |-
+            1 producción, 2 habilitación. Lo pone la siembra del Set de Pruebas y la importación desde la DIAN; en el alta manual lo indica quien la crea.
+
+            * `1` - Producción
+            * `2` - Habilitación
+          minimum: 0
+          maximum: 32767
     PatchedSoftwareDianRequest:
       type: object
       properties:
@@ -14397,7 +14408,19 @@ components:
           format: date
         activa:
           type: boolean
+        ambiente:
+          allOf:
+          - $ref: '#/components/schemas/AmbienteEnum'
+          title: Ambiente DIAN
+          description: |-
+            1 producción, 2 habilitación. Lo pone la siembra del Set de Pruebas y la importación desde la DIAN; en el alta manual lo indica quien la crea.
+
+            * `1` - Producción
+            * `2` - Habilitación
+          minimum: 0
+          maximum: 32767
       required:
+      - ambiente
       - emisor
       - fecha_resolucion
       - id
@@ -14483,7 +14506,19 @@ components:
           writeOnly: true
         activa:
           type: boolean
+        ambiente:
+          allOf:
+          - $ref: '#/components/schemas/AmbienteEnum'
+          title: Ambiente DIAN
+          description: |-
+            1 producción, 2 habilitación. Lo pone la siembra del Set de Pruebas y la importación desde la DIAN; en el alta manual lo indica quien la crea.
+
+            * `1` - Producción
+            * `2` - Habilitación
+          minimum: 0
+          maximum: 32767
       required:
+      - ambiente
       - emisor
       - fecha_resolucion
       - numero_resolucion
