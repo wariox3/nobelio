@@ -1,9 +1,16 @@
 """Resolución de numeración (autorización de rango y clave técnica)."""
 from django.db import models
+from django.db.models import Case, Value, When
 
 from apps.nucleo.models import Ambiente, ModeloConFechas
 
 from .emisor import Emisor
+
+# Los tipos de factura de compras, por su id del catálogo —fijo, viene en la
+# columna `id` del .gc—: 7 es el documento soporte (05) y 8 su nota de ajuste
+# (95). Van por id y no por código porque una columna generada solo puede leer
+# su propia fila, y de `tipo_factura` la fila solo tiene la llave.
+TIPOS_FACTURA_DE_COMPRAS = (7, 8)
 
 
 class Resolucion(ModeloConFechas):
@@ -12,6 +19,19 @@ class Resolucion(ModeloConFechas):
     La ``clave_tecnica`` es la que se usa para calcular el CUFE y NO viaja en
     el XML. Se obtiene de la consulta del rango de numeración ante la DIAN.
     """
+
+    class Modulo(models.TextChoices):
+        """Módulo de las integraciones y los ERP al que sirve la numeración.
+
+        Compras es el documento soporte; facturación, todo lo demás: la factura
+        de venta y el documento equivalente P.O.S. Nómina está para que la lista
+        sea la misma que manejan los ERP, pero ninguna resolución cae ahí: la
+        nómina electrónica no se numera con resolución.
+        """
+
+        FACTURACION = "facturacion", "Facturación"
+        NOMINA = "nomina", "Nómina"
+        COMPRAS = "compras", "Compras"
 
     # --- Atributos ---
     numero_resolucion = models.CharField("número de resolución", max_length=50)
@@ -57,6 +77,22 @@ class Resolucion(ModeloConFechas):
         on_delete=models.PROTECT,
         related_name="resoluciones",
         verbose_name="tipo de factura",
+    )
+    # Columna generada por la base de datos a partir de `tipo_factura`: se
+    # puede filtrar e indexar como cualquier otra, pero no se escribe nunca, así
+    # que no hay forma de que contradiga al tipo.
+    modulo = models.GeneratedField(
+        expression=Case(
+            When(
+                tipo_factura_id__in=TIPOS_FACTURA_DE_COMPRAS,
+                then=Value(Modulo.COMPRAS),
+            ),
+            default=Value(Modulo.FACTURACION),
+        ),
+        output_field=models.CharField(
+            "módulo", max_length=15, choices=Modulo.choices,
+        ),
+        db_persist=True,
     )
 
     class Meta:

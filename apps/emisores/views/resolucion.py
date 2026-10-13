@@ -42,10 +42,11 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
     serializer_class = serializers.ResolucionSerializer
 
     def get_queryset(self):
-        """Permite filtrar por emisor y por ambiente DIAN.
+        """Permite filtrar por emisor, por ambiente DIAN y por módulo.
 
-        ``/api/emisores/resolucion/?emisor=<id>&ambiente=<1|2>``: 1 producción,
-        2 habilitación. Los dos son opcionales y se combinan.
+        ``/api/emisores/resolucion/?emisor=<id>&ambiente=<1|2>&modulo=<facturacion|nomina|compras>``:
+        en ``ambiente``, 1 es producción y 2 habilitación. Los tres son
+        opcionales y se combinan.
         """
         qs = super().get_queryset()
         emisor = entero_de_query(self.request.query_params, "emisor")
@@ -54,6 +55,15 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         ambiente = entero_de_query(self.request.query_params, "ambiente")
         if ambiente:
             qs = qs.filter(ambiente=ambiente)
+        modulo = self.request.query_params.get("modulo")
+        if modulo:
+            if modulo not in models.Resolucion.Modulo.values:
+                raise ErrorSolicitud(
+                    "El filtro 'modulo' tiene que ser uno de: "
+                    + ", ".join(models.Resolucion.Modulo.values)
+                    + f"; se recibió '{modulo}'."
+                )
+            qs = qs.filter(modulo=modulo)
         return qs
 
     def perform_destroy(self, instance):

@@ -227,6 +227,14 @@ Set de Pruebas que siembra el alta del software (18760000001, prefijos SETP y
 EPOS) nacen en `2`. El listado se filtra por él, solo o junto con el emisor:
 `GET /api/emisores/resolucion/?emisor=<id>&ambiente=<1|2>`.
 
+El `modulo` (solo lectura) la clasifica para los ERP según su `tipo_factura`:
+`compras` si es de documento soporte (05) o de su nota de ajuste (95), y
+`facturacion` en cualquier otro caso —factura de venta y P.O.S.—. `nomina` está
+en la lista pero ninguna resolución cae ahí: la nómina no se numera con
+resolución. Se filtra con
+`GET /api/emisores/resolucion/?modulo=<facturacion|nomina|compras>`, combinable
+con los otros dos; otro valor responde 400.
+
 ## 7. Documento electrónico
 
 - [ ] `POST /api/documentos/documento/` (`DocumentoCrearSerializer`):

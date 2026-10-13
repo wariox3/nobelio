@@ -12033,14 +12033,6 @@ components:
           type: integer
       required:
       - emisor
-    ModuloEnum:
-      enum:
-      - facturacion
-      - nomina
-      type: string
-      description: |-
-        * `facturacion` - Facturación
-        * `nomina` - Nómina
     Municipio:
       type: object
       properties:
@@ -14373,6 +14365,10 @@ components:
           minimum: -9223372036854775808
           format: int64
           title: Tipo de factura
+        modulo:
+          allOf:
+          - $ref: '#/components/schemas/ResolucionModuloEnum'
+          readOnly: true
         numero_resolucion:
           type: string
           title: Número de resolución
@@ -14424,6 +14420,7 @@ components:
       - emisor
       - fecha_resolucion
       - id
+      - modulo
       - numero_resolucion
       - prefijo
       - rango_desde
@@ -14456,6 +14453,16 @@ components:
           format: date
       required:
       - numero_resolucion
+    ResolucionModuloEnum:
+      enum:
+      - facturacion
+      - nomina
+      - compras
+      type: string
+      description: |-
+        * `facturacion` - Facturación
+        * `nomina` - Nómina
+        * `compras` - Compras
     ResolucionRequest:
       type: object
       properties:
@@ -14636,7 +14643,7 @@ components:
             * `documento_equivalente` - Documento equivalente electrónico
         modulo:
           allOf:
-          - $ref: '#/components/schemas/ModuloEnum'
+          - $ref: '#/components/schemas/SoftwareDianModuloEnum'
           readOnly: true
         identificador:
           type: string
@@ -14684,6 +14691,14 @@ components:
       - modulo
       - set_pruebas_aceptado
       - tipo
+    SoftwareDianModuloEnum:
+      enum:
+      - facturacion
+      - nomina
+      type: string
+      description: |-
+        * `facturacion` - Facturación
+        * `nomina` - Nómina
     SoftwareDianRequest:
       type: object
       properties:

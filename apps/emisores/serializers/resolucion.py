@@ -11,11 +11,17 @@ class ResolucionSerializer(serializers.ModelSerializer):
         write_only=True, required=False, allow_blank=True,
         style={"input_type": "password"},
     )
+    # Explícito para que el esquema lleve sus valores: DRF no saca los
+    # `choices` del `output_field` de un `GeneratedField`.
+    modulo = serializers.ChoiceField(
+        choices=Resolucion.Modulo.choices, read_only=True,
+    )
 
     class Meta:
         model = Resolucion
         fields = [
-            "id", "emisor", "tipo_factura", "numero_resolucion", "fecha_resolucion",
+            "id", "emisor", "tipo_factura", "modulo", "numero_resolucion",
+            "fecha_resolucion",
             "prefijo", "rango_desde", "rango_hasta", "consecutivo_actual",
             "vigente_desde", "vigente_hasta",
             "clave_tecnica", "activa", "ambiente",
