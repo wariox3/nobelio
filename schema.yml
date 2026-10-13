@@ -14149,6 +14149,17 @@ components:
           minimum: -9223372036854775808
           format: int64
           title: Tipo de factura
+        modulo:
+          title: Módulo
+          description: |-
+            facturacion, nomina o compras. Vacío toma el que corresponde al tipo de factura.
+
+            * `facturacion` - Facturación
+            * `nomina` - Nómina
+            * `compras` - Compras
+          oneOf:
+          - $ref: '#/components/schemas/ResolucionModuloEnum'
+          - $ref: '#/components/schemas/BlankEnum'
         numero_resolucion:
           type: string
           minLength: 1
@@ -14366,9 +14377,16 @@ components:
           format: int64
           title: Tipo de factura
         modulo:
-          allOf:
+          title: Módulo
+          description: |-
+            facturacion, nomina o compras. Vacío toma el que corresponde al tipo de factura.
+
+            * `facturacion` - Facturación
+            * `nomina` - Nómina
+            * `compras` - Compras
+          oneOf:
           - $ref: '#/components/schemas/ResolucionModuloEnum'
-          readOnly: true
+          - $ref: '#/components/schemas/BlankEnum'
         numero_resolucion:
           type: string
           title: Número de resolución
@@ -14420,7 +14438,6 @@ components:
       - emisor
       - fecha_resolucion
       - id
-      - modulo
       - numero_resolucion
       - prefijo
       - rango_desde
@@ -14474,6 +14491,17 @@ components:
           minimum: -9223372036854775808
           format: int64
           title: Tipo de factura
+        modulo:
+          title: Módulo
+          description: |-
+            facturacion, nomina o compras. Vacío toma el que corresponde al tipo de factura.
+
+            * `facturacion` - Facturación
+            * `nomina` - Nómina
+            * `compras` - Compras
+          oneOf:
+          - $ref: '#/components/schemas/ResolucionModuloEnum'
+          - $ref: '#/components/schemas/BlankEnum'
         numero_resolucion:
           type: string
           minLength: 1

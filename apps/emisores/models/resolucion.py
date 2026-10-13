@@ -1,6 +1,5 @@
 """Resolución de numeración (autorización de rango y clave técnica)."""
 from django.db import models
-from django.db.models import Case, Value, When
 
 from apps.nucleo.models import Ambiente, ModeloConFechas
 
@@ -8,8 +7,7 @@ from .emisor import Emisor
 
 # Los tipos de factura de compras, por su id del catálogo —fijo, viene en la
 # columna `id` del .gc—: 7 es el documento soporte (05) y 8 su nota de ajuste
-# (95). Van por id y no por código porque una columna generada solo puede leer
-# su propia fila, y de `tipo_factura` la fila solo tiene la llave.
+# (95). Van por id para no consultar el catálogo en cada alta.
 TIPOS_FACTURA_DE_COMPRAS = (7, 8)
 
 
@@ -23,10 +21,11 @@ class Resolucion(ModeloConFechas):
     class Modulo(models.TextChoices):
         """Módulo de las integraciones y los ERP al que sirve la numeración.
 
-        Compras es el documento soporte; facturación, todo lo demás: la factura
-        de venta y el documento equivalente P.O.S. Nómina está para que la lista
-        sea la misma que manejan los ERP, pero ninguna resolución cae ahí: la
-        nómina electrónica no se numera con resolución.
+        Si no se indica, sale del tipo de factura (ver ``modulo_por_defecto``):
+        compras para el documento soporte y facturación para todo lo demás —la
+        factura de venta y el documento equivalente P.O.S.—. Nómina no sale
+        nunca sola, porque la nómina electrónica no se numera con resolución;
+        solo la tiene la resolución a la que se le ponga a mano.
         """
 
         FACTURACION = "facturacion", "Facturación"
@@ -78,21 +77,13 @@ class Resolucion(ModeloConFechas):
         related_name="resoluciones",
         verbose_name="tipo de factura",
     )
-    # Columna generada por la base de datos a partir de `tipo_factura`: se
-    # puede filtrar e indexar como cualquier otra, pero no se escribe nunca, así
-    # que no hay forma de que contradiga al tipo.
-    modulo = models.GeneratedField(
-        expression=Case(
-            When(
-                tipo_factura_id__in=TIPOS_FACTURA_DE_COMPRAS,
-                then=Value(Modulo.COMPRAS),
-            ),
-            default=Value(Modulo.FACTURACION),
-        ),
-        output_field=models.CharField(
-            "módulo", max_length=15, choices=Modulo.choices,
-        ),
-        db_persist=True,
+    # A diferencia del `modulo` del software, no es una columna generada: se
+    # puede corregir a mano, por la API o en la base de datos. El tipo de
+    # factura solo da el valor de partida.
+    modulo = models.CharField(
+        "módulo", max_length=15, choices=Modulo.choices, blank=True,
+        help_text="facturacion, nomina o compras. Vacío toma el que corresponde "
+        "al tipo de factura.",
     )
 
     class Meta:
@@ -107,9 +98,18 @@ class Resolucion(ModeloConFechas):
             )
         ]
 
+    @property
+    def modulo_por_defecto(self) -> str:
+        """El módulo que le toca por su tipo de factura."""
+        if self.tipo_factura_id in TIPOS_FACTURA_DE_COMPRAS:
+            return self.Modulo.COMPRAS
+        return self.Modulo.FACTURACION
+
     def save(self, *args, **kwargs):
         if self.consecutivo_actual is None:
             self.consecutivo_actual = self.rango_desde
+        if not self.modulo:
+            self.modulo = self.modulo_por_defecto
         super().save(*args, **kwargs)
 
     def __str__(self):
