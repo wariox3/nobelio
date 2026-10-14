@@ -109,7 +109,7 @@ class NotaDebitoTests(NotasTestBase):
 
 
 class DocumentoSoporteTests(NotasTestBase):
-    def _xml(self, impuestos=()):
+    def _xml(self, impuestos=(), **linea_extra):
         ds = doc.Documento.objects.create(
             ambiente=2,
             documento_tipo=doc.DocumentoTipo.objects.get(codigo=doc.DocumentoTipo.Codigo.DOCUMENTO_SOPORTE),
@@ -124,6 +124,7 @@ class DocumentoSoporteTests(NotasTestBase):
             documento=ds, numero_linea=1, descripcion="Compra a no obligado",
             cantidad=Decimal("1"), unidad_medida=self.base["catalogos"]["unidad"],
             valor_unitario=Decimal("50000"), valor_total=Decimal("50000.00"),
+            **linea_extra,
         )
         for tributo, tarifa, valor in impuestos:
             doc.DocumentoDetalleImpuesto.objects.create(
@@ -160,6 +161,48 @@ class DocumentoSoporteTests(NotasTestBase):
 
         self.assertEqual(codigos("TaxTotal"), ["01"])
         self.assertEqual(codigos("WithholdingTaxTotal"), ["06"])
+
+        # En el documento y en la línea, la 06 se llama como en la lista del DS
+        # y no como en el catálogo, que sale de la de factura: con «ReteFuente»
+        # la DIAN rechaza (DSAT13 y DSAY13).
+        nombres = [
+            esquema.findtext(f"{{{ns['cbc']}}}Name")
+            for esquema in arbol.iter(f"{{{ns['cac']}}}TaxScheme")
+            if esquema.findtext(f"{{{ns['cbc']}}}ID") == "06"
+        ]
+        self.assertEqual(nombres, ["ReteRenta", "ReteRenta"])
+        esquema, arbol = _validar_xsd(xml, "UBL-Invoice-2.1.xsd")
+        if not esquema.validate(arbol):
+            self.fail("Documento soporte inválido:\n" + str(esquema.error_log))
+
+    def _periodo(self, xml):
+        ns = ubl.NS
+        periodo = etree.fromstring(xml).find(
+            f"{{{ns['cac']}}}InvoiceLine/{{{ns['cac']}}}InvoicePeriod"
+        )
+        return {
+            etiqueta: periodo.findtext(f"{{{ns['cbc']}}}{etiqueta}")
+            for etiqueta in ("StartDate", "EndDate", "DescriptionCode", "Description")
+        }
+
+    def test_sin_forma_de_generacion_la_linea_va_por_operacion(self):
+        """La DIAN rechaza la línea sin ella (DSFC03 y DSFC04)."""
+        self.assertEqual(self._periodo(self._xml()), {
+            "StartDate": "2024-02-01", "EndDate": None,
+            "DescriptionCode": "1", "Description": "Por operación",
+        })
+
+    def test_la_descripcion_de_la_forma_de_generacion_sale_de_la_lista(self):
+        """No la que traiga la línea: la DIAN la compara con su tabla."""
+        xml = self._xml(
+            periodo_desde=date(2024, 1, 22), periodo_hasta=date(2024, 1, 28),
+            periodo_descripcion_codigo="2", periodo_descripcion="Semana 4",
+        )
+
+        self.assertEqual(self._periodo(xml), {
+            "StartDate": "2024-01-22", "EndDate": "2024-01-28",
+            "DescriptionCode": "2", "Description": "Acumulado semanal",
+        })
         esquema, arbol = _validar_xsd(xml, "UBL-Invoice-2.1.xsd")
         if not esquema.validate(arbol):
             self.fail("Documento soporte inválido:\n" + str(esquema.error_log))

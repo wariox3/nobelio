@@ -26,6 +26,20 @@ from apps.dian.ubl.base import (  # los ayudantes privados no vienen en el `*`
 from apps.dian.ubl.factura import _ConstructorNotaUBL
 from apps.documentos.models import DocumentoTipo as _Tipo
 
+# La lista FormaGeneracionTransmision del DS (`cbc:DescriptionCode` y
+# `cbc:Description` del periodo de cada línea, reglas DSFC03 y DSFC04).
+FORMA_GENERACION_POR_OPERACION = "1"
+FORMAS_GENERACION = {
+    FORMA_GENERACION_POR_OPERACION: "Por operación",
+    "2": "Acumulado semanal",
+}
+
+# Los tributos que la lista TipoImpuesto del DS llama distinto que la de
+# factura, de la que sale el catálogo. La retención en la fuente es allí
+# «ReteRenta», y con «ReteFuente» la DIAN rechaza (DSAT13 en el documento,
+# DSAY13 en la línea).
+NOMBRES_TRIBUTO_DS = {"06": "ReteRenta"}
+
 
 
 class ConstructorDocumentoSoporte(ConstructorUBL):
@@ -79,21 +93,36 @@ class ConstructorDocumentoSoporte(ConstructorUBL):
             tipo_ambiente=self.ambiente,
         )
 
-    def _periodo_linea(self, il, linea):
-        """El DS exige la **fecha de compra** en cada línea (regla DSFC02a).
+    def _nombre_tributo(self, codigo, nombre) -> str:
+        return NOMBRES_TRIBUTO_DS.get(codigo, nombre)
 
-        Va en ``cac:InvoicePeriod/cbc:StartDate``. Si la línea no trae periodo
-        propio se usa la fecha de emisión: la compra que soporta el documento es
-        la que se está documentando, y omitir el elemento es un rechazo.
+    def _periodo_linea(self, il, linea):
+        """El DS exige en cada línea la fecha de compra y la forma de generación.
+
+        - **Fecha de compra** (DSFC02a), en ``cbc:StartDate``. Si la línea no la
+          trae se usa la fecha de emisión: la compra que soporta el documento es
+          la que se está documentando.
+        - **Forma de generación y transmisión** (DSFC03 y DSFC04), en
+          ``cbc:DescriptionCode`` y ``cbc:Description``. Sin código va «por
+          operación», que es un documento por compra; y la descripción no es la
+          que traiga la línea sino la de la lista, porque la DIAN compara las
+          dos con su tabla.
+
+        Omitir cualquiera de los tres es un rechazo.
         """
-        if linea.periodo_desde or linea.periodo_hasta:
-            return super()._periodo_linea(il, linea)
+        codigo = linea.periodo_descripcion_codigo or FORMA_GENERACION_POR_OPERACION
         periodo = _sub(il, "cac", "InvoicePeriod")
-        _sub(periodo, "cbc", "StartDate", self.doc.fecha_emision.isoformat())
-        if linea.periodo_descripcion_codigo:
-            _sub(periodo, "cbc", "DescriptionCode", linea.periodo_descripcion_codigo)
-        if linea.periodo_descripcion:
-            _sub(periodo, "cbc", "Description", linea.periodo_descripcion)
+        _sub(
+            periodo, "cbc", "StartDate",
+            (linea.periodo_desde or self.doc.fecha_emision).isoformat(),
+        )
+        if linea.periodo_hasta:
+            _sub(periodo, "cbc", "EndDate", linea.periodo_hasta.isoformat())
+        _sub(periodo, "cbc", "DescriptionCode", codigo)
+        _sub(
+            periodo, "cbc", "Description",
+            FORMAS_GENERACION.get(codigo, linea.periodo_descripcion),
+        )
 
     def _parte_emisor(self, raiz):
         """``cac:AccountingSupplierParty``, que aquí es el **vendedor** (SNO).

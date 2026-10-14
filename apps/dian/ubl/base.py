@@ -555,6 +555,11 @@ class ConstructorUBL:
             return "WithholdingTaxTotal"
         return "TaxTotal"
 
+    def _nombre_tributo(self, codigo, nombre) -> str:
+        """El cbc:Name del tributo. Hook: el del catálogo, salvo donde el anexo
+        del tipo lo llame de otra manera."""
+        return nombre
+
     def _bloque_impuesto(self, padre, etiqueta, *, codigo, nombre, valor, subtotales):
         """Un cac:TaxTotal (o WithholdingTaxTotal) con un TaxSubtotal por tarifa.
 
@@ -562,6 +567,7 @@ class ConstructorUBL:
         línea, uno por cada tarifa del tributo en el documento. ``valor`` es el
         del tributo entero, la suma de los subtotales.
         """
+        nombre = self._nombre_tributo(codigo, nombre)
         tax_total = _sub(padre, "cac", etiqueta)
         _sub(tax_total, "cbc", "TaxAmount", _valor(valor), currencyID=self.moneda)
         for tarifa, base, valor_tarifa in subtotales:

@@ -169,6 +169,11 @@ practica ReteIVA y ReteRenta sobre la compra al no obligado). La lista
 El anexo de factura no usa este elemento, así que el modelo actual de impuestos
 no tiene dónde guardarlo.
 
+El catálogo de tributos sale de la lista de factura, donde el `06` se llama
+«ReteFuente». En el DS el `cbc:Name` tiene que ser «ReteRenta»: con el otro la
+DIAN rechaza con DSAT13 (documento) y DSAY13 (línea). El constructor lo cambia
+al emitir (`NOMBRES_TRIBUTO_DS` en `apps/dian/ubl/soporte.py`).
+
 ## 8. Otros elementos presentes en las ejemplificaciones
 
 - `cbc:Note` a nivel de documento (descripción libre).
