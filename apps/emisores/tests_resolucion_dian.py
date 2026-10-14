@@ -263,6 +263,26 @@ class ResolucionDianTests(APITestCase):
         self.assertEqual(resolucion.tipo_factura.codigo, "01")
         self.assertEqual(resolucion.clave_tecnica, "clave-secreta")
         self.assertEqual(resolucion.consecutivo_actual, 1)
+        self.assertEqual(resolucion.ambiente, Ambiente.PRUEBAS)
+        self.assertEqual(resolucion.modulo, Resolucion.Modulo.FACTURACION)
+
+    @override_settings(ENV="prod")
+    def test_en_prod_lo_importado_queda_con_el_ambiente_consultado(self):
+        """Producción para la operación habilitada, habilitación para la otra."""
+        self._aceptar(self.facturacion)
+        self._aceptar(self.pos)
+        respuestas = {
+            self.facturacion.pk: _respuesta(_rango()),
+            self.pos.pk: _respuesta(_rango("POS", "18764000009")),
+        }
+        with patch(CONSULTAR, side_effect=self._por_software(respuestas)):
+            resp = self._importar_emisor()
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(
+            {r.prefijo: r.ambiente for r in Resolucion.objects.all()},
+            {"FE": Ambiente.PRODUCCION, "POS": Ambiente.PRUEBAS},
+        )
 
     def test_no_reimporta_las_que_ya_existen(self):
         self._aceptar(self.facturacion)
@@ -414,6 +434,7 @@ class ResolucionDianTests(APITestCase):
             prefijo="MAN", numero_resolucion="555", fecha_resolucion="2026-01-01",
             rango_desde=1, rango_hasta=100,
             vigente_desde="2026-01-01", vigente_hasta="2027-01-01",
+            ambiente=Ambiente.PRODUCCION,
         )
         with patch(CONSULTAR, return_value=_respuesta(_rango())):
             resp = self._validar({"numero_resolucion": "555"})

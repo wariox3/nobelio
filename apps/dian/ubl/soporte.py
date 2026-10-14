@@ -199,11 +199,6 @@ class ConstructorNotaAjuste(ConstructorDocumentoSoporte, _ConstructorNotaUBL):
 
 # Mapeo código de tipo de documento -> constructor.
 
-# Los códigos de retención, para repartir los impuestos entre cac:TaxTotal y
-# cac:WithholdingTaxTotal. Va aquí abajo, con el otro import de modelos, por la
-# misma razón: los métodos que lo usan solo lo resuelven al ejecutarse.
-from apps.catalogos.models import Tributo as _Tributo  # noqa: E402
-
 # ---------------------------------------------------------------------------
 # AttachedDocument: el "sobre" con el que se entrega el documento al adquiriente
 # ---------------------------------------------------------------------------

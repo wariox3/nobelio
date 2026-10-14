@@ -52,6 +52,7 @@ class GeneracionUBLTests(TestCase):
             clave_tecnica="693ff6f2a553c3646a063436fd4dd9ded0311471",
             vigente_desde=date(2019, 1, 19),
             vigente_hasta=date(2030, 1, 19),
+            ambiente=2,
         )
         cls.documento = doc.Documento.objects.create(
             ambiente=2,

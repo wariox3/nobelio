@@ -150,6 +150,7 @@ def crear_documento_factura(catalogos=None):
         rango_desde=990000000, rango_hasta=995000000,
         clave_tecnica="693ff6f2a553c3646a063436fd4dd9ded0311471",
         vigente_desde=date(2019, 1, 19), vigente_hasta=date(2030, 1, 19),
+        ambiente=2,
     )
     documento = doc.Documento.objects.create(
         documento_tipo=doc.DocumentoTipo.objects.get(codigo=doc.DocumentoTipo.Codigo.FACTURA_VENTA), emisor=emisor,

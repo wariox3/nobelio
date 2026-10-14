@@ -82,6 +82,7 @@ class NitUnicoTests(APITestCase):
             "rango_hasta": 5000,
             "vigente_desde": "2024-01-01",
             "vigente_hasta": "2030-01-01",
+            "ambiente": 2,
         }
 
     # --- Unicidad del NIT --------------------------------------------------

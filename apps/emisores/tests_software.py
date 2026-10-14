@@ -10,6 +10,7 @@ from apps.catalogos.models import TipoFactura
 from apps.emisores.models import Emisor, Resolucion, SoftwareDian
 from apps.emisores.servicios import RESOLUCION_SET_PRUEBAS
 from apps.nomina.tests_utils import cargar_catalogos_de_nomina
+from apps.nucleo.models import Ambiente
 from apps.nucleo.tests_utils import errores_por_campo
 
 
@@ -283,6 +284,9 @@ class SoftwareDianAPITests(APITestCase):
         )
         self.assertEqual(resolucion.tipo_factura.codigo, "01")
         self.assertTrue(resolucion.activa)
+        # Es del sandbox de la DIAN: nace marcada como de habilitación.
+        self.assertEqual(resolucion.ambiente, Ambiente.PRUEBAS)
+        self.assertEqual(resolucion.modulo, Resolucion.Modulo.FACTURACION)
 
     def test_no_la_siembra_si_el_emisor_ya_esta_habilitado(self):
         """Es la resolución del sandbox: a un emisor ya habilitado no se le
@@ -407,6 +411,10 @@ class SoftwareDianAPITests(APITestCase):
         # El 20 es el `codigo_dian` del P.O.S.: es lo que empareja la
         # resolución con el documento.
         self.assertEqual(resolucion.tipo_factura.codigo, "20")
+        self.assertEqual(resolucion.ambiente, Ambiente.PRUEBAS)
+        # El P.O.S. va con el software de documento equivalente, pero para los
+        # ERP su numeración es de facturación.
+        self.assertEqual(resolucion.modulo, Resolucion.Modulo.FACTURACION)
 
     def test_crear_software_pos_deja_dos_pos_en_borrador(self):
         self.client.post(self.url, self._payload_pos(), format="json")

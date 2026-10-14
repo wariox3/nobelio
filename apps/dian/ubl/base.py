@@ -24,6 +24,7 @@ from django.conf import settings
 from django.utils import timezone
 from lxml import etree
 
+from apps.catalogos.models import Tributo as _Tributo
 from apps.dian import identificadores as ident
 from apps.utilidades.nit import digito_verificacion
 

@@ -1796,6 +1796,7 @@ class DocumentoAPITests(APITestCase):
             fecha_resolucion=original.fecha_resolucion, prefijo=original.prefijo,
             rango_desde=1, rango_hasta=100,
             vigente_desde=original.vigente_desde, vigente_hasta=original.vigente_hasta,
+            ambiente=original.ambiente,
         )
 
         resp = self._crear()
@@ -1831,6 +1832,7 @@ class DocumentoAPITests(APITestCase):
             fecha_resolucion=original.fecha_resolucion, prefijo="NC",
             rango_desde=1, rango_hasta=100,
             vigente_desde=original.vigente_desde, vigente_hasta=original.vigente_hasta,
+            ambiente=original.ambiente,
         )
 
         # El payload va con prefijo SETP: tiene que elegir la original.

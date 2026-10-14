@@ -6,6 +6,7 @@ from apps.catalogos.models import TipoFactura
 from apps.documentos.models import Documento, DocumentoEstado, DocumentoTipo
 from apps.documentos.tests_utils import crear_catalogos_minimos, crear_certificado
 from apps.emisores.models import Emisor, Resolucion
+from apps.nucleo.models import Ambiente
 
 
 def _crear_emisor(cat, nit="901192048"):
@@ -40,6 +41,7 @@ class CrearDocumentoPruebaTests(APITestCase):
             numero_resolucion="18760000001", fecha_resolucion="2026-06-29",
             prefijo="SETP", rango_desde=990000000, rango_hasta=990000002,
             vigente_desde="2019-01-19", vigente_hasta="2030-01-19", activa=True,
+            ambiente=Ambiente.PRUEBAS,
         )
         datos.update(extra)
         return Resolucion.objects.create(**datos)

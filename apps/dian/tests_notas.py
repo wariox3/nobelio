@@ -6,6 +6,7 @@ from django.conf import settings
 from django.test import TestCase
 from lxml import etree
 
+from apps.catalogos.models import Tributo
 from apps.dian import ubl
 from apps.documentos import models as doc
 from apps.documentos.tests_utils import crear_adquiriente, crear_documento_factura
@@ -108,7 +109,7 @@ class NotaDebitoTests(NotasTestBase):
 
 
 class DocumentoSoporteTests(NotasTestBase):
-    def _xml(self):
+    def _xml(self, impuestos=()):
         ds = doc.Documento.objects.create(
             ambiente=2,
             documento_tipo=doc.DocumentoTipo.objects.get(codigo=doc.DocumentoTipo.Codigo.DOCUMENTO_SOPORTE),
@@ -119,12 +120,49 @@ class DocumentoSoporteTests(NotasTestBase):
             total_impuestos=Decimal("0.00"), total_a_pagar=Decimal("50000.00"),
         )
         crear_adquiriente(ds, self.base["catalogos"])
-        doc.DocumentoDetalle.objects.create(
+        linea = doc.DocumentoDetalle.objects.create(
             documento=ds, numero_linea=1, descripcion="Compra a no obligado",
             cantidad=Decimal("1"), unidad_medida=self.base["catalogos"]["unidad"],
             valor_unitario=Decimal("50000"), valor_total=Decimal("50000.00"),
         )
+        for tributo, tarifa, valor in impuestos:
+            doc.DocumentoDetalleImpuesto.objects.create(
+                detalle=linea, tributo=tributo, base_gravable=Decimal("50000.00"),
+                tarifa=Decimal(tarifa), valor=Decimal(valor),
+            )
         return ubl.constructor_para(ds, software=self.base["software"], ambiente=2).generar_xml()
+
+    def test_las_retenciones_van_aparte_de_los_impuestos(self):
+        """El IVA en cac:TaxTotal y la ReteFuente en cac:WithholdingTaxTotal.
+
+        Un documento soporte con impuestos reventaba al generar el XML: el
+        reparto consulta los códigos de retención y el import de `Tributo`
+        había quedado en otro módulo. La otra prueba no lo veía porque su
+        documento no trae impuestos.
+        """
+        retefuente = Tributo.objects.create(id=6, codigo="06", nombre="ReteFuente")
+        xml = self._xml(impuestos=[
+            (self.base["catalogos"]["iva"], "19.00", "9500.00"),
+            (retefuente, "10.00", "5000.00"),
+        ])
+
+        arbol = etree.fromstring(xml)
+        ns = ubl.NS
+
+        def codigos(etiqueta):
+            return [
+                esquema.findtext(f"{{{ns['cbc']}}}ID")
+                for esquema in arbol.findall(
+                    f"{{{ns['cac']}}}{etiqueta}/{{{ns['cac']}}}TaxSubtotal/"
+                    f"{{{ns['cac']}}}TaxCategory/{{{ns['cac']}}}TaxScheme"
+                )
+            ]
+
+        self.assertEqual(codigos("TaxTotal"), ["01"])
+        self.assertEqual(codigos("WithholdingTaxTotal"), ["06"])
+        esquema, arbol = _validar_xsd(xml, "UBL-Invoice-2.1.xsd")
+        if not esquema.validate(arbol):
+            self.fail("Documento soporte inválido:\n" + str(esquema.error_log))
 
     def test_tipo_05_y_cuds_valida_xsd(self):
         xml = self._xml()
