@@ -172,6 +172,20 @@ def _valor(monto) -> str:
     return f"{Decimal(monto).quantize(Decimal('0.01')):.2f}"
 
 
+def _porcentaje(monto, base) -> str:
+    """El porcentaje que ``monto`` es de ``base``.
+
+    Con dos decimales si es exacto así (un 5 % sale ``5.00``); si no, con seis,
+    para que monto = base × porcentaje siga cuadrando al céntimo: un tercio
+    escrito ``33.33`` descuadra un descuento de 1000 sobre 3000 en diez céntimos.
+    """
+    porcentaje = Decimal(monto) * 100 / Decimal(base)
+    dos = porcentaje.quantize(Decimal("0.01"))
+    if dos == porcentaje:
+        return f"{dos:.2f}"
+    return f"{porcentaje.quantize(Decimal('0.000001')):.6f}"
+
+
 def _cantidad(valor) -> str:
     """Formatea una cantidad con 6 decimales (formato UBL)."""
     return f"{Decimal(valor).quantize(Decimal('0.000001')):.6f}"
@@ -503,19 +517,28 @@ class ConstructorUBL:
             _sub(medios, "cbc", "PaymentDueDate",
                  self.doc.fecha_vencimiento.isoformat())
 
-    def _descuento_o_cargo(self, padre, *, secuencia, es_cargo, monto, base, motivo):
+    def _descuento_o_cargo(
+        self, padre, *, secuencia, es_cargo, monto, base, motivo,
+        con_porcentaje=False,
+    ):
         """Un cac:AllowanceCharge: descuento (false) o cargo (true).
 
-        El orden interno lo fija el XSD: ID, ChargeIndicator, Reason, Amount y
-        BaseAmount. No se emite MultiplierFactorNumeric —el porcentaje— porque
-        es opcional y deducirlo de monto/base introduciría un redondeo que la
-        DIAN cuadraría contra los totales.
+        El orden interno lo fija el XSD: ID, ChargeIndicator, Reason,
+        MultiplierFactorNumeric, Amount y BaseAmount.
+
+        ``con_porcentaje`` emite el MultiplierFactorNumeric, deducido de
+        monto/base. En la línea es obligatorio: sin él la DIAN rechaza con
+        FBE01, que pide los cuatro —indicador, porcentaje, monto y base—
+        juntos. En el documento es opcional y no se emite, para no meter un
+        redondeo que la DIAN cuadraría contra los totales.
         """
         ac = _sub(padre, "cac", "AllowanceCharge")
         _sub(ac, "cbc", "ID", secuencia)
         _sub(ac, "cbc", "ChargeIndicator", "true" if es_cargo else "false")
         _sub(ac, "cbc", "AllowanceChargeReason",
              motivo or ("Cargo" if es_cargo else "Descuento"))
+        if con_porcentaje:
+            _sub(ac, "cbc", "MultiplierFactorNumeric", _porcentaje(monto, base))
         _sub(ac, "cbc", "Amount", _valor(monto), currencyID=self.moneda)
         _sub(ac, "cbc", "BaseAmount", _valor(base), currencyID=self.moneda)
 
@@ -546,7 +569,7 @@ class ConstructorUBL:
         self._descuento_o_cargo(
             il, secuencia=1, es_cargo=False, monto=linea.descuento,
             base=linea.valor_total + linea.descuento,
-            motivo=linea.descuento_motivo,
+            motivo=linea.descuento_motivo, con_porcentaje=True,
         )
 
     def _etiqueta_impuesto(self, codigo) -> str:

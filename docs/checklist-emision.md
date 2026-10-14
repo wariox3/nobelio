@@ -293,6 +293,17 @@ con los otros dos; otro valor responde 400.
   soporte y su nota de ajuste; en factura, notas y P.O.S. responden 400.
   `total_descuentos` no puede superar el valor bruto (la suma de los `valor_total`
   de las líneas); igualarlo sí vale.
+  En las notas, `documento_referencia` es el id en nobelio (UUID) del documento
+  que corrigen, obligatorio, del mismo emisor, y además:
+  - **de su tipo**: la nota crédito y la débito corrigen una factura de venta,
+    la nota de ajuste un documento soporte, y las notas de ajuste crédito y
+    débito un documento equivalente P.O.S.;
+  - **aceptado por la DIAN** (estado `aceptado`): la nota lleva su CUFE y la
+    DIAN comprueba que exista;
+  - **del mismo `ambiente`** que la nota.
+
+  Se comprueba en ese orden y responde 400 en `documento_referencia` con la
+  primera que falle.
 - **Duplicado:** si ya existe un documento con el mismo emisor, tipo, prefijo y
   consecutivo, responde **409** con código `documento_duplicado` y la ruta del
   existente en la cabecera `Location`. Se comprueba después de la estructura y

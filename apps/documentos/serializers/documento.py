@@ -80,6 +80,19 @@ def mensaje_resolucion_no_aplica(tipo):
 # lista vive en el modelo porque `generar_y_firmar` exige lo mismo al emitir.
 TIPOS_QUE_EXIGEN_REFERENCIA = models.DocumentoTipo.CODIGOS_CON_REFERENCIA
 
+# Qué tipo de documento corrige cada nota. La nota de factura referencia un
+# CUFE, la de ajuste un CUDS y la del documento equivalente un CUDE: cada una
+# solo tiene sentido sobre el suyo, y el XML lo dice en el @schemeName.
+TIPO_QUE_CORRIGE_CADA_NOTA = {
+    models.DocumentoTipo.Codigo.NOTA_CREDITO: models.DocumentoTipo.Codigo.FACTURA_VENTA,
+    models.DocumentoTipo.Codigo.NOTA_DEBITO: models.DocumentoTipo.Codigo.FACTURA_VENTA,
+    models.DocumentoTipo.Codigo.NOTA_AJUSTE: models.DocumentoTipo.Codigo.DOCUMENTO_SOPORTE,
+    models.DocumentoTipo.Codigo.NOTA_AJUSTE_DE_CREDITO:
+        models.DocumentoTipo.Codigo.DOCUMENTO_EQUIVALENTE_POS,
+    models.DocumentoTipo.Codigo.NOTA_AJUSTE_DE_DEBITO:
+        models.DocumentoTipo.Codigo.DOCUMENTO_EQUIVALENTE_POS,
+}
+
 
 # Lista de conceptos de corrección (ResponseCode) aplicable a cada tipo de nota.
 CONCEPTOS_POR_TIPO = {
@@ -128,6 +141,34 @@ def mensaje_vencimiento_en_nota(tipo):
     return (
         f"{tipo.nombre} no lleva fecha de vencimiento: envíe `fecha_vencimiento` "
         "en null."
+    )
+
+
+def mensaje_referencia_de_otro_tipo(tipo, esperado, referencia):
+    """Mensaje para una nota que referencia un documento que no corrige."""
+    return (
+        f"Una {tipo.nombre.lower()} corrige un documento de tipo "
+        f"{esperado.label.lower()}, y el {referencia.numero or referencia.pk} es "
+        f"{referencia.documento_tipo.nombre.lower()}."
+    )
+
+
+def mensaje_referencia_no_aceptada(referencia):
+    """Mensaje para una nota sobre un documento que la DIAN no ha aceptado."""
+    return (
+        f"El documento {referencia.numero or referencia.pk} está "
+        f"«{referencia.estado.descripcion}»: solo se corrige un documento "
+        "aceptado por la DIAN, porque la nota lleva su CUFE y la DIAN comprueba "
+        "que exista."
+    )
+
+
+def mensaje_referencia_de_otro_ambiente(referencia):
+    """Mensaje para una nota de un ambiente sobre un documento del otro."""
+    return (
+        f"El documento {referencia.numero or referencia.pk} es del ambiente "
+        f"{referencia.ambiente} ({referencia.get_ambiente_display().lower()}): la "
+        "nota tiene que ir en el mismo."
     )
 
 
@@ -330,8 +371,10 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
     emisor = RelacionDelAlcance(
         queryset=Emisor.objects.select_related("certificado"), campo_emisor="id",
     )
+    # Con su tipo y su estado: `_validar_referencia` mira los dos.
     documento_referencia = RelacionDelAlcance(
-        queryset=models.Documento.objects.all(), required=False, allow_null=True
+        queryset=models.Documento.objects.select_related("documento_tipo", "estado"),
+        required=False, allow_null=True,
     )
 
     class Meta:
@@ -469,6 +512,7 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"documento_referencia": mensaje_nota_sin_referencia(tipo)}
             )
+        self._validar_referencia(attrs, tipo, referencia)
         self._validar_concepto(attrs, tipo)
         self._validar_vencimiento(attrs, tipo)
         self._validar_retenciones(attrs, tipo)
@@ -619,6 +663,44 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
             return
         if not datos:
             raise serializers.ValidationError({"pos": MENSAJE_POS_SIN_DATOS})
+
+    def _validar_referencia(self, attrs, tipo, referencia):
+        """El documento que corrige una nota tiene que poder corregirse.
+
+        Tres condiciones, en este orden, y la primera que falle es la que se
+        informa:
+
+        - **Su tipo**: el que corrige la nota (``TIPO_QUE_CORRIGE_CADA_NOTA``).
+          Una nota crédito sobre otra nota o sobre un documento soporte salía
+          con un CUFE que no es de una factura.
+        - **Aceptado por la DIAN**: la nota lleva su número, su CUFE y su fecha,
+          y la DIAN comprueba que exista. Sobre un borrador salía sin CUFE; sobre
+          uno rechazado, con uno que la DIAN no conoce.
+        - **Del mismo ambiente**: una nota de producción sobre una factura de
+          habilitación referencia un documento que en producción no existe.
+
+        Como la regla de la referencia obligatoria, evita una nota que se crea
+        bien, consume su consecutivo y solo falla al emitirla.
+        """
+        if referencia is None or tipo is None:
+            return
+        esperado = TIPO_QUE_CORRIGE_CADA_NOTA.get(tipo.codigo)
+        if esperado is None:
+            return
+        if referencia.documento_tipo.codigo != esperado:
+            raise serializers.ValidationError({
+                "documento_referencia":
+                    mensaje_referencia_de_otro_tipo(tipo, esperado, referencia),
+            })
+        if referencia.estado.nombre != models.DocumentoEstado.Nombre.ACEPTADO:
+            raise serializers.ValidationError({
+                "documento_referencia": mensaje_referencia_no_aceptada(referencia),
+            })
+        ambiente = attrs.get("ambiente", getattr(self.instance, "ambiente", None))
+        if ambiente is not None and int(ambiente) != referencia.ambiente:
+            raise serializers.ValidationError({
+                "documento_referencia": mensaje_referencia_de_otro_ambiente(referencia),
+            })
 
     def _validar_concepto(self, attrs, tipo):
         """El concepto de corrección va en las notas, y con su propia lista.

@@ -213,6 +213,55 @@ class GeneracionUBLTests(TestCase):
         self.assertEqual(len(total.findall(f"{cac}TaxSubtotal")), 1)
         self.assertEqual(total.findtext(f"{cac}TaxSubtotal/{cac}TaxCategory/{cbc}Percent"), "19.00")
 
+    # --- Descuento de la línea (regla FBE01) --------------------------------
+
+    def _descuento_de_linea(self, descuento, valor_total):
+        linea = self.documento.detalles.get()
+        linea.descuento, linea.valor_total = descuento, valor_total
+        linea.save(update_fields=["descuento", "valor_total"])
+        xml = self._generar()
+        cac, cbc = f"{{{ubl.NS['cac']}}}", f"{{{ubl.NS['cbc']}}}"
+        descuento = etree.fromstring(xml).find(f"{cac}InvoiceLine/{cac}AllowanceCharge")
+        return xml, {hijo.tag.replace(cbc, ""): hijo.text for hijo in descuento}
+
+    def test_el_descuento_de_linea_lleva_su_porcentaje(self):
+        """FBE01 pide los cuatro juntos: indicador, porcentaje, monto y base.
+
+        Sin el porcentaje la DIAN rechazaba cualquier factura con descuento en
+        una línea.
+        """
+        xml, descuento = self._descuento_de_linea(
+            Decimal("75000.00"), Decimal("1425000.00"),
+        )
+
+        self.assertEqual(descuento, {
+            "ID": "1", "ChargeIndicator": "false",
+            "AllowanceChargeReason": "Descuento",
+            "MultiplierFactorNumeric": "5.00",
+            "Amount": "75000.00", "BaseAmount": "1500000.00",
+        })
+        xsd_path = settings.DIAN_XSD_DIR / "maindoc" / "UBL-Invoice-2.1.xsd"
+        esquema = etree.XMLSchema(etree.parse(str(xsd_path)))
+        if not esquema.validate(etree.fromstring(xml)):
+            self.fail("XML inválido contra XSD:\n" + str(esquema.error_log))
+
+    def test_el_porcentaje_que_no_es_exacto_va_con_seis_decimales(self):
+        """Para que monto = base × porcentaje siga cuadrando al céntimo."""
+        _, descuento = self._descuento_de_linea(
+            Decimal("500000.00"), Decimal("1000000.00"),
+        )
+
+        self.assertEqual(descuento["MultiplierFactorNumeric"], "33.333333")
+
+    def test_el_descuento_del_documento_no_lleva_porcentaje(self):
+        self.documento.total_descuentos = Decimal("75000.00")
+        cac, cbc = f"{{{ubl.NS['cac']}}}", f"{{{ubl.NS['cbc']}}}"
+
+        descuento = etree.fromstring(self._generar()).find(f"{cac}AllowanceCharge")
+
+        self.assertIsNotNone(descuento)
+        self.assertIsNone(descuento.find(f"{cbc}MultiplierFactorNumeric"))
+
     # --- Base imponible del total (TaxExclusiveAmount, regla FAU04) ---------
 
     def _base_imponible(self):
