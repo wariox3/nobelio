@@ -72,7 +72,7 @@ class DocumentoRecibidoViewSet(
     """
 
     serializer_class = serializers.DocumentoRecibidoSerializer
-    queryset = Documento.objects.select_related("documento_tipo", "moneda")
+    queryset = Documento.objects.select_related("documento_tipo", "moneda", "forma_pago")
     pagination_class = PaginacionAjustable
 
     filter_backends = [filters.SearchFilter, OrdenEstable]

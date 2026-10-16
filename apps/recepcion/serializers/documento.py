@@ -8,13 +8,14 @@ class DocumentoRecibidoResumenSerializer(serializers.ModelSerializer):
     """Lo que se muestra de cada documento dentro de su correo."""
 
     documento_tipo = serializers.SlugRelatedField(slug_field="codigo", read_only=True)
+    forma_pago = serializers.SlugRelatedField(slug_field="codigo", read_only=True)
 
     class Meta:
         model = Documento
         fields = [
             "id", "emisor", "documento_tipo", "numero", "cufe_cude",
             "fecha_emision", "proveedor_numero_identificacion",
-            "proveedor_razon_social", "total_a_pagar", "validacion_codigo",
+            "proveedor_razon_social", "forma_pago", "total_a_pagar", "validacion_codigo",
             "verificacion_estado", "radian_estado",
         ]
         read_only_fields = fields

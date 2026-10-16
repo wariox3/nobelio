@@ -79,7 +79,7 @@ class CorreoViewSet(
         qs = super().get_queryset()
         # Un correo puede traer documentos de otro emisor (manda el NIT receptor
         # del XML): dentro del correo solo van los que alcanza quien consulta.
-        documentos = Documento.objects.select_related("documento_tipo")
+        documentos = Documento.objects.select_related("documento_tipo", "forma_pago")
         permitidos = emisores_permitidos(self.request)
         if permitidos is not None:
             documentos = documentos.filter(emisor__in=permitidos)

@@ -10477,6 +10477,10 @@ components:
           type: string
           readOnly: true
           title: Razón social del proveedor
+        forma_pago:
+          type: string
+          title: Código
+          readOnly: true
         total_a_pagar:
           type: string
           format: decimal
@@ -10512,6 +10516,7 @@ components:
       - documento_tipo
       - emisor
       - fecha_emision
+      - forma_pago
       - id
       - numero
       - proveedor_numero_identificacion
