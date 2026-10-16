@@ -10304,9 +10304,17 @@ components:
           title: Código
           readOnly: true
         forma_pago:
-          type: string
-          title: Código
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           readOnly: true
+          nullable: true
+          title: Forma de pago
+        forma_pago_nombre:
+          type: string
+          readOnly: true
+          nullable: true
         valor_bruto:
           type: string
           format: decimal
@@ -10404,6 +10412,7 @@ components:
       - fecha_emision
       - fecha_validacion
       - forma_pago
+      - forma_pago_nombre
       - hora_emision
       - id
       - moneda
@@ -10478,9 +10487,17 @@ components:
           readOnly: true
           title: Razón social del proveedor
         forma_pago:
-          type: string
-          title: Código
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
           readOnly: true
+          nullable: true
+          title: Forma de pago
+        forma_pago_nombre:
+          type: string
+          readOnly: true
+          nullable: true
         total_a_pagar:
           type: string
           format: decimal
@@ -10517,6 +10534,7 @@ components:
       - emisor
       - fecha_emision
       - forma_pago
+      - forma_pago_nombre
       - id
       - numero
       - proveedor_numero_identificacion
