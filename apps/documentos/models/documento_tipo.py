@@ -73,6 +73,16 @@ class DocumentoTipo(ModeloConFechas):
         Codigo.NOTA_AJUSTE_DE_DEBITO,
     })
 
+    # Las notas que pueden ir sin documento referenciado: la DIAN tiene para
+    # ellas un tipo de operación propio, «sin referencia a facturas»
+    # (CustomizationID 22 y 32), y salen sin cac:BillingReference. Las demás
+    # notas lo exigen siempre.
+    CODIGOS_SIN_REFERENCIA_PERMITIDA = frozenset({
+        Codigo.NOTA_CREDITO,
+        Codigo.NOTA_DEBITO,
+    })
+    CODIGOS_CON_REFERENCIA_OBLIGATORIA = CODIGOS_CON_REFERENCIA - CODIGOS_SIN_REFERENCIA_PERMITIDA
+
     # Los tipos en los que el `adquiriente` del documento no es el receptor sino
     # el **vendedor** no obligado a facturar (SNO), y el que emite y firma es el
     # comprador. De ahí salen los roles UBL invertidos y el CustomizationID por

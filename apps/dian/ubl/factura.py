@@ -51,13 +51,28 @@ class _ConstructorNotaUBL(ConstructorUBL):
     # lo que han hecho siempre las notas de factura y de documento soporte;
     # solo la nota de crédito del documento equivalente lo trae.
     codigo_tipo_referencia = None
+    # CustomizationID de la nota sin documento referenciado («sin referencia a
+    # facturas»). `None` = esta nota no puede ir sin referencia.
+    customization_id_sin_referencia = None
+
+    def __init__(self, documento, *args, **kwargs):
+        super().__init__(documento, *args, **kwargs)
+        if (
+            documento.documento_referencia_id is None
+            and self.customization_id_sin_referencia
+            and not kwargs.get("customization_id")
+        ):
+            self.customization_id = self.customization_id_sin_referencia
 
     def _discrepancia(self, raiz):
+        # El concepto va siempre, también sin referencia: es el que dice por
+        # qué se corrige. ReferenceID (el número corregido) solo si lo hay.
         ref = self.doc.documento_referencia
-        if ref is None:
+        if ref is None and not self.customization_id_sin_referencia:
             return
         discrepancia = _sub(raiz, "cac", "DiscrepancyResponse")
-        _sub(discrepancia, "cbc", "ReferenceID", ref.numero)
+        if ref is not None:
+            _sub(discrepancia, "cbc", "ReferenceID", ref.numero)
         _sub(discrepancia, "cbc", "ResponseCode", self.concepto)
         _sub(discrepancia, "cbc", "Description", self.doc.observaciones or "Corrección")
 
@@ -84,6 +99,7 @@ class ConstructorNotaCredito(_ConstructorNotaUBL):
     etiqueta_cantidad = "CreditedQuantity"
     etiqueta_total = "LegalMonetaryTotal"
     customization_id_default = "20"
+    customization_id_sin_referencia = "22"
 
 
 class ConstructorNotaDebito(_ConstructorNotaUBL):
@@ -96,4 +112,5 @@ class ConstructorNotaDebito(_ConstructorNotaUBL):
     etiqueta_cantidad = "DebitedQuantity"
     etiqueta_total = "RequestedMonetaryTotal"
     customization_id_default = "30"
+    customization_id_sin_referencia = "32"
     permite_descuento_documento = False  # el DebitNoteType del XSD no lo define

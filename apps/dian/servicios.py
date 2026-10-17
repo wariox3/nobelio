@@ -476,10 +476,16 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
             "numeración asociada."
         )
     if (
-        codigo_tipo in DocumentoTipo.CODIGOS_CON_REFERENCIA
+        codigo_tipo in DocumentoTipo.CODIGOS_CON_REFERENCIA_OBLIGATORIA
         and documento.documento_referencia is None
     ):
         raise ErrorEmision("La nota debe referenciar el documento que corrige.")
+    if (
+        codigo_tipo == DocumentoTipo.Codigo.NOTA_CREDITO
+        and documento.documento_referencia is None
+        and documento.concepto_correccion == Documento.ConceptoNotaCredito.ANULACION
+    ):
+        raise ErrorEmision("Una anulación de factura debe referenciar la factura que anula.")
 
     # El identificador se recalcula en cada firma. `construir` reutiliza el
     # `cufe_cude` que ya tenga el documento, y la `hora_emision` que acaba de

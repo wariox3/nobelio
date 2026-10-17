@@ -294,7 +294,14 @@ con los otros dos; otro valor responde 400.
   `total_descuentos` no puede superar el valor bruto (la suma de los `valor_total`
   de las líneas); igualarlo sí vale.
   En las notas, `documento_referencia` es el id en nobelio (UUID) del documento
-  que corrigen, obligatorio, del mismo emisor, y además:
+  que corrigen, del mismo emisor. Es obligatorio en las notas de ajuste (de
+  documento soporte y de documento equivalente P.O.S.). En la nota crédito y la
+  débito de factura es opcional: con él salen como «nota que referencia una
+  factura electrónica» (`CustomizationID` 20 y 30, con `BillingReference`); sin
+  él, como «sin referencia a facturas» (22 y 32, sin `BillingReference` ni
+  `ReferenceID`, pero con el concepto en `DiscrepancyResponse`). La anulación
+  (concepto 2 de la nota crédito) no puede ir sin referencia: responde 400 en
+  `documento_referencia`. Si viene, además tiene que ser:
   - **de su tipo**: la nota crédito y la débito corrigen una factura de venta,
     la nota de ajuste un documento soporte, y las notas de ajuste crédito y
     débito un documento equivalente P.O.S.;

@@ -78,7 +78,9 @@ def mensaje_resolucion_no_aplica(tipo):
 # Tipos cuyo XML se construye con DiscrepancyResponse y BillingReference: sin
 # el documento corregido no hay nota que valga (ver `_ConstructorNotaUBL`). La
 # lista vive en el modelo porque `generar_y_firmar` exige lo mismo al emitir.
-TIPOS_QUE_EXIGEN_REFERENCIA = models.DocumentoTipo.CODIGOS_CON_REFERENCIA
+# La nota crédito y la débito de factura pueden ir sin referencia: salen como
+# «sin referencia a facturas» (CustomizationID 22 y 32).
+TIPOS_QUE_EXIGEN_REFERENCIA = models.DocumentoTipo.CODIGOS_CON_REFERENCIA_OBLIGATORIA
 
 # Qué tipo de documento corrige cada nota. La nota de factura referencia un
 # CUFE, la de ajuste un CUDS y la del documento equivalente un CUDE: cada una
@@ -170,6 +172,12 @@ def mensaje_referencia_de_otro_ambiente(referencia):
         f"{referencia.ambiente} ({referencia.get_ambiente_display().lower()}): la "
         "nota tiene que ir en el mismo."
     )
+
+
+MENSAJE_ANULACION_SIN_REFERENCIA = (
+    "Una anulación de factura (concepto 2) debe referenciar la factura que "
+    "anula: indique su id en `documento_referencia`."
+)
 
 
 def mensaje_nota_sin_referencia(tipo):
@@ -514,6 +522,7 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
             )
         self._validar_referencia(attrs, tipo, referencia)
         self._validar_concepto(attrs, tipo)
+        self._validar_anulacion_sin_referencia(attrs, tipo, referencia)
         self._validar_vencimiento(attrs, tipo)
         self._validar_retenciones(attrs, tipo)
         self._validar_descuentos_globales(attrs)
@@ -701,6 +710,25 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
             raise serializers.ValidationError({
                 "documento_referencia": mensaje_referencia_de_otro_ambiente(referencia),
             })
+
+    def _validar_anulacion_sin_referencia(self, attrs, tipo, referencia):
+        """Una anulación (concepto 2) tiene que decir qué factura anula.
+
+        La nota crédito puede ir sin referencia («sin referencia a facturas»,
+        CustomizationID 22), pero anular ninguna factura no tiene sentido. La
+        misma regla la exige `generar_y_firmar`.
+        """
+        if referencia is not None or tipo is None:
+            return
+        if tipo.codigo != models.DocumentoTipo.Codigo.NOTA_CREDITO:
+            return
+        concepto = attrs.get("concepto_correccion")
+        if concepto is None and self.instance is not None:
+            concepto = self.instance.concepto_correccion
+        if concepto == models.Documento.ConceptoNotaCredito.ANULACION:
+            raise serializers.ValidationError(
+                {"documento_referencia": MENSAJE_ANULACION_SIN_REFERENCIA}
+            )
 
     def _validar_concepto(self, attrs, tipo):
         """El concepto de corrección va en las notas, y con su propia lista.

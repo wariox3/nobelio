@@ -271,7 +271,9 @@ class Documento(ModeloUUID, ModeloConFechas):
         "(contrato, acuerdo marco) cuando es distinto del número de la orden.",
     )
 
-    # Para notas crédito/débito: referencia al documento corregido.
+    # Para notas: el documento corregido. La nota crédito y la débito de
+    # factura pueden ir sin él y salen como «sin referencia a facturas»
+    # (CustomizationID 22 y 32); las demás notas lo exigen.
     documento_referencia = models.ForeignKey(
         "self", on_delete=models.PROTECT,
         related_name="notas", null=True, blank=True,
