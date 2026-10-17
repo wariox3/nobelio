@@ -40,9 +40,9 @@ class DocumentoRecibidoViewSet(
     Filtros: ``?emisor=<id>``, ``?correo=<id>``,
     ``?documento_tipo=factura_venta|nota_credito|nota_debito``,
     ``?proveedor=<NIT sin DV>``, ``?verificacion_estado=valido|invalido|...``,
-    ``?radian_estado=sin_eventos|acuse|recibo|aceptada|reclamada``
-    y ``?desde=AAAA-MM-DD`` / ``?hasta=AAAA-MM-DD`` sobre la fecha de
-    emisión, ambos inclusive. ``?ordering=`` ordena por
+    ``?radian_estado=sin_eventos|acuse|recibo|aceptada|reclamada``,
+    ``?estado_recepcion=true|false`` y ``?desde=AAAA-MM-DD`` /
+    ``?hasta=AAAA-MM-DD`` sobre la fecha de emisión, ambos inclusive. ``?ordering=`` ordena por
     ``fecha_emision``, ``numero``, ``total_a_pagar`` o ``creado_en``.
 
     ``?search=`` busca en cuatro campos, cada uno a su manera:
@@ -139,6 +139,8 @@ class DocumentoRecibidoViewSet(
             qs = qs.filter(verificacion_estado=estado)
         if radian := params.get("radian_estado"):
             qs = qs.filter(radian_estado=radian)
+        if (terminada := params.get("estado_recepcion", "").lower()) in ("true", "false"):
+            qs = qs.filter(estado_recepcion=terminada == "true")
         return qs
 
     @extend_schema(

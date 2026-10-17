@@ -19,6 +19,7 @@ class DocumentoRecibidoResumenSerializer(serializers.ModelSerializer):
             "fecha_emision", "proveedor_numero_identificacion",
             "proveedor_razon_social", "forma_pago", "forma_pago_nombre",
             "total_a_pagar", "validacion_codigo", "verificacion_estado", "radian_estado",
+            "estado_recepcion",
         ]
         read_only_fields = fields
 
@@ -48,6 +49,6 @@ class DocumentoRecibidoSerializer(serializers.ModelSerializer):
             "valor_bruto", "total_impuestos", "total_a_pagar",
             "validacion_codigo", "fecha_validacion", "ambiente",
             "verificacion_estado", "verificacion_codigo", "verificacion_descripcion",
-            "verificado_en", "radian_estado", "tiene_xml_factura", "tiene_pdf", "creado_en",
+            "verificado_en", "radian_estado", "estado_recepcion", "tiene_xml_factura", "tiene_pdf", "creado_en",
         ]
         read_only_fields = fields

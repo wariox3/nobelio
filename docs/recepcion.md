@@ -217,6 +217,16 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
     no errores, y no cambian el estado.
   - ⚠ Falta saber qué `StatusCode` devuelve un CUFE inexistente. Las pruebas
     suponen `66`.
+- **Recepción terminada** (2026-10-17): `Documento.estado_recepcion`, booleano,
+  `False` por defecto. Pasa a `True` cuando una **factura de venta de contado**
+  se verifica como válida (`verificacion.verificar`): no admite eventos RADIAN
+  (LGC62), así que su recibo termina ahí y no saca acuse automático. La forma
+  de pago de los documentos de antes se lee de su XML la primera vez
+  (`eventos.codigo_forma_pago`). La migración `recepcion/0010` marca las de
+  contado que ya estaban válidas y tenían guardada la forma de pago; las que
+  no la tienen se marcan al verificarlas de nuevo. En la API: el campo en el
+  documento y `?estado_recepcion=true|false`. Las facturas a crédito y las
+  notas quedan en `False` por ahora.
 - **Comando `reprocesar_correos`** (`apps/recepcion/management/commands/`):
   `--id <n>` o `--todos`. Corre en el mismo proceso, no en Celery, y muestra
   cómo quedó cada correo.
@@ -417,6 +427,12 @@ empezar el siguiente.
     firmado y el ApplicationResponse de la DIAN. Al registrarse, actualiza
     `Documento.radian_estado` (`sin_eventos`, `acuse`, `recibo`, `aceptada`,
     `reclamada`).
+  - Ambiente bloqueado (2026-10-17): fuera de `ENV=prod` no se piden
+    eventos sobre facturas de producción (`apps/nucleo/entorno.py`). `solicitar`
+    responde 400 antes de crear el evento, así que no gasta número. Si uno ya
+    creado llega al envío bloqueado, `enviar` lo deja en `error` con el motivo
+    y no lo genera ni lo envía. Antes se quedaba en `pendiente` sin explicación:
+    le pasó a `ACR2` en desarrollo, que se marcó `rechazado` a mano.
   - Sin reintentos automáticos: si la DIAN no responde, puede que sí lo haya
     registrado. Queda en `error` y se reenvía con
     `POST /api/recepcion/evento/<id>/enviar/`, con el mismo XML y CUDE. ⚠ Si
@@ -484,6 +500,7 @@ empezar el siguiente.
 | Notificación del evento al proveedor | No se hace: R5 descartado. El evento vale con el registro en RADIAN (2026-10-09) |
 | Reenvío de eventos | Sin reintentos automáticos: un evento sin respuesta queda en `error` y se reenvía a mano con el mismo XML (2026-10-09) |
 | Eventos sobre facturas no verificadas | No: la DIAN tiene que tener la factura como válida (`verificacion_estado`) antes de cualquier evento (2026-10-09) |
+| Recepción terminada | `estado_recepcion` en `True` para las facturas de contado al verificarse como válidas. Las demás, en `False` por ahora (decidido 2026-10-17) |
 | Acuse (030) | Automático al verificarse la factura como válida, si el emisor lo enciende: apagado por defecto (decidido 2026-10-09) |
 | Persona que recibe (030/032) | Un valor por defecto en el emisor que la petición puede reemplazar |
 | Alcance RADIAN | Solo como adquiriente (030–033 sobre `rec_documento`), operado desde nobelio, sin ERP ni webhook. Nada sobre las facturas emitidas: ni 034, ni consulta de eventos de los clientes, ni bloqueo de notas (decidido 2026-10-06) |

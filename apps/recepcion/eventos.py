@@ -47,6 +47,7 @@ from apps.documentos.models import DocumentoTipo
 from apps.emisores.models import Emisor, SoftwareDian
 from apps.emisores.servicios import motivo_no_puede_emitir
 from apps.nucleo.colas import encolar
+from apps.nucleo.entorno import AmbienteBloqueado, exigir_ambiente_permitido
 from apps.nucleo.models import Ambiente
 from apps.nucleo.registro import campos
 from apps.recepcion import extraccion
@@ -193,13 +194,21 @@ def acuse_automatico(documento):
 def _validar_documento(documento):
     if documento.documento_tipo.codigo != DocumentoTipo.Codigo.FACTURA_VENTA:
         raise EventoInvalido("Los eventos RADIAN son solo sobre facturas de venta.")
+    try:
+        # Fuera de ENV=prod no sale nada a la DIAN de producción: se dice
+        # aquí, antes de crear el evento y gastar su número.
+        exigir_ambiente_permitido(
+            documento.ambiente or Ambiente.PRODUCCION, "enviar eventos RADIAN",
+        )
+    except AmbienteBloqueado as error:
+        raise EventoInvalido(str(error.detail))
     if documento.verificacion_estado != EstadoVerificacion.VALIDO:
         raise EventoInvalido(
             "La DIAN no tiene verificada la factura como válida "
             f"(verificación: {documento.get_verificacion_estado_display().lower()}). "
             "Verifícala antes con verificar/."
         )
-    if _forma_pago(documento) == CONTADO:
+    if codigo_forma_pago(documento) == CONTADO:
         raise EventoInvalido(
             "La factura es de contado: la DIAN solo admite eventos RADIAN sobre "
             "facturas a crédito (regla LGC62)."
@@ -210,7 +219,7 @@ def _validar_documento(documento):
         raise EventoInvalido("La factura tiene fecha futura: todavía no admite eventos.")
 
 
-def _forma_pago(documento):
+def codigo_forma_pago(documento):
     """El código de la forma de pago, o ``""`` si no se sabe.
 
     Los documentos de antes no la tienen guardada: se lee de su XML en B2 y se
@@ -324,6 +333,12 @@ def enviar(evento, *, cliente=None, firmador=None):
     """
     if evento.estado not in (EstadoEvento.PENDIENTE, EstadoEvento.ERROR):
         return evento
+    try:
+        exigir_ambiente_permitido(evento.ambiente, "enviar eventos RADIAN")
+    except AmbienteBloqueado as error:
+        # No es transitorio ni lo arregla un reintento: queda en error con
+        # el motivo. El evento nunca salió hacia la DIAN.
+        return marcar_error(evento, str(error.detail))
     Evento.objects.filter(pk=evento.pk).update(intentos=evento.intentos + 1)
     evento.intentos += 1
     emisor = evento.emisor
@@ -339,6 +354,10 @@ def enviar(evento, *, cliente=None, firmador=None):
         raise ErrorTransitorio(str(error))
     try:
         respuesta = cliente.enviar_evento(xml_firmado, _nombre_archivo(evento))
+    except AmbienteBloqueado as error:
+        # El servidor configurado es el de producción aunque el evento no lo
+        # sea: el cliente lo frena antes de enviar.
+        return marcar_error(evento, str(error.detail))
     except (requests.RequestException, etree.XMLSyntaxError) as error:
         raise ErrorTransitorio(f"La DIAN no respondió: {error}.")
     return _guardar_respuesta(evento, respuesta)

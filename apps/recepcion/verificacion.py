@@ -26,6 +26,7 @@ from django.utils import timezone
 from lxml import etree
 
 from apps.dian.servicios import construir_cliente_emisor
+from apps.documentos.models import DocumentoTipo
 from apps.emisores.servicios import motivo_no_puede_emitir
 from apps.nucleo.models import Ambiente
 from apps.nucleo.registro import campos
@@ -64,12 +65,34 @@ def verificar(documento, *, cliente=None):
     detalle = " ".join(filter(None, [respuesta.descripcion_estado, *respuesta.errores]))
     documento = _guardar(documento, estado, respuesta.codigo_estado, detalle)
     if estado == EstadoVerificacion.VALIDO:
-        # Con la factura confirmada, el acuse de recibo (030) si el emisor lo
-        # tiene automático. No falla: lo que lo impida queda en el log.
         from apps.recepcion import eventos
 
-        eventos.acuse_automatico(documento)
+        if _es_factura_de_contado(documento, eventos):
+            # No admite eventos RADIAN (LGC62): el recibo termina aquí.
+            _terminar_recepcion(documento)
+        else:
+            # Con la factura confirmada, el acuse de recibo (030) si el emisor
+            # lo tiene automático. No falla: lo que lo impida queda en el log.
+            eventos.acuse_automatico(documento)
     return documento
+
+
+def _es_factura_de_contado(documento, eventos):
+    """Si es una factura de venta de contado. La forma de pago de los
+    documentos de antes se lee de su XML (y se guarda) la primera vez."""
+    if documento.documento_tipo.codigo != DocumentoTipo.Codigo.FACTURA_VENTA:
+        return False
+    return eventos.codigo_forma_pago(documento) == eventos.CONTADO
+
+
+def _terminar_recepcion(documento):
+    if documento.estado_recepcion:
+        return
+    documento.estado_recepcion = True
+    documento.save(update_fields=["estado_recepcion", "actualizado_en"])
+    logger.info("recepcion.recepcion_terminada %s", campos(
+        documento=documento.pk, motivo="factura_contado",
+    ))
 
 
 def marcar_error(documento, detalle):
