@@ -225,8 +225,10 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
   (`eventos.codigo_forma_pago`). La migración `recepcion/0010` marca las de
   contado que ya estaban válidas y tenían guardada la forma de pago; las que
   no la tienen se marcan al verificarlas de nuevo. En la API: el campo en el
-  documento y `?estado_recepcion=true|false`. Las facturas a crédito y las
-  notas quedan en `False` por ahora.
+  documento y `?estado_recepcion=true|false`. Una factura a crédito pasa a
+  `True` cuando la DIAN registra su aceptación (033) o su reclamo (031)
+  (`eventos.CIERRAN_RECEPCION`, en `_guardar_respuesta`); la migración
+  `recepcion/0011` marca las que ya los tenían. Las notas quedan en `False`.
 - **Comando `reprocesar_correos`** (`apps/recepcion/management/commands/`):
   `--id <n>` o `--todos`. Corre en el mismo proceso, no en Celery, y muestra
   cómo quedó cada correo.
@@ -500,7 +502,7 @@ empezar el siguiente.
 | Notificación del evento al proveedor | No se hace: R5 descartado. El evento vale con el registro en RADIAN (2026-10-09) |
 | Reenvío de eventos | Sin reintentos automáticos: un evento sin respuesta queda en `error` y se reenvía a mano con el mismo XML (2026-10-09) |
 | Eventos sobre facturas no verificadas | No: la DIAN tiene que tener la factura como válida (`verificacion_estado`) antes de cualquier evento (2026-10-09) |
-| Recepción terminada | `estado_recepcion` en `True` para las facturas de contado al verificarse como válidas. Las demás, en `False` por ahora (decidido 2026-10-17) |
+| Recepción terminada | `estado_recepcion` en `True` para las facturas de contado al verificarse como válidas. Las facturas a crédito, al registrarse el 033 o el 031: con el reclamo también, porque no cabe otro evento; lo comercial lo dice `radian_estado = reclamada` (decidido 2026-10-17) |
 | Acuse (030) | Automático al verificarse la factura como válida, si el emisor lo enciende: apagado por defecto (decidido 2026-10-09) |
 | Persona que recibe (030/032) | Un valor por defecto en el emisor que la petición puede reemplazar |
 | Alcance RADIAN | Solo como adquiriente (030–033 sobre `rec_documento`), operado desde nobelio, sin ERP ni webhook. Nada sobre las facturas emitidas: ni 034, ni consulta de eventos de los clientes, ni bloqueo de notas (decidido 2026-10-06) |

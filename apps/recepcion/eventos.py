@@ -63,6 +63,9 @@ ACUSE, RECLAMO, RECIBO, ACEPTACION = (
 # El prefijo del número, por código. Los de los ejemplos oficiales, salvo el
 # 032, cuyo ejemplo no trae ninguno.
 PREFIJOS = {ACUSE: "ACR", RECLAMO: "REC", RECIBO: "RBS", ACEPTACION: "ACE"}
+# Los eventos que, registrados, terminan el recibo (`Documento.estado_recepcion`).
+CIERRAN_RECEPCION = (ACEPTACION, RECLAMO)
+
 # Lo que el evento registrado dice de la factura (`Documento.radian_estado`).
 RESUMEN = {
     ACUSE: EstadoRadian.ACUSE,
@@ -483,7 +486,13 @@ def _guardar_respuesta(evento, respuesta):
         if evento.estado == EstadoEvento.REGISTRADO:
             documento = evento.documento
             documento.radian_estado = RESUMEN[evento.evento_radian.codigo]
-            documento.save(update_fields=["radian_estado", "actualizado_en"])
+            guardar = ["radian_estado", "actualizado_en"]
+            if evento.evento_radian.codigo in CIERRAN_RECEPCION:
+                # Con la aceptación o el reclamo no cabe otro evento: el
+                # recibo de la factura terminó en nobelio.
+                documento.estado_recepcion = True
+                guardar.append("estado_recepcion")
+            documento.save(update_fields=guardar)
     logger.info("recepcion.evento_enviado %s", campos(
         evento=evento.pk, estado=evento.estado, codigo=evento.respuesta_codigo,
     ))
