@@ -5,7 +5,8 @@ from unittest import mock
 
 import requests
 from django.conf import settings
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from django.utils import timezone
 from lxml import etree
 from rest_framework.test import APITestCase
 
@@ -19,6 +20,7 @@ from apps.dian.tests_firma import _generar_certificado
 from apps.documentos.models import DocumentoTipo
 from apps.documentos.tests_utils import crear_catalogos_minimos, crear_usuario
 from apps.emisores.models import Emisor, SoftwareDian
+from apps.nucleo.models import Ambiente
 from apps.recepcion import adjuntos, eventos, tareas, verificacion
 from apps.recepcion.models import (
     Correo, Documento, EstadoEvento, EstadoRadian, EstadoVerificacion, Evento,
@@ -113,9 +115,12 @@ class BaseEventos:
 
     def documento(self, cufe, *, tipo="factura_venta", verificado=True):
         documento = crear_documento_recibido(self.correo, self.emisor, cufe, tipo=tipo)
+        # De habilitación: fuera de ENV=prod los eventos sobre facturas de
+        # producción se bloquean (`BloqueoProduccionTests`).
+        documento.ambiente = Ambiente.PRUEBAS
         if verificado:
             documento.verificacion_estado = EstadoVerificacion.VALIDO
-            documento.save()
+        documento.save()
         return Documento.objects.select_related("emisor", "documento_tipo").get(pk=documento.pk)
 
     def firmador(self):
@@ -185,7 +190,7 @@ class SolicitarTests(BaseEventos, TestCase):
             xml_documento=xml_documento(cufe="3" * 96, forma_pago="1"),
         )
         Documento.objects.filter(pk=documento.pk).update(
-            verificacion_estado=EstadoVerificacion.VALIDO,
+            verificacion_estado=EstadoVerificacion.VALIDO, ambiente=Ambiente.PRUEBAS,
         )
         documento = Documento.objects.select_related("emisor", "documento_tipo").get(pk=documento.pk)
         self.assertIsNone(documento.forma_pago)
@@ -575,3 +580,164 @@ class EliminarEventoTests(BaseEventos, APITestCase):
         evento = self.rechazado()
         self.client.force_authenticate(crear_usuario(nombre="Otro", email="otro@x.co"))
         self.assertEqual(self.client.delete(f"{URL_EVENTO}{evento.pk}/").status_code, 404)
+
+
+class EstadoRecepcionTests(BaseEventos, TestCase):
+    """Cuándo termina el recibo de una factura (`Documento.estado_recepcion`)."""
+
+    def setUp(self):
+        super().setUp()
+        self.contado = FormaPago.objects.create(id=1, codigo="1", nombre="Contado")
+        self.credito = FormaPago.objects.create(id=2, codigo="2", nombre="Crédito")
+
+    def factura_con(self, cufe, forma_pago, *, tipo="factura_venta"):
+        documento = self.documento(cufe, tipo=tipo, verificado=False)
+        documento.forma_pago = forma_pago
+        documento.save()
+        return documento
+
+    def enviar(self, evento, cliente=None):
+        evento = Evento.objects.select_related("documento", "emisor", "evento_radian").get(pk=evento.pk)
+        return eventos.enviar(evento, cliente=cliente or ClienteFalso(), firmador=self.firmador())
+
+    def test_empieza_sin_terminar(self):
+        self.assertFalse(self.factura.estado_recepcion)
+
+    def test_la_de_contado_termina_al_verificarse_y_no_saca_acuse(self):
+        documento = verificacion.verificar(self.factura_con("2", self.contado), cliente=ClienteFalso())
+        documento.refresh_from_db()
+        self.assertTrue(documento.estado_recepcion)
+        self.assertFalse(Evento.objects.exists())
+
+    def test_la_de_contado_que_la_dian_no_reconoce_no_termina(self):
+        class Invalida(ClienteFalso):
+            def consultar_estado(self, track_id):
+                return soap.RespuestaDian(es_valido=False, codigo_estado="66")
+
+        documento = verificacion.verificar(self.factura_con("2", self.contado), cliente=Invalida())
+        documento.refresh_from_db()
+        self.assertFalse(documento.estado_recepcion)
+
+    def test_la_de_contado_vieja_lee_la_forma_de_pago_del_xml(self):
+        documento = crear_documento_recibido(
+            self.correo, self.emisor, "3",
+            xml_documento=xml_documento(cufe="3" * 96, forma_pago="1"),
+        )
+        documento = Documento.objects.select_related("emisor", "documento_tipo").get(pk=documento.pk)
+        verificacion.verificar(documento, cliente=ClienteFalso())
+        documento.refresh_from_db()
+        self.assertTrue(documento.estado_recepcion)
+        self.assertEqual(documento.forma_pago.codigo, "1")
+
+    def test_la_de_credito_no_termina_al_verificarse(self):
+        documento = verificacion.verificar(self.factura_con("2", self.credito), cliente=ClienteFalso())
+        documento.refresh_from_db()
+        self.assertFalse(documento.estado_recepcion)
+
+    def test_una_nota_de_contado_no_termina(self):
+        documento = verificacion.verificar(
+            self.factura_con("2", self.contado, tipo="nota_credito"), cliente=ClienteFalso(),
+        )
+        documento.refresh_from_db()
+        self.assertFalse(documento.estado_recepcion)
+
+    def test_la_aceptacion_registrada_la_termina(self):
+        self.registrado("030")
+        self.registrado("032", fecha=timezone.localdate())
+        self.enviar(eventos.solicitar(self.factura, "033"))
+        self.factura.refresh_from_db()
+        self.assertEqual(self.factura.radian_estado, EstadoRadian.ACEPTADA)
+        self.assertTrue(self.factura.estado_recepcion)
+
+    def test_el_reclamo_registrado_la_termina(self):
+        self.registrado("030")
+        self.registrado("032", fecha=timezone.localdate())
+        self.enviar(eventos.solicitar(
+            self.factura, "031", concepto_reclamo=ConceptoReclamo.objects.get(codigo="02"),
+        ))
+        self.factura.refresh_from_db()
+        self.assertEqual(self.factura.radian_estado, EstadoRadian.RECLAMADA)
+        self.assertTrue(self.factura.estado_recepcion)
+
+    def test_el_acuse_y_el_recibo_no_la_terminan(self):
+        self.enviar(eventos.solicitar(self.factura, "030"))
+        self.factura.refresh_from_db()
+        self.assertEqual(self.factura.radian_estado, EstadoRadian.ACUSE)
+        self.assertFalse(self.factura.estado_recepcion)
+
+    def test_la_aceptacion_rechazada_no_la_termina(self):
+        self.registrado("030")
+        self.registrado("032", fecha=timezone.localdate())
+        self.enviar(eventos.solicitar(self.factura, "033"), ClienteFalso(respuesta_dian(False)))
+        self.factura.refresh_from_db()
+        self.assertFalse(self.factura.estado_recepcion)
+
+
+class EstadoRecepcionApiTests(BaseEventos, APITestCase):
+    def setUp(self):
+        super().setUp()
+        self.client.force_authenticate(self.usuario)
+        self.terminada = self.documento("2")
+        Documento.objects.filter(pk=self.terminada.pk).update(estado_recepcion=True)
+
+    def ids(self, consulta):
+        resp = self.client.get(f"{URL_DOCUMENTO}?{consulta}")
+        self.assertEqual(resp.status_code, 200, resp.data)
+        return {fila["id"] for fila in resp.data["results"]}
+
+    def test_filtra_por_estado_de_recepcion(self):
+        self.assertEqual(self.ids("estado_recepcion=true"), {str(self.terminada.pk)})
+        self.assertEqual(self.ids("estado_recepcion=false"), {str(self.factura.pk)})
+        self.assertEqual(len(self.ids("estado_recepcion=otro")), 2)
+
+    def test_el_detalle_lo_trae(self):
+        resp = self.client.get(f"{URL_DOCUMENTO}{self.terminada.pk}/")
+        self.assertIs(resp.data["estado_recepcion"], True)
+
+
+class BloqueoProduccionTests(BaseEventos, TestCase):
+    """Fuera de ENV=prod no salen eventos sobre facturas de producción."""
+
+    def setUp(self):
+        super().setUp()
+        Documento.objects.filter(pk=self.factura.pk).update(ambiente=Ambiente.PRODUCCION)
+        self.factura.refresh_from_db()
+
+    def test_no_se_pide_ni_gasta_numero(self):
+        with self.assertRaisesMessage(eventos.EventoInvalido, "ENV=test"):
+            eventos.solicitar(self.factura, "030")
+        self.assertFalse(Evento.objects.exists())
+        with override_settings(ENV="prod"):
+            self.assertEqual(eventos.solicitar(self.factura, "030").numero, "ACR1")
+
+    def test_sin_ambiente_cuenta_como_produccion(self):
+        Documento.objects.filter(pk=self.factura.pk).update(ambiente=None)
+        self.factura.refresh_from_db()
+        with self.assertRaisesMessage(eventos.EventoInvalido, "ENV=test"):
+            eventos.solicitar(self.factura, "030")
+
+    def test_uno_ya_creado_queda_en_error_sin_enviarse(self):
+        with override_settings(ENV="prod"):
+            evento = eventos.solicitar(self.factura, "030")
+        cliente = ClienteFalso()
+        evento = eventos.enviar(
+            Evento.objects.select_related("documento", "emisor", "evento_radian").get(pk=evento.pk),
+            cliente=cliente, firmador=self.firmador(),
+        )
+        self.assertEqual(evento.estado, EstadoEvento.ERROR)
+        self.assertIn("ENV=test", evento.respuesta_descripcion)
+        self.assertEqual(evento.intentos, 0)
+        self.assertFalse(evento.xml_archivo)
+        self.assertEqual(cliente.enviados, [])
+
+    def test_la_tarea_no_lo_deja_pendiente(self):
+        with override_settings(ENV="prod"):
+            evento = eventos.solicitar(self.factura, "030")
+        tareas.enviar_evento(str(evento.pk))
+        evento.refresh_from_db()
+        self.assertEqual(evento.estado, EstadoEvento.ERROR)
+
+    def test_el_acuse_automatico_se_omite_sin_fallar(self):
+        documento = verificacion.verificar(self.factura, cliente=ClienteFalso())
+        self.assertEqual(documento.verificacion_estado, EstadoVerificacion.VALIDO)
+        self.assertFalse(Evento.objects.exists())

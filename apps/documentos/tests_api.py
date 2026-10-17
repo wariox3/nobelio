@@ -59,6 +59,7 @@ from apps.documentos.serializers.documento import (
     mensaje_prefijo_ajeno,
     mensaje_resolucion_no_aplica,
     mensaje_sin_resolucion,
+    MENSAJE_ANULACION_SIN_REFERENCIA,
 )
 from apps.documentos.tests_utils import crear_documento_factura
 from apps.documentos.views import DocumentoViewSet
@@ -1080,7 +1081,7 @@ class DocumentoAPITests(APITestCase):
             "ambiente": 2,
             "documento_tipo": tipo.id,
             "numero_resolucion": "",
-            "documento_referencia": str(self.documento.id),
+            "documento_referencia": self._factura_aceptada(),
             "concepto_correccion": Documento.ConceptoNotaCredito.ANULACION,
             "prefijo": "NC", "consecutivo": 1, "numero": "NC1",
         })
@@ -1330,7 +1331,7 @@ class DocumentoAPITests(APITestCase):
             "ambiente": 2,
             "documento_tipo": tipo.id,
             "numero_resolucion": "",
-            "documento_referencia": str(self.documento.id),
+            "documento_referencia": self._factura_aceptada(),
             "concepto_correccion": Documento.ConceptoNotaCredito.ANULACION,
             "prefijo": "NC", "consecutivo": 1, "numero": "NC1",
             "forma_pago": self.credito.id,
@@ -1351,7 +1352,7 @@ class DocumentoAPITests(APITestCase):
             "ambiente": 2,
             "documento_tipo": tipo.id,
             "numero_resolucion": "",
-            "documento_referencia": str(self.documento.id),
+            "documento_referencia": self._factura_aceptada(),
             "concepto_correccion": Documento.ConceptoNotaCredito.ANULACION,
             "prefijo": "NC", "consecutivo": 1, "numero": "NC1",
             "forma_pago": self.credito.id,
@@ -1359,6 +1360,72 @@ class DocumentoAPITests(APITestCase):
 
         resp = self._post(payload)
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+    def _factura_aceptada(self):
+        """El id de la factura del helper, aceptada por la DIAN en habilitación:
+        una nota solo corrige un documento aceptado y de su mismo ambiente."""
+        self.documento.estado = DocumentoEstado.objects.get(nombre=DocumentoEstado.Nombre.ACEPTADO)
+        self.documento.ambiente = 2
+        self.documento.save(update_fields=["estado", "ambiente"])
+        return str(self.documento.id)
+
+    def _payload_nota(self, codigo, concepto, **cambios):
+        tipo = DocumentoTipo.objects.get(codigo=codigo)
+        payload = self._payload_documento()
+        payload.update({
+            "ambiente": 2,
+            "documento_tipo": tipo.id,
+            "numero_resolucion": "",
+            "concepto_correccion": concepto,
+            "prefijo": "NC", "consecutivo": 1, "numero": "NC1",
+            **cambios,
+        })
+        return payload
+
+    def test_una_nota_credito_sin_referencia_se_crea(self):
+        """Sale como «sin referencia a facturas» (CustomizationID 22)."""
+        resp = self._post(self._payload_nota(
+            DocumentoTipo.Codigo.NOTA_CREDITO, Documento.ConceptoNotaCredito.OTROS,
+        ))
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertIsNone(Documento.objects.get(pk=resp.data["id"]).documento_referencia)
+
+    def test_una_nota_debito_sin_referencia_se_crea(self):
+        resp = self._post(self._payload_nota(
+            DocumentoTipo.Codigo.NOTA_DEBITO, Documento.ConceptoNotaDebito.GASTOS,
+            prefijo="ND", numero="ND1",
+        ))
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+    def test_una_nota_sin_referencia_tampoco_lleva_vencimiento(self):
+        tipo = DocumentoTipo.objects.get(codigo=DocumentoTipo.Codigo.NOTA_CREDITO)
+        resp = self._post(self._payload_nota(
+            DocumentoTipo.Codigo.NOTA_CREDITO, Documento.ConceptoNotaCredito.OTROS,
+            forma_pago=self.credito.id,
+            fecha_vencimiento=(timezone.localdate() + timedelta(days=30)).isoformat(),
+        ))
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            errores_por_campo(resp), {"fecha_vencimiento": [mensaje_vencimiento_en_nota(tipo)]},
+        )
+
+    def test_una_anulacion_sin_referencia_no_se_crea(self):
+        resp = self._post(self._payload_nota(
+            DocumentoTipo.Codigo.NOTA_CREDITO, Documento.ConceptoNotaCredito.ANULACION,
+        ))
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            errores_por_campo(resp),
+            {"documento_referencia": [MENSAJE_ANULACION_SIN_REFERENCIA]},
+        )
+
+    def test_solo_la_nota_credito_y_la_debito_pueden_ir_sin_referencia(self):
+        """Las notas de ajuste (documento soporte y P.O.S.) la siguen exigiendo."""
+        Codigo = DocumentoTipo.Codigo
+        self.assertEqual(
+            DocumentoTipo.CODIGOS_CON_REFERENCIA_OBLIGATORIA,
+            {Codigo.NOTA_AJUSTE, Codigo.NOTA_AJUSTE_DE_CREDITO, Codigo.NOTA_AJUSTE_DE_DEBITO},
+        )
 
     def test_el_prefijo_vacio_pasa_la_estructura_y_lo_juzga_la_resolucion(self):
         """`""` dice «sin prefijo»: es válido como estructura, y si la resolución
@@ -1724,7 +1791,7 @@ class DocumentoAPITests(APITestCase):
                 codigo=DocumentoTipo.Codigo.NOTA_CREDITO
             ).id,
             "numero_resolucion": "",
-            "documento_referencia": str(self.documento.id),
+            "documento_referencia": self._factura_aceptada(),
             "concepto_correccion": Documento.ConceptoNotaCredito.ANULACION,
             "prefijo": "NC", "consecutivo": 1, "numero": "NC1",
         })
@@ -1740,7 +1807,7 @@ class DocumentoAPITests(APITestCase):
         payload.update({
             "ambiente": 2,
             "documento_tipo": tipo.id,
-            "documento_referencia": str(self.documento.id),
+            "documento_referencia": self._factura_aceptada(),
             "concepto_correccion": Documento.ConceptoNotaCredito.ANULACION,
             "prefijo": "NC", "consecutivo": 1, "numero": "NC1",
         })

@@ -81,6 +81,8 @@ def mensaje_resolucion_no_aplica(tipo):
 # La nota crédito y la débito de factura pueden ir sin referencia: salen como
 # «sin referencia a facturas» (CustomizationID 22 y 32).
 TIPOS_QUE_EXIGEN_REFERENCIA = models.DocumentoTipo.CODIGOS_CON_REFERENCIA_OBLIGATORIA
+# Todas las notas, exijan o no la referencia.
+TIPOS_NOTA = models.DocumentoTipo.CODIGOS_CON_REFERENCIA
 
 # Qué tipo de documento corrige cada nota. La nota de factura referencia un
 # CUFE, la de ajuste un CUDS y la del documento equivalente un CUDE: cada una
@@ -772,7 +774,8 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
             return getattr(self.instance, campo, None)
 
         vencimiento = dato("fecha_vencimiento")
-        if tipo is not None and tipo.codigo in TIPOS_QUE_EXIGEN_REFERENCIA:
+        # Todas las notas, con o sin referencia: ninguna lleva DueDate.
+        if tipo is not None and tipo.codigo in TIPOS_NOTA:
             if vencimiento is not None:
                 raise serializers.ValidationError(
                     {"fecha_vencimiento": mensaje_vencimiento_en_nota(tipo)}

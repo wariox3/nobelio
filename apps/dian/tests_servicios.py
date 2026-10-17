@@ -1,6 +1,7 @@
 """Pruebas del servicio de orquestación (pipeline completo)."""
 from django.core.files.base import ContentFile
 from django.test import TestCase
+from django.utils import timezone
 
 from apps.dian import servicios, soap
 from apps.dian.tests_firma import _generar_certificado
@@ -71,6 +72,30 @@ class GenerarYFirmarTests(TestCase):
         with self.assertRaises(servicios.ErrorEmision) as ctx:
             servicios.generar_y_firmar(self.documento)
         self.assertEqual(str(ctx.exception), "El documento ya está firmado.")
+
+
+class NotaSinReferenciaEmisionTests(TestCase):
+    """La regla de la anulación, de respaldo en `generar_y_firmar`."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from apps.documentos.models import DocumentoTipo
+
+        cls.documento = crear_documento_factura()["documento"]
+        cls.documento.documento_tipo = DocumentoTipo.objects.get(
+            codigo=DocumentoTipo.Codigo.NOTA_CREDITO,
+        )
+        cls.documento.documento_referencia = None
+        # Hoy: si no, la regla FAD09 (fecha de emisión = fecha de firma) va primero.
+        cls.documento.fecha_emision = timezone.localdate()
+        cls.documento.save(update_fields=["documento_tipo", "documento_referencia", "fecha_emision"])
+
+    def test_una_anulacion_sin_referencia_no_se_firma(self):
+        self.documento.concepto_correccion = Documento.ConceptoNotaCredito.ANULACION
+        self.documento.save(update_fields=["concepto_correccion"])
+        with self.assertRaises(servicios.ErrorEmision) as ctx:
+            servicios.generar_y_firmar(self.documento)
+        self.assertIn("referenciar la factura que anula", str(ctx.exception))
 
 
 class EnviarADianTests(TestCase):

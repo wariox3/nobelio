@@ -84,6 +84,47 @@ class NotaCreditoTests(NotasTestBase):
             self.fail("CreditNote inválida:\n" + str(esquema.error_log))
 
 
+class NotaSinReferenciaTests(NotasTestBase):
+    """Sin documento referenciado: «sin referencia a facturas» (22 y 32)."""
+
+    def _arbol(self, codigo, numero):
+        nota = self._crear_nota(codigo, numero, 1)
+        nota.documento_referencia = None
+        nota.concepto_correccion = "4"
+        nota.save(update_fields=["documento_referencia", "concepto_correccion"])
+        xml = ubl.constructor_para(nota, software=self.base["software"], ambiente=2).generar_xml()
+        return xml, etree.fromstring(xml)
+
+    def test_nota_credito_sale_como_22_sin_billing_reference(self):
+        xml, arbol = self._arbol(doc.DocumentoTipo.Codigo.NOTA_CREDITO, "NC2")
+        ns = ubl.NS
+        self.assertEqual(arbol.findtext(f"{{{ns['cbc']}}}CustomizationID"), "22")
+        self.assertIsNone(arbol.find(f"{{{ns['cac']}}}BillingReference"))
+        disc = arbol.find(f"{{{ns['cac']}}}DiscrepancyResponse")
+        self.assertIsNone(disc.find(f"{{{ns['cbc']}}}ReferenceID"))
+        self.assertEqual(disc.findtext(f"{{{ns['cbc']}}}ResponseCode"), "4")
+        esquema, arbol = _validar_xsd(xml, "UBL-CreditNote-2.1.xsd")
+        if not esquema.validate(arbol):
+            self.fail("CreditNote inválida:\n" + str(esquema.error_log))
+
+    def test_nota_debito_sale_como_32_sin_billing_reference(self):
+        xml, arbol = self._arbol(doc.DocumentoTipo.Codigo.NOTA_DEBITO, "ND2")
+        ns = ubl.NS
+        self.assertEqual(arbol.findtext(f"{{{ns['cbc']}}}CustomizationID"), "32")
+        self.assertIsNone(arbol.find(f"{{{ns['cac']}}}BillingReference"))
+        self.assertIsNotNone(arbol.find(f"{{{ns['cac']}}}DiscrepancyResponse"))
+        esquema, arbol = _validar_xsd(xml, "UBL-DebitNote-2.1.xsd")
+        if not esquema.validate(arbol):
+            self.fail("DebitNote inválida:\n" + str(esquema.error_log))
+
+    def test_con_referencia_sigue_saliendo_como_20(self):
+        nota = self._crear_nota(doc.DocumentoTipo.Codigo.NOTA_CREDITO, "NC3", 1)
+        arbol = etree.fromstring(
+            ubl.constructor_para(nota, software=self.base["software"], ambiente=2).generar_xml()
+        )
+        self.assertEqual(arbol.findtext(f"{{{ubl.NS['cbc']}}}CustomizationID"), "20")
+
+
 class NotaDebitoTests(NotasTestBase):
     def _xml(self):
         nota = self._crear_nota(doc.DocumentoTipo.Codigo.NOTA_DEBITO, "ND1", 1)
