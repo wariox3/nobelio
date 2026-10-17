@@ -7,8 +7,8 @@ build/
 dist/
 
 # Entornos virtuales
-# Sin barra final a propósito: aquí `.venv` es un symlink a ~/.venvs/nobelio,
-# y `.venv/` solo casaría con un directorio de verdad.
+# Sin barra final a propósito: así casa tanto si `.venv` es un directorio
+# como si es un symlink a un venv fuera del repo.
 .venv
 venv/
 env/

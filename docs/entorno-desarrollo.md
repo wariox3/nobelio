@@ -22,9 +22,25 @@ sudo apt install python3-venv postgresql postgresql-client redis-server
 
 ## 2. Entorno virtual e instalación
 
-Puedes crear el venv dentro del proyecto (como indica el README) o en
-`~/.venvs/<nombre>` si prefieres mantenerlo fuera del repo — en ese caso
-ajusta `python.defaultInterpreterPath` en `.vscode/settings.json`.
+El venv va dentro del proyecto, en `.venv/` (ignorado por git).
+
+`.vscode/` también está en `.gitignore`, así que en una máquina nueva crea
+`.vscode/settings.json` con al menos esto:
+
+```json
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.terminal.activateEnvironment": true,
+  "python.analysis.extraPaths": ["./apps"],
+  "python.analysis.exclude": ["**/.venv", "**/__pycache__", "**/node_modules"],
+  "files.watcherExclude": { "**/.venv/**": true },
+  "search.exclude": { "**/.venv": true }
+}
+```
+
+Las exclusiones evitan que VS Code vigile, busque y analice con Pylance los
+miles de archivos del venv. Si no toma el intérprete al abrir el proyecto,
+elígelo con **Python: Select Interpreter → .venv**.
 
 ```bash
 cd nobelio
