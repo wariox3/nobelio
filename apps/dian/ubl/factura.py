@@ -70,11 +70,26 @@ class _ConstructorNotaUBL(ConstructorUBL):
         ref = self.doc.documento_referencia
         if ref is None and not self.customization_id_sin_referencia:
             return
+        if ref is None:
+            self._periodo_sin_referencia(raiz)
         discrepancia = _sub(raiz, "cac", "DiscrepancyResponse")
         if ref is not None:
             _sub(discrepancia, "cbc", "ReferenceID", ref.numero)
         _sub(discrepancia, "cbc", "ResponseCode", self.concepto)
         _sub(discrepancia, "cbc", "Description", self.doc.observaciones or "Corrección")
+
+    def _periodo_sin_referencia(self, raiz):
+        """cac:InvoicePeriod del documento, que la nota sin referencia exige
+        (CAE04): el periodo que modifica, dentro de un mes y de 30 días.
+
+        Va con la fecha de la nota en el inicio y en el fin: una nota sin
+        factura se declara en el periodo en que se emite. Va antes de
+        DiscrepancyResponse, como manda el XSD.
+        """
+        fecha = self.doc.fecha_emision.isoformat()
+        periodo = _sub(raiz, "cac", "InvoicePeriod")
+        _sub(periodo, "cbc", "StartDate", fecha)
+        _sub(periodo, "cbc", "EndDate", fecha)
 
     def _referencias(self, raiz):
         ref = self.doc.documento_referencia

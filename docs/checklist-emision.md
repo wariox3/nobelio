@@ -299,7 +299,10 @@ con los otros dos; otro valor responde 400.
   débito de factura es opcional: con él salen como «nota que referencia una
   factura electrónica» (`CustomizationID` 20 y 30, con `BillingReference`); sin
   él, como «sin referencia a facturas» (22 y 32, sin `BillingReference` ni
-  `ReferenceID`, pero con el concepto en `DiscrepancyResponse`). La anulación
+  `ReferenceID`, pero con el concepto en `DiscrepancyResponse`). Sin referencia
+  la nota lleva además el `InvoicePeriod` del documento, que la DIAN exige
+  (regla CAE04: dentro de un mes y de 30 días): inicio y fin son la fecha de
+  emisión de la nota. No se recibe en la petición. La anulación
   (concepto 2 de la nota crédito) no puede ir sin referencia: responde 400 en
   `documento_referencia`. Si viene, además tiene que ser:
   - **de su tipo**: la nota crédito y la débito corrigen una factura de venta,
