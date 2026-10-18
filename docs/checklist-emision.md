@@ -182,6 +182,14 @@ sin certificado cargado y vigente responde 400.
 > al enviar como al consultar, porque `SendTestSetAsync` no da veredicto: el
 > "Set de prueba … se encuentra Aceptado" solo aparece al preguntar por su
 > ZipKey con `GetStatusZip`.
+>
+> Al marcarse `set_pruebas_aceptado` (solo al pasar de `False` a `True`) sale un
+> correo por Zinc al **correo del emisor** (`Emisor.correo`), con la marca
+> RedEDoc: «Set de pruebas aceptado», con la operación, el software y los pasos
+> que siguen (`apps/emisores/servicios/aviso_habilitacion.py`). Sale tras
+> confirmar la transacción y un fallo de Zinc solo queda en el log. Solo con
+> `ENV=prod`: en `dev` y `test` se omite, para no escribirle a un cliente real
+> desde otro entorno. Sin `correo` en el emisor, tampoco sale.
 
 ## 6. Resolución de facturación
 

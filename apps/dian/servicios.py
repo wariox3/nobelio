@@ -27,6 +27,7 @@ from apps.documentos.models import (
     DocumentoTipo,
 )
 from apps.emisores.models import SoftwareDian
+from apps.emisores.servicios import aviso_habilitacion
 from apps.emisores.servicios import (
     MENSAJE_EMISOR_INACTIVO,
     certificado_del_emisor,
@@ -241,6 +242,8 @@ def _marcar_habilitacion_superada(software, emisor):
     if not software.set_pruebas_aceptado:
         software.set_pruebas_aceptado = True
         software.save(update_fields=["set_pruebas_aceptado", "actualizado_en"])
+        # Solo al pasar de falso a verdadero: el aviso sale una vez por software.
+        aviso_habilitacion.avisar_al_confirmar(software)
     campo = CAMPO_HABILITADO_POR_SOFTWARE.get(
         software.tipo, "habilitado_facturacion"
     )
