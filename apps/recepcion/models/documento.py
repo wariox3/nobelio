@@ -138,8 +138,15 @@ class Documento(ModeloUUID, ModeloConFechas):
         "recepción terminada", default=False,
         help_text=(
             "True cuando el recibo terminó: factura de contado verificada como "
-            "válida, o factura a crédito con aceptación (033) o reclamo (031) registrado."
+            "válida, o factura a crédito con aceptación (033) o reclamo (031) registrado, "
+            "o documento descartado."
         ),
+    )
+    # El emisor decidió no hacer nada más con el documento
+    # (`apps.recepcion.descarte`). Queda intacto, con la recepción terminada.
+    estado_descartado = models.BooleanField(
+        "descartado", default=False,
+        help_text="True si el emisor lo descartó: queda intacto, sin más eventos RADIAN.",
     )
 
     # Relaciones

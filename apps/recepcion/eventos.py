@@ -52,7 +52,7 @@ from apps.nucleo.models import Ambiente
 from apps.nucleo.registro import campos
 from apps.recepcion import extraccion
 from apps.recepcion.models import (
-    Adjunto, ConsecutivoEvento, EstadoEvento, EstadoRadian, EstadoVerificacion, Evento,
+    Adjunto, ConsecutivoEvento, Documento, EstadoEvento, EstadoRadian, EstadoVerificacion, Evento,
 )
 
 logger = logging.getLogger(__name__)
@@ -138,6 +138,9 @@ def solicitar(documento, codigo, *, usuario=None, persona=None, concepto_reclamo
         # orden: dos peticiones a la vez no sacan el mismo consecutivo ni
         # registran dos veces el mismo evento.
         Emisor.objects.select_for_update().get(pk=emisor.pk)
+        # Otra vez bajo el candado: un descarte a la vez (``descarte``).
+        if Documento.objects.filter(pk=documento.pk, estado_descartado=True).exists():
+            raise EventoInvalido("La factura está descartada: no admite más eventos RADIAN.")
         _validar_orden(documento, codigo)
         # Del contador y no del máximo de rec_evento: un rechazado que se
         # elimina no devuelve su número.
@@ -197,6 +200,8 @@ def acuse_automatico(documento):
 def _validar_documento(documento):
     if documento.documento_tipo.codigo != DocumentoTipo.Codigo.FACTURA_VENTA:
         raise EventoInvalido("Los eventos RADIAN son solo sobre facturas de venta.")
+    if documento.estado_descartado:
+        raise EventoInvalido("La factura está descartada: no admite más eventos RADIAN.")
     try:
         # Fuera de ENV=prod no sale nada a la DIAN de producción: se dice
         # aquí, antes de crear el evento y gastar su número.

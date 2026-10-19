@@ -18,7 +18,9 @@ from apps.nucleo.api import (
 )
 from apps.nucleo.esquema import ErrorSerializer
 from apps.nucleo.registro import campos
-from apps.recepcion import adjuntos, eventos, procesamiento, serializers, verificacion
+from apps.recepcion import (
+    adjuntos, descarte, eventos, procesamiento, serializers, verificacion,
+)
 from apps.recepcion.models import Adjunto, Documento
 from apps.recepcion.views.adjunto import descarga
 from apps.seguridad.alcance import AlcanceEmisorMixin, usuario_del_request
@@ -41,7 +43,8 @@ class DocumentoRecibidoViewSet(
     ``?documento_tipo=factura_venta|nota_credito|nota_debito``,
     ``?proveedor=<NIT sin DV>``, ``?verificacion_estado=valido|invalido|...``,
     ``?radian_estado=sin_eventos|acuse|recibo|aceptada|reclamada``,
-    ``?estado_recepcion=true|false`` y ``?desde=AAAA-MM-DD`` /
+    ``?estado_recepcion=true|false``, ``?estado_descartado=true|false`` y
+    ``?desde=AAAA-MM-DD`` /
     ``?hasta=AAAA-MM-DD`` sobre la fecha de emisión, ambos inclusive. ``?ordering=`` ordena por
     ``fecha_emision``, ``numero``, ``total_a_pagar`` o ``creado_en``.
 
@@ -141,6 +144,8 @@ class DocumentoRecibidoViewSet(
             qs = qs.filter(radian_estado=radian)
         if (terminada := params.get("estado_recepcion", "").lower()) in ("true", "false"):
             qs = qs.filter(estado_recepcion=terminada == "true")
+        if (descartado := params.get("estado_descartado", "").lower()) in ("true", "false"):
+            qs = qs.filter(estado_descartado=descartado == "true")
         return qs
 
     @extend_schema(
@@ -214,6 +219,27 @@ class DocumentoRecibidoViewSet(
             verificacion.verificar(documento)
         except verificacion.ErrorTransitorio as error:
             verificacion.marcar_error(documento, str(error))
+        return Response(self.get_serializer(self.get_object()).data)
+
+    @extend_schema(
+        request=None,
+        responses={200: serializers.DocumentoRecibidoSerializer, 400: ErrorSerializer},
+    )
+    @action(detail=True, methods=["post"])
+    def descartar(self, request, pk=None):
+        """Descarta el documento: el emisor no hará nada más con él.
+
+        Queda intacto, con ``estado_descartado`` y ``estado_recepcion`` en
+        ``true``, y ya no admite eventos RADIAN (tampoco el acuse automático).
+        Devuelve el documento.
+
+        400 si ya está descartado, si su recepción ya terminó o si tiene algún
+        evento RADIAN, en cualquier estado.
+        """
+        try:
+            descarte.descartar(self.get_object(), usuario=usuario_del_request(request))
+        except descarte.DocumentoNoDescartable as error:
+            raise ErrorSolicitud(str(error))
         return Response(self.get_serializer(self.get_object()).data)
 
     @extend_schema(

@@ -229,6 +229,15 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
   `True` cuando la DIAN registra su aceptación (033) o su reclamo (031)
   (`eventos.CIERRAN_RECEPCION`, en `_guardar_respuesta`); la migración
   `recepcion/0011` marca las que ya los tenían. Las notas quedan en `False`.
+- **Descartar** (2026-10-19): `POST /api/recepcion/documento/{id}/descartar/`
+  (`apps/recepcion/descarte.py`). El emisor no hará nada más con el
+  documento: queda intacto (datos, archivos), con `estado_descartado` y
+  `estado_recepcion` en `True`. Responde 400 si ya está descartado, si su
+  recepción ya terminó o si tiene **algún evento**, en cualquier estado
+  (decidido 2026-10-19). Un descartado no admite eventos RADIAN, tampoco el
+  acuse automático (`eventos._validar_documento`, y otra vez bajo el candado
+  del emisor en `solicitar`, el mismo que toma el descarte). Filtro
+  `?estado_descartado=true|false`. No hay forma de deshacerlo por la API.
 - **Comando `reprocesar_correos`** (`apps/recepcion/management/commands/`):
   `--id <n>` o `--todos`. Corre en el mismo proceso, no en Celery, y muestra
   cómo quedó cada correo.
