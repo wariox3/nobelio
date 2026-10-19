@@ -948,7 +948,7 @@ Esas banderas deciden tres cosas:
 - Una nómina o un documento equivalente con ambiente `1` solo se crea si el
   emisor está habilitado para esa operación; sin el trámite la DIAN rechaza con
   la regla 92. A la facturación no se le exige.
-- La consulta de resoluciones (`consulta-dian` / `importar-dian`) va contra
+- La consulta de resoluciones (`importar-dian`) va contra
   producción si el emisor está habilitado para la operación del software, y
   contra habilitación si no (en `dev` y `test`, siempre habilitación).
 - A un emisor habilitado ya no se le siembran ni se le crean documentos de

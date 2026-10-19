@@ -196,20 +196,18 @@ sin certificado cargado y vigente responde 400.
 Hay dos vías. La recomendada es traer los datos directamente de la DIAN
 (incluida la **clave técnica**, que no se puede cargar manualmente por la API):
 
-- [ ] `GET /api/emisores/resolucion/consulta-dian/?software=<id>` → consulta
-      `GetNumberingRange` y **previsualiza** los rangos autorizados (sin guardar;
-      la clave técnica no se expone, solo se indica si está presente).
-      El parámetro `software` es obligatorio: la DIAN asocia los prefijos al
-      software, y de él salen el emisor y el ambiente.
 - [ ] `POST /api/emisores/resolucion/importar-dian/` con
-      `{"emisor": <id>}` → recorre los softwares del emisor con el Set de
-      Pruebas aceptado, consulta `GetNumberingRange` con cada uno (la DIAN solo
-      responde por software) y crea las resoluciones que falten, guardando la
-      `clave_tecnica` en el servidor. El tipo de factura lo decide el software:
-      `01` con el de facturación, `20` con el de documento equivalente. Requiere
-      que el emisor tenga certificado; sin ningún software aceptado responde
-      400 `software_no_aceptado`. Responde `{"creadas": <n>}`, sin las
-      resoluciones: esas se leen con `GET /api/emisores/resolucion/?emisor=<id>`.
+      `{"emisor": <id>}` → recorre **todos** los softwares del emisor que se
+      numeran con resolución (facturación y documento equivalente, con el Set
+      de Pruebas aceptado o no), consulta `GetNumberingRange` con cada uno (la
+      DIAN solo responde por software) y crea las resoluciones que falten,
+      guardando la `clave_tecnica` en el servidor. El tipo de factura lo decide
+      el software: `01` con el de facturación, `20` con el de documento
+      equivalente. Requiere que el emisor tenga certificado; sin ningún
+      software así responde 400 `sin_software`. Responde
+      `{"creadas": <n>, "resoluciones": [...]}` con **todas** las resoluciones
+      del emisor. (`consulta-dian`, la previsualización por software, se
+      eliminó el 2026-10-19.)
       Cada una queda con el `ambiente` con el que se consultó a la DIAN: `2`
       (habilitación) mientras el emisor no esté habilitado para esa operación,
       `1` (producción) después.
