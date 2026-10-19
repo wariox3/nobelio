@@ -434,7 +434,8 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
         # documento no se edita—: solo produce otro CUFE para el mismo número.
         DocumentoEstado.Nombre.RECHAZADO: (
             "El documento fue rechazado por la DIAN y no se vuelve a emitir: "
-            "bórrelo y créelo de nuevo con los datos corregidos."
+            "páselo a borrador con reiniciar/, o bórrelo y créelo de nuevo con "
+            "los datos corregidos."
         ),
     }
     if documento.estado_id and documento.estado.nombre in bloqueados:
@@ -809,8 +810,9 @@ def consultar_segun_envio(documento, *, cliente=None, ambiente=None, **cred):
 
 # El único estado desde el que tiene sentido aplicar lo que diga la DIAN: se
 # envió y no trajo veredicto. `aceptado` y `rechazado` son terminales —el
-# rechazado no se reemite, se borra y se crea corregido— y lo no enviado no tiene
-# nada que consultar. Leer, se puede siempre: eso es `consultar/`.
+# rechazado no se reemite: se borra y se crea corregido, o `reiniciar` lo pasa a
+# borrador— y lo no enviado no tiene nada que consultar. Leer, se puede
+# siempre: eso es `consultar/`.
 _ESTADOS_ACTUALIZABLES = {
     DocumentoEstado.Nombre.ENVIADO,
 }
@@ -864,8 +866,8 @@ MENSAJES_NO_EMITIBLE = {
     DocumentoEstado.Nombre.ACEPTADO: "El documento {numero} ya fue aceptado por la DIAN.",
     DocumentoEstado.Nombre.RECHAZADO: (
         "El documento {numero} fue rechazado por la DIAN y no se vuelve a "
-        "emitir: su detalle se consulta con consultar/, y se borra y se crea "
-        "de nuevo corregido."
+        "emitir: su detalle se consulta con consultar/; se pasa a borrador con "
+        "reiniciar/ o se borra y se crea de nuevo corregido."
     ),
 }
 
@@ -901,7 +903,8 @@ def emitir(documento):
     - `firmado` —un intento anterior que no llegó a enviar—: solo se envía.
     - `enviado` —sin veredicto, como en el Set de Pruebas—: se consulta y se
       aplica el resultado, sin reenviar.
-    - `aceptado` y `rechazado`: ``ErrorEmision``. El rechazado no se reemite.
+    - `aceptado` y `rechazado`: ``ErrorEmision``. El rechazado no se reemite
+      tal cual: antes se pasa a borrador con ``reiniciar``.
 
     Lanza ``ErrorEmision`` por lo que no se puede emitir y
     ``requests.RequestException`` si la DIAN no responde.
@@ -926,6 +929,60 @@ def emitir(documento):
                 f"pendiente de envío: está '{documento.estado.nombre}'."
             )
         return documento, ACCION_ENVIADO, enviar_a_dian(documento)
+
+
+def reiniciar(documento):
+    """Devuelve a `borrador` un documento rechazado por la DIAN.
+
+    Para volver a emitirlo con el mismo número cuando lo que la DIAN rechazó
+    no estaba en los datos del documento (una regla que ya se corrigió en
+    nobelio, el certificado, la resolución…). La DIAN no guarda los
+    rechazados, así que el número sigue libre para ella.
+
+    Se borra lo que produjeron la firma y el envío: CUFE, XML firmado,
+    track_id y operación de envío. La próxima firma calcula un CUFE nuevo con
+    la hora de ese momento. La fecha de emisión pasa a hoy, que es la única
+    que se puede firmar (FAD09), y el vencimiento se corre los mismos días. Se quedan los errores y la respuesta cruda de la
+    DIAN, que explican el rechazo hasta el siguiente envío (que los
+    reemplaza), y los eventos del documento, que son su historia.
+
+    Lanza ``ErrorEmision`` si el documento no está rechazado.
+    """
+    with transaction.atomic():
+        documento = _bloquear(documento)
+        estado = documento.estado.nombre
+        if estado != DocumentoEstado.Nombre.RECHAZADO:
+            raise ErrorEmision(
+                f"Solo se reinicia un documento rechazado por la DIAN; "
+                f"{documento.numero} está '{estado}'."
+            )
+        cufe_anterior = documento.cufe_cude
+        fecha_anterior = documento.fecha_emision
+        # Se refecha a hoy: firmar exige que la emisión sea de hoy (FAD09). El
+        # vencimiento se corre lo mismo, para conservar el plazo del crédito.
+        hoy = timezone.localdate()
+        if documento.fecha_vencimiento:
+            documento.fecha_vencimiento += hoy - fecha_anterior
+        documento.fecha_emision = hoy
+        documento.estado = _estado(DocumentoEstado.Nombre.BORRADOR)
+        documento.cufe_cude = ""
+        documento.track_id = ""
+        documento.envio = ""
+        documento.fecha_validacion = None
+        # Solo se suelta la referencia: el XML rechazado se queda en B2.
+        documento.xml_archivo = ""
+        documento.save(update_fields=[
+            "estado", "cufe_cude", "track_id", "envio", "fecha_validacion",
+            "xml_archivo", "fecha_emision", "fecha_vencimiento", "actualizado_en",
+        ])
+    logger.info("documento.reiniciado %s", campos(
+        documento=documento.pk,
+        emisor=documento.emisor_id,
+        numero=documento.numero,
+        cufe_anterior=cufe_anterior,
+        fecha_anterior=fecha_anterior,
+    ))
+    return documento
 
 
 # ---------------------------------------------------------------------------

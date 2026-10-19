@@ -376,7 +376,7 @@ con los otros dos; otro valor responde 400.
       `borrador` → firma y envía; `firmado` (un 502 anterior) → envía el mismo
       CUFE; `enviado` (sin veredicto) → consulta y aplica, sin reenviar;
       `aceptado` y `rechazado` → 400. Un rechazado se borra y se crea de nuevo
-      corregido.
+      corregido, o se pasa a borrador con `reiniciar/` (abajo).
       Se usa `SendTestSetAsync` (con el `test_set_id`) solo mientras se está en
       habilitación **y** el Set de Pruebas aún no ha sido aceptado; una vez
       aceptado (`SoftwareDian.set_pruebas_aceptado`) o en producción, `SendBillSync`.
@@ -386,6 +386,14 @@ con los otros dos; otro valor responde 400.
       pregunta a la DIAN **sin tocar** el documento, en cualquier estado —sirve
       para leer el detalle de un rechazado—; devuelve `es_valido`,
       `codigo_estado` y errores.
+- [ ] *(cuando haga falta)* `POST /api/documentos/documento/{id}/reiniciar/`, sin
+      cuerpo → pasa un documento `rechazado` a `borrador` para volver a llamar
+      a `emitir/` con el mismo número (CUFE nuevo). Es para rechazos que no
+      venían de los datos del documento (una regla corregida en nobelio, el
+      certificado, la resolución). Borra CUFE, XML firmado, `track_id` y
+      operación de envío; los errores se quedan hasta el siguiente envío.
+      La fecha de emisión pasa a hoy (FAD09) y el vencimiento se corre los
+      mismos días. En otro estado → 400.
 - [ ] `GET /api/documentos/documento/{id}/xml/` → descarga el XML firmado.
 - [ ] `GET /api/documentos/documento/{id}/pdf/` → descarga la representación gráfica (PDF con QR).
 
@@ -408,4 +416,5 @@ Usuario / Llave API
 ```
 
 Estados del documento (`DocumentoEstado.Nombre`):
-`borrador → firmado → enviado | aceptado | rechazado`.
+`borrador → firmado → enviado | aceptado | rechazado` (y `rechazado → borrador`
+con `reiniciar/`).

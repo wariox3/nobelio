@@ -372,8 +372,9 @@ class DocumentoViewSet(
           consulta y se aplica** el resultado, sin reenviar. Por eso no hay
           `actualizar-estado/`: el ERP llama a `emitir/` hasta que el estado sea
           final.
-        - `aceptado` y `rechazado` responden 400. El rechazado no se reemite: su
-          detalle se lee con `consultar/`, y se borra y se crea corregido.
+        - `aceptado` y `rechazado` responden 400. El rechazado no se reemite tal
+          cual: su detalle se lee con `consultar/`, y se pasa a borrador con
+          `reiniciar/` o se borra y se crea corregido.
 
         La consulta va con el mismo bloqueo que el envío, para que dos llamadas
         a la vez no apliquen el resultado dos veces.
@@ -396,6 +397,36 @@ class DocumentoViewSet(
             "descripcion": respuesta.descripcion_estado,
             "errores": respuesta.errores,
         })
+
+    @extend_schema(
+        request=None,
+        responses={200: serializers.DocumentoSerializer, 400: ErrorSerializer},
+    )
+    @action(detail=True, methods=["post"])
+    def reiniciar(self, request, pk=None):
+        """Devuelve a `borrador` un documento rechazado para volver a emitirlo.
+
+        ``POST /api/documentos/documento/{id}/reiniciar/``, sin cuerpo. Solo
+        para documentos en `rechazado`; en cualquier otro estado responde 400.
+
+        Sirve cuando lo que la DIAN rechazó no estaba en los datos del
+        documento (una regla corregida en nobelio, el certificado, la
+        resolución): se reinicia y se llama a `emitir/`, que lo firma con un
+        CUFE nuevo y el mismo número. Si el error estaba en los datos, el
+        camino sigue siendo borrarlo y crearlo corregido: el documento no se
+        edita.
+
+        Se borran el CUFE, el XML firmado, el `track_id` y la operación de
+        envío. Los errores del rechazo se quedan hasta el siguiente envío.
+        La fecha de emisión pasa a hoy, que es la única que `emitir/` puede
+        firmar (regla FAD09), y la de vencimiento se corre los mismos días
+        para conservar el plazo.
+        """
+        try:
+            documento = servicios.reiniciar(self.get_object())
+        except servicios.ErrorEmision as exc:
+            raise ErrorSolicitud(str(exc))
+        return Response(self.get_serializer(documento).data)
 
     @extend_schema(
         responses={200: RESPUESTA_CONSULTA_DIAN, 400: ErrorSerializer, 502: ErrorSerializer},
