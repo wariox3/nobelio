@@ -139,13 +139,7 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
             "ImportarResolucionesSolicitud",
             {"emisor": drf_serializers.IntegerField()},
         ),
-        responses=inline_serializer(
-            "ImportarResolucionesRespuesta",
-            {
-                "creadas": drf_serializers.IntegerField(),
-                "resoluciones": serializers.ResolucionSerializer(many=True),
-            },
-        ),
+        responses=serializers.ResolucionSerializer(many=True),
     )
     @action(detail=False, methods=["post"], url_path="importar-dian")
     def importar_dian(self, request):
@@ -164,9 +158,8 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         servidor. Las que ya existen no se tocan: si la DIAN cambió un rango se
         edita a mano.
 
-        Responde 200 con ``{"creadas": <n>, "resoluciones": [...]}``: cuántas
-        creó y **todas** las resoluciones del emisor, las nuevas y las que ya
-        tenía.
+        Responde 200 con la lista de **todas** las resoluciones del emisor, las
+        nuevas y las que ya tenía.
 
         Si la DIAN no devuelve rangos para ninguno de los softwares consultados
         responde 400 con su mensaje; si los devuelve para alguno, se importa lo
@@ -176,12 +169,9 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         facturación entra como factura de venta (``01``) y lo del documento
         equivalente, como P.O.S. (``20``).
         """
-        emisor, creadas = self._importar(request.data.get("emisor"))
+        emisor, _ = self._importar(request.data.get("emisor"))
         resoluciones = self.get_queryset().filter(emisor=emisor)
-        return Response({
-            "creadas": creadas,
-            "resoluciones": self.get_serializer(resoluciones, many=True).data,
-        })
+        return Response(self.get_serializer(resoluciones, many=True).data)
 
     @extend_schema(
         request=serializers.ValidarResolucionesSerializer,
