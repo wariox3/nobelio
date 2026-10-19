@@ -21,9 +21,11 @@ class SoftwareDianViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
     queryset = models.SoftwareDian.objects.select_related("emisor")
 
     def get_queryset(self):
-        """Permite filtrar por emisor y por módulo.
+        """Permite filtrar por emisor, por módulo y por el Set de Pruebas.
 
-        ``/api/emisores/software/?emisor=<id>&modulo=<facturacion|nomina>``.
+        ``/api/emisores/software/?emisor=<id>&modulo=<facturacion|nomina>``
+        ``&set_pruebas_aceptado=true|false``. Otro valor en
+        ``set_pruebas_aceptado`` responde 400.
         """
         qs = super().get_queryset()
         emisor = entero_de_query(self.request.query_params, "emisor")
@@ -38,6 +40,14 @@ class SoftwareDianViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
                     + f"; se recibió '{modulo}'."
                 )
             qs = qs.filter(modulo=modulo)
+        aceptado = self.request.query_params.get("set_pruebas_aceptado")
+        if aceptado:
+            if aceptado.lower() not in ("true", "false"):
+                raise ErrorSolicitud(
+                    "El filtro 'set_pruebas_aceptado' tiene que ser 'true' o "
+                    f"'false'; se recibió '{aceptado}'."
+                )
+            qs = qs.filter(set_pruebas_aceptado=aceptado.lower() == "true")
         return qs
 
     # Un software por emisor y operación lo comprueba el serializer, que da el
