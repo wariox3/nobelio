@@ -204,8 +204,9 @@ Hay dos vías. La recomendada es traer los datos directamente de la DIAN
       guardando la `clave_tecnica` en el servidor. El tipo de factura lo decide
       el software: `01` con el de facturación, `20` con el de documento
       equivalente. Requiere que el emisor tenga certificado; sin ningún
-      software así responde 400 `sin_software`. Responde la
-      lista de **todas** las resoluciones del emisor. (`consulta-dian`, la previsualización por software, se
+      software así responde 400 `sin_software`. Responde las
+      resoluciones del emisor igual que el listado: paginadas (`?page=`) y con
+      sus filtros (`?ambiente=`, `?modulo=`). (`consulta-dian`, la previsualización por software, se
       eliminó el 2026-10-19.)
       Cada una queda con el `ambiente` con el que se consultó a la DIAN: `2`
       (habilitación) mientras el emisor no esté habilitado para esa operación,

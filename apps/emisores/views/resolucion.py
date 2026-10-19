@@ -143,7 +143,7 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
     )
     @action(detail=False, methods=["post"], url_path="importar-dian")
     def importar_dian(self, request):
-        """Importa de la DIAN los rangos del emisor y devuelve todas sus resoluciones.
+        """Importa de la DIAN los rangos del emisor y devuelve sus resoluciones.
 
         ``POST /api/emisores/resolucion/importar-dian/`` con ``{"emisor": <id>}``.
 
@@ -158,8 +158,10 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         servidor. Las que ya existen no se tocan: si la DIAN cambió un rango se
         edita a mano.
 
-        Responde 200 con la lista de **todas** las resoluciones del emisor, las
-        nuevas y las que ya tenía.
+        Responde 200 con las resoluciones del emisor —las nuevas y las que ya
+        tenía— igual que el listado: paginadas (``count``, ``next``,
+        ``previous``, ``results``; ``?page=`` en la URL) y con sus mismos
+        filtros (``?ambiente=``, ``?modulo=``).
 
         Si la DIAN no devuelve rangos para ninguno de los softwares consultados
         responde 400 con su mensaje; si los devuelve para alguno, se importa lo
@@ -170,7 +172,12 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         equivalente, como P.O.S. (``20``).
         """
         emisor, _ = self._importar(request.data.get("emisor"))
-        resoluciones = self.get_queryset().filter(emisor=emisor)
+        # La misma respuesta que el listado (`GET /api/emisores/resolucion/`):
+        # filtrada y paginada igual, con ``?page=`` en la URL.
+        resoluciones = self.filter_queryset(self.get_queryset()).filter(emisor=emisor)
+        pagina = self.paginate_queryset(resoluciones)
+        if pagina is not None:
+            return self.get_paginated_response(self.get_serializer(pagina, many=True).data)
         return Response(self.get_serializer(resoluciones, many=True).data)
 
     @extend_schema(
