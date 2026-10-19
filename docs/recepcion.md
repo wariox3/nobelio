@@ -464,17 +464,19 @@ empezar el siguiente.
     (`verificacion.verificar`), si el emisor tiene `acuse_automatico`
     encendido (apagado por defecto) y la persona que recibe configurada. Lo
     que lo impida queda en el log y la factura sigue su camino.
-  - Emisor: `acuse_automatico` y la persona que recibe por defecto
+  - Emisor: `acuse_automatico` y la persona que recibe
     (`recibe_tipo_identificacion`, `recibe_numero_identificacion`,
     `recibe_nombres`, `recibe_apellidos`, `recibe_cargo`, `recibe_area`),
     actualizables por `PATCH /api/emisores/emisor/<id>/`. La persona va
-    completa o no va. La petición del evento puede traer otra.
+    completa o no va. **Solo la usa el acuse automático** (decidido
+    2026-10-19): en `POST .../evento/` la `persona` es obligatoria en el 030
+    y el 032 (400 si falta) y no se toma la del emisor.
   - El documento guarda ahora el tipo de identificación y de organización del
     proveedor (`proveedor_tipo_identificacion`, `proveedor_tipo_organizacion`),
     que el evento repite en el `ReceiverParty`. Los documentos de antes los
     tienen vacíos y salen como NIT y persona jurídica.
-  - API: `POST /api/recepcion/documento/<id>/evento/` (`{codigo, persona?,
-    concepto_reclamo?}`, 201 con el evento pendiente o 400 con el motivo);
+  - API: `POST /api/recepcion/documento/<id>/evento/` (`{codigo, persona
+    (030 y 032), concepto_reclamo (031)}`, 201 con el evento pendiente o 400 con el motivo);
     `GET /api/recepcion/evento/` (filtros `documento`, `emisor`, `estado`,
     `codigo`), `enviar/`, `xml/` y `respuesta/`; `?radian_estado=` en los
     documentos.

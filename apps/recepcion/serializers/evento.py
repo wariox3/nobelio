@@ -59,10 +59,19 @@ class SolicitudEventoSerializer(serializers.Serializer):
     )
     persona = PersonaQueRecibeSerializer(
         required=False,
-        help_text="Solo 030 y 032. Sin ella, va la persona que recibe configurada en el emisor.",
+        help_text="Obligatoria en el 030 y el 032; en los demás no va.",
     )
     concepto_reclamo = serializers.SlugRelatedField(
         slug_field="codigo", queryset=ConceptoReclamo.objects.filter(activo=True),
         required=False,
         help_text="Solo 031, y obligatorio ahí: el código de la lista de conceptos de reclamo.",
     )
+
+    def validate(self, datos):
+        # La persona que recibe va siempre en la petición: no se toma la
+        # configurada en el emisor (esa solo la usa el acuse automático).
+        if datos["codigo"] in ubl_evento.EVENTOS_CON_PERSONA and not datos.get("persona"):
+            raise serializers.ValidationError(
+                {"persona": f"Es obligatoria en el evento {datos['codigo']}."}
+            )
+        return datos

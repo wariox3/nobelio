@@ -271,8 +271,8 @@ class DocumentoRecibidoViewSet(
     def evento(self, request, pk=None):
         """Pide un evento RADIAN sobre la factura y lo envía a la DIAN.
 
-        ``{"codigo": "030"|"031"|"032"|"033"}``, con ``persona`` en el 030 y el
-        032 (si no viene, la configurada en el emisor) y ``concepto_reclamo``
+        ``{"codigo": "030"|"031"|"032"|"033"}``, con ``persona`` **obligatoria**
+        en el 030 y el 032 (no se toma la del emisor) y ``concepto_reclamo``
         en el 031. Responde 201 con el evento ``pendiente``: se envía en segundo
         plano y su estado se consulta en ``/api/recepcion/evento/{id}/``.
 

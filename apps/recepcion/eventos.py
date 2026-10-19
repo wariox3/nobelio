@@ -106,8 +106,8 @@ def solicitar(documento, codigo, *, usuario=None, persona=None, concepto_reclamo
     """Crea el evento ``codigo`` sobre ``documento`` y encola su envío.
 
     ``persona`` es un dict con ``CAMPOS_PERSONA`` (``tipo_identificacion`` es
-    un ``TipoIdentificacion``); sin ella, el 030 y el 032 salen con la del
-    emisor. ``concepto_reclamo`` es un ``ConceptoReclamo``, solo en el 031.
+    un ``TipoIdentificacion``), obligatorio en el 030 y el 032: no se toma la
+    del emisor (solo ``acuse_automatico`` la pasa). ``concepto_reclamo`` es un ``ConceptoReclamo``, solo en el 031.
     Lanza ``EventoInvalido`` si el evento no cabe.
     """
     emisor = documento.emisor
@@ -116,11 +116,9 @@ def solicitar(documento, codigo, *, usuario=None, persona=None, concepto_reclamo
     if tipo is None:
         raise EventoInvalido(f"El evento {codigo} no existe o no está activo.")
     if codigo in ubl_evento.EVENTOS_CON_PERSONA:
-        persona = persona or _persona_del_emisor(emisor)
-        if persona is None:
+        if not persona:
             raise EventoInvalido(
-                f"El evento {codigo} lleva la persona que recibe: mándala en la "
-                "petición o configúrala en el emisor."
+                f"El evento {codigo} lleva la persona que recibe: mándala en la petición."
             )
     else:
         persona = None
@@ -175,6 +173,8 @@ def acuse_automatico(documento):
     """El 030 de una factura recién verificada, si el emisor lo tiene encendido.
 
     Lo llama la verificación cuando la DIAN dice que la factura es válida.
+    Como no hay petición, la persona que recibe es la configurada en el
+    emisor; sin ella no hay acuse.
     No falla nunca: lo que impide el acuse (sin persona configurada, sin
     certificado, ya hay uno) se deja en el log y la factura sigue su camino;
     el acuse se puede pedir a mano después. Devuelve el evento o ``None``.
@@ -188,8 +188,15 @@ def acuse_automatico(documento):
         documento=documento, evento_radian__codigo=ACUSE, estado__in=VIGENTES,
     ).exists():
         return None
+    persona = _persona_del_emisor(emisor)
+    if persona is None:
+        logger.info("recepcion.acuse_omitido %s", campos(
+            documento=documento.pk, emisor=emisor.pk,
+            motivo="El emisor no tiene configurada la persona que recibe.",
+        ))
+        return None
     try:
-        return solicitar(documento, ACUSE)
+        return solicitar(documento, ACUSE, persona=persona)
     except EventoInvalido as error:
         logger.info("recepcion.acuse_omitido %s", campos(
             documento=documento.pk, emisor=emisor.pk, motivo=str(error),

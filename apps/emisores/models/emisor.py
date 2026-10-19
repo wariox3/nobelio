@@ -91,8 +91,8 @@ class Emisor(ModeloConFechas):
 
     # --- Eventos RADIAN de las facturas recibidas ---
     # Con qué se emiten los eventos del emisor como adquiriente
-    # (`apps.recepcion.eventos`). La persona que recibe va en el 030 y el 032;
-    # la petición de un evento puede traer otra.
+    # (`apps.recepcion.eventos`). La persona que recibe solo la usa el acuse
+    # automático: los eventos pedidos por la API la traen en la petición.
     acuse_automatico = models.BooleanField(
         "acuse de recibo automático", default=False,
         help_text="Emite el 030 solo, cuando una factura recibida se verifica "
