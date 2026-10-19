@@ -3,6 +3,8 @@
 El documento queda intacto (datos, archivos y eventos), con
 ``estado_descartado`` y ``estado_recepcion`` en ``True``. Desde ahí no admite
 eventos RADIAN, tampoco el acuse automático (``eventos._validar_documento``).
+
+``restaurar`` lo deshace: el documento vuelve a admitir eventos.
 """
 import logging
 
@@ -10,13 +12,17 @@ from django.db import transaction
 
 from apps.nucleo.registro import campos
 from apps.emisores.models import Emisor
-from apps.recepcion.models import Documento
+from apps.recepcion.models import Documento, EstadoVerificacion
 
 logger = logging.getLogger(__name__)
 
 
 class DocumentoNoDescartable(Exception):
     """El documento no se puede descartar. El mensaje dice por qué."""
+
+
+class DocumentoNoRestaurable(Exception):
+    """El documento no se puede restaurar. El mensaje dice por qué."""
 
 
 def descartar(documento, *, usuario=None):
@@ -47,6 +53,36 @@ def descartar(documento, *, usuario=None):
         documento.estado_recepcion = True
         documento.save(update_fields=["estado_descartado", "estado_recepcion", "actualizado_en"])
     logger.info("recepcion.documento_descartado %s", campos(
+        documento=documento.pk, usuario=getattr(usuario, "pk", None),
+    ))
+    return documento
+
+
+def restaurar(documento, *, usuario=None):
+    """Quita el descarte de ``documento``: vuelve a admitir eventos RADIAN.
+
+    ``estado_recepcion`` vuelve a lo que diría la recepción sin el descarte:
+    un descartado nunca tiene eventos, así que solo queda terminada una
+    factura de contado verificada como válida. El acuse automático que se
+    omitió mientras estuvo descartado no se pide solo: se pide a mano.
+
+    Lanza ``DocumentoNoRestaurable`` si no está descartado.
+    """
+    from apps.recepcion import eventos, verificacion
+
+    with transaction.atomic():
+        # El mismo candado que el descarte y ``eventos.solicitar``.
+        Emisor.objects.select_for_update().get(pk=documento.emisor_id)
+        documento = Documento.objects.select_related("documento_tipo").get(pk=documento.pk)
+        if not documento.estado_descartado:
+            raise DocumentoNoRestaurable("El documento no está descartado.")
+        documento.estado_descartado = False
+        documento.estado_recepcion = (
+            documento.verificacion_estado == EstadoVerificacion.VALIDO
+            and verificacion._es_factura_de_contado(documento, eventos)
+        )
+        documento.save(update_fields=["estado_descartado", "estado_recepcion", "actualizado_en"])
+    logger.info("recepcion.documento_restaurado %s", campos(
         documento=documento.pk, usuario=getattr(usuario, "pk", None),
     ))
     return documento

@@ -242,7 +242,13 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
   (decidido 2026-10-19). Un descartado no admite eventos RADIAN, tampoco el
   acuse automático (`eventos._validar_documento`, y otra vez bajo el candado
   del emisor en `solicitar`, el mismo que toma el descarte). Filtro
-  `?estado_descartado=true|false`. No hay forma de deshacerlo por la API.
+  `?estado_descartado=true|false`.
+  - **Restaurar**: `POST /api/recepcion/documento/{id}/restaurar/`
+    (`descarte.restaurar`). `estado_descartado` vuelve a `False` y
+    `estado_recepcion` a lo que diría la recepción sin el descarte: `False`,
+    salvo una factura de contado verificada como válida, que queda en `True`.
+    400 si no está descartado. El acuse automático omitido mientras estuvo
+    descartado no se pide solo.
 - **Comando `reprocesar_correos`** (`apps/recepcion/management/commands/`):
   `--id <n>` o `--todos`. Corre en el mismo proceso, no en Celery, y muestra
   cómo quedó cada correo.

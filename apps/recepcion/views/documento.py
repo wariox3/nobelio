@@ -243,6 +243,27 @@ class DocumentoRecibidoViewSet(
         return Response(self.get_serializer(self.get_object()).data)
 
     @extend_schema(
+        request=None,
+        responses={200: serializers.DocumentoRecibidoSerializer, 400: ErrorSerializer},
+    )
+    @action(detail=True, methods=["post"])
+    def restaurar(self, request, pk=None):
+        """Quita el descarte: el documento vuelve a admitir eventos RADIAN.
+
+        ``estado_descartado`` pasa a ``false`` y ``estado_recepcion`` vuelve a
+        ``false``, salvo en una factura de contado verificada como válida, que
+        no admite eventos y queda terminada. El acuse automático omitido no se
+        pide solo. Devuelve el documento.
+
+        400 si no está descartado.
+        """
+        try:
+            descarte.restaurar(self.get_object(), usuario=usuario_del_request(request))
+        except descarte.DocumentoNoRestaurable as error:
+            raise ErrorSolicitud(str(error))
+        return Response(self.get_serializer(self.get_object()).data)
+
+    @extend_schema(
         request=serializers.SolicitudEventoSerializer,
         responses={201: serializers.EventoSerializer, 400: ErrorSerializer},
     )
