@@ -143,6 +143,23 @@ def generar_y_firmar_nomina(nomina, *, firmador=None, ambiente=None, **cred):
     if not nomina.emisor.activo:
         raise ErrorEmision(MENSAJE_EMISOR_INACTIVO)
 
+    # La nota lleva el CUNE y la fecha del predecesor, que se leen ahora: si
+    # la DIAN no lo ha aceptado, la nota señalaría un documento que para ella
+    # no existe. Se corta antes de firmar, así la nota sigue en borrador y se
+    # emite cuando el predecesor esté aceptado (p. ej. las que siembra el alta).
+    anterior = nomina.nomina_predecesora
+    if (
+        nomina.tipo_xml == nom.Nomina.TipoXML.AJUSTE
+        and anterior is not None
+        and (not anterior.estado_id or anterior.estado.nombre != DocumentoEstado.Nombre.ACEPTADO)
+    ):
+        estado_anterior = anterior.estado.nombre if anterior.estado_id else "sin estado"
+        raise ErrorEmision(
+            f"La nota {nomina.numero} ajusta la nómina {anterior.numero}, que "
+            f"todavía no está aceptada por la DIAN (está '{estado_anterior}'). "
+            "Emita primero esa nómina; la nota se queda en borrador."
+        )
+
     # Antes se respetaba el par que trajera la nómina, y eso dejaba documentos
     # que declaraban haberse generado horas después de estar firmados.
     nomina.fecha_generacion = timezone.localdate()

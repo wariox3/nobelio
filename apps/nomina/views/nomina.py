@@ -226,6 +226,14 @@ class NominaViewSet(
                 "La nómina fue aceptada por la DIAN: corríjala con una nota de "
                 "ajuste en vez de borrarla."
             )
+        # Sin esto el PROTECT de `nomina_predecesora` saldría como un 500. Pasa
+        # con las de prueba del alta, que nacen con su nota en borrador.
+        notas = list(nomina.ajustes.values_list("numero", flat=True))
+        if notas:
+            raise ErrorSolicitud(
+                f"No se puede borrar {nomina.numero}: la ajustan las notas "
+                f"{', '.join(notas)}. Bórrelas primero."
+            )
         return super().destroy(request, *args, **kwargs)
 
     def _bloquear(self, obj):

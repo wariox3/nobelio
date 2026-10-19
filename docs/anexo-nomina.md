@@ -168,6 +168,21 @@ La nota se crea de una de dos formas:
   de arriba: el reemplazo repite el documento entero, y el único sitio donde
   está completo y tal como se firmó es el predecesor.
 
+El alta del software de nómina deja 10 nóminas de prueba y **una nota de
+ajuste (reemplazo) por cada una**, todas en borrador y numeradas después de
+las nóminas. Como la nómina aún no tiene CUNE, la nota no se firma hasta que su
+nómina esté aceptada: antes `emitir/` responde 400 y la nota sigue en borrador
+(con `emitir-pendientes/` sale sola en una llamada posterior). Esa regla vale
+para toda nota: se firma solo sobre una nómina aceptada. Una nómina con notas
+no se borra sin borrarlas antes.
+
+Cuando la DIAN da por aceptado el Set de Pruebas de nómina (al marcarse
+`set_pruebas_aceptado`), se borran solas las nóminas y notas de habilitación
+del emisor que quedaron en `borrador`, `firmado` o `rechazado`
+(`limpiar_nominas_de_habilitacion`). Se quedan las aceptadas y las `enviado`,
+que aún pueden recibir veredicto. Corre al confirmar la transacción y, si falla,
+solo queda en el log.
+
 Las nóminas y notas de prueba usan el prefijo `NESETP`. Si el emisor tiene una
 resolución activa de módulo `nomina` con ese prefijo (la numeración que lleva
 el ERP; la DIAN no autoriza rangos de nómina), toman su `consecutivo_actual` y

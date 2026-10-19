@@ -70,7 +70,9 @@ class SoftwareDianViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         `sembrar_resolucion_de_pruebas`.
 
         Con la resolución puesta, el de facturación deja además sus facturas de
-        prueba en borrador, y el de documento equivalente sus dos P.O.S. Son el material del Set de Pruebas y se crean aquí
+        prueba en borrador, el de documento equivalente sus dos P.O.S. y el de
+        nómina sus 10 nóminas con una nota de ajuste cada una (la nota se firma
+        cuando su nómina esté aceptada). Son el material del Set de Pruebas y se crean aquí
         por lo mismo que la resolución: para que el emisor no acabe el alta con
         numeración y sin nada que emitir contra ella.
 

@@ -190,6 +190,17 @@ sin certificado cargado y vigente responde 400.
 > confirmar la transacción y un fallo de Zinc solo queda en el log. Solo con
 > `ENV=prod`: en `dev` y `test` se omite, para no escribirle a un cliente real
 > desde otro entorno. Sin `correo` en el emisor, tampoco sale.
+>
+> En ese mismo momento se borran los documentos de habilitación del emisor que
+> no quedaron aceptados: los de ambiente de pruebas en `borrador`, `firmado` o
+> `rechazado`. En facturación son las facturas de venta y las notas crédito y
+> débito (`limpiar_facturas_de_habilitacion`); en documento equivalente, los
+> P.O.S. y sus notas de ajuste crédito y débito
+> (`limpiar_documentos_equivalentes_de_habilitacion`); en nómina, las nóminas
+> y sus notas de ajuste (`limpiar_nominas_de_habilitacion`). Se quedan los aceptados, los
+> `enviado` (aún pueden recibir veredicto) y lo que referencie una nota que se
+> queda. Corre tras confirmar la transacción y un fallo solo queda en el log.
+> El documento soporte no se limpia: no es parte de ningún set.
 
 ## 6. Resolución de facturación
 

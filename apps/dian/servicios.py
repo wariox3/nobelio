@@ -244,12 +244,51 @@ def _marcar_habilitacion_superada(software, emisor):
         software.save(update_fields=["set_pruebas_aceptado", "actualizado_en"])
         # Solo al pasar de falso a verdadero: el aviso sale una vez por software.
         aviso_habilitacion.avisar_al_confirmar(software)
+        if software.tipo in _SOFTWARES_CON_LIMPIEZA:
+            # Al confirmar y no ahora: esto corre dentro del bloqueo del
+            # documento que trajo la aceptación, y la limpieza no debe tocarlo.
+            tipo = software.tipo
+            transaction.on_commit(lambda: _limpiar_habilitacion(emisor, tipo))
     campo = CAMPO_HABILITADO_POR_SOFTWARE.get(
         software.tipo, "habilitado_facturacion"
     )
     if not getattr(emisor, campo):
         setattr(emisor, campo, True)
         emisor.save(update_fields=[campo, "actualizado_en"])
+
+
+# Los sets que, al cerrarse, borran lo de habilitación que no quedó aceptado.
+_SOFTWARES_CON_LIMPIEZA = (
+    SoftwareDian.Tipo.FACTURACION,
+    SoftwareDian.Tipo.DOCUMENTO_EQUIVALENTE,
+    SoftwareDian.Tipo.NOMINA,
+)
+
+
+def _limpiar_habilitacion(emisor, tipo_software):
+    """Borra lo de habilitación que no quedó aceptado, según el set que se cerró.
+
+    Nómina borra sus nóminas y notas; facturación, sus facturas y notas
+    crédito y débito; documento equivalente, sus P.O.S. y notas de ajuste. Un
+    fallo aquí no tumba nada: la habilitación ya quedó marcada y confirmada, y
+    la limpieza solo ordena. Se anota y se sigue.
+    """
+    # Aquí y no arriba: esos módulos importan de este.
+    from apps.emisores.servicios import factura_prueba, nomina_prueba
+
+    limpiar = {
+        SoftwareDian.Tipo.FACTURACION: factura_prueba.limpiar_facturas_de_habilitacion,
+        SoftwareDian.Tipo.DOCUMENTO_EQUIVALENTE: (
+            factura_prueba.limpiar_documentos_equivalentes_de_habilitacion
+        ),
+        SoftwareDian.Tipo.NOMINA: nomina_prueba.limpiar_nominas_de_habilitacion,
+    }[tipo_software]
+    try:
+        limpiar(emisor)
+    except Exception:
+        logger.exception("habilitacion.limpieza_fallida %s", campos(
+            emisor=emisor.pk, software=tipo_software,
+        ))
 
 
 def desmarcar_habilitacion(software):

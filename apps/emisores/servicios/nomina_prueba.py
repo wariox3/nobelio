@@ -1,5 +1,6 @@
 """Nóminas de prueba para la habilitación de nómina electrónica."""
 import calendar
+import logging
 from datetime import date
 from decimal import Decimal
 
@@ -20,8 +21,11 @@ from apps.catalogos.models import (
 from apps.nomina.models import Empleado, Nomina, NominaConcepto
 from apps.nomina.servicios import crear_nota_ajuste
 from apps.nucleo.models import Ambiente
+from apps.nucleo.registro import campos
 
 from .emision import motivo_no_puede_emitir
+
+logger = logging.getLogger(__name__)
 
 PREFIJO_POR_DEFECTO = "NESETP"
 
@@ -73,6 +77,36 @@ def _resolucion_de_nomina(emisor, prefijo):
     )
 
 
+def _consecutivo_de_prueba(emisor, prefijo, resolucion):
+    """El siguiente número para un documento de prueba con ese prefijo.
+
+    Con resolución se sigue su ``consecutivo_actual``; el máximo de las
+    nóminas existentes queda de piso por si la resolución se quedó atrás.
+    """
+    consecutivo = _siguiente_consecutivo(emisor, prefijo)
+    if resolucion is not None:
+        consecutivo = max(consecutivo, resolucion.consecutivo_actual)
+    return consecutivo
+
+
+def _crear_nota_de_prueba(nomina, *, exigir_cune=True):
+    """Una nota de ajuste de reemplazo sobre ``nomina``, en borrador.
+
+    Toma el número de la serie de prueba (ver ``_consecutivo_de_prueba``) y
+    corre la resolución de nómina, si la hay. Hay que llamarla en transacción.
+    """
+    resolucion = _resolucion_de_nomina(nomina.emisor, nomina.prefijo)
+    nota = crear_nota_ajuste(
+        nomina,
+        tipo_nota=Nomina.TipoNota.REEMPLAZAR,
+        consecutivo=_consecutivo_de_prueba(nomina.emisor, nomina.prefijo, resolucion),
+        notas="Nota de ajuste de prueba (habilitación).",
+        exigir_cune=exigir_cune,
+    )
+    _avanzar_resolucion(resolucion, nota.consecutivo)
+    return nota
+
+
 def _avanzar_resolucion(resolucion, ultimo_usado):
     """Deja ``consecutivo_actual`` después de ``ultimo_usado``; nunca lo retrocede."""
     if resolucion is not None and ultimo_usado + 1 > resolucion.consecutivo_actual:
@@ -108,11 +142,7 @@ def crear_nomina_prueba(emisor, *, prefijo=None, consecutivo=None,
     prefijo = PREFIJO_POR_DEFECTO if prefijo is None else prefijo
     resolucion = _resolucion_de_nomina(emisor, prefijo)
     if consecutivo is None:
-        consecutivo = _siguiente_consecutivo(emisor, prefijo)
-        # Con resolución, se sigue su consecutivo; el máximo de las nóminas
-        # existentes queda de piso por si la resolución se quedó atrás.
-        if resolucion is not None:
-            consecutivo = max(consecutivo, resolucion.consecutivo_actual)
+        consecutivo = _consecutivo_de_prueba(emisor, prefijo, resolucion)
 
     fin = periodo_fin or hoy
     inicio = periodo_inicio or fin.replace(day=1)
@@ -215,10 +245,18 @@ def _mes(hoy, atras):
 
 
 def crear_nominas_de_prueba(emisor, cantidad=NOMINAS_DE_PRUEBA):
-    """Deja ``cantidad`` nóminas de prueba en borrador. Devuelve la lista.
+    """Deja ``cantidad`` nóminas de prueba y una nota de ajuste por cada una,
+    todo en borrador. Devuelve la lista: primero las nóminas, después las notas.
 
     Es lo que siembra el alta del software de nómina, igual que
     ``crear_facturas_de_prueba`` en facturación.
+
+    **Las notas se crean antes de que exista lo que ajustan.** Cada una es de
+    reemplazo sobre su nómina (la primera nota, la primera nómina…), y se
+    numeran después de las diez. Como la nómina aún no tiene CUNE, la nota no
+    se puede firmar hasta que su nómina esté aceptada: hasta entonces `emitir`
+    responde 400 y la nota sigue en borrador. Una por nómina para que un
+    rechazo deje bloqueada solo su nota, no las diez.
 
     **Una por mes, hacia atrás desde el mes en curso**, y ese detalle es el
     motivo de que esto exista en vez de llamar diez veces a
@@ -238,7 +276,7 @@ def crear_nominas_de_prueba(emisor, cantidad=NOMINAS_DE_PRUEBA):
 
     hoy = timezone.localdate()
     with transaction.atomic():
-        return [
+        nominas = [
             crear_nomina_prueba(
                 emisor,
                 periodo_inicio=inicio,
@@ -248,6 +286,8 @@ def crear_nominas_de_prueba(emisor, cantidad=NOMINAS_DE_PRUEBA):
                 _mes(hoy, atras) for atras in range(cantidad - 1, -1, -1)
             )
         ]
+        notas = [_crear_nota_de_prueba(nomina, exigir_cune=False) for nomina in nominas]
+    return nominas + notas
 
 
 def siguiente_periodo(emisor, prefijo=PREFIJO_POR_DEFECTO):
@@ -373,18 +413,58 @@ def crear_notas_ajuste_de_prueba(software, cantidad=NOTAS_AJUSTE_DE_PRUEBA):
         )
 
     with transaction.atomic():
-        notas = [
-            crear_nota_ajuste(
-                nomina,
-                tipo_nota=Nomina.TipoNota.REEMPLAZAR,
-                notas="Nota de ajuste de prueba (habilitación).",
-            )
-            for _ in range(cantidad)
-        ]
-        # Las notas toman el prefijo de la nómina ajustada y gastan números de
-        # la misma serie: la resolución de nómina, si la hay, se corre con ellas.
-        _avanzar_resolucion(
-            _resolucion_de_nomina(emisor, nomina.prefijo),
-            max(nota.consecutivo for nota in notas),
-        )
+        notas = [_crear_nota_de_prueba(nomina) for _ in range(cantidad)]
     return nomina, notas
+
+
+# Lo que se borra al cerrar la habilitación de nómina: lo que no llegó a la
+# DIAN o lo que ella rechazó. `enviado` se queda: no tiene veredicto todavía y
+# la DIAN puede aceptarlo al consultarlo.
+ESTADOS_DESCARTABLES = ("borrador", "firmado", "rechazado")
+
+
+def limpiar_nominas_de_habilitacion(emisor):
+    """Borra las nóminas de habilitación del emisor que no quedaron aceptadas.
+
+    Se llama al aceptarse el Set de Pruebas de nómina
+    (``apps.dian.servicios._marcar_habilitacion_superada``): con la
+    habilitación cerrada ya no sirven, y dejarlas solo ensucia el listado.
+
+    Borra las de ambiente de pruebas en `borrador`, `firmado` o `rechazado`,
+    notas de ajuste incluidas, con sus conceptos, errores y eventos. Se quedan
+    las aceptadas, las `enviado` (sin veredicto todavía) y las que otra
+    petición tenga bloqueadas en ese momento. Una nómina que todavía tenga
+    notas que no se borran tampoco se borra. Los archivos en B2 se quedan,
+    como al borrar por la API.
+
+    Devuelve los números borrados.
+    """
+    with transaction.atomic():
+        candidatas = Nomina.objects.filter(
+            emisor=emisor,
+            ambiente=Ambiente.PRUEBAS,
+            estado__nombre__in=ESTADOS_DESCARTABLES,
+        )
+        ids = set(
+            candidatas.select_for_update(skip_locked=True, of=("self",))
+            .values_list("pk", flat=True)
+        )
+        # Una nómina no se borra si la ajusta una nota que se queda (PROTECT).
+        con_notas_que_quedan = set(
+            Nomina.objects.filter(nomina_predecesora__in=ids)
+            .exclude(pk__in=ids)
+            .values_list("nomina_predecesora", flat=True)
+        )
+        ids -= con_notas_que_quedan
+        borradas = list(
+            Nomina.objects.filter(pk__in=ids).order_by("consecutivo")
+            .values_list("numero", flat=True)
+        )
+        # Primero las notas: su predecesora está protegida mientras existan.
+        Nomina.objects.filter(pk__in=ids, tipo_xml=Nomina.TipoXML.AJUSTE).delete()
+        Nomina.objects.filter(pk__in=ids).delete()
+    if borradas:
+        logger.info("nomina.habilitacion_limpiada %s", campos(
+            emisor=emisor.pk, borradas=len(borradas), numeros=",".join(borradas),
+        ))
+    return borradas

@@ -77,7 +77,7 @@ def siguiente_consecutivo(emisor, prefijo) -> int:
 
 @transaction.atomic
 def crear_nota_ajuste(nomina, *, tipo_nota, prefijo=None, consecutivo=None,
-                      notas=None) -> Nomina:
+                      notas=None, exigir_cune=True) -> Nomina:
     """Crea —solo crea— la nota de ajuste de una nómina ya emitida.
 
     La nota de nómina no es una nota crédito: no lleva diferencias sino el
@@ -96,12 +96,17 @@ def crear_nota_ajuste(nomina, *, tipo_nota, prefijo=None, consecutivo=None,
     La eliminación sale sin conceptos y con los totales en cero: su XML no lleva
     ni ``Devengados`` ni ``DevengadosTotal``, y los totales entran en el CUNE
     (ver ``docs/anexo-nomina.md`` §6).
+
+    ``exigir_cune=False`` deja crearla sobre una nómina aún sin emitir: lo usa
+    la siembra del Set de Pruebas, que deja la nota lista desde el alta. El
+    CUNE y la fecha del predecesor se leen al firmar la nota, y la firma exige
+    que el predecesor ya esté aceptado.
     """
     if tipo_nota not in Nomina.TipoNota.values:
         raise ValueError(
             f"`tipo_nota` debe ser 1 (reemplazar) o 2 (eliminar), no {tipo_nota!r}."
         )
-    if not nomina.cune:
+    if exigir_cune and not nomina.cune:
         raise ValueError(
             "La nómina que se ajusta todavía no tiene CUNE: emítala antes de "
             "ajustarla."

@@ -17,6 +17,8 @@ from apps.documentos.models import (
     DocumentoPOS,
     DocumentoTipo,
 )
+from apps.nucleo.models import Ambiente
+from apps.nucleo.registro import campos
 
 from .emision import motivo_no_puede_emitir
 
@@ -400,3 +402,85 @@ def crear_documento_de_prueba(resolucion, consecutivo=None):
             f"El emisor ya tiene un documento de este tipo numerado "
             f"{resolucion.prefijo}{consecutivo}."
         )
+
+
+# Lo que entra en cada Set de Pruebas de documentos. El documento soporte no
+# está: sale con el software de facturación pero no es parte de su set.
+TIPOS_DEL_SET_DE_FACTURACION = (
+    DocumentoTipo.Codigo.FACTURA_VENTA,
+    DocumentoTipo.Codigo.NOTA_CREDITO,
+    DocumentoTipo.Codigo.NOTA_DEBITO,
+)
+TIPOS_DEL_SET_DE_DOCUMENTO_EQUIVALENTE = (
+    DocumentoTipo.Codigo.DOCUMENTO_EQUIVALENTE_POS,
+    DocumentoTipo.Codigo.NOTA_AJUSTE_DE_CREDITO,
+    DocumentoTipo.Codigo.NOTA_AJUSTE_DE_DEBITO,
+)
+
+# Lo que se borra al cerrar la habilitación: lo que no llegó a la DIAN o lo que
+# ella rechazó. `enviado` se queda: todavía puede recibir veredicto.
+ESTADOS_DESCARTABLES = (
+    DocumentoEstado.Nombre.BORRADOR,
+    DocumentoEstado.Nombre.FIRMADO,
+    DocumentoEstado.Nombre.RECHAZADO,
+)
+
+
+def limpiar_facturas_de_habilitacion(emisor):
+    """Lo de ``limpiar_documentos_de_habilitacion`` para el set de facturación."""
+    return limpiar_documentos_de_habilitacion(emisor, TIPOS_DEL_SET_DE_FACTURACION)
+
+
+def limpiar_documentos_equivalentes_de_habilitacion(emisor):
+    """Lo de ``limpiar_documentos_de_habilitacion`` para el set del P.O.S."""
+    return limpiar_documentos_de_habilitacion(
+        emisor, TIPOS_DEL_SET_DE_DOCUMENTO_EQUIVALENTE,
+    )
+
+
+def limpiar_documentos_de_habilitacion(emisor, tipos):
+    """Borra los documentos de habilitación del emisor que no quedaron aceptados.
+
+    Se llama al aceptarse un Set de Pruebas de documentos
+    (``apps.dian.servicios._marcar_habilitacion_superada``), con los ``tipos``
+    de ese set, igual que ``limpiar_nominas_de_habilitacion`` con el de nómina.
+
+    Borra los documentos de esos tipos de ambiente de pruebas en `borrador`,
+    `firmado` o `rechazado`, con sus detalles, errores, eventos y datos de
+    caja (P.O.S.). Se quedan los aceptados, los `enviado` (sin veredicto todavía),
+    los que otra petición tenga bloqueados en ese momento y los que todavía
+    referencie una nota que no se borra. Los archivos en B2 se quedan, como al
+    borrar por la API, y el consecutivo de la resolución no retrocede.
+
+    Devuelve los números borrados.
+    """
+    with transaction.atomic():
+        ids = set(
+            Documento.objects.filter(
+                emisor=emisor,
+                ambiente=Ambiente.PRUEBAS,
+                documento_tipo__codigo__in=tipos,
+                estado__nombre__in=ESTADOS_DESCARTABLES,
+            )
+            .select_for_update(skip_locked=True, of=("self",))
+            .values_list("pk", flat=True)
+        )
+        # Un documento no se borra si lo referencia una nota que se queda (PROTECT).
+        ids -= set(
+            Documento.objects.filter(documento_referencia__in=ids)
+            .exclude(pk__in=ids)
+            .values_list("documento_referencia", flat=True)
+        )
+        borrados = list(
+            Documento.objects.filter(pk__in=ids).order_by("consecutivo")
+            .values_list("numero", flat=True)
+        )
+        # Primero las notas: el documento que referencian está protegido
+        # mientras existan.
+        Documento.objects.filter(pk__in=ids, documento_referencia__isnull=False).delete()
+        Documento.objects.filter(pk__in=ids).delete()
+    if borrados:
+        logger.info("documento.habilitacion_limpiada %s", campos(
+            emisor=emisor.pk, borrados=len(borrados), numeros=",".join(borrados),
+        ))
+    return borrados
