@@ -168,6 +168,12 @@ La nota se crea de una de dos formas:
   de arriba: el reemplazo repite el documento entero, y el único sitio donde
   está completo y tal como se firmó es el predecesor.
 
+Las nóminas y notas de prueba usan el prefijo `NESETP`. Si el emisor tiene una
+resolución activa de módulo `nomina` con ese prefijo (la numeración que lleva
+el ERP; la DIAN no autoriza rangos de nómina), toman su `consecutivo_actual` y
+la dejan apuntando al siguiente, para que el ERP no proponga un número ya
+gastado. La nómina normal (`POST /api/nomina/nomina/`) no la toca.
+
 Después va `emitir/`, igual que en la nómina —firma y envía en una sola
 llamada—: el envío decide solo entre el Set de Pruebas y `SendNominaSync`, y el
 archivo sale con el prefijo `niae`.

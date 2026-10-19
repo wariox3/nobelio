@@ -51,10 +51,44 @@ def _siguiente_consecutivo(emisor, prefijo) -> int:
     return (ultimo or 0) + 1
 
 
+def _resolucion_de_nomina(emisor, prefijo):
+    """La resolución de nómina activa del emisor con ese prefijo, bloqueada.
+
+    La nómina no se numera con resolución ante la DIAN, pero un ERP puede
+    llevar su numeración en una (módulo ``nomina``) y proponer desde su
+    ``consecutivo_actual``. Las de prueba la siguen y la avanzan, para que el
+    ERP no proponga después un número que ya gastaron. ``None`` si no hay.
+    Hay que llamarla dentro de una transacción.
+    """
+    from apps.emisores.models import Resolucion
+
+    return (
+        Resolucion.objects.select_for_update()
+        .filter(
+            emisor=emisor, prefijo=prefijo, activa=True,
+            modulo=Resolucion.Modulo.NOMINA,
+        )
+        .order_by("-fecha_resolucion", "-id")
+        .first()
+    )
+
+
+def _avanzar_resolucion(resolucion, ultimo_usado):
+    """Deja ``consecutivo_actual`` después de ``ultimo_usado``; nunca lo retrocede."""
+    if resolucion is not None and ultimo_usado + 1 > resolucion.consecutivo_actual:
+        resolucion.consecutivo_actual = ultimo_usado + 1
+        resolucion.save(update_fields=["consecutivo_actual", "actualizado_en"])
+
+
 @transaction.atomic
 def crear_nomina_prueba(emisor, *, prefijo=None, consecutivo=None,
                         periodo_inicio=None, periodo_fin=None) -> Nomina:
     """Crea —solo crea— una nómina en borrador para el emisor.
+
+    Si el emisor tiene una resolución de nómina activa con el prefijo, el
+    consecutivo sale de su ``consecutivo_actual`` (o del siguiente libre, si
+    va más adelante) y la resolución queda apuntando al siguiente. Sin
+    resolución, es el siguiente libre del prefijo.
 
     No la firma ni la envía: es material para probar la emisión de nómina
     electrónica, igual que ``crear_facturas_de_prueba`` lo es para la facturación.
@@ -72,8 +106,13 @@ def crear_nomina_prueba(emisor, *, prefijo=None, consecutivo=None,
     """
     hoy = timezone.localdate()
     prefijo = PREFIJO_POR_DEFECTO if prefijo is None else prefijo
+    resolucion = _resolucion_de_nomina(emisor, prefijo)
     if consecutivo is None:
         consecutivo = _siguiente_consecutivo(emisor, prefijo)
+        # Con resolución, se sigue su consecutivo; el máximo de las nóminas
+        # existentes queda de piso por si la resolución se quedó atrás.
+        if resolucion is not None:
+            consecutivo = max(consecutivo, resolucion.consecutivo_actual)
 
     fin = periodo_fin or hoy
     inicio = periodo_inicio or fin.replace(day=1)
@@ -163,6 +202,7 @@ def crear_nomina_prueba(emisor, *, prefijo=None, consecutivo=None,
             valor=APORTE,
         ),
     ])
+    _avanzar_resolucion(resolucion, consecutivo)
     return nomina
 
 
@@ -234,7 +274,8 @@ def crear_nomina_de_prueba(software, consecutivo=None):
     """Una nómina de prueba en borrador para ese software de nómina.
 
     La misma que siembra el alta, pero de una en una. Sin ``consecutivo`` toma
-    el siguiente libre del emisor para el prefijo de pruebas, y el periodo
+    el de la resolución de nómina del prefijo de pruebas, si la hay, o el
+    siguiente libre del emisor para ese prefijo; el periodo
     continúa la serie (ver ``siguiente_periodo``). La nómina no se edita: si hace
     falta otro periodo, se borra el borrador y se crea por la API de nómina.
 
@@ -340,4 +381,10 @@ def crear_notas_ajuste_de_prueba(software, cantidad=NOTAS_AJUSTE_DE_PRUEBA):
             )
             for _ in range(cantidad)
         ]
+        # Las notas toman el prefijo de la nómina ajustada y gastan números de
+        # la misma serie: la resolución de nómina, si la hay, se corre con ellas.
+        _avanzar_resolucion(
+            _resolucion_de_nomina(emisor, nomina.prefijo),
+            max(nota.consecutivo for nota in notas),
+        )
     return nomina, notas
