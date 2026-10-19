@@ -169,12 +169,13 @@ class ConstructorEvento:
              listSchemeURI="urn:oasis:names:specification:ubl:codelist:gc:CountryIdentificationCode-2.1")
 
         # Software propio: el proveedor tecnológico es quien emite el evento.
-        # Como en la factura: con el DV del NIT, o "0" si no es NIT.
+        # Como en la factura: siempre como NIT, con el DV calculado sobre el
+        # número aunque el emisor sea una persona natural con cédula (FAB22b).
         emisor = self.evento.emisor
         proveedor = _sub(dian, "sts", "SoftwareProvider")
         _sub(proveedor, "sts", "ProviderID", emisor.numero_identificacion,
              schemeAgencyID="195", schemeAgencyName=AGENCIA_DIAN,
-             schemeID=_dv(emisor.numero_identificacion, emisor.tipo_identificacion) or "0",
+             schemeID=digito_verificacion(emisor.numero_identificacion) or "0",
              schemeName=SCHEME_NIT)
         _sub(proveedor, "sts", "SoftwareID", self.software.identificador,
              schemeAgencyID="195", schemeAgencyName=AGENCIA_DIAN)

@@ -19,6 +19,7 @@ from django.utils import timezone
 from lxml import etree
 
 from apps.dian import identificadores as ident
+from apps.utilidades.nit import digito_verificacion
 
 # --- Namespaces -------------------------------------------------------------
 NS_NOMINA = "dian:gov:co:facturaelectronica:NominaIndividual"
@@ -303,7 +304,7 @@ class ConstructorNominaXML:
             raiz, "ProveedorXML",
             RazonSocial=self.emisor.razon_social,
             NIT=self.emisor.numero_identificacion,
-            DV=self.emisor.digito_verificacion or "0",
+            DV=self._dv_emisor(),
             SoftwareID=self.software.identificador,
             SoftwareSC=ident.calcular_codigo_seguridad_software(
                 id_software=self.software.identificador,
@@ -331,12 +332,22 @@ class ConstructorNominaXML:
             })
         _sub(raiz, "InformacionGeneral", **atributos)
 
+    def _dv_emisor(self):
+        """El DV del NIT del emisor, calculado sobre el número.
+
+        ``ProveedorXML`` y ``Empleador`` lo llevan siempre como NIT, también si
+        el emisor es una persona natural registrada con cédula: su NIT es ese
+        número y la DIAN le calcula el DV. ``emisor.digito_verificacion`` está
+        vacío en ese caso.
+        """
+        return digito_verificacion(self.emisor.numero_identificacion) or "0"
+
     def _empleador(self, raiz):
         _sub(
             raiz, "Empleador",
             RazonSocial=self.emisor.razon_social,
             NIT=self.emisor.numero_identificacion,
-            DV=self.emisor.digito_verificacion or "0",
+            DV=self._dv_emisor(),
             Pais=self.emisor.pais.codigo,
             DepartamentoEstado=self.emisor.departamento.codigo,
             MunicipioCiudad=self.emisor.municipio.codigo,

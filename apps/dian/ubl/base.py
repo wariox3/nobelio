@@ -363,11 +363,15 @@ class ConstructorUBL:
 
         # Software propio: el proveedor tecnológico es el propio emisor, así que
         # el ProviderID es su NIT y el schemeID, su dígito de verificación.
+        # Siempre como NIT, también si el emisor es una persona natural
+        # registrada con cédula: su NIT es ese número, y la DIAN le calcula el
+        # DV (regla FAB22b). `emisor.digito_verificacion` está vacío en ese caso.
         emisor = self.doc.emisor
         proveedor = _sub(dian, "sts", "SoftwareProvider")
         _sub(proveedor, "sts", "ProviderID", emisor.numero_identificacion,
              schemeAgencyID="195", schemeAgencyName=AGENCIA_DIAN,
-             schemeID=emisor.digito_verificacion or "0", schemeName="31")
+             schemeID=digito_verificacion(emisor.numero_identificacion) or "0",
+             schemeName="31")
         _sub(proveedor, "sts", "SoftwareID", self.software.identificador,
              schemeAgencyID="195", schemeAgencyName=AGENCIA_DIAN)
 
