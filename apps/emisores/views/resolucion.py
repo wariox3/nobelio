@@ -92,8 +92,9 @@ class ResolucionViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
 
         **El tipo lo decide la resolución**, no quien llama: su ``tipo_factura``
         es el mismo código que el ``codigo_dian`` del tipo de documento, así que
-        una resolución de facturación (01) da una factura de venta y una de
-        documento soporte (05), un documento soporte.
+        una resolución de facturación (01) da una factura de venta, una de
+        documento soporte (05), un documento soporte, y una de documento
+        equivalente (20), un P.O.S. con la caja y el cajero de prueba del alta.
 
         Sin ``consecutivo`` toma el siguiente libre: el posterior al mayor que
         ya se usó de esa resolución para ese tipo, o el primero del rango si

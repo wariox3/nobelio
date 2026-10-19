@@ -158,15 +158,15 @@ sin certificado cargado y vigente responde 400.
       alta, sobre la resolución que se indique.
   - **El tipo lo decide la resolución**, no el cuerpo: su `tipo_factura` es el
     mismo código que el `codigo_dian` del tipo de documento, así que una de
-    facturación (01) da una factura de venta y una de documento soporte (05), un
-    documento soporte. Las numeraciones de notas (91, 92, 95) se rechazan: las
+    facturación (01) da una factura de venta, una de documento soporte (05), un
+    documento soporte, y una de documento equivalente (20), un P.O.S. con la
+    misma caja y cajero de prueba que deja el alta. Las numeraciones de notas (91, 92, 95) se rechazan: las
     notas heredan el número del documento que corrigen.
   - Sin `consecutivo`, toma **el siguiente libre** de esa resolución para ese
     tipo; con el rango agotado responde 400.
   - Se niega sobre una resolución inactiva, sobre un emisor que ya esté en
     producción para esa operación —gastaría un consecutivo real, y no se
-    recuperan— y sobre el documento equivalente P.O.S., que necesita el bloque
-    `pos` con los datos de la caja.
+    recuperan—.
 
 > **El Set de Pruebas no se corre de principio a fin.** El alta del software
 > deja el material creado (resolución y facturas en borrador), pero **firmarlo y

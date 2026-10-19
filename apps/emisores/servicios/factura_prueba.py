@@ -216,17 +216,27 @@ def crear_documentos_pos_de_prueba(emisor, resolucion, cantidad=POS_DE_PRUEBA):
                 observaciones="Documento equivalente P.O.S. del Set de Pruebas "
                 "(habilitación).",
             )
-            DocumentoPOS.objects.create(
-                documento=documento,
-                caja_placa="CAJA-PRUEBA",
-                caja_ubicacion="Punto de venta de prueba",
-                caja_tipo="Caja de prueba",
-                cajero="Cajero De Prueba",
-                codigo_venta=f"{resolucion.prefijo}{consecutivo}",
-            )
+            _crear_caja_de_prueba(documento)
             documentos.append(documento)
         _avanzar_consecutivo(resolucion, resolucion.rango_desde + cantidad)
     return documentos
+
+
+def _crear_caja_de_prueba(documento):
+    """El satélite ``DocumentoPOS`` de un P.O.S. de prueba.
+
+    Caja y cajero de prueba, y el número del documento como código de venta.
+    Los datos del comprador se dejan vacíos: la extensión los toma del
+    adquiriente, que es el propio emisor.
+    """
+    return DocumentoPOS.objects.create(
+        documento=documento,
+        caja_placa="CAJA-PRUEBA",
+        caja_ubicacion="Punto de venta de prueba",
+        caja_tipo="Caja de prueba",
+        cajero="Cajero De Prueba",
+        codigo_venta=f"{documento.prefijo}{documento.consecutivo}",
+    )
 
 
 def sembrar_documentos_de_prueba(emisor, tipo_software, resolucion):
@@ -325,24 +335,13 @@ def crear_documento_de_prueba(resolucion, consecutivo=None):
     """Un documento de prueba en borrador sobre ``resolucion``.
 
     El mismo que siembra el alta del software, pero de uno en uno y donde se
-    diga. El tipo lo decide la resolución (``tipo_de_documento_de``) y el
+    diga; el P.O.S. con la misma caja de prueba. El tipo lo decide la resolución (``tipo_de_documento_de``) y el
     número, ``consecutivo``; si no se indica, el siguiente libre.
 
     Lanza ``ValueError`` con el motivo cuando no se puede: quien llama lo
     traduce a un 400.
     """
     documento_tipo = tipo_de_documento_de(resolucion)
-
-    if documento_tipo.codigo == DocumentoTipo.Codigo.DOCUMENTO_EQUIVALENTE_POS:
-        # El P.O.S. no es un documento más: exige el satélite `DocumentoPOS`
-        # con la caja, el cajero y el código de venta, y sin él la validación
-        # cruzada del serializer lo rechaza. Crearlo a medias sería dejar un
-        # borrador que revienta al emitir.
-        raise ValueError(
-            "El documento equivalente P.O.S. necesita los datos de la caja "
-            "(bloque 'pos'), que este endpoint no compone. Créelo con "
-            "POST /api/documentos/documento/."
-        )
 
     if not resolucion.activa:
         # Es justo lo que la bandera impide: numerar con una dada de baja.
@@ -386,6 +385,11 @@ def crear_documento_de_prueba(resolucion, consecutivo=None):
                 consecutivo=consecutivo,
                 observaciones="Documento del Set de Pruebas (habilitación).",
             )
+            if documento_tipo.codigo == DocumentoTipo.Codigo.DOCUMENTO_EQUIVALENTE_POS:
+                # El P.O.S. exige el satélite con la caja, el cajero y el
+                # código de venta (DEPD11 y DEPD21): los mismos de prueba que
+                # deja el alta del software.
+                _crear_caja_de_prueba(documento)
             # Solo hacia delante: un consecutivo indicado a mano puede ser
             # anterior a otros ya usados, y eso no devuelve el contador.
             if consecutivo + 1 > resolucion.consecutivo_actual:
