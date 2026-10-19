@@ -32,9 +32,12 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         # una consulta que nadie aprovecha.
         consulta = super().get_queryset()
         if self.action == "list":
+            # Del más nuevo al más viejo. El modelo ordena por razón social, que
+            # sirve para los selects pero deja los recién creados perdidos en
+            # medio del listado. El `id` es único: la paginación no repite filas.
             consulta = consulta.prefetch_related(None).prefetch_related(
                 "responsabilidades"
-            ).select_related("municipio")
+            ).select_related("municipio").order_by("-id")
         return consulta
 
     def create(self, request, *args, **kwargs):
