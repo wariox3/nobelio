@@ -8,6 +8,7 @@ from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import filters, mixins, viewsets
 from rest_framework import serializers as campos
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.dian import servicios
@@ -22,7 +23,7 @@ from apps.nomina import serializers
 from apps.nomina.models import Nomina
 from apps.nucleo.api import ErrorSolicitud, entero_de_query
 from apps.nucleo.esquema import ErrorSerializer
-from apps.seguridad.alcance import AlcanceEmisorMixin
+from apps.seguridad.alcance import AlcanceEmisorMixin, LlaveGlobal
 
 # Las acciones no reciben la nómina ni la devuelven, pero spectacular las
 # describía con el serializer del ViewSet: `emitir/` pedía una nómina entera como
@@ -39,9 +40,90 @@ RESPUESTA_EMISION_NOMINA = inline_serializer(
     },
 )
 
+# `actualizar-estado/` consulta la DIAN de una en una y dentro de la petición:
+# con un tope por llamada no se queda colgada cuando hay muchas. Las que
+# sobran se ven en `pendientes` y salen en la llamada siguiente.
+LIMITE_ACTUALIZAR_ESTADO = 50
+
+RESPUESTA_ACTUALIZAR_ESTADO = inline_serializer(
+    name="ActualizarEstadoNominaRespuesta",
+    fields={
+        "consultadas": campos.IntegerField(
+            help_text="Cuántas nóminas se consultaron en esta llamada.",
+        ),
+        "pendientes": campos.IntegerField(
+            help_text="Cuántas siguen en `enviado` después de esta llamada.",
+        ),
+        "resultados": inline_serializer(
+            name="ActualizarEstadoNominaResultado",
+            many=True,
+            fields={
+                "id": campos.IntegerField(),
+                "emisor": campos.IntegerField(),
+                "numero": campos.CharField(),
+                "estado": campos.CharField(
+                    help_text="Estado después de la consulta: `aceptado`, "
+                    "`rechazado` o `enviado` si la DIAN aún no resuelve.",
+                ),
+                "codigo_estado": campos.CharField(allow_blank=True),
+                "descripcion": campos.CharField(allow_blank=True),
+                "errores": campos.ListField(child=campos.CharField()),
+                "error": campos.CharField(
+                    allow_blank=True,
+                    help_text="Por qué no se pudo consultar (vacío si se consultó).",
+                ),
+            },
+        ),
+    },
+)
+
+# `emitir-pendientes/` firma y envía dentro de la petición, con un viaje a la
+# DIAN por nómina: el tope es más bajo que el de la consulta para que la
+# llamada no pase del tiempo de espera de un proxy.
+LIMITE_EMITIR_PENDIENTES = 20
+
+RESPUESTA_EMITIR_PENDIENTES = inline_serializer(
+    name="EmitirPendientesNominaRespuesta",
+    fields={
+        "emitidas": campos.IntegerField(
+            help_text="Cuántas nóminas se intentaron emitir en esta llamada.",
+        ),
+        "pendientes": campos.IntegerField(
+            help_text="Cuántas siguen en `borrador` o `firmado` después de esta llamada.",
+        ),
+        "resultados": inline_serializer(
+            name="EmitirPendientesNominaResultado",
+            many=True,
+            fields={
+                "id": campos.IntegerField(),
+                "emisor": campos.IntegerField(),
+                "numero": campos.CharField(),
+                "estado": campos.CharField(
+                    help_text="Estado después de emitir: `aceptado`, `rechazado`, "
+                    "`enviado` (Set de Pruebas, sin veredicto), o `borrador` / "
+                    "`firmado` si falló.",
+                ),
+                "cune": campos.CharField(allow_blank=True),
+                "track_id": campos.CharField(allow_blank=True),
+                "codigo_estado": campos.CharField(allow_blank=True),
+                "descripcion": campos.CharField(allow_blank=True),
+                "errores": campos.ListField(child=campos.CharField()),
+                "error": campos.CharField(
+                    allow_blank=True,
+                    help_text="Por qué no se pudo emitir (vacío si se envió).",
+                ),
+            },
+        ),
+    },
+)
+
 # Lo que dice `accion` en la respuesta de `emitir/`.
 ACCION_ENVIADO = "enviado"
 ACCION_CONSULTADO = "consultado"
+
+# Lo que `emitir-pendientes/` toma: lo que aún no se ha enviado. `firmado` es
+# un envío anterior que no llegó a la DIAN.
+ESTADOS_POR_EMITIR = (DocumentoEstado.Nombre.BORRADOR, DocumentoEstado.Nombre.FIRMADO)
 
 # Estados finales: `emitir/` responde 400 y no llama a la DIAN.
 MENSAJES_NO_EMITIBLE = {
@@ -244,6 +326,172 @@ class NominaViewSet(
             "descripcion": respuesta.descripcion_estado,
             "errores": respuesta.errores,
         })
+
+    @extend_schema(
+        request=None,
+        responses={200: RESPUESTA_ACTUALIZAR_ESTADO, 403: ErrorSerializer},
+    )
+    @action(
+        detail=False, methods=["post"], url_path="actualizar-estado",
+        permission_classes=[IsAuthenticated, LlaveGlobal],
+    )
+    def actualizar_estado(self, request):
+        """Consulta en la DIAN las nóminas `enviado` de todos los emisores y aplica el resultado.
+
+        ``POST /api/nomina/nomina/actualizar-estado/``, sin cuerpo. Es un
+        proceso de toda la plataforma: solo lo llama una llave de alcance
+        global (403 para cualquier otra, staff incluido).
+
+        Es lo mismo que hace `emitir/` con una nómina enviada sin veredicto
+        (como las del Set de Pruebas), pero para todas a la vez: cada una queda
+        en `aceptado`, `rechazado` o, si la DIAN aún no resuelve, en `enviado`.
+        Nunca reenvía.
+
+        Va de una en una, de la más vieja a la más nueva, y como mucho
+        ``LIMITE_ACTUALIZAR_ESTADO`` (50) por llamada; `pendientes` dice
+        cuántas quedan en `enviado`. Si una falla (la DIAN no responde, falta
+        el certificado…), su `error` lo dice y se sigue con las demás, por eso
+        no hay 502. La que otra petición esté emitiendo en ese momento se
+        salta: no se espera su bloqueo.
+        """
+        enviadas = Nomina.objects.filter(estado__nombre=DocumentoEstado.Nombre.ENVIADO)
+        ids = list(
+            enviadas.order_by("creado_en", "id")
+            .values_list("pk", flat=True)[:LIMITE_ACTUALIZAR_ESTADO]
+        )
+        resultados = [r for r in map(self._actualizar_una, ids) if r is not None]
+        return Response({
+            "consultadas": len(resultados),
+            "pendientes": enviadas.count(),
+            "resultados": resultados,
+        })
+
+    @extend_schema(
+        request=None,
+        responses={200: RESPUESTA_EMITIR_PENDIENTES, 403: ErrorSerializer},
+    )
+    @action(
+        detail=False, methods=["post"], url_path="emitir-pendientes",
+        permission_classes=[IsAuthenticated, LlaveGlobal],
+    )
+    def emitir_pendientes(self, request):
+        """Emite las nóminas en `borrador` de todos los emisores.
+
+        ``POST /api/nomina/nomina/emitir-pendientes/``, sin cuerpo. Es un
+        proceso de toda la plataforma: solo lo llama una llave de alcance
+        global (403 para cualquier otra, staff incluido).
+
+        Cada una pasa por lo mismo que `emitir/`: se firma, se confirma la
+        firma y se envía, en dos transacciones. También toma las que quedaron
+        en `firmado` porque un envío anterior no llegó a la DIAN: se mandan
+        con el mismo CUNE, sin volver a firmar.
+
+        Van de la más vieja a la más nueva (dentro de un emisor, eso es por
+        consecutivo) y como mucho ``LIMITE_EMITIR_PENDIENTES`` (20) por
+        llamada; `pendientes` dice cuántas quedan. Si una falla, su `error` lo
+        dice y se sigue con las demás, por eso no hay 502: si la firma falla
+        sigue en `borrador`, y si falla el envío queda en `firmado` y sale en
+        la llamada siguiente. La que otra petición esté emitiendo en ese
+        momento se salta.
+
+        Lo que salga al Set de Pruebas queda en `enviado`: su veredicto se trae
+        con `actualizar-estado/`.
+        """
+        por_emitir = Nomina.objects.filter(estado__nombre__in=ESTADOS_POR_EMITIR)
+        ids = list(
+            por_emitir.order_by("creado_en", "id")
+            .values_list("pk", flat=True)[:LIMITE_EMITIR_PENDIENTES]
+        )
+        resultados = [r for r in map(self._emitir_una, ids) if r is not None]
+        return Response({
+            "emitidas": len(resultados),
+            "pendientes": por_emitir.count(),
+            "resultados": resultados,
+        })
+
+    def _emitir_una(self, pk):
+        """Firma (si hace falta) y envía una nómina. ``None`` si se salta.
+
+        Se salta si otra petición la tiene bloqueada (``skip_locked``) o si ya
+        no está por emitir cuando le toca.
+        """
+        respuesta = None
+        try:
+            with transaction.atomic():
+                nomina = (
+                    Nomina.objects.select_for_update(skip_locked=True, of=("self",))
+                    .select_related("estado", "emisor")
+                    .filter(pk=pk, estado__nombre__in=ESTADOS_POR_EMITIR)
+                    .first()
+                )
+                if nomina is None:
+                    return None
+                if nomina.estado.nombre == DocumentoEstado.Nombre.BORRADOR:
+                    servicios.generar_y_firmar_nomina(nomina)
+            with transaction.atomic():
+                nomina = self._bloquear(nomina)
+                # Entre las dos transacciones otra petición pudo enviarla.
+                if nomina.estado.nombre != DocumentoEstado.Nombre.FIRMADO:
+                    raise servicios.ErrorEmision(
+                        f"La nómina {nomina.numero} ya no está firmada y "
+                        f"pendiente de envío: está '{nomina.estado.nombre}'."
+                    )
+                respuesta = servicios.enviar_nomina_a_dian(nomina)
+            error = ""
+        except (servicios.ErrorEmision, ValueError, requests.RequestException) as exc:
+            error = str(exc) or type(exc).__name__
+        nomina = Nomina.objects.select_related("estado").get(pk=pk)
+        return {
+            "id": nomina.pk,
+            "emisor": nomina.emisor_id,
+            "numero": nomina.numero,
+            "estado": nomina.estado.nombre,
+            "cune": nomina.cune,
+            "track_id": nomina.track_id,
+            "codigo_estado": (respuesta.codigo_estado or "") if respuesta else "",
+            "descripcion": (respuesta.descripcion_estado or "") if respuesta else "",
+            "errores": list(respuesta.errores or []) if respuesta else [],
+            "error": error,
+        }
+
+    def _actualizar_una(self, pk):
+        """Consulta y aplica el estado de una nómina. ``None`` si se salta.
+
+        Se salta si otra petición la tiene bloqueada (``skip_locked``) o si ya
+        no está `enviado` cuando le toca.
+        """
+        try:
+            with transaction.atomic():
+                nomina = (
+                    Nomina.objects.select_for_update(skip_locked=True, of=("self",))
+                    .select_related("estado", "emisor")
+                    .filter(pk=pk, estado__nombre=DocumentoEstado.Nombre.ENVIADO)
+                    .first()
+                )
+                if nomina is None:
+                    return None
+                respuesta = servicios.actualizar_estado_nomina(nomina)
+        except (servicios.ErrorEmision, ValueError, requests.RequestException) as exc:
+            nomina = Nomina.objects.select_related("estado").get(pk=pk)
+            return {
+                "id": nomina.pk,
+                "numero": nomina.numero,
+                "estado": nomina.estado.nombre,
+                "codigo_estado": "",
+                "descripcion": "",
+                "errores": [],
+                "error": str(exc) or type(exc).__name__,
+            }
+        return {
+            "id": nomina.pk,
+            "emisor": nomina.emisor_id,
+            "numero": nomina.numero,
+            "estado": nomina.estado.nombre,
+            "codigo_estado": respuesta.codigo_estado or "",
+            "descripcion": respuesta.descripcion_estado or "",
+            "errores": list(respuesta.errores or []),
+            "error": "",
+        }
 
     @extend_schema(
         responses={200: RESPUESTA_CONSULTA_DIAN, 400: ErrorSerializer, 502: ErrorSerializer},

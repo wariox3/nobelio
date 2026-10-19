@@ -172,6 +172,21 @@ Después va `emitir/`, igual que en la nómina —firma y envía en una sola
 llamada—: el envío decide solo entre el Set de Pruebas y `SendNominaSync`, y el
 archivo sale con el prefijo `niae`.
 
+Lo que sale al Set de Pruebas queda en `enviado`, sin veredicto. Para no llamar
+a `emitir/` una por una, `POST /api/nomina/nomina/actualizar-estado/`, sin
+cuerpo, consulta todas las `enviado` de la plataforma (nóminas y notas de todos
+los emisores, hasta 50 por llamada) y aplica lo que diga la DIAN; responde
+`consultadas`, `pendientes` y el resultado de cada una. Nunca reenvía.
+
+Para emitir en lote, `POST /api/nomina/nomina/emitir-pendientes/`, sin cuerpo,
+firma y envía las `borrador` de todos los emisores —y reenvía las que quedaron
+en `firmado` por un envío fallido—, hasta 20 por llamada y de la más vieja a la
+más nueva. Responde `emitidas`, `pendientes` y el resultado de cada una; un
+fallo no corta las demás.
+
+Los dos son procesos de toda la plataforma: solo los llama una llave de
+alcance global (`LlaveGlobal`); cualquier otra, staff incluido, recibe 403.
+
 La nota hereda el **ambiente** del documento que ajusta y no del emisor: apunta
 a un CUNE que se firmó en uno concreto, y una nota de producción sobre una
 nómina de habilitación señalaría un documento que en ese ambiente no existe.

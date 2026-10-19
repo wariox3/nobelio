@@ -62,6 +62,17 @@ class AlcanceTotal(BasePermission):
         return alcance_total(request)
 
 
+class LlaveGlobal(BasePermission):
+    """Solo una llave de alcance global, sin el staff. Para los procesos de
+    toda la plataforma que corre un sistema y no una persona (p. ej. emitir
+    las nóminas pendientes de todos los emisores)."""
+
+    message = "Solo una llave de alcance global puede hacer esto."
+
+    def has_permission(self, request, view):
+        return es_llave_global(request)
+
+
 def usuario_del_request(request):
     """La persona en cuyo nombre se actúa, o ``None`` si no hay ninguna.
 
