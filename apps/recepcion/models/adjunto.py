@@ -13,14 +13,11 @@ from apps.utilidades.almacenamiento import almacenamiento_backblaze
 def _ruta(instance, filename):
     """``<emisor o sin-emisor>/recepcion/<aaaa>/<mm>/<uuid>.<ext>``.
 
-    El emisor es el del documento si el adjunto es de uno, y si no el del
-    correo. En el bucket el nombre es un uuid: el que puso el proveedor (que
-    puede traer ``../`` o lo que sea) solo se guarda en ``nombre``.
+    El emisor es el del adjunto (``Adjunto.emisor``). En el bucket el nombre
+    es un uuid: el que puso el proveedor (que puede traer ``../`` o lo que
+    sea) solo se guarda en ``nombre``.
     """
-    if instance.documento_id is not None:
-        dueno = instance.documento.emisor_id
-    else:
-        dueno = instance.correo.emisor_id or "sin-emisor"
+    dueno = instance.emisor_id or "sin-emisor"
     extension = PurePosixPath(filename.lower()).suffix
     if not re.fullmatch(r"\.[a-z0-9]{1,10}", extension):
         extension = ""
@@ -37,6 +34,11 @@ class Adjunto(ModeloUUID):
     ``correo`` va siempre, aunque el documento ya lo diga: así todos los
     archivos de un correo salen con un solo filtro, que es lo que usan la lista
     y el borrado. Los dos los pone el mismo servicio.
+
+    ``emisor`` es de quién es el archivo, y lo que acota quién lo ve: el del
+    documento si el adjunto es de uno (el NIT receptor del XML, que puede no
+    ser el del correo) y si no el del correo. Nulo si el correo no tiene
+    emisor (``empresa_desconocida``): solo lo ve quien alcanza todos.
 
     Se borran solo con el correo, por el servicio que borra también B2: por eso
     ``PROTECT`` hacia el correo y el documento.
@@ -55,6 +57,10 @@ class Adjunto(ModeloUUID):
     documento = models.ForeignKey(
         "recepcion.Documento", on_delete=models.PROTECT, null=True, blank=True,
         related_name="adjuntos", verbose_name="documento",
+    )
+    emisor = models.ForeignKey(
+        "emisores.Emisor", on_delete=models.PROTECT, null=True, blank=True,
+        related_name="adjuntos_recibidos", verbose_name="emisor",
     )
     rol = models.CharField("rol", max_length=20, choices=Rol.choices)
 

@@ -10,7 +10,7 @@ class AdjuntoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Adjunto
         fields = [
-            "id", "correo", "documento", "rol", "nombre", "tipo_contenido",
+            "id", "emisor", "correo", "documento", "rol", "nombre", "tipo_contenido",
             "tamano", "sha256", "creado_en",
         ]
         read_only_fields = fields

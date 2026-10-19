@@ -123,12 +123,16 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
 - **Adjuntos** (`rec_adjunto`, `apps/recepcion/adjuntos.py`): **todos** los
   archivos del correo, ya fuera de sus ZIP (los ZIP no se guardan; su
   contenido sí, y un ZIP dañado se guarda tal cual).
-  - Campos: `correo` (siempre), `documento` (si es de uno), `rol`
+  - Campos: `correo` (siempre), `documento` (si es de uno), `emisor`, `rol`
     (`xml`, `xml_documento`, `pdf`, `otro`), `archivo` en B2, `nombre`
     original (sin rutas), `tipo_contenido`, `tamano`, `sha256`, `creado_en`.
+  - `emisor` (2026-10-19, migración `recepcion/0013`, que lo llena en los
+    que ya había): el del documento si el adjunto es de uno, y si no el del
+    correo; nulo si el correo no tiene emisor. Es lo que acota quién ve el
+    adjunto.
   - La base de datos garantiza un solo archivo por rol y documento, y que un
     adjunto sin documento sea `otro`.
-  - En B2: `<emisor del documento, o del correo, o sin-emisor>/recepcion/<aaaa>/<mm>/<uuid>.<ext>`.
+  - En B2: `<emisor del adjunto, o sin-emisor>/recepcion/<aaaa>/<mm>/<uuid>.<ext>`.
     El nombre del proveedor nunca llega al bucket.
   - Los archivos de un documento repetido o de un receptor desconocido quedan
     como `otro`. No se deduplica por hash.
@@ -136,11 +140,12 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
     se deshace y se borra lo que alcanzó a subir; el reintento no duplica.
   - `PROTECT` hacia correo y documento: se borran solo con
     `adjuntos.eliminar_correo`, que borra también B2 y R2.
-  - API: `GET /api/recepcion/adjunto/` (filtros `?correo`, `?documento`,
-    `?rol`, `?search` en el nombre), su detalle y `descargar/` (siempre como
-    descarga, con el nombre original). `GET /api/recepcion/correo/<id>/adjuntos/`
-    los lista por correo. Cada quien ve los del documento si alcanza su emisor,
-    y los demás si alcanza el del correo.
+  - API: `GET /api/recepcion/adjunto/?emisor=<id>` (**`emisor` obligatorio**:
+    sin él, 400; filtros `?correo`, `?documento`, `?rol`, `?search` en el
+    nombre), su detalle y `descargar/` (siempre como descarga, con el nombre
+    original). `GET /api/recepcion/correo/<id>/adjuntos/` los lista por
+    correo. Cada quien ve solo los adjuntos cuyo `emisor` alcanza; los de
+    `emisor` nulo, solo quien alcanza todos.
   - El emisor del documento es el del **NIT receptor del XML**, aunque el
     correo llegara a otro buzón. Si el correo no tenía emisor, toma ese.
   - CUFE único: un repetido se ignora (sin fila ni archivos).

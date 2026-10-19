@@ -55,6 +55,8 @@ def crear(correo, contenido, *, nombre, rol, documento=None, subidos):
     adjunto = Adjunto(
         correo=correo,
         documento=documento,
+        # El del documento manda: su NIT receptor puede no ser el del correo.
+        emisor_id=documento.emisor_id if documento is not None else correo.emisor_id,
         rol=rol,
         nombre=nombre,
         tipo_contenido=tipo_de(nombre),
