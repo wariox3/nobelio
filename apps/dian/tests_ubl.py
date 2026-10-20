@@ -151,6 +151,20 @@ class GeneracionUBLTests(TestCase):
         self.assertEqual(autorizador.text, "800197268")
         self.assertEqual(autorizador.get("schemeID"), "4")
 
+    def test_el_proveedor_persona_natural_lleva_el_dv_calculado(self):
+        """FAB22b: el emisor persona natural, registrado con cédula, no tiene
+        DV guardado; el ProviderID lo lleva igual, calculado sobre el número."""
+        emisor = self.documento.emisor
+        emisor.numero_identificacion = "71234567"
+        emisor.digito_verificacion = ""
+
+        arbol = etree.fromstring(self._generar())
+        proveedor = arbol.find(f".//{{{ubl.NS['sts']}}}ProviderID")
+
+        self.assertEqual(proveedor.text, "71234567")
+        self.assertEqual(proveedor.get("schemeID"), "7")
+        self.assertEqual(proveedor.get("schemeName"), "31")
+
     def test_valida_contra_xsd_oficial(self):
         xml = self._generar()
         xsd_path = settings.DIAN_XSD_DIR / "maindoc" / "UBL-Invoice-2.1.xsd"

@@ -61,6 +61,9 @@ puede faltar. Las rutas cuelgan de `/api/`.
     `tipo_organizacion`, `direccion`, `pais`, `departamento`, `municipio` y `correo`.
     Cualquier otro campo responde 400 con código `campo_no_actualizable`: el resto
     (NIT, `referencia_externa`, `cuenta`, teléfono, ambientes…) se fija en el alta.
+  - **Borrado** (`DELETE /api/emisores/emisor/{id}/`) solo de un emisor vacío: si tiene
+    software, certificado, resoluciones, documentos emitidos o recibidos, nóminas,
+    empleados, eventos o adjuntos de recepción responde 400 diciendo qué tiene.
 
 ## 4. Certificado digital
 

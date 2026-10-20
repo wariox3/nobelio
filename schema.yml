@@ -3182,8 +3182,9 @@ paths:
           consulta y se aplica** el resultado, sin reenviar. Por eso no hay
           `actualizar-estado/`: el ERP llama a `emitir/` hasta que el estado sea
           final.
-        - `aceptado` y `rechazado` responden 400. El rechazado no se reemite: su
-          detalle se lee con `consultar/`, y se borra y se crea corregido.
+        - `aceptado` y `rechazado` responden 400. El rechazado no se reemite tal
+          cual: su detalle se lee con `consultar/`, y se pasa a borrador con
+          `reiniciar/` o se borra y se crea corregido.
 
         La consulta va con el mismo bloqueo que el envío, para que dos llamadas
         a la vez no apliquen el resultado dos veces.
@@ -3344,6 +3345,70 @@ paths:
               schema:
                 type: string
                 format: binary
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/documentos/documento/{id}/reiniciar/:
+    post:
+      operationId: documentos_documento_reiniciar_create
+      description: |-
+        Devuelve a `borrador` un documento rechazado para volver a emitirlo.
+
+        ``POST /api/documentos/documento/{id}/reiniciar/``, sin cuerpo. Solo
+        para documentos en `rechazado`; en cualquier otro estado responde 400.
+
+        Sirve cuando lo que la DIAN rechazó no estaba en los datos del
+        documento (una regla corregida en nobelio, el certificado, la
+        resolución): se reinicia y se llama a `emitir/`, que lo firma con un
+        CUFE nuevo y el mismo número. Si el error estaba en los datos, el
+        camino sigue siendo borrarlo y crearlo corregido: el documento no se
+        edita.
+
+        Se borran el CUFE, el XML firmado, el `track_id` y la operación de
+        envío. Los errores del rechazo se quedan hasta el siguiente envío.
+        La fecha de emisión pasa a hoy, que es la única que `emitir/` puede
+        firmar (regla FAD09), y la de vencimiento se corre los mismos días
+        para conservar el plazo.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este documento electrónico.
+        required: true
+      tags:
+      - documentos
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Documento'
           description: ''
         '400':
           content:
@@ -4642,8 +4707,9 @@ paths:
 
         **El tipo lo decide la resolución**, no quien llama: su ``tipo_factura``
         es el mismo código que el ``codigo_dian`` del tipo de documento, así que
-        una resolución de facturación (01) da una factura de venta y una de
-        documento soporte (05), un documento soporte.
+        una resolución de facturación (01) da una factura de venta, una de
+        documento soporte (05), un documento soporte, y una de documento
+        equivalente (20), un P.O.S. con la caja y el cajero de prueba del alta.
 
         Sin ``consecutivo`` toma el siguiente libre: el posterior al mayor que
         ya se usó de esa resolución para ese tipo, o el primero del rango si
@@ -4705,69 +4771,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /api/emisores/resolucion/consulta-dian/:
-    get:
-      operationId: emisores_resolucion_consulta_dian_retrieve
-      description: |-
-        Consulta en la DIAN los rangos de numeración de un software (GetNumberingRange).
-
-        ``GET /api/emisores/resolucion/consulta-dian/?software=<id>``
-
-        La DIAN asocia los prefijos al software, no al emisor: cada software
-        (facturación, documento equivalente) tiene los suyos, así que se indica
-        cuál consultar. El emisor sale de él, y el ambiente también: producción
-        si el emisor ya está habilitado para esa operación y habilitación si
-        no. En los entornos ``dev`` y ``test`` se consulta siempre en
-        habilitación.
-
-        Solo para previsualizar: devuelve los rangos autorizados sin persistir.
-        La clave técnica no se expone (es sensible); se indica únicamente si
-        está presente. Para guardarla usa ``importar-dian``.
-      tags:
-      - emisores
-      security:
-      - LlaveApi: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Resolucion'
-          description: ''
-        '429':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '401':
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
   /api/emisores/resolucion/importar-dian/:
     post:
       operationId: emisores_resolucion_importar_dian_create
       description: |-
-        Importa de la DIAN los rangos y crea las resoluciones que falten.
+        Importa de la DIAN los rangos del emisor y devuelve sus resoluciones.
 
         ``POST /api/emisores/resolucion/importar-dian/`` con ``{"emisor": <id>}``.
 
         La DIAN solo responde por software (GetNumberingRange no trae las de
-        todo el emisor), así que se recorren los softwares del emisor con el
-        Set de Pruebas aceptado —facturación y documento equivalente; el de
-        nómina no se numera con resolución— y se importan las de todos. Sin
-        ninguno aceptado responde 400 (``software_no_aceptado``).
+        todo el emisor), así que se consultan **todos** los softwares del
+        emisor que se numeran con resolución —facturación y documento
+        equivalente, con el Set de Pruebas aceptado o no; el de nómina no se
+        numera con resolución—. Sin ninguno responde 400 (``sin_software``).
 
-        Crea solo las resoluciones que el emisor todavía no tiene (se comparan
+        Crea las resoluciones que el emisor todavía no tiene (se comparan
         prefijo + número de resolución), guardando la ``clave_tecnica`` en el
         servidor. Las que ya existen no se tocan: si la DIAN cambió un rango se
         edita a mano.
 
-        Responde 200 con ``{"creadas": <n>}``: confirma que el proceso corrió y
-        cuántas resoluciones nuevas dejó. No las devuelve; se leen con el
-        listado, ``GET /api/emisores/resolucion/?emisor=<id>``.
+        Responde 200 con las resoluciones del emisor —las nuevas y las que ya
+        tenía— igual que el listado: paginadas (``count``, ``next``,
+        ``previous``, ``results``; ``?page=`` en la URL) y con sus mismos
+        filtros (``?ambiente=``, ``?modulo=``).
 
         Si la DIAN no devuelve rangos para ninguno de los softwares consultados
         responde 400 con su mensaje; si los devuelve para alguno, se importa lo
@@ -4776,6 +4802,19 @@ paths:
         **El tipo de factura lo decide el software**: lo importado con el de
         facturación entra como factura de venta (``01``) y lo del documento
         equivalente, como P.O.S. (``20``).
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un número de página dentro del conjunto de resultados paginado.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
       tags:
       - emisores
       requestBody:
@@ -4797,7 +4836,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ImportarResolucionesRespuesta'
+                $ref: '#/components/schemas/PaginatedResolucionList'
           description: ''
         '429':
           description: Error
@@ -6761,6 +6800,110 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/nomina/nomina/actualizar-estado/:
+    post:
+      operationId: nomina_nomina_actualizar_estado_create
+      description: |-
+        Consulta en la DIAN las nóminas `enviado` de todos los emisores y aplica el resultado.
+
+        ``POST /api/nomina/nomina/actualizar-estado/``, sin cuerpo. Es un
+        proceso de toda la plataforma: solo lo llama una llave de alcance
+        global (403 para cualquier otra, staff incluido).
+
+        Es lo mismo que hace `emitir/` con una nómina enviada sin veredicto
+        (como las del Set de Pruebas), pero para todas a la vez: cada una queda
+        en `aceptado`, `rechazado` o, si la DIAN aún no resuelve, en `enviado`.
+        Nunca reenvía.
+
+        Va de una en una, de la más vieja a la más nueva, y como mucho
+        ``LIMITE_ACTUALIZAR_ESTADO`` (50) por llamada; `pendientes` dice
+        cuántas quedan en `enviado`. Si una falla (la DIAN no responde, falta
+        el certificado…), su `error` lo dice y se sigue con las demás, por eso
+        no hay 502. La que otra petición esté emitiendo en ese momento se
+        salta: no se espera su bloqueo.
+      tags:
+      - nomina
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActualizarEstadoNominaRespuesta'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/nomina/nomina/emitir-pendientes/:
+    post:
+      operationId: nomina_nomina_emitir_pendientes_create
+      description: |-
+        Emite las nóminas en `borrador` de todos los emisores.
+
+        ``POST /api/nomina/nomina/emitir-pendientes/``, sin cuerpo. Es un
+        proceso de toda la plataforma: solo lo llama una llave de alcance
+        global (403 para cualquier otra, staff incluido).
+
+        Cada una pasa por lo mismo que `emitir/`: se firma, se confirma la
+        firma y se envía, en dos transacciones. También toma las que quedaron
+        en `firmado` porque un envío anterior no llegó a la DIAN: se mandan
+        con el mismo CUNE, sin volver a firmar.
+
+        Van de la más vieja a la más nueva (dentro de un emisor, eso es por
+        consecutivo) y como mucho ``LIMITE_EMITIR_PENDIENTES`` (20) por
+        llamada; `pendientes` dice cuántas quedan. Si una falla, su `error` lo
+        dice y se sigue con las demás, por eso no hay 502: si la firma falla
+        sigue en `borrador`, y si falla el envío queda en `firmado` y sale en
+        la llamada siguiente. La que otra petición esté emitiendo en ese
+        momento se salta.
+
+        Lo que salga al Set de Pruebas queda en `enviado`: su veredicto se trae
+        con `actualizar-estado/`.
+      tags:
+      - nomina
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmitirPendientesNominaRespuesta'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/recepcion/adjunto/:
     get:
       operationId: recepcion_adjunto_list
@@ -6770,10 +6913,19 @@ paths:
 
         De solo lectura: los crea el procesamiento del correo y se borran con él.
 
+        El listado exige ``?emisor=<id>``: sin él responde 400. Cada uno ve solo
+        los adjuntos de los emisores que alcanza.
+
         Filtros: ``?correo=<id>``, ``?documento=<uuid>`` y
         ``?rol=xml|xml_documento|pdf|otro``. ``?search=`` busca en el nombre
         original. El contenido se baja con ``descargar/``.
       parameters:
+      - in: query
+        name: emisor
+        schema:
+          type: integer
+        description: Id del emisor. Obligatorio.
+        required: true
       - name: page
         required: false
         in: query
@@ -6817,6 +6969,9 @@ paths:
         de sus ZIP.
 
         De solo lectura: los crea el procesamiento del correo y se borran con él.
+
+        El listado exige ``?emisor=<id>``: sin él responde 400. Cada uno ve solo
+        los adjuntos de los emisores que alcanza.
 
         Filtros: ``?correo=<id>``, ``?documento=<uuid>`` y
         ``?rol=xml|xml_documento|pdf|otro``. ``?search=`` busca en el nombre
@@ -7213,7 +7368,8 @@ paths:
         ``?documento_tipo=factura_venta|nota_credito|nota_debito``,
         ``?proveedor=<NIT sin DV>``, ``?verificacion_estado=valido|invalido|...``,
         ``?radian_estado=sin_eventos|acuse|recibo|aceptada|reclamada``,
-        ``?estado_recepcion=true|false`` y ``?desde=AAAA-MM-DD`` /
+        ``?estado_recepcion=true|false``, ``?estado_descartado=true|false`` y
+        ``?desde=AAAA-MM-DD`` /
         ``?hasta=AAAA-MM-DD`` sobre la fecha de emisión, ambos inclusive. ``?ordering=`` ordena por
         ``fecha_emision``, ``numero``, ``total_a_pagar`` o ``creado_en``.
 
@@ -7302,7 +7458,8 @@ paths:
         ``?documento_tipo=factura_venta|nota_credito|nota_debito``,
         ``?proveedor=<NIT sin DV>``, ``?verificacion_estado=valido|invalido|...``,
         ``?radian_estado=sin_eventos|acuse|recibo|aceptada|reclamada``,
-        ``?estado_recepcion=true|false`` y ``?desde=AAAA-MM-DD`` /
+        ``?estado_recepcion=true|false``, ``?estado_descartado=true|false`` y
+        ``?desde=AAAA-MM-DD`` /
         ``?hasta=AAAA-MM-DD`` sobre la fecha de emisión, ambos inclusive. ``?ordering=`` ordena por
         ``fecha_emision``, ``numero``, ``total_a_pagar`` o ``creado_en``.
 
@@ -7424,14 +7581,69 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/recepcion/documento/{id}/descartar/:
+    post:
+      operationId: recepcion_documento_descartar_create
+      description: |-
+        Descarta el documento: el emisor no hará nada más con él.
+
+        Queda intacto, con ``estado_descartado`` y ``estado_recepcion`` en
+        ``true``, y ya no admite eventos RADIAN (tampoco el acuse automático).
+        Devuelve el documento.
+
+        400 si ya está descartado, si su recepción ya terminó o si tiene algún
+        evento RADIAN, en cualquier estado.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este documento recibido.
+        required: true
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentoRecibido'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/recepcion/documento/{id}/evento/:
     post:
       operationId: recepcion_documento_evento_create
       description: |-
         Pide un evento RADIAN sobre la factura y lo envía a la DIAN.
 
-        ``{"codigo": "030"|"031"|"032"|"033"}``, con ``persona`` en el 030 y el
-        032 (si no viene, la configurada en el emisor) y ``concepto_reclamo``
+        ``{"codigo": "030"|"031"|"032"|"033"}``, con ``persona`` **obligatoria**
+        en el 030 y el 032 (no se toma la del emisor) y ``concepto_reclamo``
         en el 031. Responde 201 con el evento ``pendiente``: se envía en segundo
         plano y su estado se consulta en ``/api/recepcion/evento/{id}/``.
 
@@ -7517,6 +7729,61 @@ paths:
               schema:
                 type: string
                 format: binary
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/recepcion/documento/{id}/restaurar/:
+    post:
+      operationId: recepcion_documento_restaurar_create
+      description: |-
+        Quita el descarte: el documento vuelve a admitir eventos RADIAN.
+
+        ``estado_descartado`` pasa a ``false`` y ``estado_recepcion`` vuelve a
+        ``false``, salvo en una factura de contado verificada como válida, que
+        no admite eventos y queda terminada. El acuse automático omitido no se
+        pide solo. Devuelve el documento.
+
+        400 si no está descartado.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este documento recibido.
+        required: true
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentoRecibido'
           description: ''
         '400':
           content:
@@ -8077,6 +8344,57 @@ paths:
                 $ref: '#/components/schemas/Error'
 components:
   schemas:
+    ActualizarEstadoNominaRespuesta:
+      type: object
+      properties:
+        consultadas:
+          type: integer
+          description: Cuántas nóminas se consultaron en esta llamada.
+        pendientes:
+          type: integer
+          description: Cuántas siguen en `enviado` después de esta llamada.
+        resultados:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActualizarEstadoNominaResultado'
+      required:
+      - consultadas
+      - pendientes
+      - resultados
+    ActualizarEstadoNominaResultado:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        emisor:
+          type: integer
+        numero:
+          type: string
+        estado:
+          type: string
+          description: 'Estado después de la consulta: `aceptado`, `rechazado` o `enviado`
+            si la DIAN aún no resuelve.'
+        codigo_estado:
+          type: string
+        descripcion:
+          type: string
+        errores:
+          type: array
+          items:
+            type: string
+        error:
+          type: string
+          description: Por qué no se pudo consultar (vacío si se consultó).
+      required:
+      - codigo_estado
+      - descripcion
+      - emisor
+      - error
+      - errores
+      - estado
+      - id
+      - numero
     Adjunto:
       type: object
       description: 'Un archivo del correo. El contenido no va aquí: se baja con ``descargar/``.'
@@ -8085,6 +8403,10 @@ components:
           type: string
           format: uuid
           readOnly: true
+        emisor:
+          type: integer
+          readOnly: true
+          nullable: true
         correo:
           type: integer
           readOnly: true
@@ -8121,6 +8443,7 @@ components:
       - correo
       - creado_en
       - documento
+      - emisor
       - id
       - nombre
       - rol
@@ -10398,7 +10721,13 @@ components:
           title: Recepción terminada
           description: 'True cuando el recibo terminó: factura de contado verificada
             como válida, o factura a crédito con aceptación (033) o reclamo (031)
-            registrado.'
+            registrado, o documento descartado.'
+        estado_descartado:
+          type: boolean
+          readOnly: true
+          title: Descartado
+          description: 'True si el emisor lo descartó: queda intacto, sin más eventos
+            RADIAN.'
         tiene_xml_factura:
           type: boolean
           readOnly: true
@@ -10416,6 +10745,7 @@ components:
       - cufe_cude
       - documento_tipo
       - emisor
+      - estado_descartado
       - estado_recepcion
       - fecha_emision
       - fecha_validacion
@@ -10542,11 +10872,18 @@ components:
           title: Recepción terminada
           description: 'True cuando el recibo terminó: factura de contado verificada
             como válida, o factura a crédito con aceptación (033) o reclamo (031)
-            registrado.'
+            registrado, o documento descartado.'
+        estado_descartado:
+          type: boolean
+          readOnly: true
+          title: Descartado
+          description: 'True si el emisor lo descartó: queda intacto, sin más eventos
+            RADIAN.'
       required:
       - cufe_cude
       - documento_tipo
       - emisor
+      - estado_descartado
       - estado_recepcion
       - fecha_emision
       - forma_pago
@@ -11183,6 +11520,63 @@ components:
       - razon_social
       - tipo_identificacion
       - tipo_organizacion
+    EmitirPendientesNominaRespuesta:
+      type: object
+      properties:
+        emitidas:
+          type: integer
+          description: Cuántas nóminas se intentaron emitir en esta llamada.
+        pendientes:
+          type: integer
+          description: Cuántas siguen en `borrador` o `firmado` después de esta llamada.
+        resultados:
+          type: array
+          items:
+            $ref: '#/components/schemas/EmitirPendientesNominaResultado'
+      required:
+      - emitidas
+      - pendientes
+      - resultados
+    EmitirPendientesNominaResultado:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        emisor:
+          type: integer
+        numero:
+          type: string
+        estado:
+          type: string
+          description: 'Estado después de emitir: `aceptado`, `rechazado`, `enviado`
+            (Set de Pruebas, sin veredicto), o `borrador` / `firmado` si falló.'
+        cune:
+          type: string
+        track_id:
+          type: string
+        codigo_estado:
+          type: string
+        descripcion:
+          type: string
+        errores:
+          type: array
+          items:
+            type: string
+        error:
+          type: string
+          description: Por qué no se pudo emitir (vacío si se envió).
+      required:
+      - codigo_estado
+      - cune
+      - descripcion
+      - emisor
+      - error
+      - errores
+      - estado
+      - id
+      - numero
+      - track_id
     Empleado:
       type: object
       description: |-
@@ -12058,13 +12452,6 @@ components:
       description: |-
         * `devengado` - Devengado
         * `deduccion` - Deducción
-    ImportarResolucionesRespuesta:
-      type: object
-      properties:
-        creadas:
-          type: integer
-      required:
-      - creadas
     ImportarResolucionesSolicitudRequest:
       type: object
       properties:
@@ -14698,6 +15085,9 @@ components:
           readOnly: true
         emisor:
           type: integer
+        emisor_nombre:
+          type: string
+          readOnly: true
         tipo:
           allOf:
           - $ref: '#/components/schemas/SoftwareDianTipoEnum'
@@ -14753,6 +15143,7 @@ components:
           maxLength: 200
       required:
       - emisor
+      - emisor_nombre
       - id
       - identificador
       - modulo
@@ -14853,8 +15244,7 @@ components:
         persona:
           allOf:
           - $ref: '#/components/schemas/PersonaQueRecibeRequest'
-          description: Solo 030 y 032. Sin ella, va la persona que recibe configurada
-            en el emisor.
+          description: Obligatoria en el 030 y el 032; en los demás no va.
         concepto_reclamo:
           type: string
           minLength: 1

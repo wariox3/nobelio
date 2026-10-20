@@ -58,7 +58,7 @@ RESPUESTA_ACTUALIZAR_ESTADO = inline_serializer(
             name="ActualizarEstadoNominaResultado",
             many=True,
             fields={
-                "id": campos.IntegerField(),
+                "id": campos.UUIDField(),
                 "emisor": campos.IntegerField(),
                 "numero": campos.CharField(),
                 "estado": campos.CharField(
@@ -95,7 +95,7 @@ RESPUESTA_EMITIR_PENDIENTES = inline_serializer(
             name="EmitirPendientesNominaResultado",
             many=True,
             fields={
-                "id": campos.IntegerField(),
+                "id": campos.UUIDField(),
                 "emisor": campos.IntegerField(),
                 "numero": campos.CharField(),
                 "estado": campos.CharField(

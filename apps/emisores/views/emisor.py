@@ -6,6 +6,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from apps.emisores import models, serializers
+from apps.nucleo.api import ErrorSolicitud
 from apps.seguridad.alcance import AlcanceEmisorMixin, usuario_del_request
 from apps.utilidades.rues import RuesNoDisponible, consultar_detalle
 
@@ -39,6 +40,40 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
                 "responsabilidades"
             ).select_related("municipio").order_by("-id")
         return consulta
+
+    # Lo que impide borrar el emisor: (relación inversa, cómo se nombra).
+    # Unas son PROTECT y harían fallar el borrado; las de configuración
+    # (software, resoluciones) son CASCADE y se irían con él sin avisar.
+    BLOQUEAN_BORRADO = [
+        ("documentos", "documento(s) emitido(s)"),
+        ("nominas", "nómina(s)"),
+        ("empleados", "empleado(s)"),
+        ("documentos_recibidos", "documento(s) recibido(s)"),
+        ("eventos_recepcion", "evento(s) de recepción"),
+        ("adjuntos_recibidos", "adjunto(s) recibido(s)"),
+        ("softwares", "software(s)"),
+        ("resoluciones", "resolución(es)"),
+    ]
+
+    def perform_destroy(self, instance):
+        # Comprobado antes de borrar y no capturando el ProtectedError: así el
+        # mensaje dice qué tiene el emisor, en vez de un 500. Solo se borra un
+        # emisor vacío (dado de alta por error); uno con historia o ya
+        # configurado se queda.
+        pendientes = []
+        for relacion, nombre in self.BLOQUEAN_BORRADO:
+            cantidad = getattr(instance, relacion).count()
+            if cantidad:
+                pendientes.append(f"{cantidad} {nombre}")
+        if models.Certificado.objects.filter(emisor=instance).exists():
+            pendientes.append("certificado")
+        if pendientes:
+            raise ErrorSolicitud(
+                f"El emisor {instance.numero_identificacion} tiene "
+                f"{', '.join(pendientes)} y no se puede borrar. Solo se borra "
+                f"un emisor sin documentos ni configuración."
+            )
+        instance.delete()
 
     def create(self, request, *args, **kwargs):
         """El de DRF, salvo que un NIT repetido devuelve el `emisor_id` existente.

@@ -14,7 +14,7 @@ from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 from cryptography.hazmat.primitives.serialization import BestAvailableEncryption, pkcs12
 from rest_framework import status
-from rest_framework.test import APITestCase
+from rest_framework.test import APIClient, APITestCase
 
 from apps.catalogos import memoria as memoria_de_catalogos
 from apps.dian import soap
@@ -391,6 +391,27 @@ class NominaCreacionTests(NominaAPIBase):
             self.nomina.empleado.tipo_identificacion.codigo,
         )
 
+    def test_la_nomina_normal_no_toca_la_resolucion_de_nomina(self):
+        """Solo las de prueba siguen la resolución: la normal trae su número."""
+        from apps.catalogos.models import TipoFactura
+        from apps.emisores.models import Resolucion
+
+        tipo, _ = TipoFactura.objects.get_or_create(
+            codigo="01", defaults={"id": 1, "nombre": "Factura electrónica de Venta"},
+        )
+        resolucion = Resolucion.objects.create(
+            emisor=self.emisor, tipo_factura=tipo, modulo=Resolucion.Modulo.NOMINA,
+            prefijo=self.nomina.prefijo, numero_resolucion="1", fecha_resolucion="2026-01-01",
+            rango_desde=50, rango_hasta=5000, vigente_desde="2026-01-01",
+            vigente_hasta="2030-01-01", ambiente=2,
+        )
+
+        resp = self.client.post("/api/nomina/nomina/", self._payload(900), format="json")
+
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        resolucion.refresh_from_db()
+        self.assertEqual(resolucion.consecutivo_actual, 50)
+
     def test_el_ambiente_es_obligatorio(self):
         payload = self._payload(901)
         del payload["ambiente"]
@@ -442,3 +463,279 @@ class NominaCreacionTests(NominaAPIBase):
             q["sql"] for q in capturadas.captured_queries if ' FROM "cat_' in q["sql"]
         ]
         self.assertEqual(lecturas, [], "\n\n".join(lecturas))
+
+
+def _certificado_real(emisor):
+    """Un .p12 de verdad para ``emisor``, para que la firma firme de verdad."""
+    llave, cert = _generar_certificado()
+    p12 = pkcs12.serialize_key_and_certificates(
+        b"alias", llave, cert, None, BestAvailableEncryption(b"clave123")
+    )
+    Certificado.objects.filter(emisor=emisor).delete()
+    certificado = Certificado(emisor=emisor, clave="clave123", alias="test")
+    certificado.archivo.save("test.p12", ContentFile(p12), save=True)
+
+
+class NominaLoteTests(NominaAPIBase):
+    """`emitir-pendientes/` y `actualizar-estado/`: de toda la plataforma, solo
+    con una llave de alcance global."""
+
+    URL_EMITIR = "/api/nomina/nomina/emitir-pendientes/"
+    URL_ACTUALIZAR = "/api/nomina/nomina/actualizar-estado/"
+
+    def setUp(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from apps.documentos.tests_utils import crear_usuario
+        from apps.seguridad.models import LlaveApi
+
+        self.staff = crear_usuario(nombre="Técnico", email="tecnico@x.co", is_staff=True)
+        _, clave = LlaveApi.generar(
+            usuario=self.staff, nombre="Procesos", alcance_global=True,
+            expira_en=timezone.now() + timedelta(days=30),
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Api-Key {clave}")
+        # Una segunda nómina de otro emisor: los procesos no son por emisor.
+        self.otra_base = crear_emisor_de_nomina(self.base["catalogos"], nit="800199436")
+        _certificado_real(self.otra_base["emisor"])
+        self.otra, _ = crear_nomina(self.otra_base)
+
+    def _post(self, url, cliente):
+        with patch("apps.dian.servicios_nomina.construir_cliente_emisor", return_value=cliente):
+            return self.client.post(url)
+
+    def _estado(self, nomina):
+        nomina.refresh_from_db()
+        return nomina.estado.nombre
+
+    def _enviar_sin_veredicto(self):
+        """Las dos nóminas en `enviado`, como las deja el Set de Pruebas."""
+        resp = self._post(self.URL_EMITIR, ClienteNominaFalso(_respuesta(es_valido=False)))
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertEqual(self._estado(self.nomina), DocumentoEstado.Nombre.ENVIADO)
+        self.assertEqual(self._estado(self.otra), DocumentoEstado.Nombre.ENVIADO)
+
+    # --- Quién puede ----------------------------------------------------------
+
+    def test_solo_una_llave_global(self):
+        from apps.seguridad.models import LlaveApi
+
+        _, normal = LlaveApi.generar(usuario=self.usuario, nombre="ERP")
+        casos = {
+            "llave normal": {"credenciales": f"Api-Key {normal}"},
+            "usuario del emisor": {"usuario": self.usuario},
+            "staff": {"usuario": self.staff},
+        }
+        for nombre, caso in casos.items():
+            for url in (self.URL_EMITIR, self.URL_ACTUALIZAR):
+                with self.subTest(quien=nombre, url=url):
+                    cliente = APIClient()
+                    if "usuario" in caso:
+                        cliente.force_authenticate(caso["usuario"])
+                    else:
+                        cliente.credentials(HTTP_AUTHORIZATION=caso["credenciales"])
+                    with patch("apps.dian.servicios_nomina.construir_cliente_emisor") as dian:
+                        resp = cliente.post(url)
+                    self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN, resp.data)
+                    dian.assert_not_called()
+        self.assertEqual(self._estado(self.nomina), DocumentoEstado.Nombre.BORRADOR)
+
+    # --- emitir-pendientes ----------------------------------------------------
+
+    def test_emite_los_borradores_de_todos_los_emisores(self):
+        resp = self._post(self.URL_EMITIR, ClienteNominaFalso(_respuesta()))
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertEqual(resp.data["emitidas"], 2)
+        self.assertEqual(resp.data["pendientes"], 0)
+        self.assertEqual(
+            {(str(r["id"]), r["emisor"], r["estado"], r["error"]) for r in resp.data["resultados"]},
+            {
+                (str(self.nomina.id), self.emisor.id, "aceptado", ""),
+                (str(self.otra.id), self.otra_base["emisor"].id, "aceptado", ""),
+            },
+        )
+        self.assertTrue(all(len(r["cune"]) == 96 for r in resp.data["resultados"]))
+
+    def test_reenvia_la_firmada_con_el_mismo_cune(self):
+        caido = Mock()
+        caido.enviar_set_pruebas.side_effect = requests.ConnectionError("sin red")
+        primero = self._post(self.URL_EMITIR, caido)
+        self.assertEqual(primero.data["emitidas"], 2)
+        self.assertTrue(all("sin red" in r["error"] for r in primero.data["resultados"]))
+        self.assertEqual(primero.data["pendientes"], 2)
+        self.assertEqual(self._estado(self.nomina), DocumentoEstado.Nombre.FIRMADO)
+        cune = self.nomina.cune
+
+        segundo = self._post(self.URL_EMITIR, ClienteNominaFalso(_respuesta()))
+
+        self.assertEqual(segundo.data["pendientes"], 0)
+        self.assertEqual(self._estado(self.nomina), DocumentoEstado.Nombre.ACEPTADO)
+        self.assertEqual(self.nomina.cune, cune)
+
+    def test_un_fallo_no_corta_las_demas(self):
+        # La del primer emisor no se puede firmar: el emisor está dado de baja.
+        type(self.emisor).objects.filter(pk=self.emisor.pk).update(activo=False)
+
+        resp = self._post(self.URL_EMITIR, ClienteNominaFalso(_respuesta()))
+
+        por_id = {str(r["id"]): r for r in resp.data["resultados"]}
+        self.assertTrue(por_id[str(self.nomina.id)]["error"])
+        self.assertEqual(por_id[str(self.nomina.id)]["estado"], DocumentoEstado.Nombre.BORRADOR)
+        self.assertEqual(por_id[str(self.otra.id)]["estado"], DocumentoEstado.Nombre.ACEPTADO)
+        self.assertEqual(resp.data["pendientes"], 1)
+
+    def test_respeta_el_tope_por_llamada(self):
+        with patch("apps.nomina.views.nomina.LIMITE_EMITIR_PENDIENTES", 1):
+            resp = self._post(self.URL_EMITIR, ClienteNominaFalso(_respuesta()))
+
+        self.assertEqual(resp.data["emitidas"], 1)
+        self.assertEqual(resp.data["pendientes"], 1)
+        # La más vieja primero.
+        self.assertEqual(str(resp.data["resultados"][0]["id"]), str(self.nomina.id))
+
+    def test_no_toca_lo_enviado_ni_lo_final(self):
+        self._enviar_sin_veredicto()
+        cliente = ClienteNominaFalso(_respuesta())
+
+        resp = self._post(self.URL_EMITIR, cliente)
+
+        self.assertEqual(resp.data, {"emitidas": 0, "pendientes": 0, "resultados": []})
+        self.assertEqual(cliente.llamadas, [])
+
+    def test_la_nota_espera_a_que_su_nomina_este_aceptada(self):
+        from apps.nomina.servicios import crear_nota_ajuste
+
+        nota = crear_nota_ajuste(
+            self.nomina, tipo_nota=Nomina.TipoNota.REEMPLAZAR, exigir_cune=False,
+        )
+        self._enviar_sin_veredicto()
+        self.assertEqual(self._estado(nota), DocumentoEstado.Nombre.BORRADOR)
+
+        # Su nómina sigue en `enviado`: la nota no se firma.
+        resp = self._post(self.URL_EMITIR, ClienteNominaFalso(_respuesta()))
+        resultado = resp.data["resultados"][0]
+        self.assertEqual(str(resultado["id"]), str(nota.id))
+        self.assertIn("todavía no está aceptada", resultado["error"])
+        self.assertEqual(self._estado(nota), DocumentoEstado.Nombre.BORRADOR)
+
+        # Aceptada la nómina, la nota sale en la llamada siguiente.
+        self._post(self.URL_ACTUALIZAR, ClienteNominaFalso(_respuesta()))
+        self._post(self.URL_EMITIR, ClienteNominaFalso(_respuesta()))
+        self.assertEqual(self._estado(nota), DocumentoEstado.Nombre.ACEPTADO)
+
+    # --- actualizar-estado ----------------------------------------------------
+
+    def test_actualiza_las_enviadas_de_todos_los_emisores(self):
+        self._enviar_sin_veredicto()
+        cliente = ClienteNominaFalso(_respuesta())
+
+        resp = self._post(self.URL_ACTUALIZAR, cliente)
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertEqual(resp.data["consultadas"], 2)
+        self.assertEqual(resp.data["pendientes"], 0)
+        self.assertEqual({r["estado"] for r in resp.data["resultados"]}, {"aceptado"})
+        self.assertEqual(
+            {r["emisor"] for r in resp.data["resultados"]},
+            {self.emisor.id, self.otra_base["emisor"].id},
+        )
+        # Salieron al Set de Pruebas: se pregunta por el ZipKey, sin reenviar.
+        self.assertEqual({llamada[0] for llamada in cliente.llamadas}, {"estado_zip"})
+
+    def test_aplica_el_rechazo_y_deja_lo_que_sigue_sin_veredicto(self):
+        self._enviar_sin_veredicto()
+        errores = ["Regla: NIE001, Rechazo: El CUNE no corresponde."]
+
+        rechazo = self._post(
+            self.URL_ACTUALIZAR, ClienteNominaFalso(_respuesta(es_valido=False, errores=errores)),
+        )
+
+        self.assertEqual({r["estado"] for r in rechazo.data["resultados"]}, {"rechazado"})
+        self.assertEqual(rechazo.data["resultados"][0]["errores"], errores)
+        self.assertEqual(rechazo.data["pendientes"], 0)
+
+    def test_sin_veredicto_siguen_pendientes(self):
+        self._enviar_sin_veredicto()
+
+        resp = self._post(self.URL_ACTUALIZAR, ClienteNominaFalso(_respuesta(es_valido=False)))
+
+        self.assertEqual(resp.data["consultadas"], 2)
+        self.assertEqual(resp.data["pendientes"], 2)
+        self.assertEqual({r["estado"] for r in resp.data["resultados"]}, {"enviado"})
+
+    def test_si_la_dian_no_responde_lo_dice_y_sigue(self):
+        self._enviar_sin_veredicto()
+        caido = Mock()
+        caido.consultar_estado_zip.side_effect = requests.ConnectionError("sin red")
+
+        resp = self._post(self.URL_ACTUALIZAR, caido)
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertEqual(resp.data["consultadas"], 2)
+        self.assertTrue(all("sin red" in r["error"] for r in resp.data["resultados"]))
+        self.assertEqual(self._estado(self.nomina), DocumentoEstado.Nombre.ENVIADO)
+
+    def test_actualizar_respeta_el_tope_y_no_toca_borradores(self):
+        self._enviar_sin_veredicto()
+        crear_nomina(self.base)  # un borrador: no se consulta
+        with patch("apps.nomina.views.nomina.LIMITE_ACTUALIZAR_ESTADO", 1):
+            resp = self._post(self.URL_ACTUALIZAR, ClienteNominaFalso(_respuesta()))
+
+        self.assertEqual(resp.data["consultadas"], 1)
+        self.assertEqual(resp.data["pendientes"], 1)
+
+
+class NotaDeAjusteTests(NominaAPIBase):
+    def _nota(self):
+        from apps.nomina.servicios import crear_nota_ajuste
+
+        return crear_nota_ajuste(
+            self.nomina, tipo_nota=Nomina.TipoNota.REEMPLAZAR, exigir_cune=False,
+        )
+
+    def test_crear_nota_sin_cune_solo_si_se_pide(self):
+        from apps.nomina.servicios import crear_nota_ajuste
+
+        with self.assertRaisesMessage(ValueError, "todavía no tiene CUNE"):
+            crear_nota_ajuste(self.nomina, tipo_nota=Nomina.TipoNota.REEMPLAZAR)
+        self.assertEqual(self._nota().nomina_predecesora, self.nomina)
+
+    def test_la_nota_no_se_firma_sin_su_nomina_aceptada(self):
+        nota = self._nota()
+        # Firmada y enviada, pero sin veredicto: tampoco basta.
+        self._emitir(ClienteNominaFalso(_respuesta(es_valido=False)))
+
+        resp = self._emitir(nomina=nota)
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertIn("todavía no está aceptada", resp.data["detail"])
+        self.assertIn("'enviado'", resp.data["detail"])
+        nota.refresh_from_db()
+        self.assertEqual(nota.estado.nombre, DocumentoEstado.Nombre.BORRADOR)
+        self.assertFalse(nota.cune)
+
+    def test_con_su_nomina_aceptada_se_firma_con_su_cune(self):
+        nota = self._nota()
+        self._emitir()  # acepta la nómina
+        self.nomina.refresh_from_db()
+
+        resp = self._emitir(nomina=nota)
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        nota.refresh_from_db()
+        self.assertIn(self.nomina.cune.encode(), nota.leer_xml())
+
+    def test_una_nomina_con_notas_no_se_borra(self):
+        nota = self._nota()
+
+        resp = self.client.delete(self._url())
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertIn(nota.numero, resp.data["detail"])
+        self.assertTrue(Nomina.objects.filter(pk=self.nomina.pk).exists())
+
+        self.assertEqual(self.client.delete(self._url(nomina=nota)).status_code, 204)
+        self.assertEqual(self.client.delete(self._url()).status_code, 204)

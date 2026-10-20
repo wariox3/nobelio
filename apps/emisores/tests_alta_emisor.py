@@ -322,3 +322,41 @@ class ActualizacionEmisorTests(APITestCase):
     def test_put_no_esta_permitido(self):
         resp = self.client.put(self.url, {"razon_social": "Otra"}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+
+class ListadoEmisorTests(APITestCase):
+    """El listado sale del más nuevo al más viejo, no por razón social."""
+
+    def setUp(self):
+        c = crear_catalogos_minimos()
+        self.usuario = Usuario.objects.create_user(email="dueno@x.co", password="x")
+        self.emisores = [
+            Emisor.objects.create(
+                usuario=self.usuario, razon_social=nombre,
+                tipo_identificacion=c["nit"], numero_identificacion=nit,
+                tipo_organizacion=c["juridica"], pais=c["colombia"],
+                departamento=c["antioquia"], municipio=c["medellin"],
+                direccion="Calle 1 # 2-3",
+            )
+            for nombre, nit in (("Zeta SAS", "900000001"), ("Alfa SAS", "900000002"),
+                                ("Mega SAS", "900000003"))
+        ]
+        self.usuario.emisores.add(*self.emisores)
+        self.client.force_authenticate(self.usuario)
+
+    def test_ordena_por_id_descendente(self):
+        resp = self.client.get(URL_EMISORES)
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertEqual(
+            [e["id"] for e in resp.data["results"]],
+            sorted((e.id for e in self.emisores), reverse=True),
+        )
+
+    def test_la_busqueda_respeta_el_orden(self):
+        resp = self.client.get(URL_EMISORES, {"search": "SAS"})
+
+        self.assertEqual(
+            [e["razon_social"] for e in resp.data["results"]],
+            ["Mega SAS", "Alfa SAS", "Zeta SAS"],
+        )

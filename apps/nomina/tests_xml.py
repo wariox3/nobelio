@@ -166,6 +166,21 @@ class NominaXMLTests(TestCase):
         self.assertEqual(arbol.findtext(self._q("DeduccionesTotal")), "80000.00")
         self.assertEqual(arbol.findtext(self._q("ComprobanteTotal")), "920000.00")
 
+    def test_el_emisor_persona_natural_lleva_el_dv_calculado(self):
+        """ProveedorXML y Empleador van como NIT aunque el emisor esté
+        registrado con cédula y sin DV guardado: se calcula sobre el número."""
+        emisor = self.nomina.emisor
+        emisor.numero_identificacion = "71234567"
+        emisor.digito_verificacion = ""
+
+        arbol = etree.fromstring(self._xml())
+
+        for etiqueta in ("ProveedorXML", "Empleador"):
+            with self.subTest(etiqueta=etiqueta):
+                nodo = arbol.find(self._q(etiqueta))
+                self.assertEqual(nodo.get("NIT"), "71234567")
+                self.assertEqual(nodo.get("DV"), "7")
+
     def test_el_qr_apunta_al_cune(self):
         arbol = etree.fromstring(self._xml())
         cune = arbol.find(self._q("InformacionGeneral")).get("CUNE")

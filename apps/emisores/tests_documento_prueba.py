@@ -134,6 +134,31 @@ class CrearDocumentoPruebaTests(APITestCase):
             resp.data["documento_tipo"], DocumentoTipo.Codigo.DOCUMENTO_SOPORTE
         )
 
+    def test_sobre_una_resolucion_de_documento_equivalente_crea_el_pos_con_su_caja(self):
+        tipo_20, _ = TipoFactura.objects.get_or_create(
+            codigo="20", defaults={"id": 20, "nombre": "Documento equivalente P.O.S."},
+        )
+        pos = self._resolucion(tipo_20, numero_resolucion="18760000009", prefijo="EPOS")
+
+        resp = self.client.post(self._url(pos), {}, format="json")
+
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(
+            resp.data["documento_tipo"], DocumentoTipo.Codigo.DOCUMENTO_EQUIVALENTE_POS,
+        )
+        self.assertEqual(resp.data["estado"], DocumentoEstado.Nombre.BORRADOR)
+        documento = Documento.objects.get(pk=resp.data["id"])
+        caja = documento.pos
+        self.assertEqual(caja.caja_placa, "CAJA-PRUEBA")
+        self.assertEqual(caja.cajero, "Cajero De Prueba")
+        self.assertEqual(caja.codigo_venta, "EPOS990000000")
+        self.assertEqual(
+            documento.adquiriente.numero_identificacion,
+            self.emisor.numero_identificacion,
+        )
+        pos.refresh_from_db()
+        self.assertEqual(pos.consecutivo_actual, 990000001)
+
     # --- Lo que tiene que cortar --------------------------------------------
 
     def test_rechaza_un_consecutivo_fuera_del_rango(self):

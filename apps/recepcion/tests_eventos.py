@@ -128,9 +128,23 @@ class BaseEventos:
             self.llave, self.cert, policy_id=settings.DIAN_POLICY_ID, policy_hash="dGVzdA==",
         )
 
+    def persona(self, **cambios):
+        """La persona que recibe, como la manda la petición del 030 y el 032."""
+        return {
+            "tipo_identificacion": self.cedula, "numero_identificacion": "1020304050",
+            "nombres": "Ana", "apellidos": "Pérez", "cargo": "Contadora", "area": "",
+            **cambios,
+        }
+
+    def solicitar(self, documento, codigo, **kwargs):
+        """``eventos.solicitar`` con la persona que exigen el 030 y el 032."""
+        if codigo in ("030", "032"):
+            kwargs.setdefault("persona", self.persona())
+        return eventos.solicitar(documento, codigo, **kwargs)
+
     def registrado(self, codigo, documento=None, fecha=None):
         """Un evento ya registrado en RADIAN, sin pasar por el envío."""
-        evento = eventos.solicitar(
+        evento = self.solicitar(
             documento or self.factura, codigo,
             concepto_reclamo=ConceptoReclamo.objects.get(codigo="02") if codigo == "031" else None,
         )
@@ -141,8 +155,8 @@ class BaseEventos:
 
 
 class SolicitarTests(BaseEventos, TestCase):
-    def test_el_acuse_sale_con_la_persona_del_emisor(self):
-        evento = eventos.solicitar(self.factura, "030")
+    def test_el_acuse_sale_con_la_persona_de_la_peticion(self):
+        evento = self.solicitar(self.factura, "030")
 
         self.assertEqual(evento.estado, EstadoEvento.PENDIENTE)
         self.assertEqual(evento.numero, "ACR1")
@@ -151,37 +165,40 @@ class SolicitarTests(BaseEventos, TestCase):
         self.assertEqual(evento.persona_cargo, "Contadora")
         self.assertEqual(self.encolados, [(str(evento.pk),)])
 
-    def test_la_persona_de_la_peticion_reemplaza_la_del_emisor(self):
-        persona = {
-            "tipo_identificacion": self.cedula, "numero_identificacion": "99",
-            "nombres": "Luis", "apellidos": "Gómez", "cargo": "", "area": "Bodega",
-        }
-        evento = eventos.solicitar(self.factura, "030", persona=persona)
+    def test_no_toma_la_persona_del_emisor(self):
+        persona = self.persona(
+            numero_identificacion="99", nombres="Luis", apellidos="Gómez", cargo="",
+            area="Bodega",
+        )
+        evento = self.solicitar(self.factura, "030", persona=persona)
         self.assertEqual(evento.persona_nombres, "Luis")
         self.assertEqual(evento.persona_area, "Bodega")
 
-    def test_sin_persona_no_hay_acuse(self):
-        Emisor.objects.filter(pk=self.emisor.pk).update(recibe_nombres="")
-        factura = self.documento("2")
-        with self.assertRaisesMessage(eventos.EventoInvalido, "lleva la persona que recibe"):
-            eventos.solicitar(factura, "030")
+    def test_sin_persona_en_la_peticion_no_hay_acuse_ni_recibo(self):
+        # El emisor tiene una configurada, y aun así no se usa: esa es solo
+        # para el acuse automático.
+        for codigo in ("030", "032"):
+            with self.subTest(codigo=codigo), \
+                    self.assertRaisesMessage(eventos.EventoInvalido, "mándala en la petición"):
+                eventos.solicitar(self.factura, codigo)
+        self.assertFalse(Evento.objects.exists())
 
     def test_solo_sobre_facturas_de_venta(self):
         nota = self.documento("2", tipo="nota_credito")
         with self.assertRaisesMessage(eventos.EventoInvalido, "solo sobre facturas de venta"):
-            eventos.solicitar(nota, "030")
+            self.solicitar(nota, "030")
 
     def test_solo_sobre_facturas_verificadas(self):
         pendiente = self.documento("2", verificado=False)
         with self.assertRaisesMessage(eventos.EventoInvalido, "verificada la factura como válida"):
-            eventos.solicitar(pendiente, "030")
+            self.solicitar(pendiente, "030")
 
     def test_solo_sobre_facturas_a_credito(self):
         contado = FormaPago.objects.create(id=1, codigo="1", nombre="Contado")
         Documento.objects.filter(pk=self.factura.pk).update(forma_pago=contado)
         factura = Documento.objects.select_related("emisor", "documento_tipo").get(pk=self.factura.pk)
         with self.assertRaisesMessage(eventos.EventoInvalido, "La factura es de contado"):
-            eventos.solicitar(factura, "030")
+            self.solicitar(factura, "030")
 
     def test_la_forma_de_pago_de_un_documento_viejo_se_lee_del_xml(self):
         FormaPago.objects.create(id=1, codigo="1", nombre="Contado")
@@ -195,45 +212,45 @@ class SolicitarTests(BaseEventos, TestCase):
         documento = Documento.objects.select_related("emisor", "documento_tipo").get(pk=documento.pk)
         self.assertIsNone(documento.forma_pago)
         with self.assertRaisesMessage(eventos.EventoInvalido, "La factura es de contado"):
-            eventos.solicitar(documento, "030")
+            self.solicitar(documento, "030")
         documento.refresh_from_db()
         self.assertEqual(documento.forma_pago.codigo, "1")
 
     def test_sin_forma_de_pago_conocida_decide_la_dian(self):
         # El XML del documento de prueba no la trae: no se bloquea.
-        self.assertEqual(eventos.solicitar(self.factura, "030").numero, "ACR1")
+        self.assertEqual(self.solicitar(self.factura, "030").numero, "ACR1")
 
     def test_un_evento_no_se_repite_salvo_que_lo_hayan_rechazado(self):
-        primero = eventos.solicitar(self.factura, "030")
+        primero = self.solicitar(self.factura, "030")
         with self.assertRaisesMessage(eventos.EventoInvalido, "ya tiene el acuse de recibo"):
-            eventos.solicitar(self.factura, "030")
+            self.solicitar(self.factura, "030")
 
         Evento.objects.filter(pk=primero.pk).update(estado=EstadoEvento.RECHAZADO)
-        segundo = eventos.solicitar(self.factura, "030")
+        segundo = self.solicitar(self.factura, "030")
         self.assertEqual(segundo.numero, "ACR2")
 
     def test_el_recibo_va_despues_del_acuse_registrado(self):
-        eventos.solicitar(self.factura, "030")
+        self.solicitar(self.factura, "030")
         with self.assertRaisesMessage(eventos.EventoInvalido, "después del acuse"):
-            eventos.solicitar(self.factura, "032")
+            self.solicitar(self.factura, "032")
 
         Evento.objects.update(estado=EstadoEvento.REGISTRADO)
-        recibo = eventos.solicitar(self.factura, "032")
+        recibo = self.solicitar(self.factura, "032")
         # Cada tipo de evento lleva su propio consecutivo.
         self.assertEqual(recibo.numero, "RBS1")
 
     def test_la_aceptacion_va_despues_del_recibo(self):
         self.registrado("030")
         with self.assertRaisesMessage(eventos.EventoInvalido, "después del recibo"):
-            eventos.solicitar(self.factura, "033")
+            self.solicitar(self.factura, "033")
 
     def test_aceptacion_y_reclamo_se_excluyen(self):
         self.registrado("030")
         self.registrado("032", fecha=date(2026, 10, 9))
         with mock.patch.object(eventos, "_hoy", return_value=date(2026, 10, 9)):
-            eventos.solicitar(self.factura, "033")
+            self.solicitar(self.factura, "033")
             with self.assertRaisesMessage(eventos.EventoInvalido, "excluye el reclamo"):
-                eventos.solicitar(
+                self.solicitar(
                     self.factura, "031",
                     concepto_reclamo=ConceptoReclamo.objects.get(codigo="02"),
                 )
@@ -244,17 +261,17 @@ class SolicitarTests(BaseEventos, TestCase):
         limite = sumar_dias_habiles(date(2026, 10, 9), 3)
         with mock.patch.object(eventos, "_hoy", return_value=date.fromordinal(limite.toordinal() + 1)):
             with self.assertRaisesMessage(eventos.EventoInvalido, "Venció el plazo"):
-                eventos.solicitar(self.factura, "033")
+                self.solicitar(self.factura, "033")
         with mock.patch.object(eventos, "_hoy", return_value=limite):
-            self.assertEqual(eventos.solicitar(self.factura, "033").numero, "ACE1")
+            self.assertEqual(self.solicitar(self.factura, "033").numero, "ACE1")
 
     def test_el_reclamo_lleva_concepto(self):
         self.registrado("030")
         self.registrado("032", fecha=date(2026, 10, 9))
         with mock.patch.object(eventos, "_hoy", return_value=date(2026, 10, 9)):
             with self.assertRaisesMessage(eventos.EventoInvalido, "lleva su concepto"):
-                eventos.solicitar(self.factura, "031")
-            reclamo = eventos.solicitar(
+                self.solicitar(self.factura, "031")
+            reclamo = self.solicitar(
                 self.factura, "031", concepto_reclamo=ConceptoReclamo.objects.get(codigo="02"),
             )
         self.assertEqual(reclamo.numero, "REC1")
@@ -269,7 +286,7 @@ class EnviarTests(BaseEventos, TestCase):
 
     def test_registrado_guarda_el_xml_la_respuesta_y_el_resumen(self):
         cliente = ClienteFalso()
-        evento = self.enviar(eventos.solicitar(self.factura, "030"), cliente)
+        evento = self.enviar(self.solicitar(self.factura, "030"), cliente)
 
         self.assertEqual(evento.estado, EstadoEvento.REGISTRADO)
         self.assertEqual(evento.respuesta_codigo, "00")
@@ -295,7 +312,7 @@ class EnviarTests(BaseEventos, TestCase):
             proveedor_tipo_identificacion="13", proveedor_tipo_organizacion="2",
         )
         cliente = ClienteFalso()
-        self.enviar(eventos.solicitar(self.factura, "030"), cliente)
+        self.enviar(self.solicitar(self.factura, "030"), cliente)
 
         arbol = etree.fromstring(cliente.enviados[0][0])
         nit = arbol.find("cac:ReceiverParty/cac:PartyTaxScheme/cbc:CompanyID", NS)
@@ -304,7 +321,7 @@ class EnviarTests(BaseEventos, TestCase):
 
     def test_rechazado_no_toca_el_resumen(self):
         cliente = ClienteFalso(respuesta_dian(False, ["Regla: AAH09, Rechazo: evento repetido"]))
-        evento = self.enviar(eventos.solicitar(self.factura, "030"), cliente)
+        evento = self.enviar(self.solicitar(self.factura, "030"), cliente)
 
         self.assertEqual(evento.estado, EstadoEvento.RECHAZADO)
         self.assertIn("evento repetido", evento.respuesta_descripcion)
@@ -312,7 +329,7 @@ class EnviarTests(BaseEventos, TestCase):
         self.assertEqual(self.factura.radian_estado, EstadoRadian.SIN_EVENTOS)
 
     def test_sin_respuesta_queda_en_error_y_el_reenvio_manda_el_mismo_xml(self):
-        evento = eventos.solicitar(self.factura, "030")
+        evento = self.solicitar(self.factura, "030")
         caido = ClienteFalso(error=requests.ConnectionError("sin red"))
         with mock.patch.object(eventos, "construir_cliente_emisor", return_value=caido), \
                 mock.patch.object(eventos, "construir_firmador_emisor", return_value=self.firmador()):
@@ -350,6 +367,9 @@ class AcuseAutomaticoTests(BaseEventos, TestCase):
         evento = Evento.objects.get()
         self.assertEqual(evento.evento_radian.codigo, "030")
         self.assertIsNone(evento.usuario)
+        # El automático no tiene petición: es el único que usa la del emisor.
+        self.assertEqual(evento.persona_nombres, "Ana")
+        self.assertEqual(evento.persona_cargo, "Contadora")
 
     def test_apagado_no_sale(self):
         Emisor.objects.filter(pk=self.emisor.pk).update(acuse_automatico=False)
@@ -373,9 +393,15 @@ class EventoApiTests(BaseEventos, APITestCase):
         super().setUp()
         self.client.force_authenticate(self.usuario)
 
+    PERSONA = {
+        "tipo_identificacion": 13, "numero_identificacion": "77",
+        "nombres": "Luis", "apellidos": "Gómez",
+    }
+
     def test_pedir_un_evento(self):
         resp = self.client.post(
-            f"{URL_DOCUMENTO}{self.factura.pk}/evento/", {"codigo": "030"}, format="json",
+            f"{URL_DOCUMENTO}{self.factura.pk}/evento/",
+            {"codigo": "030", "persona": self.PERSONA}, format="json",
         )
         self.assertEqual(resp.status_code, 201, resp.data)
         self.assertEqual(resp.data["codigo"], "030")
@@ -394,9 +420,24 @@ class EventoApiTests(BaseEventos, APITestCase):
         self.assertEqual(resp.status_code, 201, resp.data)
         self.assertEqual(resp.data["persona_nombres"], "Luis")
 
+    def test_sin_persona_es_400(self):
+        for codigo in ("030", "032"):
+            with self.subTest(codigo=codigo):
+                resp = self.client.post(
+                    f"{URL_DOCUMENTO}{self.factura.pk}/evento/", {"codigo": codigo},
+                    format="json",
+                )
+                self.assertEqual(resp.status_code, 400)
+                self.assertIn(
+                    f"persona: Es obligatoria en el evento {codigo}.",
+                    [e["mensaje"] for e in resp.data["errores"]],
+                )
+        self.assertFalse(Evento.objects.exists())
+
     def test_un_evento_que_no_cabe_es_400(self):
         resp = self.client.post(
-            f"{URL_DOCUMENTO}{self.factura.pk}/evento/", {"codigo": "032"}, format="json",
+            f"{URL_DOCUMENTO}{self.factura.pk}/evento/",
+            {"codigo": "032", "persona": self.PERSONA}, format="json",
         )
         self.assertEqual(resp.status_code, 400)
         self.assertIn("después del acuse", resp.data["detail"])
@@ -411,7 +452,7 @@ class EventoApiTests(BaseEventos, APITestCase):
     def test_listar_y_filtrar(self):
         evento = self.registrado("030")
         otra = self.documento("2")
-        eventos.solicitar(otra, "030")
+        self.solicitar(otra, "030")
 
         resp = self.client.get(URL_EVENTO, {"documento": str(self.factura.pk)})
         self.assertEqual(resp.status_code, 200)
@@ -427,7 +468,7 @@ class EventoApiTests(BaseEventos, APITestCase):
         self.assertIn("Solo se reenvían los eventos en error", resp.data["detail"])
 
     def test_reenviar_uno_en_error(self):
-        evento = eventos.solicitar(self.factura, "030")
+        evento = self.solicitar(self.factura, "030")
         Evento.objects.filter(pk=evento.pk).update(estado=EstadoEvento.ERROR)
         with mock.patch.object(eventos, "construir_cliente_emisor", return_value=ClienteFalso()), \
                 mock.patch.object(eventos, "construir_firmador_emisor", return_value=self.firmador()):
@@ -503,7 +544,7 @@ class EliminarDocumentoTests(BaseEventos, APITestCase):
         self.assertTrue(Documento.objects.filter(pk=otra.pk).exists())
 
     def test_con_eventos_no_se_elimina(self):
-        evento = eventos.solicitar(self.factura, "030")
+        evento = self.solicitar(self.factura, "030")
         Evento.objects.filter(pk=evento.pk).update(estado=EstadoEvento.RECHAZADO)
 
         resp = self.client.delete(f"{URL_DOCUMENTO}{self.factura.pk}/")
@@ -538,7 +579,7 @@ class EliminarEventoTests(BaseEventos, APITestCase):
 
     def rechazado(self):
         """Un 030 enviado y rechazado, con su XML y la respuesta en B2."""
-        evento = eventos.solicitar(self.factura, "030")
+        evento = self.solicitar(self.factura, "030")
         evento = Evento.objects.select_related("documento", "emisor", "evento_radian").get(pk=evento.pk)
         respuesta = respuesta_dian(False, ["Regla: LGC62, Rechazo: no es de tipo crédito"])
         b64 = base64.b64encode(b"<ApplicationResponse>RECHAZO</ApplicationResponse>").decode()
@@ -559,7 +600,7 @@ class EliminarEventoTests(BaseEventos, APITestCase):
     def test_su_numero_no_se_vuelve_a_usar(self):
         evento = self.rechazado()
         self.client.delete(f"{URL_EVENTO}{evento.pk}/")
-        self.assertEqual(eventos.solicitar(self.factura, "030").numero, "ACR2")
+        self.assertEqual(self.solicitar(self.factura, "030").numero, "ACR2")
 
     def test_sin_el_rechazado_el_documento_se_puede_eliminar(self):
         evento = self.rechazado()
@@ -568,7 +609,7 @@ class EliminarEventoTests(BaseEventos, APITestCase):
         self.assertEqual(self.client.delete(f"{URL_DOCUMENTO}{self.factura.pk}/").status_code, 204)
 
     def test_solo_los_rechazados(self):
-        evento = eventos.solicitar(self.factura, "030")
+        evento = self.solicitar(self.factura, "030")
         for estado in (EstadoEvento.PENDIENTE, EstadoEvento.ERROR, EstadoEvento.REGISTRADO):
             Evento.objects.filter(pk=evento.pk).update(estado=estado)
             resp = self.client.delete(f"{URL_EVENTO}{evento.pk}/")
@@ -644,7 +685,7 @@ class EstadoRecepcionTests(BaseEventos, TestCase):
     def test_la_aceptacion_registrada_la_termina(self):
         self.registrado("030")
         self.registrado("032", fecha=timezone.localdate())
-        self.enviar(eventos.solicitar(self.factura, "033"))
+        self.enviar(self.solicitar(self.factura, "033"))
         self.factura.refresh_from_db()
         self.assertEqual(self.factura.radian_estado, EstadoRadian.ACEPTADA)
         self.assertTrue(self.factura.estado_recepcion)
@@ -652,7 +693,7 @@ class EstadoRecepcionTests(BaseEventos, TestCase):
     def test_el_reclamo_registrado_la_termina(self):
         self.registrado("030")
         self.registrado("032", fecha=timezone.localdate())
-        self.enviar(eventos.solicitar(
+        self.enviar(self.solicitar(
             self.factura, "031", concepto_reclamo=ConceptoReclamo.objects.get(codigo="02"),
         ))
         self.factura.refresh_from_db()
@@ -660,7 +701,7 @@ class EstadoRecepcionTests(BaseEventos, TestCase):
         self.assertTrue(self.factura.estado_recepcion)
 
     def test_el_acuse_y_el_recibo_no_la_terminan(self):
-        self.enviar(eventos.solicitar(self.factura, "030"))
+        self.enviar(self.solicitar(self.factura, "030"))
         self.factura.refresh_from_db()
         self.assertEqual(self.factura.radian_estado, EstadoRadian.ACUSE)
         self.assertFalse(self.factura.estado_recepcion)
@@ -668,7 +709,7 @@ class EstadoRecepcionTests(BaseEventos, TestCase):
     def test_la_aceptacion_rechazada_no_la_termina(self):
         self.registrado("030")
         self.registrado("032", fecha=timezone.localdate())
-        self.enviar(eventos.solicitar(self.factura, "033"), ClienteFalso(respuesta_dian(False)))
+        self.enviar(self.solicitar(self.factura, "033"), ClienteFalso(respuesta_dian(False)))
         self.factura.refresh_from_db()
         self.assertFalse(self.factura.estado_recepcion)
 
@@ -705,20 +746,20 @@ class BloqueoProduccionTests(BaseEventos, TestCase):
 
     def test_no_se_pide_ni_gasta_numero(self):
         with self.assertRaisesMessage(eventos.EventoInvalido, "ENV=test"):
-            eventos.solicitar(self.factura, "030")
+            self.solicitar(self.factura, "030")
         self.assertFalse(Evento.objects.exists())
         with override_settings(ENV="prod"):
-            self.assertEqual(eventos.solicitar(self.factura, "030").numero, "ACR1")
+            self.assertEqual(self.solicitar(self.factura, "030").numero, "ACR1")
 
     def test_sin_ambiente_cuenta_como_produccion(self):
         Documento.objects.filter(pk=self.factura.pk).update(ambiente=None)
         self.factura.refresh_from_db()
         with self.assertRaisesMessage(eventos.EventoInvalido, "ENV=test"):
-            eventos.solicitar(self.factura, "030")
+            self.solicitar(self.factura, "030")
 
     def test_uno_ya_creado_queda_en_error_sin_enviarse(self):
         with override_settings(ENV="prod"):
-            evento = eventos.solicitar(self.factura, "030")
+            evento = self.solicitar(self.factura, "030")
         cliente = ClienteFalso()
         evento = eventos.enviar(
             Evento.objects.select_related("documento", "emisor", "evento_radian").get(pk=evento.pk),
@@ -732,7 +773,7 @@ class BloqueoProduccionTests(BaseEventos, TestCase):
 
     def test_la_tarea_no_lo_deja_pendiente(self):
         with override_settings(ENV="prod"):
-            evento = eventos.solicitar(self.factura, "030")
+            evento = self.solicitar(self.factura, "030")
         tareas.enviar_evento(str(evento.pk))
         evento.refresh_from_db()
         self.assertEqual(evento.estado, EstadoEvento.ERROR)

@@ -141,6 +141,55 @@ class SoftwareDianAPITests(APITestCase):
             [s["tipo"] for s in nomina.data["results"]], ["nomina"],
         )
 
+    def test_filtra_por_set_de_pruebas_aceptado(self):
+        aceptado = SoftwareDian.objects.create(
+            emisor=self.emisor, tipo=SoftwareDian.Tipo.FACTURACION,
+            identificador="a", pin="1", set_pruebas_aceptado=True,
+        )
+        pendiente = SoftwareDian.objects.create(
+            emisor=self.emisor, tipo=SoftwareDian.Tipo.NOMINA, identificador="b", pin="1",
+        )
+        otro = _crear_emisor(self.cat, nit="800197268")
+        self.usuario.emisores.add(otro)
+        SoftwareDian.objects.create(
+            emisor=otro, tipo=SoftwareDian.Tipo.FACTURACION, identificador="c", pin="1",
+            set_pruebas_aceptado=True,
+        )
+
+        def ids(**filtros):
+            resp = self.client.get(self.url, filtros)
+            self.assertEqual(resp.status_code, 200, resp.data)
+            return sorted(s["id"] for s in resp.data["results"])
+
+        self.assertEqual(ids(emisor=self.emisor.id, set_pruebas_aceptado="true"), [aceptado.id])
+        self.assertEqual(ids(emisor=self.emisor.id, set_pruebas_aceptado="false"), [pendiente.id])
+        # Sin distinguir mayúsculas, y combinado con el módulo.
+        self.assertEqual(
+            ids(emisor=self.emisor.id, set_pruebas_aceptado="TRUE", modulo="nomina"), [],
+        )
+        self.assertEqual(len(ids(set_pruebas_aceptado="true")), 2)
+
+    def test_un_set_de_pruebas_aceptado_que_no_es_booleano_responde_400(self):
+        resp = self.client.get(self.url, {"set_pruebas_aceptado": "si"})
+        self.assertEqual(resp.status_code, 400, resp.data)
+        self.assertIn("'true' o 'false'", resp.data["detail"])
+
+    def test_lleva_el_nombre_del_emisor(self):
+        resp = self.client.post(self.url, self._payload(), format="json")
+        self.assertEqual(resp.data["emisor_nombre"], self.emisor.razon_social)
+
+        listado = self.client.get(self.url)
+        self.assertEqual(listado.data["results"][0]["emisor_nombre"], self.emisor.razon_social)
+
+    def test_el_nombre_del_emisor_es_de_solo_lectura(self):
+        payload = {**self._payload(), "emisor_nombre": "Otro nombre"}
+        resp = self.client.post(self.url, payload, format="json")
+
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(resp.data["emisor_nombre"], self.emisor.razon_social)
+        self.emisor.refresh_from_db()
+        self.assertNotEqual(self.emisor.razon_social, "Otro nombre")
+
     def test_un_modulo_desconocido_responde_400(self):
         resp = self.client.get(self.url, {"modulo": "contabilidad"})
         self.assertEqual(resp.status_code, 400, resp.data)
@@ -465,20 +514,31 @@ class SoftwareDianAPITests(APITestCase):
         payload["identificador"] = "software-de-nomina"
         return payload
 
-    def test_crear_software_de_nomina_deja_diez_nominas_en_borrador(self):
+    def test_crear_software_de_nomina_deja_diez_nominas_y_diez_notas(self):
         from apps.nomina.models import Nomina
 
         resp = self.client.post(self.url, self._payload_nomina(), format="json")
         self.assertEqual(resp.status_code, 201, resp.data)
 
         nominas = list(
-            Nomina.objects.filter(emisor=self.emisor).order_by("consecutivo")
+            Nomina.objects.filter(emisor=self.emisor, tipo_xml=Nomina.TipoXML.NOMINA)
+            .order_by("consecutivo")
         )
-        self.assertEqual(len(nominas), 10)
-        for nomina in nominas:
-            self.assertEqual(nomina.estado.nombre, DocumentoEstado.Nombre.BORRADOR)
-            self.assertEqual(nomina.tipo_xml, Nomina.TipoXML.NOMINA)
-            self.assertFalse(nomina.cune)  # se crean, no se emiten
+        notas = list(
+            Nomina.objects.filter(emisor=self.emisor, tipo_xml=Nomina.TipoXML.AJUSTE)
+            .order_by("consecutivo")
+        )
+        self.assertEqual([n.consecutivo for n in nominas], list(range(1, 11)))
+        # Las notas van después de las nóminas, una por cada una y en orden.
+        self.assertEqual([n.consecutivo for n in notas], list(range(11, 21)))
+        self.assertEqual([n.nomina_predecesora_id for n in notas], [n.id for n in nominas])
+        for documento in nominas + notas:
+            self.assertEqual(documento.estado.nombre, DocumentoEstado.Nombre.BORRADOR)
+            self.assertFalse(documento.cune)  # se crean, no se emiten
+        for nota, nomina in zip(notas, nominas):
+            self.assertEqual(nota.tipo_nota, Nomina.TipoNota.REEMPLAZAR)
+            self.assertEqual(nota.conceptos.count(), nomina.conceptos.count())
+            self.assertEqual(nota.prefijo, nomina.prefijo)
 
     def test_cada_nomina_va_de_un_mes_distinto(self):
         """La regla 90 rechaza dos nóminas del mismo trabajador y periodo."""
@@ -517,7 +577,7 @@ class SoftwareDianAPITests(APITestCase):
 
         self.client.post(self.url, self._payload_nomina(), format="json")
 
-        self.assertEqual(Nomina.objects.filter(emisor=self.emisor).count(), 10)
+        self.assertEqual(Nomina.objects.filter(emisor=self.emisor).count(), 20)
 
     def test_volver_a_registrar_el_software_no_duplica_las_facturas(self):
         """Dar de baja el software y rehacerlo pasa otra vez por aquí."""
@@ -644,7 +704,7 @@ class SoftwareDianAPITests(APITestCase):
 
         self.assertEqual(resp.status_code, 201, resp.data)
         self.assertEqual(resp.data["estado"], DocumentoEstado.Nombre.BORRADOR)
-        self.assertEqual(Nomina.objects.filter(emisor=self.emisor).count(), 11)
+        self.assertEqual(Nomina.objects.filter(emisor=self.emisor).count(), 21)
 
     def test_sin_consecutivo_sigue_por_el_ultimo(self):
         software = self._alta_nomina()
@@ -653,8 +713,8 @@ class SoftwareDianAPITests(APITestCase):
             f"{self.url}{software}/crear-nomina-prueba/", {}, format="json"
         )
 
-        # Las diez del alta gastaron del 1 al 10.
-        self.assertEqual(resp.data["consecutivo"], 11)
+        # Las diez nóminas y las diez notas del alta gastaron del 1 al 20.
+        self.assertEqual(resp.data["consecutivo"], 21)
 
     def test_el_periodo_continua_la_serie_hacia_atras(self):
         """La regla 90 rechaza dos nóminas del mismo trabajador y periodo."""
@@ -695,7 +755,7 @@ class SoftwareDianAPITests(APITestCase):
         )
 
         self.assertEqual(resp.status_code, 400, resp.data)
-        self.assertEqual(Nomina.objects.filter(emisor=self.emisor).count(), 10)
+        self.assertEqual(Nomina.objects.filter(emisor=self.emisor).count(), 20)
 
     def test_solo_sobre_un_software_de_nomina(self):
         from apps.nomina.models import Nomina
@@ -724,7 +784,7 @@ class SoftwareDianAPITests(APITestCase):
 
         self.assertEqual(resp.status_code, 400, resp.data)
         self.assertIn("habilitado", resp.data["detail"])
-        self.assertEqual(Nomina.objects.filter(emisor=self.emisor).count(), 10)
+        self.assertEqual(Nomina.objects.filter(emisor=self.emisor).count(), 20)
 
     def test_no_alcanza_el_software_de_otro_emisor(self):
         from apps.emisores.models import SoftwareDian as SW
@@ -739,6 +799,106 @@ class SoftwareDianAPITests(APITestCase):
         )
 
         self.assertEqual(resp.status_code, 404)
+
+    # --- La resolución de nómina, si el ERP lleva una ------------------------
+
+    def _resolucion_de_nomina(self, consecutivo_actual, **extra):
+        datos = dict(
+            emisor=self.emisor, tipo_factura=TipoFactura.objects.get(codigo="01"),
+            modulo=Resolucion.Modulo.NOMINA, prefijo="NESETP",
+            numero_resolucion="NOM-1", fecha_resolucion="2026-01-01",
+            rango_desde=1, rango_hasta=5000, consecutivo_actual=consecutivo_actual,
+            vigente_desde="2026-01-01", vigente_hasta="2030-01-01", ambiente=2,
+        )
+        datos.update(extra)
+        return Resolucion.objects.create(**datos)
+
+    def _consecutivos(self, tipo_xml):
+        from apps.nomina.models import Nomina
+
+        return list(
+            Nomina.objects.filter(emisor=self.emisor, tipo_xml=tipo_xml)
+            .order_by("consecutivo").values_list("consecutivo", flat=True)
+        )
+
+    def test_el_alta_sigue_la_resolucion_de_nomina_y_la_avanza(self):
+        from apps.nomina.models import Nomina
+
+        resolucion = self._resolucion_de_nomina(100)
+
+        self._alta_nomina()
+
+        self.assertEqual(self._consecutivos(Nomina.TipoXML.NOMINA), list(range(100, 110)))
+        self.assertEqual(self._consecutivos(Nomina.TipoXML.AJUSTE), list(range(110, 120)))
+        resolucion.refresh_from_db()
+        self.assertEqual(resolucion.consecutivo_actual, 120)
+
+    def test_una_resolucion_atrasada_no_hace_repetir_numeros(self):
+        software = self._alta_nomina()  # gasta del 1 al 20
+        resolucion = self._resolucion_de_nomina(5)
+
+        resp = self.client.post(f"{self.url}{software}/crear-nomina-prueba/", {}, format="json")
+
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(resp.data["consecutivo"], 21)
+        resolucion.refresh_from_db()
+        self.assertEqual(resolucion.consecutivo_actual, 22)
+
+    def test_un_consecutivo_a_mano_tambien_la_avanza_pero_nunca_la_retrocede(self):
+        software = self._alta_nomina()
+        resolucion = self._resolucion_de_nomina(30)
+        url = f"{self.url}{software}/crear-nomina-prueba/"
+
+        self.client.post(url, {"consecutivo": 500}, format="json")
+        resolucion.refresh_from_db()
+        self.assertEqual(resolucion.consecutivo_actual, 501)
+
+        self.client.post(url, {"consecutivo": 25}, format="json")
+        resolucion.refresh_from_db()
+        self.assertEqual(resolucion.consecutivo_actual, 501)
+
+    def test_ignora_la_resolucion_inactiva_de_otro_prefijo_o_de_otro_modulo(self):
+        inactiva = self._resolucion_de_nomina(100, activa=False)
+        otro_prefijo = self._resolucion_de_nomina(200, prefijo="NE", numero_resolucion="NOM-2")
+        facturacion = self._resolucion_de_nomina(
+            300, modulo=Resolucion.Modulo.FACTURACION, numero_resolucion="NOM-3",
+        )
+
+        self._alta_nomina()
+
+        from apps.nomina.models import Nomina
+        self.assertEqual(self._consecutivos(Nomina.TipoXML.NOMINA), list(range(1, 11)))
+        for resolucion, actual in ((inactiva, 100), (otro_prefijo, 200), (facturacion, 300)):
+            resolucion.refresh_from_db()
+            self.assertEqual(resolucion.consecutivo_actual, actual)
+
+    def test_si_choca_el_numero_la_resolucion_no_avanza(self):
+        software = self._alta_nomina()
+        resolucion = self._resolucion_de_nomina(30)
+
+        resp = self.client.post(
+            f"{self.url}{software}/crear-nomina-prueba/", {"consecutivo": 1}, format="json",
+        )
+
+        self.assertEqual(resp.status_code, 400, resp.data)
+        resolucion.refresh_from_db()
+        self.assertEqual(resolucion.consecutivo_actual, 30)
+
+    def test_las_notas_de_prueba_tambien_la_avanzan(self):
+        software = self._alta_nomina()
+        self._aceptar(3)
+        resolucion = self._resolucion_de_nomina(40)
+
+        resp = self.client.post(
+            f"{self.url}{software}/crear-nota-ajuste-prueba/", {}, format="json"
+        )
+
+        self.assertEqual(resp.status_code, 201, resp.data)
+        self.assertEqual(
+            sorted(n["consecutivo"] for n in resp.data["notas"]), list(range(40, 51)),
+        )
+        resolucion.refresh_from_db()
+        self.assertEqual(resolucion.consecutivo_actual, 51)
 
     # --- Notas de ajuste: crear-nota-ajuste-prueba -------------------------
 
@@ -767,19 +927,17 @@ class SoftwareDianAPITests(APITestCase):
         self.assertEqual(resp.status_code, 201, resp.data)
         self.assertEqual(resp.data["nomina_ajustada"]["id"], str(aceptada.id))
         self.assertEqual(len(resp.data["notas"]), 11)
-        notas = Nomina.objects.filter(
-            emisor=self.emisor, tipo_xml=Nomina.TipoXML.AJUSTE,
-        )
+        notas = Nomina.objects.filter(pk__in=[n["id"] for n in resp.data["notas"]])
         self.assertEqual(notas.count(), 11)
         for nota in notas:
             self.assertEqual(nota.nomina_predecesora_id, aceptada.id)
             self.assertEqual(nota.tipo_nota, Nomina.TipoNota.REEMPLAZAR)
             self.assertEqual(nota.estado.nombre, DocumentoEstado.Nombre.BORRADOR)
             self.assertEqual(nota.conceptos.count(), aceptada.conceptos.count())
-        # Las diez del alta gastaron del 1 al 10.
+        # Las diez nóminas y las diez notas del alta gastaron del 1 al 20.
         self.assertEqual(
             sorted(notas.values_list("consecutivo", flat=True)),
-            list(range(11, 22)),
+            list(range(21, 32)),
         )
 
     def test_sin_nomina_aceptada_responde_400(self):
@@ -793,7 +951,7 @@ class SoftwareDianAPITests(APITestCase):
 
         self.assertEqual(resp.status_code, 400, resp.data)
         self.assertIn("aceptada", resp.data["detail"])
-        self.assertEqual(Nomina.objects.filter(emisor=self.emisor).count(), 10)
+        self.assertEqual(Nomina.objects.filter(emisor=self.emisor).count(), 20)
 
     def test_ignora_la_aceptada_con_errores(self):
         from apps.nomina.models import Nomina, NominaError
@@ -810,7 +968,7 @@ class SoftwareDianAPITests(APITestCase):
         )
 
         self.assertEqual(resp.status_code, 400, resp.data)
-        self.assertEqual(Nomina.objects.filter(emisor=self.emisor).count(), 10)
+        self.assertEqual(Nomina.objects.filter(emisor=self.emisor).count(), 20)
 
     def test_toma_la_aceptada_sin_errores_aunque_haya_otra_con_errores(self):
         from apps.nomina.models import NominaError

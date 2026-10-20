@@ -61,31 +61,53 @@ class AdjuntoApiTests(APITestCase):
         filas = filas["results"] if isinstance(filas, dict) else filas
         return sorted(f["nombre"] for f in filas)
 
-    def test_lista_lo_que_alcanza(self):
+    def listar(self, emisor=None, **filtros):
+        emisor = self.emisor if emisor is None else emisor
+        return self.client.get(URL, {"emisor": emisor.pk, **filtros})
+
+    def test_sin_emisor_es_400(self):
+        respuesta = self.client.get(URL)
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(respuesta.json()["detail"], "El filtro 'emisor' es obligatorio.")
+
+    def test_lista_los_del_emisor(self):
         # Del documento ajeno no ve nada, aunque esté en su correo.
         self.assertEqual(
-            self.nombres(self.client.get(URL)), ["FE-1.pdf", "ad-FE-1.xml", "logo.png"],
+            self.nombres(self.listar()), ["FE-1.pdf", "ad-FE-1.xml", "logo.png"],
         )
 
-    def test_el_staff_ve_todos(self):
+    def test_otro_emisor_fuera_del_alcance_no_ve_nada(self):
+        self.assertEqual(self.nombres(self.listar(self.emisor_ajeno)), [])
+
+    def test_el_staff_ve_los_de_cualquier_emisor(self):
         admin = Usuario.objects.create_superuser(email="admin@nobelio.co", password="Clave123456")
         self.client.force_authenticate(admin)
 
-        self.assertEqual(len(self.nombres(self.client.get(URL))), 5)
+        self.assertEqual(len(self.nombres(self.listar())), 3)
+        # El documento ajeno vino en el correo del emisor, pero sus archivos
+        # son del ajeno.
+        self.assertEqual(
+            self.nombres(self.listar(self.emisor_ajeno)), ["ad-FE-2.xml", "x.txt"],
+        )
+
+    def test_cada_adjunto_lleva_su_emisor(self):
+        filas = self.listar().json()["results"]
+        self.assertEqual({f["emisor"] for f in filas}, {self.emisor.pk})
+        ajeno = Adjunto.objects.filter(documento__emisor=self.emisor_ajeno).first()
+        self.assertEqual(ajeno.emisor, self.emisor_ajeno)
+        self.assertEqual(self.de_correo_ajeno.emisor, self.emisor_ajeno)
 
     def test_filtros(self):
-        self.assertEqual(self.nombres(self.client.get(URL, {"rol": "otro"})), ["logo.png"])
+        self.assertEqual(self.nombres(self.listar(rol="otro")), ["logo.png"])
         self.assertEqual(
-            self.nombres(self.client.get(URL, {"documento": self.documento.pk})),
+            self.nombres(self.listar(documento=self.documento.pk)),
             ["FE-1.pdf", "ad-FE-1.xml"],
         )
-        self.assertEqual(
-            self.nombres(self.client.get(URL, {"correo": self.correo_ajeno.pk})), [],
-        )
-        self.assertEqual(self.nombres(self.client.get(URL, {"search": "logo"})), ["logo.png"])
+        self.assertEqual(self.nombres(self.listar(correo=self.correo_ajeno.pk)), [])
+        self.assertEqual(self.nombres(self.listar(search="logo")), ["logo.png"])
 
     def test_filtro_invalido_es_400(self):
-        self.assertEqual(self.client.get(URL, {"documento": "no-es-uuid"}).status_code, 400)
+        self.assertEqual(self.listar(documento="no-es-uuid").status_code, 400)
 
     def test_detalle(self):
         fila = self.client.get(f"{URL}{self.otro.pk}/").json()

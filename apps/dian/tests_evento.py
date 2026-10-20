@@ -122,6 +122,14 @@ class ConstructorEventoTests(SimpleTestCase):
             f"https://catalogo-vpfe-hab.dian.gov.co/document/searchqr?documentkey={CUFE}",
         )
 
+    def test_el_proveedor_persona_natural_lleva_el_dv_calculado(self):
+        """FAB22b: el DV del ProviderID se calcula siempre sobre el número."""
+        natural = replace(ACUSE, emisor=Parte("Ana Pérez", "71234567", "13", "2"))
+        proveedor = _arbol(natural).find(".//sts:SoftwareProvider/sts:ProviderID", NS)
+
+        self.assertEqual(proveedor.text, "71234567")
+        self.assertEqual(proveedor.get("schemeID"), "7")
+
     def test_produccion(self):
         arbol = _arbol(ACUSE, ambiente=1)
         self.assertEqual(_texto(arbol, "cbc:ProfileExecutionID"), "1")

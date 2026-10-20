@@ -287,6 +287,112 @@ class DocumentoAPITests(APITestCase):
                 self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
                 self.assertEqual(cliente.llamadas, [])
 
+    # --- reiniciar/: un rechazado vuelve a borrador ---------------------------
+
+    def _rechazar(self):
+        rechazo = FakeCliente(soap.RespuestaDian(
+            track_id="track-1", es_valido=False, codigo_estado="99",
+            errores=["Regla: FAB22b, Rechazo: DV del NIT del Prestador mal calculado"],
+        ))
+        resp = self._emitir(rechazo)
+        self.assertEqual(resp.data["estado"], DocumentoEstado.Nombre.RECHAZADO, resp.data)
+        self.documento.refresh_from_db()
+        return self.documento
+
+    def test_reiniciar_un_rechazado_lo_deja_en_borrador_sin_lo_de_la_firma(self):
+        rechazado = self._rechazar()
+        self.assertTrue(rechazado.cufe_cude)
+        self.assertTrue(rechazado.xml_archivo)
+
+        resp = self.client.post(self._url("reiniciar/"))
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertEqual(resp.data["estado_nombre"], DocumentoEstado.Nombre.BORRADOR)
+        self.assertEqual(resp.data["cufe_cude"], "")
+        self.documento.refresh_from_db()
+        self.assertEqual(self.documento.estado.nombre, DocumentoEstado.Nombre.BORRADOR)
+        self.assertEqual(self.documento.cufe_cude, "")
+        self.assertFalse(self.documento.xml_archivo)
+        self.assertEqual(self.documento.track_id, "")
+        self.assertEqual(self.documento.envio, "")
+        self.assertIsNone(self.documento.fecha_validacion)
+        # El rechazo sigue explicándose hasta el siguiente envío.
+        self.assertEqual(self.documento.errores.count(), 1)
+        # La historia se queda.
+        self.assertIn("rechazado", self._eventos())
+
+    def test_reiniciado_se_vuelve_a_emitir_con_el_mismo_numero(self):
+        self._rechazar()
+        self.client.post(self._url("reiniciar/"))
+
+        resp = self._emitir()
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertEqual(resp.data["estado"], DocumentoEstado.Nombre.ACEPTADO)
+        # Firmado otra vez: CUFE calculado de nuevo (con la hora de esta firma).
+        self.assertEqual(len(resp.data["cufe_cude"]), 96)
+        self.assertEqual(self._eventos().count("firmado"), 2)
+        self.documento.refresh_from_db()
+        # El envío nuevo reemplaza los errores del rechazo.
+        self.assertFalse(self.documento.errores.exists())
+        self.assertEqual(self.documento.numero, "323200000129")
+
+    def test_reiniciar_lleva_la_fecha_a_hoy_y_corre_el_vencimiento(self):
+        self._rechazar()
+        hoy = timezone.localdate()
+        Documento.objects.filter(pk=self.documento.pk).update(
+            fecha_emision=hoy - timedelta(days=3),
+            fecha_vencimiento=hoy + timedelta(days=27),
+        )
+
+        resp = self.client.post(self._url("reiniciar/"))
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.documento.refresh_from_db()
+        self.assertEqual(self.documento.fecha_emision, hoy)
+        # Se conserva el plazo de 30 días.
+        self.assertEqual(self.documento.fecha_vencimiento, hoy + timedelta(days=30))
+        # Y con la fecha de hoy ya se puede firmar (FAD09).
+        self.assertEqual(self._emitir().status_code, status.HTTP_200_OK)
+
+    def test_reiniciar_sin_vencimiento_no_lo_inventa(self):
+        self._rechazar()
+        Documento.objects.filter(pk=self.documento.pk).update(
+            fecha_emision=timezone.localdate() - timedelta(days=3), fecha_vencimiento=None,
+        )
+
+        self.client.post(self._url("reiniciar/"))
+
+        self.documento.refresh_from_db()
+        self.assertEqual(self.documento.fecha_emision, timezone.localdate())
+        self.assertIsNone(self.documento.fecha_vencimiento)
+
+    def test_solo_se_reinicia_un_rechazado(self):
+        for estado in (
+            DocumentoEstado.Nombre.BORRADOR,
+            DocumentoEstado.Nombre.FIRMADO,
+            DocumentoEstado.Nombre.ENVIADO,
+            DocumentoEstado.Nombre.ACEPTADO,
+        ):
+            with self.subTest(estado=estado):
+                self.documento.estado = DocumentoEstado.objects.get(nombre=estado)
+                self.documento.save(update_fields=["estado"])
+
+                resp = self.client.post(self._url("reiniciar/"))
+
+                self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+                self.assertIn("Solo se reinicia un documento rechazado", resp.data["detail"])
+                self.documento.refresh_from_db()
+                self.assertEqual(self.documento.estado.nombre, estado)
+
+    def test_el_rechazado_dice_que_se_puede_reiniciar(self):
+        self._rechazar()
+
+        resp = self._emitir()
+
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("reiniciar/", resp.data["detail"])
+
     # --- Eventos: un registro por cada cambio de estado ----------------------
 
     def _eventos(self):

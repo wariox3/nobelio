@@ -1,4 +1,4 @@
-"""Pruebas de `consulta-dian`, `importar-dian` y `validar`, las acciones de la resolución."""
+"""Pruebas de `importar-dian` y `validar`, las acciones de la resolución contra la DIAN."""
 from unittest.mock import patch
 
 import requests
@@ -41,7 +41,6 @@ def _rango(prefijo="FE", numero="18764000001"):
 
 
 class ResolucionDianTests(APITestCase):
-    url_consulta = "/api/emisores/resolucion/consulta-dian/"
     url_importar = "/api/emisores/resolucion/importar-dian/"
     url_validar = "/api/emisores/resolucion/validar/"
 
@@ -72,97 +71,25 @@ class ResolucionDianTests(APITestCase):
         software.set_pruebas_aceptado = True
         software.save(update_fields=["set_pruebas_aceptado"])
 
-    # --- consulta-dian ------------------------------------------------------
-
-    def test_consulta_con_el_software_indicado(self):
-        with patch(CONSULTAR, return_value=_respuesta(_rango())) as consultar:
-            resp = self.client.get(self.url_consulta, {"software": self.pos.pk})
-
-        self.assertEqual(resp.status_code, 200, resp.data)
-        consultar.assert_called_once_with(
-            self.emisor, software=self.pos, ambiente=Ambiente.PRUEBAS,
-        )
-        rango = resp.data["rangos"][0]
-        self.assertEqual(rango["prefijo"], "FE")
-        self.assertTrue(rango["tiene_clave_tecnica"])
-        self.assertNotIn("clave_tecnica", rango)
-        self.assertFalse(Resolucion.objects.exists())
-
-    @override_settings(ENV="prod")
-    def test_en_prod_la_operacion_habilitada_consulta_en_produccion(self):
-        with patch(CONSULTAR, return_value=_respuesta()) as consultar:
-            self.client.get(self.url_consulta, {"software": self.facturacion.pk})
-
-        consultar.assert_called_once_with(
-            self.emisor, software=self.facturacion, ambiente=Ambiente.PRODUCCION,
-        )
-
-    @override_settings(ENV="prod")
-    def test_en_prod_la_operacion_sin_habilitar_consulta_en_pruebas(self):
-        with patch(CONSULTAR, return_value=_respuesta()) as consultar:
-            self.client.get(self.url_consulta, {"software": self.pos.pk})
-
-        consultar.assert_called_once_with(
-            self.emisor, software=self.pos, ambiente=Ambiente.PRUEBAS,
-        )
-
-    def test_fuera_de_prod_consulta_siempre_en_pruebas(self):
-        for entorno in ("dev", "test"):
-            with self.subTest(entorno=entorno), override_settings(ENV=entorno):
-                with patch(CONSULTAR, return_value=_respuesta()) as consultar:
-                    self.client.get(
-                        self.url_consulta, {"software": self.facturacion.pk}
-                    )
-                consultar.assert_called_once_with(
-                    self.emisor, software=self.facturacion,
-                    ambiente=Ambiente.PRUEBAS,
-                )
-
-    def test_consulta_sin_software_es_400(self):
-        resp = self.client.get(self.url_consulta)
-
-        self.assertEqual(resp.status_code, 400, resp.data)
-
-    def test_consulta_con_software_inexistente_es_404(self):
-        resp = self.client.get(self.url_consulta, {"software": 999999})
-
-        self.assertEqual(resp.status_code, 404, resp.data)
-        self.assertEqual(resp.data["detail"], "No existe un software con id 999999.")
-
-    def test_consulta_con_software_fuera_del_alcance_es_403(self):
-        ajeno = self._software(
-            SoftwareDian.Tipo.FACTURACION, "sw-ajeno",
-            emisor=_crear_emisor(self.cat, nit="900123456"),
-        )
-        with patch(CONSULTAR) as consultar:
-            resp = self.client.get(self.url_consulta, {"software": ajeno.pk})
-
-        self.assertEqual(resp.status_code, 403, resp.data)
-        consultar.assert_not_called()
-
-    def test_el_software_de_nomina_no_tiene_rangos(self):
-        nomina = self._software(SoftwareDian.Tipo.NOMINA, "sw-nomina")
-        with patch(CONSULTAR) as consultar:
-            resp = self.client.get(self.url_consulta, {"software": nomina.pk})
-
-        self.assertEqual(resp.status_code, 400, resp.data)
-        consultar.assert_not_called()
-
     # --- importar-dian ------------------------------------------------------
 
-    def _importar_emisor(self, emisor=None):
+    def _importar_emisor(self, emisor=None, **filtros):
+        url = self.url_importar
+        if filtros:
+            url += "?" + "&".join(f"{k}={v}" for k, v in filtros.items())
         return self.client.post(
-            self.url_importar, {"emisor": (emisor or self.emisor).pk},
-            format="json",
+            url, {"emisor": (emisor or self.emisor).pk}, format="json",
         )
 
     def _por_software(self, respuestas):
         """``consultar_rangos_numeracion`` que responde según el software."""
         return lambda emisor, software, ambiente: respuestas[software.pk]
 
-    def test_importa_las_de_todos_los_softwares_aceptados(self):
-        self._aceptar(self.facturacion)
-        self._aceptar(self.pos)
+    def _prefijos(self, resp):
+        return sorted(r["prefijo"] for r in resp.data["results"])
+
+    def test_importa_las_de_todos_los_softwares(self):
+        # Ninguno tiene el Set de Pruebas aceptado: ya no hace falta.
         respuestas = {
             self.facturacion.pk: _respuesta(_rango()),
             self.pos.pk: _respuesta(_rango("POS", "18764000009")),
@@ -171,35 +98,107 @@ class ResolucionDianTests(APITestCase):
             resp = self._importar_emisor()
 
         self.assertEqual(resp.status_code, 200, resp.data)
-        self.assertEqual(resp.data, {"creadas": 2})
         self.assertEqual(consultar.call_count, 2)
         self.assertEqual(
             {r.prefijo: r.tipo_factura.codigo for r in Resolucion.objects.all()},
             {"FE": "01", "POS": "20"},
         )
+        self.assertEqual(resp.data["count"], 2)
+        self.assertEqual(self._prefijos(resp), ["FE", "POS"])
 
-    def test_por_emisor_solo_consulta_los_aceptados(self):
-        self._aceptar(self.facturacion)
-        self._aceptar(self._software(SoftwareDian.Tipo.NOMINA, "sw-nomina"))
+    def test_no_consulta_el_software_de_nomina(self):
+        self._software(SoftwareDian.Tipo.NOMINA, "sw-nomina")
         with patch(CONSULTAR, return_value=_respuesta(_rango())) as consultar:
             resp = self._importar_emisor()
 
         self.assertEqual(resp.status_code, 200, resp.data)
-        consultar.assert_called_once_with(
-            self.emisor, software=self.facturacion, ambiente=Ambiente.PRUEBAS,
+        self.assertEqual(
+            {c.kwargs["software"] for c in consultar.call_args_list},
+            {self.facturacion, self.pos},
         )
 
-    def test_por_emisor_sin_software_aceptado_es_400(self):
+    def test_sin_software_con_resolucion_es_400(self):
+        SoftwareDian.objects.all().delete()
+        self._software(SoftwareDian.Tipo.NOMINA, "sw-nomina")
         with patch(CONSULTAR) as consultar:
             resp = self._importar_emisor()
 
         self.assertEqual(resp.status_code, 400, resp.data)
-        self.assertEqual(resp.data["errores"][0]["codigo"], "software_no_aceptado")
+        self.assertEqual(resp.data["errores"][0]["codigo"], "sin_software")
         consultar.assert_not_called()
 
+    def test_devuelve_todas_las_del_emisor_no_solo_las_creadas(self):
+        Resolucion.objects.create(
+            emisor=self.emisor, tipo_factura=TipoFactura.objects.get(codigo="01"),
+            prefijo="MAN", numero_resolucion="555", fecha_resolucion="2026-01-01",
+            rango_desde=1, rango_hasta=100,
+            vigente_desde="2026-01-01", vigente_hasta="2027-01-01",
+            ambiente=Ambiente.PRODUCCION,
+        )
+        ajeno = _crear_emisor(self.cat, nit="900123456")
+        Resolucion.objects.create(
+            emisor=ajeno, tipo_factura=TipoFactura.objects.get(codigo="01"),
+            prefijo="AJE", numero_resolucion="777", fecha_resolucion="2026-01-01",
+            rango_desde=1, rango_hasta=100,
+            vigente_desde="2026-01-01", vigente_hasta="2027-01-01",
+            ambiente=Ambiente.PRUEBAS,
+        )
+        with patch(CONSULTAR, return_value=_respuesta(_rango())):
+            resp = self._importar_emisor()
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(self._prefijos(resp), ["FE", "MAN"])
+        # Lo mismo que el listado: sin la clave técnica.
+        self.assertNotIn("clave_tecnica", resp.data["results"][0])
+
+    def test_la_respuesta_va_paginada_como_el_listado(self):
+        rangos = [_rango(f"P{n:02d}", f"1876400{n:04d}") for n in range(12)]
+        with patch(CONSULTAR, return_value=_respuesta(*rangos)):
+            resp = self._importar_emisor()
+
+        self.assertEqual(resp.status_code, 200, resp.data)
+        self.assertEqual(resp.data["count"], 12)
+        self.assertEqual(len(resp.data["results"]), 10)
+        self.assertIsNotNone(resp.data["next"])
+
+    def test_la_respuesta_acepta_los_filtros_del_listado(self):
+        Resolucion.objects.create(
+            emisor=self.emisor, tipo_factura=TipoFactura.objects.get(codigo="01"),
+            prefijo="MAN", numero_resolucion="555", fecha_resolucion="2026-01-01",
+            rango_desde=1, rango_hasta=100,
+            vigente_desde="2026-01-01", vigente_hasta="2027-01-01",
+            ambiente=Ambiente.PRODUCCION,
+        )
+        with patch(CONSULTAR, return_value=_respuesta(_rango())):
+            resp = self._importar_emisor(ambiente=Ambiente.PRUEBAS)
+
+        self.assertEqual(self._prefijos(resp), ["FE"])
+
+    @override_settings(ENV="prod")
+    def test_en_prod_consulta_en_produccion_solo_la_operacion_habilitada(self):
+        with patch(CONSULTAR, return_value=_respuesta()) as consultar:
+            self._importar_emisor()
+
+        self.assertEqual(
+            {c.kwargs["software"]: c.kwargs["ambiente"] for c in consultar.call_args_list},
+            {self.facturacion: Ambiente.PRODUCCION, self.pos: Ambiente.PRUEBAS},
+        )
+
+    def test_fuera_de_prod_consulta_siempre_en_pruebas(self):
+        for entorno in ("dev", "test"):
+            with self.subTest(entorno=entorno), override_settings(ENV=entorno):
+                with patch(CONSULTAR, return_value=_respuesta()) as consultar:
+                    self._importar_emisor()
+                self.assertEqual(
+                    {c.kwargs["ambiente"] for c in consultar.call_args_list},
+                    {Ambiente.PRUEBAS},
+                )
+
+    def test_consulta_dian_ya_no_existe(self):
+        resp = self.client.get("/api/emisores/resolucion/consulta-dian/")
+        self.assertEqual(resp.status_code, 404)
+
     def test_por_emisor_importa_lo_del_software_que_si_trae_rangos(self):
-        self._aceptar(self.facturacion)
-        self._aceptar(self.pos)
         respuestas = {
             self.facturacion.pk: _respuesta(_rango()),
             self.pos.pk: soap.RespuestaRangos(
@@ -211,7 +210,7 @@ class ResolucionDianTests(APITestCase):
             resp = self._importar_emisor()
 
         self.assertEqual(resp.status_code, 200, resp.data)
-        self.assertEqual(resp.data, {"creadas": 1})
+        self.assertEqual(resp.data["count"], 1)
         self.assertEqual(Resolucion.objects.get().prefijo, "FE")
 
     def test_por_emisor_sin_rangos_en_ninguno_devuelve_el_mensaje(self):
@@ -250,7 +249,7 @@ class ResolucionDianTests(APITestCase):
         consultar.assert_not_called()
 
     def test_importa_con_facturacion_como_tipo_01(self):
-        self._aceptar(self.facturacion)
+        SoftwareDian.objects.filter(pk=self.pos.pk).delete()
         with patch(CONSULTAR, return_value=_respuesta(_rango())) as consultar:
             resp = self._importar_emisor()
 
@@ -285,7 +284,7 @@ class ResolucionDianTests(APITestCase):
         )
 
     def test_no_reimporta_las_que_ya_existen(self):
-        self._aceptar(self.facturacion)
+        SoftwareDian.objects.filter(pk=self.pos.pk).delete()
         with patch(CONSULTAR, return_value=_respuesta(_rango())):
             self._importar_emisor()
             repetida = self._importar_emisor()
@@ -293,8 +292,8 @@ class ResolucionDianTests(APITestCase):
             resp = self._importar_emisor()
 
         self.assertEqual(repetida.status_code, 200, repetida.data)
-        self.assertEqual(repetida.data, {"creadas": 0})
-        self.assertEqual(resp.data, {"creadas": 1})
+        self.assertEqual(repetida.data["count"], 1)
+        self.assertEqual(self._prefijos(resp), ["FE", "FE2"])
         self.assertEqual(Resolucion.objects.count(), 2)
 
     def test_importar_con_emisor_inexistente_es_404_con_su_id(self):
@@ -345,8 +344,10 @@ class ResolucionDianTests(APITestCase):
             resp = self._validar(self._pedida())
 
         self.assertEqual(resp.status_code, 200, resp.data)
-        consultar.assert_called_once_with(
-            self.emisor, software=self.facturacion, ambiente=Ambiente.PRUEBAS,
+        # Importa con todos los softwares que se numeran con resolución.
+        self.assertEqual(
+            {c.kwargs["software"] for c in consultar.call_args_list},
+            {self.facturacion, self.pos},
         )
         self.assertEqual(Resolucion.objects.count(), 1)
         self.assertEqual(resp.json(), [{
@@ -455,12 +456,13 @@ class ResolucionDianTests(APITestCase):
         consultar.assert_not_called()
         self.assertFalse(Resolucion.objects.exists())
 
-    def test_validar_sin_software_aceptado_es_400(self):
+    def test_validar_sin_software_es_400(self):
+        SoftwareDian.objects.all().delete()
         with patch(CONSULTAR) as consultar:
             resp = self._validar(self._pedida())
 
         self.assertEqual(resp.status_code, 400, resp.data)
-        self.assertEqual(resp.data["errores"][0]["codigo"], "software_no_aceptado")
+        self.assertEqual(resp.data["errores"][0]["codigo"], "sin_software")
         consultar.assert_not_called()
 
     def test_validar_sin_rangos_en_la_dian_devuelve_su_mensaje(self):
