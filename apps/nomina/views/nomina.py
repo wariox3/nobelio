@@ -1,7 +1,7 @@
 """API de nóminas electrónicas y acciones del ciclo de vida DIAN."""
 import requests
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, inline_serializer
@@ -124,6 +124,16 @@ ACCION_CONSULTADO = "consultado"
 # Lo que `emitir-pendientes/` toma: lo que aún no se ha enviado. `firmado` es
 # un envío anterior que no llegó a la DIAN.
 ESTADOS_POR_EMITIR = (DocumentoEstado.Nombre.BORRADOR, DocumentoEstado.Nombre.FIRMADO)
+
+# Lo que cuenta `resumen-monitor/`.
+ESTADOS_MONITOR = (
+    DocumentoEstado.Nombre.BORRADOR, DocumentoEstado.Nombre.FIRMADO,
+    DocumentoEstado.Nombre.ENVIADO, DocumentoEstado.Nombre.RECHAZADO,
+)
+RESPUESTA_RESUMEN_MONITOR_NOMINA = inline_serializer(
+    name="ResumenMonitorNominaRespuesta",
+    fields={str(nombre): campos.IntegerField() for nombre in ESTADOS_MONITOR},
+)
 
 # Estados finales: `emitir/` responde 400 y no llama a la DIAN.
 MENSAJES_NO_EMITIBLE = {
@@ -251,6 +261,21 @@ class NominaViewSet(
         garantía que se busca.
         """
         return type(obj).objects.select_for_update().get(pk=obj.pk)
+
+    @extend_schema(responses={200: RESPUESTA_RESUMEN_MONITOR_NOMINA})
+    @action(detail=False, methods=["get"], url_path="resumen-monitor")
+    def resumen_monitor(self, request):
+        """Conteos para el monitor de nóminas, en una sola consulta.
+
+        ``GET /api/nomina/nomina/resumen-monitor/``. Cuenta las nóminas en
+        `borrador`, `firmado`, `enviado` y `rechazado`. Respeta el alcance y
+        los filtros del listado (p. ej. ``?emisor=2``).
+        """
+        qs = self.get_queryset().prefetch_related(None).order_by()
+        return Response(qs.aggregate(**{
+            nombre: Count("id", filter=Q(estado__nombre=nombre))
+            for nombre in ESTADOS_MONITOR
+        }))
 
     @extend_schema(
         request=None,

@@ -3551,6 +3551,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/documentos/documento/resumen-monitor/:
+    get:
+      operationId: documentos_documento_resumen_monitor_retrieve
+      description: |-
+        Conteos para el monitor de documentos, en una sola consulta.
+
+        ``GET /api/documentos/documento/resumen-monitor/``. Cuenta los
+        documentos en `borrador`, `firmado`, `enviado` y `rechazado`, y los
+        aceptados que siguen sin `respuesta_validado`. Respeta el alcance y
+        los filtros del listado (p. ej. ``?emisor=2``).
+      tags:
+      - documentos
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResumenMonitorRespuesta'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/emisores/certificado/:
     get:
       operationId: emisores_certificado_list
@@ -6964,6 +6997,38 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/nomina/nomina/resumen-monitor/:
+    get:
+      operationId: nomina_nomina_resumen_monitor_retrieve
+      description: |-
+        Conteos para el monitor de nóminas, en una sola consulta.
+
+        ``GET /api/nomina/nomina/resumen-monitor/``. Cuenta las nóminas en
+        `borrador`, `firmado`, `enviado` y `rechazado`. Respeta el alcance y
+        los filtros del listado (p. ej. ``?emisor=2``).
+      tags:
+      - nomina
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResumenMonitorNominaRespuesta'
           description: ''
         '429':
           description: Error
@@ -15180,6 +15245,42 @@ components:
       - creados
       - rechazados
       - repetidos
+    ResumenMonitorNominaRespuesta:
+      type: object
+      properties:
+        borrador:
+          type: integer
+        firmado:
+          type: integer
+        enviado:
+          type: integer
+        rechazado:
+          type: integer
+      required:
+      - borrador
+      - enviado
+      - firmado
+      - rechazado
+    ResumenMonitorRespuesta:
+      type: object
+      properties:
+        borrador:
+          type: integer
+        firmado:
+          type: integer
+        enviado:
+          type: integer
+        rechazado:
+          type: integer
+        aceptado_sin_respuesta_validado:
+          type: integer
+          description: Aceptados por la DIAN con `respuesta_validado = false`.
+      required:
+      - aceptado_sin_respuesta_validado
+      - borrador
+      - enviado
+      - firmado
+      - rechazado
     RolEnum:
       enum:
       - xml

@@ -55,6 +55,9 @@ CAMPOS_ACTUALIZABLES = (
     "departamento",
     "municipio",
     "correo",
+    # Cómo conoce al emisor el ERP que lo integra; viaja como `cliente` en los
+    # avisos de webhook.
+    "referencia_externa",
     # La configuración de los eventos RADIAN de las facturas recibidas.
     "acuse_automatico",
     "recibe_tipo_identificacion",

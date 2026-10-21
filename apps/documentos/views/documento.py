@@ -2,7 +2,7 @@
 import requests
 from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.http import FileResponse, HttpResponse
 from django.urls import reverse
 from drf_spectacular.types import OpenApiTypes
@@ -84,6 +84,18 @@ RESPUESTA_NOTIFICACION = inline_serializer(
 RESPUESTA_DESMARCADO = inline_serializer(
     name="DesmarcarRespuestaValidadoRespuesta",
     fields={"respuesta_validado": campos.BooleanField()},
+)
+RESPUESTA_RESUMEN_MONITOR = inline_serializer(
+    name="ResumenMonitorRespuesta",
+    fields={
+        "borrador": campos.IntegerField(),
+        "firmado": campos.IntegerField(),
+        "enviado": campos.IntegerField(),
+        "rechazado": campos.IntegerField(),
+        "aceptado_sin_respuesta_validado": campos.IntegerField(
+            help_text="Aceptados por la DIAN con `respuesta_validado = false`.",
+        ),
+    },
 )
 RESPUESTA_VALIDADO = inline_serializer(
     name="RespuestaValidadoRespuesta",
@@ -344,6 +356,27 @@ class DocumentoViewSet(
 
         self.perform_destroy(documento)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @extend_schema(responses={200: RESPUESTA_RESUMEN_MONITOR})
+    @action(detail=False, methods=["get"], url_path="resumen-monitor")
+    def resumen_monitor(self, request):
+        """Conteos para el monitor de documentos, en una sola consulta.
+
+        ``GET /api/documentos/documento/resumen-monitor/``. Cuenta los
+        documentos en `borrador`, `firmado`, `enviado` y `rechazado`, y los
+        aceptados que siguen sin `respuesta_validado`. Respeta el alcance y
+        los filtros del listado (p. ej. ``?emisor=2``).
+        """
+        Nombre = DocumentoEstado.Nombre
+        conteos = {
+            nombre: Count("id", filter=Q(estado__nombre=nombre))
+            for nombre in (Nombre.BORRADOR, Nombre.FIRMADO, Nombre.ENVIADO, Nombre.RECHAZADO)
+        }
+        conteos["aceptado_sin_respuesta_validado"] = Count(
+            "id", filter=Q(estado__nombre=Nombre.ACEPTADO, respuesta_validado=False),
+        )
+        qs = self.get_queryset().prefetch_related(None).order_by()
+        return Response(qs.aggregate(**conteos))
 
     @extend_schema(
         request=None,
