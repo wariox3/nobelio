@@ -658,6 +658,27 @@ def consultar_rangos_numeracion(emisor, *, cliente=None, ambiente=None,
     )
 
 
+def consultar_adquiriente(emisor, tipo_identificacion, numero_identificacion, *,
+                          cliente=None, ambiente=None, **cred):
+    """Consulta en la DIAN (GetAcquirer) el nombre y correo de un adquiriente.
+
+    El WS exige firma WS-Security, así que se consulta con el certificado del
+    emisor. ``tipo_identificacion`` es un ``catalogos.TipoIdentificacion``: a
+    la DIAN va su código. Devuelve un ``soap.RespuestaAdquiriente``.
+    """
+    # GetAcquirer es del servicio de facturación: producción si el emisor ya
+    # está habilitado para facturar, si no habilitación.
+    if ambiente is None:
+        ambiente = ambiente_segun_habilitacion(
+            emisor.habilitado_para(SoftwareDian.Tipo.FACTURACION)
+        )
+    if cliente is None:
+        cliente = construir_cliente_emisor(emisor, ambiente, **cred)
+    return cliente.consultar_adquiriente(
+        tipo_identificacion.codigo, numero_identificacion,
+    )
+
+
 # Prefijos del nombre de archivo de la familia del documento equivalente
 # (numeral 8.13.5). Comparten el mismo consecutivo anual.
 PREFIJO_ARCHIVO_DOCUMENTO_EQUIVALENTE = "ds"

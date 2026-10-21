@@ -259,3 +259,24 @@ class EmisorListaSerializer(EmisorSerializer):
             for campo in EmisorSerializer.Meta.fields
             if campo not in FUERA_DEL_LISTADO
         ] + ["municipio_id", "municipio_nombre", "municipio_codigo"]
+
+
+class ConsultarAdquirienteSerializer(TiposEstrictos, serializers.Serializer):
+    """Lo que recibe ``consultar-adquiriente``: el documento del adquiriente."""
+
+    tipo_identificacion = RelacionDeCatalogo(queryset=TipoIdentificacion.objects.all())
+    numero_identificacion = serializers.CharField(max_length=20, trim_whitespace=True)
+
+
+class AdquirienteConsultadoSerializer(serializers.Serializer):
+    """Lo que devuelve ``consultar-adquiriente``: lo que la DIAN tiene registrado.
+
+    ``existe`` es falso cuando la DIAN no devuelve nombre ni correo; ``codigo``
+    y ``mensaje`` son los de la DIAN tal cual.
+    """
+
+    existe = serializers.BooleanField()
+    nombre = serializers.CharField(allow_blank=True)
+    correo = serializers.CharField(allow_blank=True)
+    codigo = serializers.CharField(allow_blank=True)
+    mensaje = serializers.CharField(allow_blank=True)

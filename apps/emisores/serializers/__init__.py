@@ -1,7 +1,12 @@
 """Serializers de la API de emisores."""
 from .certificado import CertificadoSerializer
 from .cuenta import CuentaSerializer
-from .emisor import EmisorListaSerializer, EmisorSerializer
+from .emisor import (
+    AdquirienteConsultadoSerializer,
+    ConsultarAdquirienteSerializer,
+    EmisorListaSerializer,
+    EmisorSerializer,
+)
 from .resolucion import (
     ResolucionSerializer,
     ResolucionValidadaSerializer,
@@ -15,6 +20,8 @@ __all__ = [
     "CuentaSerializer",
     "EmisorSerializer",
     "EmisorListaSerializer",
+    "ConsultarAdquirienteSerializer",
+    "AdquirienteConsultadoSerializer",
     "SoftwareDianSerializer",
     "CertificadoSerializer",
     "ResolucionSerializer",

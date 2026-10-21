@@ -237,7 +237,7 @@ class EventosRadianTests(SimpleTestCase):
         )
         self.enviados = []
 
-        def post(sobre, accion):
+        def post(sobre, accion, **_opciones):
             self.enviados.append((etree.fromstring(sobre), accion))
             return respuesta.encode()
 

@@ -4342,6 +4342,79 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/emisores/emisor/{id}/consultar-adquiriente/:
+    post:
+      operationId: emisores_emisor_consultar_adquiriente_create
+      description: |-
+        Consulta en la DIAN (GetAcquirer) el nombre y correo de un adquiriente.
+
+        ``POST /api/emisores/emisor/{id}/consultar-adquiriente/`` con
+        ``{"tipo_identificacion": <id del catálogo>, "numero_identificacion": "900123456"}``.
+
+        Se consulta con el certificado del emisor (el WS exige firma). El correo
+        es el que el adquiriente tiene registrado en la DIAN (parece ser el de
+        notificación del RUT). En habilitación la DIAN no tiene adquirientes:
+        todo responde "no existe".
+
+        Respuestas:
+          - 200 ``{"existe": ..., "nombre", "correo", "codigo", "mensaje"}``.
+          - 400 si los datos no son válidos o el emisor no puede firmar
+            (sin certificado, vencido...).
+          - 502 si la DIAN falla o rechaza la consulta.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este emisor.
+        required: true
+      tags:
+      - emisores
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsultarAdquirienteRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ConsultarAdquirienteRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ConsultarAdquirienteRequest'
+        required: true
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdquirienteConsultado'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '400':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/emisores/emisor/validar-nit/:
     get:
       operationId: emisores_emisor_validar_nit_retrieve
@@ -8562,6 +8635,30 @@ components:
       - responsabilidades
       - tipo_identificacion
       - tipo_organizacion
+    AdquirienteConsultado:
+      type: object
+      description: |-
+        Lo que devuelve ``consultar-adquiriente``: lo que la DIAN tiene registrado.
+
+        ``existe`` es falso cuando la DIAN no devuelve nombre ni correo; ``codigo``
+        y ``mensaje`` son los de la DIAN tal cual.
+      properties:
+        existe:
+          type: boolean
+        nombre:
+          type: string
+        correo:
+          type: string
+        codigo:
+          type: string
+        mensaje:
+          type: string
+      required:
+      - codigo
+      - correo
+      - existe
+      - mensaje
+      - nombre
     AdquirienteRequest:
       type: object
       description: 'Datos del receptor. No tiene endpoint propio: se piden en el documento.'
@@ -8966,6 +9063,24 @@ components:
       - errores
       - es_valido
       - estado
+    ConsultarAdquirienteRequest:
+      type: object
+      description: 'Lo que recibe ``consultar-adquiriente``: el documento del adquiriente.'
+      properties:
+        tipo_identificacion:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+          x-catalogo: tipo-identificacion
+          x-catalogo-valor: id
+        numero_identificacion:
+          type: string
+          minLength: 1
+          maxLength: 20
+      required:
+      - numero_identificacion
+      - tipo_identificacion
     Correo:
       type: object
       properties:

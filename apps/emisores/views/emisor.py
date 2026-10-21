@@ -1,12 +1,16 @@
 """API del emisor."""
 
+import requests
+from drf_spectacular.utils import extend_schema
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
+from apps.dian import servicios as dian
+from apps.dian import soap
 from apps.emisores import models, serializers
-from apps.nucleo.api import ErrorSolicitud
+from apps.nucleo.api import ErrorPasarela, ErrorSolicitud
 from apps.seguridad.alcance import AlcanceEmisorMixin, usuario_del_request
 from apps.utilidades.rues import RuesNoDisponible, consultar_detalle
 
@@ -163,3 +167,54 @@ class EmisorViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
                 "actividad_ciiu_descripcion": empresa.actividad_ciiu_descripcion,
             }
         )
+
+    @extend_schema(
+        request=serializers.ConsultarAdquirienteSerializer,
+        responses=serializers.AdquirienteConsultadoSerializer,
+    )
+    @action(detail=True, methods=["post"], url_path="consultar-adquiriente")
+    def consultar_adquiriente(self, request, pk=None):
+        """Consulta en la DIAN (GetAcquirer) el nombre y correo de un adquiriente.
+
+        ``POST /api/emisores/emisor/{id}/consultar-adquiriente/`` con
+        ``{"tipo_identificacion": <id del catálogo>, "numero_identificacion": "900123456"}``.
+
+        Se consulta con el certificado del emisor (el WS exige firma). El correo
+        es el que el adquiriente tiene registrado en la DIAN (parece ser el de
+        notificación del RUT). En habilitación la DIAN no tiene adquirientes:
+        todo responde "no existe".
+
+        Respuestas:
+          - 200 ``{"existe": ..., "nombre", "correo", "codigo", "mensaje"}``.
+          - 400 si los datos no son válidos o el emisor no puede firmar
+            (sin certificado, vencido...).
+          - 502 si la DIAN falla o rechaza la consulta.
+        """
+        emisor = self.get_object()
+        entrada = serializers.ConsultarAdquirienteSerializer(data=request.data)
+        entrada.is_valid(raise_exception=True)
+        datos = entrada.validated_data
+
+        try:
+            resultado = dian.consultar_adquiriente(
+                emisor, datos["tipo_identificacion"], datos["numero_identificacion"],
+            )
+        except dian.ErrorEmision as exc:
+            raise ErrorSolicitud(str(exc))
+        except requests.HTTPError as exc:
+            # La DIAN suele responder 500 con un soap:Fault que explica la causa.
+            fault = ""
+            if exc.response is not None:
+                fault = soap.extraer_fault(exc.response.content)
+            raise ErrorPasarela(f"La DIAN rechazó la consulta: {fault or exc}")
+        except requests.RequestException as exc:
+            raise ErrorPasarela(f"Error al comunicarse con la DIAN: {exc}")
+
+        salida = serializers.AdquirienteConsultadoSerializer({
+            "existe": bool(resultado.nombre or resultado.correo),
+            "nombre": resultado.nombre,
+            "correo": resultado.correo,
+            "codigo": resultado.codigo,
+            "mensaje": resultado.mensaje,
+        })
+        return Response(salida.data)

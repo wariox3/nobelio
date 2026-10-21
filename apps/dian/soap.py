@@ -392,6 +392,40 @@ class RespuestaEventos:
 
 
 # ===========================================================================
+# Consulta de adquiriente (GetAcquirer)
+# ===========================================================================
+@dataclass
+class RespuestaAdquiriente:
+    """Respuesta de GetAcquirer (``AdquirienteResponse`` del WSDL).
+
+    ``nombre`` y ``correo`` son los que el adquiriente tiene registrados en la
+    DIAN (el correo parece ser el de notificación del RUT, no siempre un buzón
+    de facturas); vienen vacíos si no está registrado. Si no existe, la DIAN
+    responde ``StatusCode`` 404; en habilitación esa base está vacía.
+    """
+
+    codigo: str = ""
+    mensaje: str = ""
+    nombre: str = ""
+    correo: str = ""
+
+    @classmethod
+    def desde_xml(cls, xml: bytes | str) -> "RespuestaAdquiriente":
+        raiz = etree.fromstring(xml if isinstance(xml, bytes) else xml.encode())
+
+        def texto(local_name):
+            nodos = raiz.xpath(f"//*[local-name()='{local_name}']")
+            return nodos[0].text.strip() if nodos and nodos[0].text else ""
+
+        return cls(
+            codigo=texto("StatusCode"),
+            mensaje=texto("Message"),
+            nombre=texto("ReceiverName"),
+            correo=texto("ReceiverEmail"),
+        )
+
+
+# ===========================================================================
 # Firma WS-Security del sobre SOAP
 # ===========================================================================
 class FirmanteWSSecurity:
@@ -600,6 +634,27 @@ class ClienteDian:
             "GetStatusEvent", {"trackId": cufe}, lector=RespuestaEventos.desde_xml,
         )
 
+    def consultar_adquiriente(
+        self, tipo_identificacion: str, numero_identificacion: str,
+    ) -> RespuestaAdquiriente:
+        """GetAcquirer: nombre y correo que el adquiriente tiene en la DIAN.
+
+        ``tipo_identificacion`` es el código DIAN de la lista TipoIdFiscal
+        (31 NIT, 13 cédula...).
+        """
+        return self._invocar(
+            "GetAcquirer",
+            {
+                "identificationType": tipo_identificacion,
+                "identificationNumber": numero_identificacion,
+            },
+            lector=RespuestaAdquiriente.desde_xml,
+            # Si el adquiriente no existe, la DIAN responde HTTP 404 con un
+            # GetAcquirerResponse normal (StatusCode 404, "El adquirente No
+            # existe en la base de datos"): es un resultado, no un fallo.
+            estados_aceptados=(404,),
+        )
+
     # -- Internos -----------------------------------------------------------
 
     def construir_sobre(self, operacion: str, parametros: dict) -> bytes:
@@ -618,18 +673,24 @@ class ClienteDian:
         return etree.tostring(envelope, xml_declaration=True, encoding="UTF-8")
 
     def _invocar(self, operacion: str, parametros: dict, *,
-                 lector=RespuestaDian.desde_xml):
+                 lector=RespuestaDian.desde_xml, estados_aceptados=()):
         sobre = self.construir_sobre(operacion, parametros)
         accion = f"{ACCION_BASE}/{operacion}"
-        respuesta = self._post(sobre, accion)
+        respuesta = self._post(sobre, accion, estados_aceptados=estados_aceptados)
         _capturar(operacion, sobre, respuesta)
         return lector(respuesta)
 
-    def _post(self, sobre: bytes, accion: str) -> bytes:
-        """Realiza el POST HTTP. Aislado para facilitar las pruebas."""
+    def _post(self, sobre: bytes, accion: str, *, estados_aceptados=()) -> bytes:
+        """Realiza el POST HTTP. Aislado para facilitar las pruebas.
+
+        ``estados_aceptados``: códigos HTTP de error que la operación usa como
+        respuesta de negocio (con su cuerpo SOAP) y no como fallo.
+        """
         headers = {
             "Content-Type": f'application/soap+xml;charset=UTF-8;action="{accion}"',
         }
         resp = requests.post(self.url, data=sobre, headers=headers, timeout=self.timeout)
+        if resp.status_code in estados_aceptados:
+            return resp.content
         resp.raise_for_status()
         return resp.content
