@@ -9309,6 +9309,9 @@ components:
           readOnly: true
         emisor:
           type: integer
+        emisor_razon_social:
+          type: string
+          readOnly: true
         resolucion:
           type: integer
           nullable: true
@@ -9534,6 +9537,7 @@ components:
       - documento_tipo
       - documento_tipo_nombre
       - emisor
+      - emisor_razon_social
       - envio
       - errores
       - estado
@@ -10258,6 +10262,9 @@ components:
           readOnly: true
         emisor:
           type: integer
+        emisor_razon_social:
+          type: string
+          readOnly: true
         resolucion:
           type: integer
           nullable: true
@@ -10476,6 +10483,7 @@ components:
       - documento_tipo
       - documento_tipo_nombre
       - emisor
+      - emisor_razon_social
       - envio
       - estado
       - estado_nombre
@@ -12685,6 +12693,9 @@ components:
           readOnly: true
         emisor:
           type: integer
+        emisor_razon_social:
+          type: string
+          readOnly: true
         empleado:
           type: integer
         empleado_nombre:
@@ -12945,6 +12956,7 @@ components:
       - consecutivo
       - creado_en
       - emisor
+      - emisor_razon_social
       - empleado
       - empleado_nombre
       - errores
@@ -13656,6 +13668,9 @@ components:
           readOnly: true
         emisor:
           type: integer
+        emisor_razon_social:
+          type: string
+          readOnly: true
         empleado:
           type: integer
         empleado_nombre:
@@ -13908,6 +13923,7 @@ components:
       - consecutivo
       - creado_en
       - emisor
+      - emisor_razon_social
       - empleado
       - empleado_nombre
       - estado

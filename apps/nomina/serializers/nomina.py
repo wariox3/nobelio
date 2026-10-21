@@ -90,11 +90,12 @@ class NominaSerializer(serializers.ModelSerializer):
         source="empleado.nombre_completo", read_only=True,
     )
     estado_nombre = serializers.CharField(source="estado.nombre", read_only=True)
+    emisor_razon_social = serializers.CharField(source="emisor.razon_social", read_only=True)
 
     class Meta:
         model = models.Nomina
         fields = [
-            "id", "emisor", "empleado", "empleado_nombre",
+            "id", "emisor", "emisor_razon_social", "empleado", "empleado_nombre",
             "estado", "estado_nombre", "tipo_xml", "tipo_nota",
             "nomina_predecesora",
             "prefijo", "consecutivo", "numero", "periodo_nomina",

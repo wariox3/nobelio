@@ -275,6 +275,7 @@ class DocumentoSerializer(serializers.ModelSerializer):
     )
     estado_nombre = serializers.CharField(source="estado.nombre", read_only=True)
     estado_descripcion = serializers.CharField(source="estado.descripcion", read_only=True)
+    emisor_razon_social = serializers.CharField(source="emisor.razon_social", read_only=True)
     # El número es lo que el emisor reconoce de su resolución; el id es interno.
     resolucion_numero = serializers.CharField(
         source="resolucion.numero_resolucion", read_only=True, default=None,
@@ -285,7 +286,8 @@ class DocumentoSerializer(serializers.ModelSerializer):
         fields = [
             "id", "documento_tipo", "documento_tipo_nombre",
             "estado", "estado_nombre", "estado_descripcion",
-            "emisor", "resolucion", "resolucion_numero", "adquiriente",
+            "emisor", "emisor_razon_social",
+            "resolucion", "resolucion_numero", "adquiriente",
             "prefijo", "consecutivo", "numero", "cufe_cude", "track_id",
             "envio", "ambiente", "fecha_validacion", "notificado",
             "respuesta_validado", "referencia_externa", "errores",
