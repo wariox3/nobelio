@@ -61,6 +61,10 @@ MENSAJE_ELIMINACION_CON_CONCEPTOS = (
     "La nota que elimina el documento anterior no lleva conceptos: su XML no "
     "emite ni `Devengados` ni `Deducciones`."
 )
+MENSAJE_OTRO_CONCEPTO_REPETIDO = (
+    "Hay varios 'otro concepto' con la descripción \"{descripcion}\": un mismo "
+    "concepto del periodo se informa una sola vez, con los valores sumados."
+)
 MENSAJE_ELIMINACION_CON_TOTALES = (
     "La nota que elimina el documento anterior lleva los totales en cero: su "
     "XML no los emite."
@@ -375,6 +379,29 @@ class NominaCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
             return
         if not conceptos:
             raise serializers.ValidationError({"conceptos": MENSAJE_SIN_CONCEPTOS})
+        self._validar_otros_conceptos_unicos(conceptos)
+
+    def _validar_otros_conceptos_unicos(self, conceptos):
+        """Cada "otro concepto" va una sola vez por documento.
+
+        La nómina electrónica resume el periodo, no las quincenas: si el mismo
+        concepto se pagó dos veces, el ERP los suma y manda uno. Se identifica
+        por la descripción, que es lo único que distingue un ``OtroConcepto`` de
+        otro; se compara sin mayúsculas ni espacios sobrantes.
+        """
+        vistos = set()
+        for concepto in conceptos:
+            if concepto.get("concepto") != models.NominaConcepto.Concepto.OTRO_CONCEPTO:
+                continue
+            descripcion = (concepto.get("descripcion") or "").strip()
+            clave = " ".join(descripcion.lower().split())
+            if clave in vistos:
+                raise serializers.ValidationError({
+                    "conceptos": MENSAJE_OTRO_CONCEPTO_REPETIDO.format(
+                        descripcion=descripcion
+                    )
+                })
+            vistos.add(clave)
 
     def _validar_totales(self, attrs):
         """Los totales informados tienen que cuadrar con los conceptos.

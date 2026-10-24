@@ -102,6 +102,22 @@ def _valor(monto) -> str:
     return ident.formatear_valor(monto if monto is not None else CERO)
 
 
+def _partes_salariales(fila) -> tuple[str | None, str | None]:
+    """Parte salarial y no salarial de un concepto partido, para el XML.
+
+    Las dos son opcionales en el XSD, pero la DIAN rechaza la salarial en cero
+    (regla NIE147 en ``OtroConcepto``): un concepto solo no salarial tiene que
+    salir sin ese atributo, no con ``0.00``. Si no hay parte no salarial, la
+    salarial se emite siempre, aunque sea cero, para no dejar el elemento vacío.
+    """
+    no_salarial = (
+        _valor(fila.valor_no_salarial) if fila.valor_no_salarial is not None else None
+    )
+    if no_salarial is not None and not fila.valor:
+        return None, no_salarial
+    return _valor(fila.valor), no_salarial
+
+
 def _fecha(valor) -> str | None:
     return valor.isoformat() if valor is not None else None
 
@@ -518,11 +534,10 @@ class ConstructorNominaXML:
         if otros:
             cont = _sub(dev, "OtrosConceptos")
             for fila in otros:
+                salarial, no_salarial = _partes_salariales(fila)
                 _sub(cont, "OtroConcepto",
                      DescripcionConcepto=fila.descripcion,
-                     ConceptoS=_valor(fila.valor),
-                     ConceptoNS=_valor(fila.valor_no_salarial)
-                     if fila.valor_no_salarial is not None else None)
+                     ConceptoS=salarial, ConceptoNS=no_salarial)
 
         # Los dos siguientes tienen los dos atributos obligatorios, así que la
         # parte que no venga sale en ceros.
@@ -648,11 +663,8 @@ class ConstructorNominaXML:
             return
         cont = _sub(padre, contenedor)
         for fila in filas:
-            _sub(cont, etiqueta, **{
-                attr_s: _valor(fila.valor),
-                attr_ns: (_valor(fila.valor_no_salarial)
-                          if fila.valor_no_salarial is not None else None),
-            })
+            salarial, no_salarial = _partes_salariales(fila)
+            _sub(cont, etiqueta, **{attr_s: salarial, attr_ns: no_salarial})
 
     def _valores(self, padre, filas, contenedor, etiqueta):
         """Contenedor de elementos que solo llevan un importe como texto."""
