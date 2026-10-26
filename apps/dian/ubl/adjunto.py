@@ -24,6 +24,7 @@ from apps.dian.ubl.base import (  # los ayudantes privados no vienen en el `*`
     agrupar_impuestos,
 )
 from apps.documentos.models import DocumentoTipo as _Tipo
+from apps.utilidades.correos import primer_correo
 
 
 
@@ -128,7 +129,7 @@ class ConstructorAttachedDocument(ConstructorUBL):
             if entidad.telefono:
                 _sub(contacto, "cbc", "Telephone", entidad.telefono)
             if entidad.correo:
-                _sub(contacto, "cbc", "ElectronicMail", entidad.correo)
+                _sub(contacto, "cbc", "ElectronicMail", primer_correo(entidad.correo))
 
     def _adjunto(self, padre, etiqueta, contenido):
         """Un XML incrustado como texto dentro de ExternalReference/Description."""

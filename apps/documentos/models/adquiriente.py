@@ -8,6 +8,7 @@ cliente no reescribe la historia de las facturas ya emitidas.
 from django.db import models
 
 from apps.nucleo.models import ModeloConFechas
+from apps.utilidades.correos import validar_correos
 from apps.utilidades.nit import dv_de_entidad
 
 
@@ -41,7 +42,12 @@ class Adquiriente(ModeloConFechas):
         help_text="cbc:PostalZone de las direcciones del XML.",
     )
     telefono = models.CharField("teléfono", max_length=50, blank=True)
-    correo = models.EmailField("correo electrónico", blank=True)
+    correo = models.CharField(
+        "correo electrónico", max_length=500, blank=True,
+        validators=[validar_correos],
+        help_text="Uno o varios correos separados por punto y coma. Se le "
+        "notifica a todos; en el XML va solo el primero.",
+    )
 
     # --- Relaciones ---
     documento = models.OneToOneField(

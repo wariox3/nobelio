@@ -28,6 +28,9 @@ from apps.documentos.models import DocumentoEstado, DocumentoNotificacion
 from apps.emisores.models import WebhookAviso
 from apps.emisores.servicios import webhooks
 from apps.nucleo.registro import campos
+from apps.utilidades.correos import (
+    SEPARADOR_ZINC, normalizar_correos, separar_correos, unir_correos,
+)
 from apps.utilidades.zinc import Zinc, ZincNoDisponible
 
 # Tope del material adjunto que acepta la notificación. No cuenta el XML, que
@@ -155,7 +158,7 @@ def actualizar_correo(documento, correo):
     1:1— y no entra en el XML firmado, así que cambiarlo después de emitir no
     toca nada de lo que validó la DIAN. Vacío no borra el que había.
     """
-    correo = (correo or "").strip()
+    correo = normalizar_correos(correo)
     adquiriente = documento.adquiriente
     if not correo or correo == adquiriente.correo:
         return
@@ -270,11 +273,11 @@ def payload_zinc(documento, paquete, *, asunto=None, html=None):
 
     Aislado a propósito: el contrato lo define Zinc, así que si cambian los
     nombres de los campos se corrige aquí y en ningún otro sitio. Los
-    destinatarios van en una sola cadena separada por ``;``, que es como los
-    parte la pasarela.
+    destinatarios —y la copia— van en una sola cadena separada por comas, que
+    es como los acepta la pasarela; en nobelio se guardan separados por ``;``.
     """
     datos = {
-        "correo": ";".join(_destinatarios(paquete)),
+        "correo": unir_correos(_destinatarios(paquete), SEPARADOR_ZINC),
         "asunto": asunto if asunto is not None else asunto_notificacion(documento),
         "contenido": html if html is not None else cuerpo_html(documento, paquete),
         "nombreRemitente": getattr(
@@ -299,7 +302,9 @@ def payload_zinc(documento, paquete, *, asunto=None, html=None):
     # La copia es del emisor —su archivo, su contador—, no del documento, así
     # que se resuelve aquí y no viaja en la petición de notificar.
     if documento.emisor.correo_copia:
-        datos["correoCopia"] = documento.emisor.correo_copia
+        datos["correoCopia"] = unir_correos(
+            separar_correos(documento.emisor.correo_copia), SEPARADOR_ZINC,
+        )
     return datos
 
 
@@ -308,7 +313,7 @@ logger = logging.getLogger(__name__)
 
 def _destinatarios(paquete):
     """Los correos a los que va el paquete, ya limpios."""
-    return [c.strip() for c in paquete.destinatario.split(";") if c.strip()]
+    return separar_correos(paquete.destinatario)
 
 
 def _registrar(documento, paquete, estado, *, codigo_envio="", error=""):
@@ -316,7 +321,7 @@ def _registrar(documento, paquete, estado, *, codigo_envio="", error=""):
     return DocumentoNotificacion.objects.create(
         documento=documento,
         estado=estado,
-        destinatario=";".join(_destinatarios(paquete)),
+        destinatario=unir_correos(_destinatarios(paquete)),
         copia=documento.emisor.correo_copia,
         archivo=paquete.nombre,
         tamano=paquete.tamano,

@@ -8687,9 +8687,10 @@ components:
           maxLength: 50
         correo:
           type: string
-          format: email
           title: Correo electrónico
-          maxLength: 254
+          description: Uno o varios correos separados por punto y coma. Se le notifica
+            a todos; en el XML va solo el primero.
+          maxLength: 500
       required:
       - codigo_postal
       - correo
@@ -8822,10 +8823,11 @@ components:
           maxLength: 50
         correo:
           type: string
-          format: email
           minLength: 1
           title: Correo electrónico
-          maxLength: 254
+          description: Uno o varios correos separados por punto y coma. Se le notifica
+            a todos; en el XML va solo el primero.
+          maxLength: 500
       required:
       - codigo_postal
       - correo
@@ -13959,11 +13961,8 @@ components:
         que el tope de 10 MB aplica solo a lo que llega en la petición.
       properties:
         correo:
-          oneOf:
-          - type: string
-            format: email
-          - type: string
-            maxLength: 0
+          type: string
+          maxLength: 500
         pdf:
           type: string
           format: binary

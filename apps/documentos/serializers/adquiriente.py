@@ -5,6 +5,7 @@ from apps.catalogos.memoria import RelacionDeCatalogo
 from apps.catalogos.models.municipio import mensaje_municipio_de_otro_departamento
 from apps.documentos.models import Adquiriente
 from apps.nucleo.serializers import EstructuraEstricta
+from apps.utilidades.correos import normalizar_correos
 
 # Lista TipoOrganizacion de la DIAN.
 CODIGO_PERSONA_JURIDICA = "1"
@@ -91,7 +92,8 @@ class AdquirienteSerializer(EstructuraEstricta, serializers.ModelSerializer):
         #
         # El correo también, y con valor, en todos los tipos de documento: es a
         # donde `notificar` entrega el documento, y sin él el fallo aparecía
-        # después, al notificar, con el documento ya emitido.
+        # después, al notificar, con el documento ya emitido. Admite varios
+        # separados por `;` (ver `validate_correo`).
         #
         # Los nombres admiten `null`: hay ERPs que mandan así los vacíos, y una
         # empresa llegaba rechazada por unos campos que igual se descartan. La
@@ -103,6 +105,16 @@ class AdquirienteSerializer(EstructuraEstricta, serializers.ModelSerializer):
             "responsabilidades": {"required": True},
             "correo": {"required": True, "allow_blank": False},
         }
+
+    def validate_correo(self, valor):
+        """Uno o varios correos separados por ``;``; se guardan sin espacios.
+
+        Cada uno ya lo validó el campo (``validar_correos`` del modelo).
+        """
+        correo = normalizar_correos(valor)
+        if not correo:
+            raise serializers.ValidationError("Este campo no puede estar en blanco.")
+        return correo
 
     def validate(self, attrs):
         """Reglas que dependen de otro dato del propio adquiriente.

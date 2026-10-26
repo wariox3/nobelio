@@ -27,6 +27,7 @@ from lxml import etree
 from apps.catalogos.models import Tributo as _Tributo
 from apps.dian import identificadores as ident
 from apps.utilidades.nit import digito_verificacion
+from apps.utilidades.correos import primer_correo
 
 # --- Namespaces UBL / DIAN --------------------------------------------------
 NS = {
@@ -477,7 +478,7 @@ class ConstructorUBL:
             if adq.telefono:
                 _sub(contacto, "cbc", "Telephone", adq.telefono)
             if adq.correo:
-                _sub(contacto, "cbc", "ElectronicMail", adq.correo)
+                _sub(contacto, "cbc", "ElectronicMail", primer_correo(adq.correo))
         # Person va después de Contact, y dentro de él el orden del XSD no es el
         # natural: FamilyName antes que MiddleName, y ResidenceAddress al final.
         self._persona(party, adq)
@@ -506,7 +507,7 @@ class ConstructorUBL:
             if adq.telefono:
                 _sub(contacto, "cbc", "Telephone", adq.telefono)
             if adq.correo:
-                _sub(contacto, "cbc", "ElectronicMail", adq.correo)
+                _sub(contacto, "cbc", "ElectronicMail", primer_correo(adq.correo))
         if adq.municipio or adq.direccion:
             residencia = _sub(persona, "cac", "ResidenceAddress")
             self._cuerpo_direccion(residencia, adq)

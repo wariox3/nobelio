@@ -2,6 +2,7 @@
 from rest_framework import serializers
 
 from apps.documentos.servicios import TAMANO_MAXIMO_ADJUNTOS
+from apps.utilidades.correos import normalizar_correos, validar_correos
 
 
 def mensaje_adjuntos_muy_pesados(tamano):
@@ -22,12 +23,19 @@ class NotificacionSerializer(serializers.Serializer):
     """
 
     # El nuevo correo del adquiriente. Si viene, reemplaza al que tenía y a él
-    # se envía; vacío o ausente, se usa el guardado.
-    correo = serializers.EmailField(required=False, allow_blank=True)
+    # se envía; vacío o ausente, se usa el guardado. Admite varios separados
+    # por `;`, igual que el del adquiriente.
+    correo = serializers.CharField(
+        required=False, allow_blank=True, max_length=500,
+        validators=[validar_correos],
+    )
     pdf = serializers.FileField(required=False)
     adjuntos = serializers.ListField(
         child=serializers.FileField(), required=False, allow_empty=True,
     )
+
+    def validate_correo(self, valor):
+        return normalizar_correos(valor)
 
     def validate(self, attrs):
         archivos = [a for a in (attrs.get("pdf"),) if a is not None]
