@@ -28,9 +28,7 @@ from apps.documentos.models import DocumentoEstado, DocumentoNotificacion
 from apps.emisores.models import WebhookAviso
 from apps.emisores.servicios import webhooks
 from apps.nucleo.registro import campos
-from apps.utilidades.correos import (
-    SEPARADOR_ZINC, normalizar_correos, separar_correos, unir_correos,
-)
+from apps.utilidades.correos import normalizar_correos, separar_correos, unir_correos
 from apps.utilidades.zinc import Zinc, ZincNoDisponible
 
 # Tope del material adjunto que acepta la notificación. No cuenta el XML, que
@@ -273,11 +271,11 @@ def payload_zinc(documento, paquete, *, asunto=None, html=None):
 
     Aislado a propósito: el contrato lo define Zinc, así que si cambian los
     nombres de los campos se corrige aquí y en ningún otro sitio. Los
-    destinatarios —y la copia— van en una sola cadena separada por comas, que
-    es como los acepta la pasarela; en nobelio se guardan separados por ``;``.
+    destinatarios —y la copia— van en una sola cadena separada por ``;``, que
+    es como los parte la pasarela.
     """
     datos = {
-        "correo": unir_correos(_destinatarios(paquete), SEPARADOR_ZINC),
+        "correo": unir_correos(_destinatarios(paquete)),
         "asunto": asunto if asunto is not None else asunto_notificacion(documento),
         "contenido": html if html is not None else cuerpo_html(documento, paquete),
         "nombreRemitente": getattr(
@@ -302,9 +300,7 @@ def payload_zinc(documento, paquete, *, asunto=None, html=None):
     # La copia es del emisor —su archivo, su contador—, no del documento, así
     # que se resuelve aquí y no viaja en la petición de notificar.
     if documento.emisor.correo_copia:
-        datos["correoCopia"] = unir_correos(
-            separar_correos(documento.emisor.correo_copia), SEPARADOR_ZINC,
-        )
+        datos["correoCopia"] = normalizar_correos(documento.emisor.correo_copia)
     return datos
 
 

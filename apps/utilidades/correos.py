@@ -4,14 +4,12 @@ Los ERP mandan varios correos del adquiriente en el mismo campo, separados por
 ``;``. Aquí se parten, se validan uno por uno y se vuelven a unir, para que el
 resto del sistema no repita esa lógica.
 
-Se guardan separados por ``;`` (como llegan) y a la pasarela Zinc se le envían
-separados por comas, que es como ella los acepta.
+Se guardan y se le envían a la pasarela Zinc separados por ``;``.
 """
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 
 SEPARADOR = ";"
-SEPARADOR_ZINC = ","
 
 
 def separar_correos(valor):
