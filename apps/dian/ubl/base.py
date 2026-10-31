@@ -247,6 +247,11 @@ class ConstructorUBL:
     etiqueta_total = "LegalMonetaryTotal"
     scheme_name = ident.SCHEME_NAME_CUFE
     usa_cude = False
+    # El emisor se declara siempre como NIT (schemeName 31 y DV calculado),
+    # aunque sea persona natural registrada con cédula: su NIT es ese número.
+    # El documento equivalente lo exige (reglas DEAJ24b y DEAJ48); la factura
+    # no, y por eso se activa solo donde hace falta.
+    emisor_como_nit = False
     incluir_control = True  # sts:InvoiceControl (resolución) solo en factura
     incluir_vencimiento = True  # cbc:DueDate solo existe en el UBL Invoice
     # Dónde encaja cac:AllowanceCharge según el XSD de cada tipo: en el
@@ -444,11 +449,12 @@ class ConstructorUBL:
         nombre = _sub(party, "cac", "PartyName")
         _sub(nombre, "cbc", "Name", emisor.razon_social)
         self._direccion_fisica(party, emisor)
-        self._party_tax_scheme(party, emisor)
+        self._party_tax_scheme(party, emisor, como_nit=self.emisor_como_nit)
         codigo_sucursal = (
             self.resolucion.prefijo if self.resolucion and self.resolucion.prefijo else None
         )
-        self._party_legal_entity(party, emisor, codigo_sucursal=codigo_sucursal)
+        self._party_legal_entity(party, emisor, codigo_sucursal=codigo_sucursal,
+                                 como_nit=self.emisor_como_nit)
         if emisor.correo or emisor.telefono:
             contacto = _sub(party, "cac", "Contact")
             if emisor.telefono:
@@ -761,13 +767,12 @@ class ConstructorUBL:
         _sub(pais, "cbc", "IdentificationCode", entidad.pais.codigo)
         _sub(pais, "cbc", "Name", entidad.pais.nombre, languageID="es")
 
-    def _party_tax_scheme(self, party, entidad):
+    def _party_tax_scheme(self, party, entidad, como_nit=False):
         pts = _sub(party, "cac", "PartyTaxScheme")
         _sub(pts, "cbc", "RegistrationName", entidad.razon_social)
         _sub(pts, "cbc", "CompanyID", entidad.numero_identificacion,
              schemeAgencyID="195", schemeAgencyName=AGENCIA_DIAN,
-             schemeID=entidad.digito_verificacion or "0",
-             schemeName=entidad.tipo_identificacion.codigo)
+             **self._esquema_identificacion(entidad, como_nit))
         _sub(pts, "cbc", "TaxLevelCode", self._responsabilidades(entidad), listName="05")
         direccion = _sub(pts, "cac", "RegistrationAddress")
         self._cuerpo_direccion(direccion, entidad)
@@ -775,13 +780,12 @@ class ConstructorUBL:
         _sub(esquema, "cbc", "ID", COD_IVA)
         _sub(esquema, "cbc", "Name", "IVA")
 
-    def _party_legal_entity(self, party, entidad, codigo_sucursal=None):
+    def _party_legal_entity(self, party, entidad, codigo_sucursal=None, como_nit=False):
         ple = _sub(party, "cac", "PartyLegalEntity")
         _sub(ple, "cbc", "RegistrationName", entidad.razon_social)
         _sub(ple, "cbc", "CompanyID", entidad.numero_identificacion,
              schemeAgencyID="195", schemeAgencyName=AGENCIA_DIAN,
-             schemeID=entidad.digito_verificacion or "0",
-             schemeName=entidad.tipo_identificacion.codigo)
+             **self._esquema_identificacion(entidad, como_nit))
         # FAB10a: el prefijo (código de la sucursal/punto de facturación) debe
         # coincidir con el Prefix del InvoiceControl.
         if codigo_sucursal:
@@ -789,6 +793,23 @@ class ConstructorUBL:
             _sub(crs, "cbc", "ID", codigo_sucursal)
 
     # -- Auxiliares ---------------------------------------------------------
+
+    @staticmethod
+    def _esquema_identificacion(entidad, como_nit=False) -> dict:
+        """``@schemeID`` (DV) y ``@schemeName`` (tipo) del ``cbc:CompanyID``.
+
+        Con ``como_nit`` la parte sale como NIT (``31``) con el DV calculado del
+        número, también si está registrada con cédula y sin DV guardado.
+        """
+        if como_nit:
+            return {
+                "schemeID": digito_verificacion(entidad.numero_identificacion) or "0",
+                "schemeName": SCHEME_NAME_NIT,
+            }
+        return {
+            "schemeID": entidad.digito_verificacion or "0",
+            "schemeName": entidad.tipo_identificacion.codigo,
+        }
 
     def _responsabilidades(self, entidad) -> str:
         """TaxLevelCode: los códigos de la lista TipoResponsabilidad, o ``R-99-PN``.

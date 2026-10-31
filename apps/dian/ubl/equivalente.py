@@ -59,6 +59,7 @@ class ConstructorDocumentoEquivalentePOS(ConstructorUBL):
     scheme_name = ident.SCHEME_NAME_CUDE
     usa_cude = True
     nombre_tipo = NOMBRE_TIPO_DOCUMENTO_EQUIVALENTE_POS
+    emisor_como_nit = True
 
     def _linea_extra(self, il, linea):
         """``cbc:FreeOfChargeIndicator``, como en la ejemplificación oficial.
@@ -197,6 +198,7 @@ class ConstructorNotaAjusteDECredito(ConstructorNotaCredito):
     customization_id_default = CUSTOMIZATION_NOTA_AJUSTE_DE_POS
     scheme_name_referencia = ident.SCHEME_NAME_CUDE
     codigo_tipo_referencia = CODIGO_TIPO_REFERENCIA_POS
+    emisor_como_nit = True
 
 
 class ConstructorNotaAjusteDEDebito(ConstructorNotaDebito):
@@ -213,4 +215,5 @@ class ConstructorNotaAjusteDEDebito(ConstructorNotaDebito):
 
     profile_id = PROFILE_ID_NOTA_AJUSTE_DE_DEBITO
     customization_id_default = CUSTOMIZATION_NOTA_AJUSTE_DE_POS
+    emisor_como_nit = True
     scheme_name_referencia = ident.SCHEME_NAME_CUDE
