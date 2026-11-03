@@ -100,8 +100,8 @@ class ConstructorDocumentoSoporte(ConstructorUBL):
         """El DS exige en cada línea la fecha de compra y la forma de generación.
 
         - **Fecha de compra** (DSFC02a), en ``cbc:StartDate``. Si la línea no la
-          trae se usa la fecha de emisión: la compra que soporta el documento es
-          la que se está documentando.
+          trae se usa la ``fecha_compra`` del documento, que puede ser pasada
+          (Decreto 442 de 2023); y sin ella, la fecha de emisión.
         - **Forma de generación y transmisión** (DSFC03 y DSFC04), en
           ``cbc:DescriptionCode`` y ``cbc:Description``. Sin código va «por
           operación», que es un documento por compra; y la descripción no es la
@@ -114,7 +114,10 @@ class ConstructorDocumentoSoporte(ConstructorUBL):
         periodo = _sub(il, "cac", "InvoicePeriod")
         _sub(
             periodo, "cbc", "StartDate",
-            (linea.periodo_desde or self.doc.fecha_emision).isoformat(),
+            (
+                linea.periodo_desde or self.doc.fecha_compra
+                or self.doc.fecha_emision
+            ).isoformat(),
         )
         if linea.periodo_hasta:
             _sub(periodo, "cbc", "EndDate", linea.periodo_hasta.isoformat())

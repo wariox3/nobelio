@@ -303,6 +303,12 @@ con los otros dos; otro valor responde 400.
   `numero_linea` no pueden repetirse dentro del documento.
   Si una línea trae `periodo_desde` y `periodo_hasta`, el inicio tiene que ser
   anterior al fin (iguales no valen).
+  `fecha_compra` es opcional y solo va en el documento soporte y su nota de
+  ajuste (en otro tipo responde 400): es la fecha de la operación, que puede
+  ser anterior a la de emisión (Decreto 442 de 2023) pero no posterior a hoy.
+  Así se soporta hoy una compra de días pasados. Es el `StartDate` de las
+  líneas que no traen su `periodo_desde`; sin las dos, va la fecha de emisión.
+  En esas líneas tiene que quedar antes de su `periodo_hasta`.
   `descuento` es obligatorio en cada línea (0 si no hay), y `valor_total` tiene que
   ser cantidad × valor unitario − descuento, con un céntimo de tolerancia.
   Cantidad, valor unitario, total de la línea y base gravable tienen que ser

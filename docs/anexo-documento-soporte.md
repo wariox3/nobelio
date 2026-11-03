@@ -187,6 +187,21 @@ al emitir (`NOMBRES_TRIBUTO_DS` en `apps/dian/ubl/soporte.py`).
 - `cac:PaymentExchangeRate` cuando `DocumentCurrencyCode` ≠ COP
   (`SourceCurrencyCode`, `TargetCurrencyCode`, `CalculationRate`, `Date`).
 
+### Fecha de generación y fecha de la operación
+
+- **Generación** (`cbc:IssueDate`): siempre la del día en que se firma. No se
+  antedata. En nobelio es `fecha_emision` y tiene que ser hoy.
+- **Operación** (`cac:InvoicePeriod/cbc:StartDate` de cada línea, DSFC02a):
+  puede ser anterior. El art. 7 del Decreto 442 de 2023 pide registrar las dos
+  fechas y reconoce que pueden ser distintas. En nobelio es `periodo_desde` de
+  la línea o, por defecto, `fecha_compra` del documento (no posterior a hoy).
+- **Plazo** (art. 10 Res. 167 de 2021): al hacer cada compra o, si se acumula,
+  a más tardar el último día hábil de la semana con un mismo proveedor
+  (`DescriptionCode` 2). Emitirlo tarde es un incumplimiento formal, no un
+  bloqueo técnico: nobelio no lo impide.
+- ⚠ Sin confirmar: si la DIAN rechaza o solo advierte cuando el `StartDate` es
+  muy anterior al `IssueDate`. Probar en habilitación.
+
 ## 9. Nota de ajuste al documento soporte (tipo 95)
 
 Estructura de nota, como las notas crédito de factura:

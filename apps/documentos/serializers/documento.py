@@ -14,7 +14,7 @@ from apps.nucleo.serializers import EstructuraEstricta
 from apps.seguridad.alcance import RelacionDelAlcance
 
 from .adquiriente import AdquirienteSerializer
-from .documento_detalle import DocumentoDetalleSerializer
+from .documento_detalle import MENSAJE_PERIODO_AL_REVES, DocumentoDetalleSerializer
 from .documento_pos import DocumentoPOSSerializer
 from .documento_error import DocumentoErrorSerializer
 
@@ -205,6 +205,26 @@ def mensaje_fecha_emision_no_es_hoy(hoy):
 
 
 
+# Los tipos con fecha de la operación aparte de la de emisión.
+TIPOS_CON_FECHA_COMPRA = frozenset({
+    models.DocumentoTipo.Codigo.DOCUMENTO_SOPORTE,
+    models.DocumentoTipo.Codigo.NOTA_AJUSTE,
+})
+
+
+def mensaje_fecha_compra_no_aplica(tipo):
+    """Mensaje para una fecha de compra en un tipo que no la lleva."""
+    return (
+        f"{tipo.nombre} no lleva fecha de compra: solo va en el documento "
+        f"soporte y su nota de ajuste."
+    )
+
+
+def mensaje_fecha_compra_futura(hoy):
+    """Mensaje para una fecha de compra posterior a hoy."""
+    return f"La fecha de compra no puede ser posterior a hoy ({hoy})."
+
+
 def mensaje_prefijo_ajeno(resolucion):
     """Mensaje para un prefijo que no es el que autorizó la resolución."""
     prefijo = f"'{resolucion.prefijo}'" if resolucion.prefijo else "sin prefijo"
@@ -294,7 +314,8 @@ class DocumentoSerializer(serializers.ModelSerializer):
             "concepto_correccion", "fecha_vencimiento",
             "orden_compra", "orden_compra_fecha", "orden_compra_tipo",
             "orden_compra_documento",
-            "fecha_emision", "hora_emision", "moneda", "forma_pago", "medio_pago",
+            "fecha_emision", "hora_emision", "fecha_compra",
+            "moneda", "forma_pago", "medio_pago",
             "valor_bruto", "total_impuestos",
             "total_descuentos", "descuentos_motivo", "total_cargos", "cargos_motivo",
             "total_a_pagar", "documento_referencia", "observaciones", "detalles",
@@ -395,7 +416,7 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
             "id", "documento_tipo", "emisor", "ambiente", "numero_resolucion",
             "referencia_externa",
             "adquiriente", "prefijo", "consecutivo", "numero",
-            "fecha_emision", "moneda", "forma_pago", "medio_pago",
+            "fecha_emision", "fecha_compra", "moneda", "forma_pago", "medio_pago",
             "total_descuentos", "descuentos_motivo",
             "total_cargos", "cargos_motivo", "documento_referencia",
             "concepto_correccion", "fecha_vencimiento",
@@ -434,6 +455,7 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
             "forma_pago": {"required": True, "allow_null": False},
             "medio_pago": {"required": True, "allow_null": False},
             "fecha_vencimiento": {"required": True, "allow_null": True},
+            "fecha_compra": {"required": False, "allow_null": True},
         }
         # Sin validador de unicidad, a propósito: el duplicado no es un error de
         # datos (400) sino un conflicto (409) con un documento que ya existe, y
@@ -528,6 +550,7 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
         self._validar_concepto(attrs, tipo)
         self._validar_anulacion_sin_referencia(attrs, tipo, referencia)
         self._validar_vencimiento(attrs, tipo)
+        self._validar_fecha_compra(attrs, tipo)
         self._validar_retenciones(attrs, tipo)
         self._validar_descuentos_globales(attrs)
 
@@ -581,6 +604,42 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
                     descuentos, bruto,
                 ),
             })
+
+    def _validar_fecha_compra(self, attrs, tipo):
+        """La fecha de la operación, solo en el soporte y su nota de ajuste.
+
+        El Decreto 442 de 2023 separa la fecha de la operación de la de
+        generación: la de emisión sigue siendo hoy (FAD09) y esta puede ser
+        anterior, para soportar una compra de días pasados. Futura no, porque
+        sería documentar una compra que no ha ocurrido.
+
+        Es el ``StartDate`` de las líneas que no traen su ``periodo_desde``, así
+        que en esas líneas tiene que quedar antes de su ``periodo_hasta``, con
+        la misma regla que el periodo de la línea.
+        """
+        fecha = attrs.get("fecha_compra")
+        if fecha is None:
+            return
+        if tipo is not None and tipo.codigo not in TIPOS_CON_FECHA_COMPRA:
+            raise serializers.ValidationError(
+                {"fecha_compra": mensaje_fecha_compra_no_aplica(tipo)}
+            )
+        hoy = timezone.localdate()
+        if fecha > hoy:
+            raise serializers.ValidationError(
+                {"fecha_compra": mensaje_fecha_compra_futura(hoy)}
+            )
+        errores = [
+            {"periodo_hasta": MENSAJE_PERIODO_AL_REVES}
+            if (
+                detalle.get("periodo_desde") is None
+                and detalle.get("periodo_hasta") is not None
+                and not fecha < detalle["periodo_hasta"]
+            ) else {}
+            for detalle in attrs.get("detalles") or []
+        ]
+        if any(errores):
+            raise serializers.ValidationError({"detalles": errores})
 
     def _validar_retenciones(self, attrs, tipo):
         """Las retenciones solo van en los tipos que las separan del total.

@@ -9448,6 +9448,14 @@ components:
           title: Hora de emisión
           description: IssueTime del XML. Si se omite se toma la hora actual, y al
             firmar se reescribe con la hora de la firma.
+        fecha_compra:
+          type: string
+          format: date
+          nullable: true
+          title: Fecha de compra
+          description: 'Solo documento soporte y su nota de ajuste: fecha de la operación
+            (Decreto 442 de 2023), que puede ser anterior a la de emisión. Es el StartDate
+            de las líneas que no traen su periodo_desde.'
         moneda:
           type: integer
           maximum: 9223372036854775807
@@ -9624,6 +9632,14 @@ components:
           title: Fecha de emisión
           description: IssueDate del XML. Si se omite se toma la fecha de hoy, que
             es la única con la que se puede firmar (regla FAD09).
+        fecha_compra:
+          type: string
+          format: date
+          nullable: true
+          title: Fecha de compra
+          description: 'Solo documento soporte y su nota de ajuste: fecha de la operación
+            (Decreto 442 de 2023), que puede ser anterior a la de emisión. Es el StartDate
+            de las líneas que no traen su periodo_desde.'
         moneda:
           type: integer
           maximum: 9223372036854775807
@@ -9795,6 +9811,14 @@ components:
           title: Fecha de emisión
           description: IssueDate del XML. Si se omite se toma la fecha de hoy, que
             es la única con la que se puede firmar (regla FAD09).
+        fecha_compra:
+          type: string
+          format: date
+          nullable: true
+          title: Fecha de compra
+          description: 'Solo documento soporte y su nota de ajuste: fecha de la operación
+            (Decreto 442 de 2023), que puede ser anterior a la de emisión. Es el StartDate
+            de las líneas que no traen su periodo_desde.'
         moneda:
           type: integer
           maximum: 9223372036854775807
@@ -10396,6 +10420,14 @@ components:
           title: Hora de emisión
           description: IssueTime del XML. Si se omite se toma la hora actual, y al
             firmar se reescribe con la hora de la firma.
+        fecha_compra:
+          type: string
+          format: date
+          nullable: true
+          title: Fecha de compra
+          description: 'Solo documento soporte y su nota de ajuste: fecha de la operación
+            (Decreto 442 de 2023), que puede ser anterior a la de emisión. Es el StartDate
+            de las líneas que no traen su periodo_desde.'
         moneda:
           type: integer
           maximum: 9223372036854775807

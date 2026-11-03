@@ -138,6 +138,12 @@ class Documento(ModeloUUID, ModeloConFechas):
         help_text="IssueDate del XML. Si se omite se toma la fecha de hoy, que "
         "es la única con la que se puede firmar (regla FAD09).",
     )
+    fecha_compra = models.DateField(
+        "fecha de compra", null=True, blank=True,
+        help_text="Solo documento soporte y su nota de ajuste: fecha de la "
+        "operación (Decreto 442 de 2023), que puede ser anterior a la de "
+        "emisión. Es el StartDate de las líneas que no traen su periodo_desde.",
+    )
     fecha_vencimiento = models.DateField(
         "fecha de vencimiento", null=True, blank=True,
         help_text="DueDate del XML: hasta cuándo hay plazo para pagar. La DIAN "
