@@ -259,6 +259,8 @@ class ActualizacionEmisorTests(APITestCase):
             "departamento": c["antioquia"].id,
             "municipio": c["medellin"].id,
             "correo": "otro@empresa.co",
+            "correo_copia": "copia@empresa.co;contador@empresa.co",
+            "referencia_externa": "16",
             "acuse_automatico": True,
             "recibe_tipo_identificacion": c["nit"].id,
             "recibe_numero_identificacion": "1020304050",
@@ -274,8 +276,17 @@ class ActualizacionEmisorTests(APITestCase):
         self.assertEqual(emisor.razon_social, "Semantica Digital SAS")
         self.assertEqual(emisor.direccion, "Calle 10 # 20-30")
         self.assertEqual(emisor.correo, "otro@empresa.co")
+        self.assertEqual(emisor.correo_copia, "copia@empresa.co;contador@empresa.co")
+        self.assertEqual(emisor.referencia_externa, "16")
         self.assertTrue(emisor.acuse_automatico)
         self.assertEqual(emisor.recibe_nombres, "Ana")
+
+    def test_el_correo_copia_se_puede_vaciar(self):
+        """Vacío = el emisor deja de recibir copia de las notificaciones."""
+        self.client.patch(self.url, {"correo_copia": "copia@empresa.co"}, format="json")
+        resp = self.client.patch(self.url, {"correo_copia": ""}, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        self.assertEqual(Emisor.objects.get().correo_copia, "")
 
     def test_la_persona_que_recibe_va_completa(self):
         resp = self.client.patch(self.url, {"recibe_nombres": "Ana"}, format="json")
@@ -289,11 +300,9 @@ class ActualizacionEmisorTests(APITestCase):
         for campo, valor in (
             ("numero_identificacion", "900123456"),
             ("tipo_identificacion", self.cat["nit"].id),
-            ("referencia_externa", "16"),
             ("cuenta", None),
             ("telefono", "6041234567"),
             ("codigo_postal", "050001"),
-            ("correo_copia", "copia@empresa.co"),
             ("responsabilidades", []),
             ("activo", False),
             ("habilitado_nomina", True),
@@ -308,7 +317,6 @@ class ActualizacionEmisorTests(APITestCase):
                 )
         emisor = Emisor.objects.get()
         self.assertEqual(emisor.numero_identificacion, "901192048")
-        self.assertEqual(emisor.referencia_externa, "15")
 
     def test_un_campo_prohibido_tumba_el_patch_entero(self):
         """Nada se guarda a medias: ni siquiera los campos permitidos."""

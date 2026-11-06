@@ -45,8 +45,8 @@ MENSAJE_DUPLICADO = (
 CODIGO_DUPLICADO = "emisor_duplicado"
 
 # Lo único que se puede cambiar de un emisor ya dado de alta. El resto —la
-# identificación, la cuenta, la referencia externa…— se fija en
-# el alta, y mandarlo en un PATCH responde 400 en vez de ignorarse en silencio.
+# identificación, la cuenta, el teléfono…— se fija en el alta, y mandarlo en un
+# PATCH responde 400 en vez de ignorarse en silencio.
 CAMPOS_ACTUALIZABLES = (
     "razon_social",
     "tipo_organizacion",
@@ -55,6 +55,7 @@ CAMPOS_ACTUALIZABLES = (
     "departamento",
     "municipio",
     "correo",
+    "correo_copia",
     # Cómo conoce al emisor el ERP que lo integra; viaja como `cliente` en los
     # avisos de webhook.
     "referencia_externa",
