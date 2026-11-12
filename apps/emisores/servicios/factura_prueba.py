@@ -28,8 +28,9 @@ logger = logging.getLogger(__name__)
 VALOR = Decimal("1000.00")
 IVA = Decimal("190.00")
 
-# Cuántas facturas deja el alta del software de facturación.
-FACTURAS_DE_PRUEBA = 2
+# Cuántas facturas deja el alta del software de facturación. Además deja una
+# nota crédito que anula la primera.
+FACTURAS_DE_PRUEBA = 3
 
 # Cuántos documentos equivalentes P.O.S. deja el alta de su software.
 POS_DE_PRUEBA = 2
@@ -39,9 +40,8 @@ def _crear_documento(emisor, resolucion, *, codigo_tipo, consecutivo, observacio
                      **extra):
     """Arma un documento de prueba completo: cabecera, adquiriente y su línea.
 
-    Lo comparten la factura y la nota crédito, que salvo el tipo, la referencia
-    y el texto son el mismo documento. Estaba duplicado entero y las dos copias
-    ya habían empezado a separarse.
+    Lo comparten la factura, la nota crédito y el P.O.S., que salvo el tipo, la
+    referencia y el texto son el mismo documento.
 
     El adquiriente es el propio emisor: el Set de Pruebas no necesita un
     tercero real, y usar uno inventado mete datos de una persona que no existe
@@ -105,58 +105,26 @@ def _avanzar_consecutivo(resolucion, siguiente):
     resolucion.save(update_fields=["consecutivo_actual", "actualizado_en"])
 
 
-@transaction.atomic
-def crear_factura_prueba(emisor, resolucion, consecutivo=None):
-    """Crea —solo crea— una factura de prueba y su nota crédito, en borrador.
-
-    No las firma ni las envía. Es el material del Set de Pruebas: la nota anula
-    la factura entera y la referencia, que es lo que la DIAN espera ver.
-
-    Devuelve las dos, en ese orden.
-
-    **Sin llamantes desde el 2026-09-12**, cuando se retiró el endpoint
-    ``crear-factura-prueba``. El alta del software usa
-    ``crear_facturas_de_prueba`` (solo facturas); esta es la única pieza que
-    sabe armar la nota crédito del Set con su referencia, así que se conserva a
-    la espera de decidir si se vuelve a exponer o se emite como un documento
-    normal por ``POST /api/documentos/documento/``.
-    """
-    if consecutivo is None:
-        consecutivo = 990000000
-
-    factura = _crear_documento(
-        emisor, resolucion,
-        codigo_tipo=DocumentoTipo.Codigo.FACTURA_VENTA,
-        consecutivo=consecutivo,
-        observaciones="Documento del Set de Pruebas (habilitación).",
-    )
-    # La nota anula la factura entera (mismos importes) y la referencia por
-    # `documento_referencia`, de donde el UBL saca DiscrepancyResponse y
-    # BillingReference (ver apps.dian.ubl._ConstructorNotaUBL). Comparte
-    # consecutivo con su factura: las notas heredan la numeración del documento
-    # que corrigen, y el índice único incluye el tipo, así que no chocan.
-    nota_credito = _crear_documento(
-        emisor, resolucion,
-        codigo_tipo=DocumentoTipo.Codigo.NOTA_CREDITO,
-        consecutivo=consecutivo,
-        observaciones="Nota crédito del Set de Pruebas (habilitación).",
-        documento_referencia=factura,
-        concepto_correccion=Documento.ConceptoNotaCredito.ANULACION,
-    )
-    return factura, nota_credito
-
-
 def crear_facturas_de_prueba(emisor, resolucion, cantidad=FACTURAS_DE_PRUEBA):
-    """Deja ``cantidad`` facturas de prueba en borrador. Devuelve la lista.
+    """Deja ``cantidad`` facturas de prueba y una nota crédito, en borrador.
 
     Es lo que siembra el alta del software de facturación, para que el emisor
-    no se quede con resolución y sin nada que emitir contra ella. Solo facturas:
-    la nota crédito del Set de Pruebas se crea como un documento cualquiera por
-    ``POST /api/documentos/documento/``, referenciando la factura que anula.
+    no se quede con resolución y sin nada que emitir contra ella. Devuelve la
+    lista: primero las facturas, después la nota.
 
     Los consecutivos salen de ``resolucion.rango_desde`` —el primero que la
     DIAN autoriza— y no de un número fijo, para que valga con cualquier
     resolución y no solo con la del sandbox.
+
+    **La nota se crea antes de que exista lo que anula.** Anula la primera
+    factura entera (mismos importes, concepto 2) y la referencia por
+    ``documento_referencia``, de donde el UBL saca DiscrepancyResponse y
+    BillingReference. Como la factura aún no tiene CUFE, la nota no se puede
+    firmar hasta que esa factura esté aceptada: hasta entonces ``emitir``
+    responde 400 y la nota sigue en borrador —lo mismo que las notas de
+    ajuste de la nómina—. Comparte consecutivo con su factura: las notas
+    heredan la numeración del documento que corrigen, y el índice único
+    incluye el tipo, así que no chocan.
 
     **No duplica.** Si el emisor ya tiene facturas contra esa resolución se
     devuelve la lista vacía: el índice único (emisor, prefijo, consecutivo,
@@ -182,8 +150,17 @@ def crear_facturas_de_prueba(emisor, resolucion, cantidad=FACTURAS_DE_PRUEBA):
             )
             for i in range(cantidad)
         ]
+        anulada = facturas[0]
+        nota_credito = _crear_documento(
+            emisor, resolucion,
+            codigo_tipo=DocumentoTipo.Codigo.NOTA_CREDITO,
+            consecutivo=anulada.consecutivo,
+            observaciones="Nota crédito del Set de Pruebas (habilitación).",
+            documento_referencia=anulada,
+            concepto_correccion=Documento.ConceptoNotaCredito.ANULACION,
+        )
         _avanzar_consecutivo(resolucion, desde + cantidad)
-    return facturas
+    return [*facturas, nota_credito]
 
 
 def crear_documentos_pos_de_prueba(emisor, resolucion, cantidad=POS_DE_PRUEBA):
@@ -249,7 +226,8 @@ def sembrar_documentos_de_prueba(emisor, tipo_software, resolucion):
 
     Cada operación se siembra a su manera porque se numera a su manera:
 
-    - **Facturación**: facturas sobre la resolución. ``resolucion`` a ``None``
+    - **Facturación**: facturas sobre la resolución y una nota crédito que
+      anula la primera. ``resolucion`` a ``None``
       es la señal de que no hay nada que hacer —sin numeración no hay documento
       posible—, y es lo que devuelve ``sembrar_resolucion_de_pruebas`` cuando
       el emisor ya está habilitado.

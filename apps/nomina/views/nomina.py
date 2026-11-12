@@ -117,10 +117,6 @@ RESPUESTA_EMITIR_PENDIENTES = inline_serializer(
     },
 )
 
-# Lo que dice `accion` en la respuesta de `emitir/`.
-ACCION_ENVIADO = "enviado"
-ACCION_CONSULTADO = "consultado"
-
 # Lo que `emitir-pendientes/` toma: lo que aún no se ha enviado. `firmado` es
 # un envío anterior que no llegó a la DIAN.
 ESTADOS_POR_EMITIR = (DocumentoEstado.Nombre.BORRADOR, DocumentoEstado.Nombre.FIRMADO)
@@ -135,18 +131,6 @@ RESPUESTA_RESUMEN_MONITOR_NOMINA = inline_serializer(
     fields={str(nombre): campos.IntegerField() for nombre in ESTADOS_MONITOR},
 )
 
-# Estados finales: `emitir/` responde 400 y no llama a la DIAN.
-MENSAJES_NO_EMITIBLE = {
-    DocumentoEstado.Nombre.ACEPTADO: (
-        "La nómina {numero} ya fue aceptada por la DIAN: se corrige con una nota "
-        "de ajuste."
-    ),
-    DocumentoEstado.Nombre.RECHAZADO: (
-        "La nómina {numero} fue rechazada por la DIAN y no se vuelve a emitir: "
-        "su detalle se consulta con consultar/, y se borra y se crea de nuevo "
-        "corregida."
-    ),
-}
 
 
 class NominaViewSet(
@@ -317,31 +301,7 @@ class NominaViewSet(
         """
         nomina = self.get_object()
         try:
-            with transaction.atomic():
-                nomina = self._bloquear(nomina)
-                estado = nomina.estado.nombre
-                if estado in MENSAJES_NO_EMITIBLE:
-                    raise servicios.ErrorEmision(
-                        MENSAJES_NO_EMITIBLE[estado].format(numero=nomina.numero)
-                    )
-                if estado == DocumentoEstado.Nombre.ENVIADO:
-                    respuesta = servicios.actualizar_estado_nomina(nomina)
-                    accion = ACCION_CONSULTADO
-                else:
-                    accion = ACCION_ENVIADO
-                    if estado != DocumentoEstado.Nombre.FIRMADO:
-                        # Lo que no se puede firmar lo explica el propio servicio.
-                        servicios.generar_y_firmar_nomina(nomina)
-            if accion == ACCION_ENVIADO:
-                with transaction.atomic():
-                    nomina = self._bloquear(nomina)
-                    # Entre las dos transacciones otra petición pudo enviarla.
-                    if nomina.estado.nombre != DocumentoEstado.Nombre.FIRMADO:
-                        raise servicios.ErrorEmision(
-                            f"La nómina {nomina.numero} ya no está firmada y "
-                            f"pendiente de envío: está '{nomina.estado.nombre}'."
-                        )
-                    respuesta = servicios.enviar_nomina_a_dian(nomina)
+            nomina, accion, respuesta = servicios.emitir_nomina(nomina)
         except ValueError as exc:
             raise ErrorSolicitud(str(exc))
         except servicios.ErrorEmision as exc:

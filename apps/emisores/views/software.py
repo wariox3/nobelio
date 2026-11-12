@@ -1,5 +1,7 @@
 """API del software DIAN del emisor."""
 from django.db import IntegrityError, transaction
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import serializers as drf_serializers
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -9,6 +11,8 @@ from apps.emisores import models, serializers
 from apps.emisores.servicios import (
     crear_nomina_de_prueba,
     crear_notas_ajuste_de_prueba,
+    habilitacion,
+    motivo_no_puede_emitir,
     sembrar_documentos_de_prueba,
     sembrar_resolucion_de_pruebas,
 )
@@ -70,7 +74,8 @@ class SoftwareDianViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
         `sembrar_resolucion_de_pruebas`.
 
         Con la resolución puesta, el de facturación deja además sus facturas de
-        prueba en borrador, el de documento equivalente sus dos P.O.S. y el de
+        prueba en borrador y una nota crédito que anula la primera (se firma
+        cuando esa factura esté aceptada), el de documento equivalente sus dos P.O.S. y el de
         nómina sus 10 nóminas con una nota de ajuste cada una (la nota se firma
         cuando su nómina esté aceptada). Son el material del Set de Pruebas y se crean aquí
         por lo mismo que la resolución: para que el emisor no acabe el alta con
@@ -186,6 +191,96 @@ class SoftwareDianViewSet(AlcanceEmisorMixin, viewsets.ModelViewSet):
             },
             status=status.HTTP_201_CREATED,
         )
+
+    @extend_schema(
+        request=None,
+        responses={200: inline_serializer(
+            name="HabilitacionSoftware",
+            fields={
+                "id": drf_serializers.IntegerField(),
+                "terminado": drf_serializers.BooleanField(),
+                "motivo": drf_serializers.ChoiceField(choices=habilitacion.MOTIVOS),
+                "set_pruebas_aceptado": drf_serializers.BooleanField(),
+                "documentos": inline_serializer(
+                    name="HabilitacionDocumento",
+                    many=True,
+                    fields={
+                        "id": drf_serializers.UUIDField(),
+                        "numero": drf_serializers.CharField(),
+                        "tipo": drf_serializers.CharField(),
+                        "estado": drf_serializers.CharField(),
+                        "error": drf_serializers.CharField(),
+                    },
+                ),
+            },
+        )},
+    )
+    @action(detail=True, methods=["post"])
+    def habilitar(self, request, pk=None):
+        """Emite el Set de Pruebas y espera el veredicto de la DIAN.
+
+        ``POST /api/emisores/software/{id}/habilitar/``, sin cuerpo. **Solo
+        sobre un software de facturación o de nómina** y con el Set de Pruebas
+        sin aceptar.
+
+        Trabaja **en la propia petición** (hasta unos 75 segundos) sobre los
+        documentos de pruebas del emisor —los que siembra el alta del
+        software—:
+
+        - **Facturación**: primero las facturas de venta y después las notas
+          crédito. Los borradores se firman con la fecha de hoy —la DIAN la
+          exige y pudieron sembrarse otro día—.
+        - **Nómina**: primero las nóminas y después las notas de ajuste.
+
+        Firma y envía lo que está en borrador, envía lo firmado y consulta lo
+        enviado sin veredicto, cada pocos segundos, hasta que quede aceptado o
+        rechazado. Cada nota se emite en cuanto el documento que corrige está
+        aceptado, porque lleva su CUFE/CUNE.
+
+        Responde 200 con ``motivo``:
+
+        - ``set_aceptado``: la DIAN aceptó el Set; el software y el emisor
+          quedan habilitados. ``terminado: true``.
+        - ``sin_pendientes``: todo quedó aceptado o rechazado (una nota cuyo
+          documento se rechazó cuenta como terminada). ``terminado: true``.
+        - ``con_errores``: lo que queda no se pudo emitir; el motivo va en el
+          ``error`` de cada documento.
+        - ``dian_sin_respuesta`` o ``tiempo_agotado``: se cortó a mitad. **Se
+          vuelve a llamar** y sigue donde quedó, sin reenviar nada.
+
+        Un documento rechazado no se reintenta. Una factura se corrige y se
+        pasa a borrador con `reiniciar/`; una nómina se borra y se crea de
+        nuevo. Después se vuelve a llamar a este endpoint.
+        """
+        software = self.get_object()
+        conjunto = habilitacion.set_de(software)
+        if conjunto is None:
+            raise ErrorSolicitud(
+                "Solo se habilita por aquí un software de facturación o de "
+                f"nómina; este es de {software.get_tipo_display().lower()}."
+            )
+        if software.set_pruebas_aceptado:
+            raise ErrorSolicitud(
+                "El Set de Pruebas de este software ya fue aceptado por la DIAN."
+            )
+        motivo = motivo_no_puede_emitir(software.emisor)
+        if motivo:
+            raise ErrorSolicitud(motivo)
+        if not conjunto.documentos(software.emisor).exists():
+            raise ErrorSolicitud(
+                "El emisor no tiene documentos de pruebas que emitir para "
+                f"{software.get_tipo_display().lower()}. Se crean al registrar "
+                "el software."
+            )
+
+        motivo, documentos = habilitacion.habilitar(software)
+        return Response({
+            "id": software.pk,
+            "terminado": motivo in habilitacion.MOTIVOS_TERMINADO,
+            "motivo": motivo,
+            "set_pruebas_aceptado": software.set_pruebas_aceptado,
+            "documentos": documentos,
+        })
 
     def perform_destroy(self, instance):
         """Borra el software, salvo que ya esté habilitado o en producción.

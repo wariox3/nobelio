@@ -120,9 +120,16 @@ sin certificado cargado y vigente responde 400.
     - la **resolución del Set de Pruebas** (`SETP` 18760000001, con su clave
       técnica) — solo en facturación y solo si el emisor está en ambiente de
       pruebas para esa operación;
-    - **2 facturas de prueba en borrador**, numeradas desde el `rango_desde` de
-      esa resolución. Solo facturas: la nota crédito del Set se crea como un
-      documento cualquiera (paso 7), referenciando la factura que anula.
+    - **3 facturas de prueba en borrador**, numeradas desde el `rango_desde` de
+      esa resolución, y **1 nota crédito en borrador** que anula la primera
+      (concepto 2, mismo consecutivo). La nota no se puede firmar hasta que esa
+      factura esté aceptada —lleva su CUFE—: antes, `emitir` responde 400.
+    - Para emitirlos todos de una vez: `POST /api/emisores/software/{id}/habilitar/`
+      (facturación y nómina; en nómina, primero las nóminas y después sus notas
+      de ajuste). En la misma petición firma, envía y consulta hasta que
+      cada documento quede aceptado o rechazado, o la DIAN dé el Set por
+      aceptado. Si responde `dian_sin_respuesta` o `tiempo_agotado`, se vuelve a
+      llamar y sigue donde quedó.
   - El de **nómina** no lleva resolución —numera con prefijo y consecutivo
     propios— y deja en su lugar **10 nóminas en borrador**, prefijo `NESETP`,
     **una por mes hacia atrás desde el mes en curso**. Los periodos distintos no
@@ -426,7 +433,7 @@ Usuario / Llave API
       └→ Emisor → Certificado (B2, uno por emisor)
                     └→ Software DIAN (uno por operación)
                          └→ Resolución SETP  ┐ se siembran solas
-                         └→ 2 facturas       ┘ al registrar el de facturación
+                         └→ 3 facturas + NC  ┘ al registrar el de facturación
                 → Resolución (real, importada de la DIAN)
                 → Documento (lleva dentro al adquiriente)
                        └→ emitir (firma y envía) → xml/pdf

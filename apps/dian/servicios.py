@@ -529,6 +529,17 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
         and documento.concepto_correccion == Documento.ConceptoNotaCredito.ANULACION
     ):
         raise ErrorEmision("Una anulación de factura debe referenciar la factura que anula.")
+    # La nota lleva el número, el CUFE y la fecha del documento que corrige, y
+    # la DIAN comprueba que exista. El serializer ya lo exige al crear la nota
+    # por la API; aquí se vuelve a mirar porque el alta del software siembra la
+    # nota crédito del Set de Pruebas antes de que su factura esté emitida.
+    referencia = documento.documento_referencia
+    if referencia is not None and referencia.estado.nombre != DocumentoEstado.Nombre.ACEPTADO:
+        raise ErrorEmision(
+            f"El documento {referencia.numero or referencia.pk} que corrige esta "
+            f"nota está «{referencia.estado.descripcion}»: emítalo primero; la "
+            "nota se firma cuando la DIAN lo haya aceptado, porque lleva su CUFE."
+        )
 
     # El identificador se recalcula en cada firma. `construir` reutiliza el
     # `cufe_cude` que ya tenga el documento, y la `hora_emision` que acaba de
@@ -1058,6 +1069,7 @@ from apps.dian.servicios_nomina import (  # noqa: E402,F401
     actualizar_estado_nomina,
     consultar_estado_nomina,
     consultar_segun_envio_nomina,
+    emitir_nomina,
     enviar_nomina_a_dian,
     generar_y_firmar_nomina,
 )

@@ -5583,6 +5583,80 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/emisores/software/{id}/habilitar/:
+    post:
+      operationId: emisores_software_habilitar_create
+      description: |-
+        Emite el Set de Pruebas y espera el veredicto de la DIAN.
+
+        ``POST /api/emisores/software/{id}/habilitar/``, sin cuerpo. **Solo
+        sobre un software de facturación o de nómina** y con el Set de Pruebas
+        sin aceptar.
+
+        Trabaja **en la propia petición** (hasta unos 75 segundos) sobre los
+        documentos de pruebas del emisor —los que siembra el alta del
+        software—:
+
+        - **Facturación**: primero las facturas de venta y después las notas
+          crédito. Los borradores se firman con la fecha de hoy —la DIAN la
+          exige y pudieron sembrarse otro día—.
+        - **Nómina**: primero las nóminas y después las notas de ajuste.
+
+        Firma y envía lo que está en borrador, envía lo firmado y consulta lo
+        enviado sin veredicto, cada pocos segundos, hasta que quede aceptado o
+        rechazado. Cada nota se emite en cuanto el documento que corrige está
+        aceptado, porque lleva su CUFE/CUNE.
+
+        Responde 200 con ``motivo``:
+
+        - ``set_aceptado``: la DIAN aceptó el Set; el software y el emisor
+          quedan habilitados. ``terminado: true``.
+        - ``sin_pendientes``: todo quedó aceptado o rechazado (una nota cuyo
+          documento se rechazó cuenta como terminada). ``terminado: true``.
+        - ``con_errores``: lo que queda no se pudo emitir; el motivo va en el
+          ``error`` de cada documento.
+        - ``dian_sin_respuesta`` o ``tiempo_agotado``: se cortó a mitad. **Se
+          vuelve a llamar** y sigue donde quedó, sin reenviar nada.
+
+        Un documento rechazado no se reintenta. Una factura se corrige y se
+        pasa a borrador con `reiniciar/`; una nómina se borra y se crea de
+        nuevo. Después se vuelve a llamar a este endpoint.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este software DIAN.
+        required: true
+      tags:
+      - emisores
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HabilitacionSoftware'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/emisores/webhook/:
     get:
       operationId: emisores_webhook_list
@@ -12674,6 +12748,47 @@ components:
       description: |-
         * `devengado` - Devengado
         * `deduccion` - Deducción
+    HabilitacionDocumento:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        numero:
+          type: string
+        tipo:
+          type: string
+        estado:
+          type: string
+        error:
+          type: string
+      required:
+      - error
+      - estado
+      - id
+      - numero
+      - tipo
+    HabilitacionSoftware:
+      type: object
+      properties:
+        id:
+          type: integer
+        terminado:
+          type: boolean
+        motivo:
+          $ref: '#/components/schemas/MotivoEnum'
+        set_pruebas_aceptado:
+          type: boolean
+        documentos:
+          type: array
+          items:
+            $ref: '#/components/schemas/HabilitacionDocumento'
+      required:
+      - documentos
+      - id
+      - motivo
+      - set_pruebas_aceptado
+      - terminado
     ImportarResolucionesSolicitudRequest:
       type: object
       properties:
@@ -12681,6 +12796,20 @@ components:
           type: integer
       required:
       - emisor
+    MotivoEnum:
+      enum:
+      - set_aceptado
+      - sin_pendientes
+      - con_errores
+      - dian_sin_respuesta
+      - tiempo_agotado
+      type: string
+      description: |-
+        * `set_aceptado` - set_aceptado
+        * `sin_pendientes` - sin_pendientes
+        * `con_errores` - con_errores
+        * `dian_sin_respuesta` - dian_sin_respuesta
+        * `tiempo_agotado` - tiempo_agotado
     Municipio:
       type: object
       properties:

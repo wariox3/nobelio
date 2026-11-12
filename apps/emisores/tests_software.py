@@ -383,22 +383,21 @@ class SoftwareDianAPITests(APITestCase):
             documento_tipo__codigo=DocumentoTipo.Codigo.FACTURA_VENTA,
         ).order_by("consecutivo")
 
-    def test_crear_software_de_facturacion_deja_dos_facturas_en_borrador(self):
+    def test_crear_software_de_facturacion_deja_tres_facturas_en_borrador(self):
         resp = self.client.post(self.url, self._payload(), format="json")
         self.assertEqual(resp.status_code, 201, resp.data)
 
         facturas = list(self._facturas())
-        self.assertEqual(len(facturas), 2)
+        self.assertEqual(len(facturas), 3)
         resolucion = Resolucion.objects.get(emisor=self.emisor)
         # Numeradas desde el primer consecutivo que autoriza la resolución.
+        desde = resolucion.rango_desde
         self.assertEqual(
-            [f.consecutivo for f in facturas],
-            [resolucion.rango_desde, resolucion.rango_desde + 1],
+            [f.consecutivo for f in facturas], [desde, desde + 1, desde + 2],
         )
-        # Y la resolución queda apuntando al siguiente libre.
-        self.assertEqual(
-            resolucion.consecutivo_actual, resolucion.rango_desde + 2
-        )
+        # Y la resolución queda apuntando al siguiente libre: la nota no gasta
+        # consecutivo, comparte el de su factura.
+        self.assertEqual(resolucion.consecutivo_actual, desde + 3)
         for factura in facturas:
             self.assertEqual(factura.estado.nombre, DocumentoEstado.Nombre.BORRADOR)
             self.assertEqual(factura.resolucion_id, resolucion.id)
@@ -406,16 +405,26 @@ class SoftwareDianAPITests(APITestCase):
             # Se crean, no se emiten: sin XML y sin CUFE.
             self.assertFalse(factura.xml_archivo)
 
-    def test_no_crea_notas_credito(self):
-        """Solo facturas; la nota del Set se crea aparte, con su pareja."""
+    def test_crea_una_nota_credito_que_anula_la_primera_factura(self):
         self.client.post(self.url, self._payload(), format="json")
 
-        self.assertFalse(
-            Documento.objects.filter(
-                emisor=self.emisor,
-                documento_tipo__codigo=DocumentoTipo.Codigo.NOTA_CREDITO,
-            ).exists()
+        notas = Documento.objects.filter(
+            emisor=self.emisor,
+            documento_tipo__codigo=DocumentoTipo.Codigo.NOTA_CREDITO,
         )
+        self.assertEqual(notas.count(), 1)
+        nota = notas.get()
+        primera = self._facturas().first()
+        self.assertEqual(nota.documento_referencia_id, primera.id)
+        self.assertEqual(nota.consecutivo, primera.consecutivo)
+        self.assertEqual(
+            nota.concepto_correccion, Documento.ConceptoNotaCredito.ANULACION,
+        )
+        self.assertEqual(nota.estado.nombre, DocumentoEstado.Nombre.BORRADOR)
+        # Anula la factura entera: mismos importes.
+        self.assertEqual(nota.total_a_pagar, primera.total_a_pagar)
+        self.assertEqual(nota.ambiente, Ambiente.PRUEBAS)
+        self.assertFalse(nota.xml_archivo)
 
     def test_sin_resolucion_no_hay_facturas(self):
         """Habilitado no se siembra resolución, así que tampoco facturas."""
@@ -587,7 +596,14 @@ class SoftwareDianAPITests(APITestCase):
         resp = self.client.post(self.url, self._payload(), format="json")
 
         self.assertEqual(resp.status_code, 201, resp.data)
-        self.assertEqual(self._facturas().count(), 2)
+        self.assertEqual(self._facturas().count(), 3)
+        self.assertEqual(
+            Documento.objects.filter(
+                emisor=self.emisor,
+                documento_tipo__codigo=DocumentoTipo.Codigo.NOTA_CREDITO,
+            ).count(),
+            1,
+        )
 
     # --- Borrar el software -------------------------------------------------
 

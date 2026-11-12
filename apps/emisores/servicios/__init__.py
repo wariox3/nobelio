@@ -9,7 +9,6 @@ from .emision import (
 from .factura_prueba import (
     FACTURAS_DE_PRUEBA,
     POS_DE_PRUEBA,
-    crear_factura_prueba,
     crear_documento_de_prueba,
     crear_documentos_pos_de_prueba,
     crear_facturas_de_prueba,
@@ -39,7 +38,6 @@ __all__ = [
     "motivo_no_puede_emitir",
     "FACTURAS_DE_PRUEBA",
     "POS_DE_PRUEBA",
-    "crear_factura_prueba",
     "crear_documento_de_prueba",
     "crear_documentos_pos_de_prueba",
     "crear_facturas_de_prueba",

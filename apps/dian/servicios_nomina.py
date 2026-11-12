@@ -15,10 +15,13 @@ import logging
 
 from django.conf import settings
 from django.core.files.base import ContentFile
+from django.db import transaction
 from django.utils import timezone
 
 from apps.dian import identificadores as ident, nomina as xml_nomina
 from apps.dian.servicios import (
+    ACCION_CONSULTADO,
+    ACCION_ENVIADO,
     ErrorEmision,
     MENSAJE_EMISOR_INACTIVO,
     _anotar_si_cerro_el_set,
@@ -385,3 +388,69 @@ def actualizar_estado_nomina(nomina, *, cliente=None, ambiente=None, **cred):
         envio=nomina.envio,
     ), etiqueta="nomina")
     return respuesta
+
+
+# ---------------------------------------------------------------------------
+# Emitir: de donde esté hasta el estado final
+# ---------------------------------------------------------------------------
+# Estados finales: `emitir_nomina` no llama a la DIAN.
+MENSAJES_NOMINA_NO_EMITIBLE = {
+    DocumentoEstado.Nombre.ACEPTADO: (
+        "La nómina {numero} ya fue aceptada por la DIAN: se corrige con una nota "
+        "de ajuste."
+    ),
+    DocumentoEstado.Nombre.RECHAZADO: (
+        "La nómina {numero} fue rechazada por la DIAN y no se vuelve a emitir: "
+        "su detalle se consulta con consultar/, y se borra y se crea de nuevo "
+        "corregida."
+    ),
+}
+
+
+def _bloquear_nomina(nomina):
+    """Relee la nómina con ``FOR UPDATE``. Hay que estar en transacción."""
+    return type(nomina).objects.select_for_update().get(pk=nomina.pk)
+
+
+def emitir_nomina(nomina):
+    """Lleva la nómina a su estado final ante la DIAN.
+
+    Lo mismo que `apps.dian.servicios.emitir` para documentos, y por los mismos
+    motivos. La usan `emitir/` de la nómina y la habilitación del software de
+    nómina. Devuelve ``(nomina, accion, respuesta)``, con la nómina releída.
+
+    **Son dos transacciones, y a propósito.** La firma se confirma antes de
+    enviar: si el envío falla por red, la nómina queda `firmado` con su CUNE y
+    el reintento manda **ese mismo** CUNE.
+
+    - `borrador`: se firma y se envía.
+    - `firmado` —un intento anterior que no llegó a enviar—: solo se envía.
+    - `enviado` —sin veredicto, como en el Set de Pruebas—: se consulta y se
+      aplica el resultado, sin reenviar.
+    - `aceptado` y `rechazado`: ``ErrorEmision``.
+
+    Lanza ``ErrorEmision`` (o ``ValueError``) por lo que no se puede emitir y
+    ``requests.RequestException`` si la DIAN no responde.
+    """
+    with transaction.atomic():
+        nomina = _bloquear_nomina(nomina)
+        estado = nomina.estado.nombre
+        if estado in MENSAJES_NOMINA_NO_EMITIBLE:
+            raise ErrorEmision(
+                MENSAJES_NOMINA_NO_EMITIBLE[estado].format(numero=nomina.numero)
+            )
+        if estado == DocumentoEstado.Nombre.ENVIADO:
+            return nomina, ACCION_CONSULTADO, actualizar_estado_nomina(nomina)
+        if estado != DocumentoEstado.Nombre.FIRMADO:
+            # Lo que no se puede firmar lo explica el propio servicio.
+            generar_y_firmar_nomina(nomina)
+
+    with transaction.atomic():
+        nomina = _bloquear_nomina(nomina)
+        # Entre las dos transacciones otra petición pudo enviarla.
+        if nomina.estado.nombre != DocumentoEstado.Nombre.FIRMADO:
+            raise ErrorEmision(
+                f"La nómina {nomina.numero} ya no está firmada y "
+                f"pendiente de envío: está '{nomina.estado.nombre}'."
+            )
+        return nomina, ACCION_ENVIADO, enviar_nomina_a_dian(nomina)
