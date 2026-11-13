@@ -60,6 +60,13 @@ from apps.documentos.serializers.documento import (
     mensaje_resolucion_no_aplica,
     mensaje_sin_resolucion,
     MENSAJE_ANULACION_SIN_REFERENCIA,
+    MENSAJE_DOS_REFERENCIAS,
+    MENSAJE_REFERENCIA_EXTERNA_POSTERIOR,
+    mensaje_nota_sin_referencia,
+    mensaje_referencia_externa_no_aplica,
+)
+from apps.documentos.serializers.documento_referencia_externo import (
+    MENSAJE_CUFE_CUDE_INVALIDO,
 )
 from apps.documentos.tests_utils import crear_documento_factura
 from apps.documentos.views import DocumentoViewSet
@@ -1531,6 +1538,131 @@ class DocumentoAPITests(APITestCase):
         self.assertEqual(
             DocumentoTipo.CODIGOS_CON_REFERENCIA_OBLIGATORIA,
             {Codigo.NOTA_AJUSTE, Codigo.NOTA_AJUSTE_DE_CREDITO, Codigo.NOTA_AJUSTE_DE_DEBITO},
+        )
+
+    # --- Nota de ajuste sobre un documento soporte de otro sistema ----------
+
+    CUDS_EXTERNO = "ab" * 48
+
+    def _referencia_externa(self, **cambios):
+        return {
+            "numero": "DS123", "cufe_cude": self.CUDS_EXTERNO,
+            "fecha": (timezone.localdate() - timedelta(days=3)).isoformat(),
+            **cambios,
+        }
+
+    def _payload_nota_ajuste(self, **cambios):
+        return self._payload_nota(
+            DocumentoTipo.Codigo.NOTA_AJUSTE, Documento.ConceptoNotaAjuste.OTROS,
+            prefijo="NA", numero="NA1", **cambios,
+        )
+
+    def test_la_nota_de_ajuste_se_crea_con_referencia_externa(self):
+        externo = self._referencia_externa()
+        resp = self._post(self._payload_nota_ajuste(documento_referencia_externo=externo))
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+        self.assertEqual(resp.data["documento_referencia_externo"], externo)
+        self.assertIsNone(resp.data["documento_referencia"])
+
+        nota = Documento.objects.get(pk=resp.data["id"])
+        self.assertEqual(nota.documento_referencia_externo, externo)
+        ref = nota.referencia_corregida
+        self.assertEqual(
+            (ref.numero, ref.cufe_cude, ref.fecha.isoformat()),
+            ("DS123", self.CUDS_EXTERNO, externo["fecha"]),
+        )
+        detalle = self.client.get(f"/api/documentos/documento/{nota.pk}/")
+        self.assertEqual(detalle.data["documento_referencia_externo"], externo)
+
+    def test_la_nota_de_ajuste_sin_ninguna_referencia_no_se_crea(self):
+        tipo = DocumentoTipo.objects.get(codigo=DocumentoTipo.Codigo.NOTA_AJUSTE)
+        resp = self._post(self._payload_nota_ajuste())
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            errores_por_campo(resp),
+            {"documento_referencia": [mensaje_nota_sin_referencia(tipo)]},
+        )
+        self.assertIn("documento_referencia_externo", mensaje_nota_sin_referencia(tipo))
+
+    def test_la_nota_credito_no_admite_referencia_externa(self):
+        """Por ahora solo la nota de ajuste: la de factura sigue como estaba."""
+        tipo = DocumentoTipo.objects.get(codigo=DocumentoTipo.Codigo.NOTA_CREDITO)
+        resp = self._post(self._payload_nota(
+            DocumentoTipo.Codigo.NOTA_CREDITO, Documento.ConceptoNotaCredito.OTROS,
+            documento_referencia_externo=self._referencia_externa(),
+        ))
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            errores_por_campo(resp),
+            {"documento_referencia_externo": [mensaje_referencia_externa_no_aplica(tipo)]},
+        )
+
+    def test_la_factura_no_admite_referencia_externa(self):
+        tipo = DocumentoTipo.objects.get(codigo=DocumentoTipo.Codigo.FACTURA_VENTA)
+        payload = self._payload_documento()
+        payload["documento_referencia_externo"] = self._referencia_externa()
+        resp = self._post(payload)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            errores_por_campo(resp),
+            {"documento_referencia_externo": [mensaje_referencia_externa_no_aplica(tipo)]},
+        )
+
+    def test_la_nota_de_ajuste_no_admite_las_dos_referencias(self):
+        soporte = DocumentoTipo.objects.get(codigo=DocumentoTipo.Codigo.DOCUMENTO_SOPORTE)
+        self.documento.documento_tipo = soporte
+        self.documento.save(update_fields=["documento_tipo"])
+        resp = self._post(self._payload_nota_ajuste(
+            documento_referencia=self._factura_aceptada(),
+            documento_referencia_externo=self._referencia_externa(),
+        ))
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            errores_por_campo(resp),
+            {"documento_referencia_externo": [MENSAJE_DOS_REFERENCIAS]},
+        )
+
+    def test_la_fecha_del_documento_externo_no_puede_ser_posterior_a_la_nota(self):
+        manana = (timezone.localdate() + timedelta(days=1)).isoformat()
+        resp = self._post(self._payload_nota_ajuste(
+            documento_referencia_externo=self._referencia_externa(fecha=manana),
+        ))
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            errores_por_campo(resp),
+            {"documento_referencia_externo.fecha": [MENSAJE_REFERENCIA_EXTERNA_POSTERIOR]},
+        )
+
+    def test_el_documento_externo_del_mismo_dia_se_admite(self):
+        hoy = timezone.localdate().isoformat()
+        resp = self._post(self._payload_nota_ajuste(
+            documento_referencia_externo=self._referencia_externa(fecha=hoy),
+        ))
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED, resp.data)
+
+    def test_el_cuds_externo_mal_formado_no_se_admite(self):
+        for cuds in ("xyz", "g" * 96, "a" * 95):
+            with self.subTest(cuds=cuds):
+                resp = self._post(self._payload_nota_ajuste(
+                    documento_referencia_externo=self._referencia_externa(cufe_cude=cuds),
+                ))
+                self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+                self.assertEqual(
+                    errores_por_campo(resp),
+                    {"documento_referencia_externo.cufe_cude": [MENSAJE_CUFE_CUDE_INVALIDO]},
+                )
+
+    def test_el_documento_externo_exige_sus_tres_claves_y_ninguna_mas(self):
+        externo = self._referencia_externa(otra="x")
+        del externo["numero"]
+        resp = self._post(self._payload_nota_ajuste(documento_referencia_externo=externo))
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST, resp.data)
+        self.assertEqual(
+            sorted(errores_por_campo(resp)),
+            ["documento_referencia_externo.numero", "documento_referencia_externo.otra"],
+        )
+        self.assertEqual(
+            sorted(codigos(resp)), sorted([CODIGO_OBLIGATORIO, CODIGO_CAMPO_DESCONOCIDO]),
         )
 
     def test_el_prefijo_vacio_pasa_la_estructura_y_lo_juzga_la_resolucion(self):

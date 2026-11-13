@@ -520,12 +520,12 @@ def generar_y_firmar(documento, *, firmador=None, ambiente=None, **cred):
         )
     if (
         codigo_tipo in DocumentoTipo.CODIGOS_CON_REFERENCIA_OBLIGATORIA
-        and documento.documento_referencia is None
+        and not documento.tiene_referencia
     ):
         raise ErrorEmision("La nota debe referenciar el documento que corrige.")
     if (
         codigo_tipo == DocumentoTipo.Codigo.NOTA_CREDITO
-        and documento.documento_referencia is None
+        and not documento.tiene_referencia
         and documento.concepto_correccion == Documento.ConceptoNotaCredito.ANULACION
     ):
         raise ErrorEmision("Una anulación de factura debe referenciar la factura que anula.")

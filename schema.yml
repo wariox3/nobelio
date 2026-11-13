@@ -9591,6 +9591,11 @@ components:
           format: uuid
           nullable: true
           title: Documento de referencia
+        documento_referencia_externo:
+          allOf:
+          - $ref: '#/components/schemas/DocumentoReferenciaExterno'
+          readOnly: true
+          nullable: true
         observaciones:
           type: string
         detalles:
@@ -9618,6 +9623,7 @@ components:
       - creado_en
       - cufe_cude
       - detalles
+      - documento_referencia_externo
       - documento_tipo
       - documento_tipo_nombre
       - emisor
@@ -9759,6 +9765,10 @@ components:
         documento_referencia:
           type: string
           format: uuid
+          nullable: true
+        documento_referencia_externo:
+          allOf:
+          - $ref: '#/components/schemas/DocumentoReferenciaExterno'
           nullable: true
         concepto_correccion:
           type: string
@@ -9938,6 +9948,10 @@ components:
         documento_referencia:
           type: string
           format: uuid
+          nullable: true
+        documento_referencia_externo:
+          allOf:
+          - $ref: '#/components/schemas/DocumentoReferenciaExternoRequest'
           nullable: true
         concepto_correccion:
           type: string
@@ -10563,6 +10577,11 @@ components:
           format: uuid
           nullable: true
           title: Documento de referencia
+        documento_referencia_externo:
+          allOf:
+          - $ref: '#/components/schemas/DocumentoReferenciaExterno'
+          readOnly: true
+          nullable: true
         observaciones:
           type: string
         pos:
@@ -10588,6 +10607,7 @@ components:
       - consecutivo
       - creado_en
       - cufe_cude
+      - documento_referencia_externo
       - documento_tipo
       - documento_tipo_nombre
       - emisor
@@ -11192,6 +11212,56 @@ components:
       - total_a_pagar
       - validacion_codigo
       - verificacion_estado
+    DocumentoReferenciaExterno:
+      type: object
+      description: |-
+        Documento que corrige la nota cuando se emitió en otro sistema.
+
+        Son los datos con que la DIAN lo conoce y los únicos que el XML de la nota
+        necesita de él: el número (``cbc:ReferenceID`` y ``cbc:ID``), su
+        CUFE/CUDE/CUDS (``cbc:UUID``) y su fecha de emisión (``cbc:IssueDate``).
+        Como no está en nobelio, no se comprueba que exista ni que esté aceptado:
+        eso lo valida la DIAN al recibir la nota.
+      properties:
+        numero:
+          type: string
+          maxLength: 30
+        cufe_cude:
+          type: string
+          maxLength: 96
+        fecha:
+          type: string
+          format: date
+      required:
+      - cufe_cude
+      - fecha
+      - numero
+    DocumentoReferenciaExternoRequest:
+      type: object
+      description: |-
+        Documento que corrige la nota cuando se emitió en otro sistema.
+
+        Son los datos con que la DIAN lo conoce y los únicos que el XML de la nota
+        necesita de él: el número (``cbc:ReferenceID`` y ``cbc:ID``), su
+        CUFE/CUDE/CUDS (``cbc:UUID``) y su fecha de emisión (``cbc:IssueDate``).
+        Como no está en nobelio, no se comprueba que exista ni que esté aceptado:
+        eso lo valida la DIAN al recibir la nota.
+      properties:
+        numero:
+          type: string
+          minLength: 1
+          maxLength: 30
+        cufe_cude:
+          type: string
+          minLength: 1
+          maxLength: 96
+        fecha:
+          type: string
+          format: date
+      required:
+      - cufe_cude
+      - fecha
+      - numero
     DocumentoTipoEnum:
       enum:
       - factura_venta

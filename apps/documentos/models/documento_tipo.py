@@ -83,6 +83,14 @@ class DocumentoTipo(ModeloConFechas):
     })
     CODIGOS_CON_REFERENCIA_OBLIGATORIA = CODIGOS_CON_REFERENCIA - CODIGOS_SIN_REFERENCIA_PERMITIDA
 
+    # Las notas que pueden corregir un documento emitido en otro sistema, que
+    # no está en nobelio: lo describen en `documento_referencia_externo` en vez
+    # de apuntarlo con `documento_referencia`. Por ahora solo la nota de
+    # ajuste; el dato es genérico (`cufe_cude`) para sumar las demás notas.
+    CODIGOS_CON_REFERENCIA_EXTERNA = frozenset({
+        Codigo.NOTA_AJUSTE,
+    })
+
     # Los tipos en los que el `adquiriente` del documento no es el receptor sino
     # el **vendedor** no obligado a facturar (SNO), y el que emite y firma es el
     # comprador. De ahí salen los roles UBL invertidos y el CustomizationID por

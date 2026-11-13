@@ -261,3 +261,58 @@ class DocumentoSoporteTests(NotasTestBase):
         esquema, arbol = _validar_xsd(xml, "UBL-Invoice-2.1.xsd")
         if not esquema.validate(arbol):
             self.fail("Documento soporte inválido:\n" + str(esquema.error_log))
+
+
+class NotaAjusteReferenciaExternaTests(NotasTestBase):
+    """Nota de ajuste sobre un documento soporte emitido en otro sistema.
+
+    El documento corregido no está en nobelio: el XML toma su número, su CUDS y
+    su fecha de `documento_referencia_externo` en vez del FK.
+    """
+
+    CUDS = "ab" * 48
+
+    def _xml(self):
+        nota = self._crear_nota(doc.DocumentoTipo.Codigo.NOTA_AJUSTE, "NA1", 1)
+        nota.documento_referencia = None
+        nota.documento_referencia_externo = {
+            "numero": "DS123", "cufe_cude": self.CUDS, "fecha": "2024-01-15",
+        }
+        nota.concepto_correccion = doc.Documento.ConceptoNotaAjuste.OTROS
+        nota.save(update_fields=[
+            "documento_referencia", "documento_referencia_externo", "concepto_correccion",
+        ])
+        return ubl.constructor_para(nota, software=self.base["software"], ambiente=2).generar_xml()
+
+    def test_la_referencia_sale_del_documento_externo(self):
+        arbol = etree.fromstring(self._xml())
+        ns = ubl.NS
+        disc = arbol.find(f"{{{ns['cac']}}}DiscrepancyResponse")
+        self.assertEqual(disc.findtext(f"{{{ns['cbc']}}}ReferenceID"), "DS123")
+        self.assertEqual(
+            disc.findtext(f"{{{ns['cbc']}}}ResponseCode"),
+            doc.Documento.ConceptoNotaAjuste.OTROS,
+        )
+        ref = arbol.find(
+            f"{{{ns['cac']}}}BillingReference/{{{ns['cac']}}}InvoiceDocumentReference"
+        )
+        self.assertEqual(ref.findtext(f"{{{ns['cbc']}}}ID"), "DS123")
+        uuid = ref.find(f"{{{ns['cbc']}}}UUID")
+        self.assertEqual(uuid.text, self.CUDS)
+        self.assertEqual(uuid.get("schemeName"), "CUDS-SHA384")
+        self.assertEqual(ref.findtext(f"{{{ns['cbc']}}}IssueDate"), "2024-01-15")
+
+    def test_valida_contra_xsd(self):
+        esquema, arbol = _validar_xsd(self._xml(), "UBL-CreditNote-2.1.xsd")
+        if not esquema.validate(arbol):
+            self.fail("Nota de ajuste inválida:\n" + str(esquema.error_log))
+
+    def test_la_base_no_admite_las_dos_referencias(self):
+        from django.db import IntegrityError, transaction
+
+        nota = self._crear_nota(doc.DocumentoTipo.Codigo.NOTA_AJUSTE, "NA2", 2)
+        nota.documento_referencia_externo = {
+            "numero": "DS123", "cufe_cude": self.CUDS, "fecha": "2024-01-15",
+        }
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            nota.save(update_fields=["documento_referencia_externo"])

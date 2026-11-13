@@ -58,7 +58,7 @@ class _ConstructorNotaUBL(ConstructorUBL):
     def __init__(self, documento, *args, **kwargs):
         super().__init__(documento, *args, **kwargs)
         if (
-            documento.documento_referencia_id is None
+            not documento.tiene_referencia
             and self.customization_id_sin_referencia
             and not kwargs.get("customization_id")
         ):
@@ -67,7 +67,8 @@ class _ConstructorNotaUBL(ConstructorUBL):
     def _discrepancia(self, raiz):
         # El concepto va siempre, también sin referencia: es el que dice por
         # qué se corrige. ReferenceID (el número corregido) solo si lo hay.
-        ref = self.doc.documento_referencia
+        # La referencia sale del documento de nobelio o del externo, igual.
+        ref = self.doc.referencia_corregida
         if ref is None and not self.customization_id_sin_referencia:
             return
         if ref is None:
@@ -92,14 +93,14 @@ class _ConstructorNotaUBL(ConstructorUBL):
         _sub(periodo, "cbc", "EndDate", fecha)
 
     def _referencias(self, raiz):
-        ref = self.doc.documento_referencia
+        ref = self.doc.referencia_corregida
         if ref is None:
             return
         billing = _sub(raiz, "cac", "BillingReference")
         idr = _sub(billing, "cac", "InvoiceDocumentReference")
         _sub(idr, "cbc", "ID", ref.numero)
         _sub(idr, "cbc", "UUID", ref.cufe_cude, schemeName=self.scheme_name_referencia)
-        _sub(idr, "cbc", "IssueDate", ref.fecha_emision.isoformat())
+        _sub(idr, "cbc", "IssueDate", ref.fecha.isoformat())
         if self.codigo_tipo_referencia:
             _sub(idr, "cbc", "DocumentTypeCode", self.codigo_tipo_referencia)
 

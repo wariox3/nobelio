@@ -16,6 +16,7 @@ from apps.seguridad.alcance import RelacionDelAlcance
 from .adquiriente import AdquirienteSerializer
 from .documento_detalle import MENSAJE_PERIODO_AL_REVES, DocumentoDetalleSerializer
 from .documento_pos import DocumentoPOSSerializer
+from .documento_referencia_externo import DocumentoReferenciaExternoSerializer
 from .documento_error import DocumentoErrorSerializer
 
 # El emisor solo conoce el número que le dio la DIAN, no nuestros ids, así que
@@ -189,11 +190,41 @@ def mensaje_nota_sin_referencia(tipo):
     ajuste referencia un documento soporte, no una factura.
     """
     esperado = TIPO_QUE_CORRIGE_CADA_NOTA[tipo.codigo]
-    return (
+    mensaje = (
         f"Una {tipo.nombre.lower()} debe referenciar el documento que corrige: "
         "indique en `documento_referencia` el id del documento de tipo "
-        f"{esperado.label.lower()}."
+        f"{esperado.label.lower()}"
     )
+    if tipo.codigo in TIPOS_CON_REFERENCIA_EXTERNA:
+        mensaje += (
+            " o, si se emitió en otro sistema, sus datos en "
+            "`documento_referencia_externo`"
+        )
+    return mensaje + "."
+
+
+# Las notas que admiten un documento corregido emitido fuera de nobelio.
+TIPOS_CON_REFERENCIA_EXTERNA = models.DocumentoTipo.CODIGOS_CON_REFERENCIA_EXTERNA
+
+MENSAJE_DOS_REFERENCIAS = (
+    "Indique el documento que corrige la nota de una sola forma: "
+    "`documento_referencia` si está en nobelio o `documento_referencia_externo` "
+    "si se emitió en otro sistema, no los dos."
+)
+
+
+def mensaje_referencia_externa_no_aplica(tipo):
+    """Mensaje para un documento que no admite referencia externa y la trae."""
+    return (
+        f"{tipo.nombre} no admite `documento_referencia_externo`: por ahora solo "
+        "la nota de ajuste al documento soporte puede corregir un documento "
+        "emitido en otro sistema."
+    )
+
+
+MENSAJE_REFERENCIA_EXTERNA_POSTERIOR = (
+    "La fecha del documento corregido no puede ser posterior a la de la nota."
+)
 
 
 def mensaje_fecha_emision_no_es_hoy(hoy):
@@ -306,6 +337,9 @@ class DocumentoSerializer(serializers.ModelSerializer):
     resolucion_numero = serializers.CharField(
         source="resolucion.numero_resolucion", read_only=True, default=None,
     )
+    documento_referencia_externo = DocumentoReferenciaExternoSerializer(
+        read_only=True, allow_null=True,
+    )
 
     class Meta:
         model = models.Documento
@@ -324,8 +358,8 @@ class DocumentoSerializer(serializers.ModelSerializer):
             "moneda", "forma_pago", "medio_pago",
             "valor_bruto", "total_impuestos",
             "total_descuentos", "descuentos_motivo", "total_cargos", "cargos_motivo",
-            "total_a_pagar", "documento_referencia", "observaciones", "detalles",
-            "pos", "creado_en", "actualizado_en",
+            "total_a_pagar", "documento_referencia", "documento_referencia_externo",
+            "observaciones", "detalles", "pos", "creado_en", "actualizado_en",
         ]
         read_only_fields = [
             "estado", "cufe_cude", "track_id", "envio", "ambiente", "fecha_validacion",
@@ -415,6 +449,11 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
         queryset=models.Documento.objects.select_related("documento_tipo", "estado"),
         required=False, allow_null=True,
     )
+    # El documento corregido cuando se emitió en otro sistema (solo la nota de
+    # ajuste, por ahora): excluyente con `documento_referencia`.
+    documento_referencia_externo = DocumentoReferenciaExternoSerializer(
+        required=False, allow_null=True,
+    )
 
     class Meta:
         model = models.Documento
@@ -425,7 +464,7 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
             "fecha_emision", "fecha_compra", "moneda", "forma_pago", "medio_pago",
             "total_descuentos", "descuentos_motivo",
             "total_cargos", "cargos_motivo", "documento_referencia",
-            "concepto_correccion", "fecha_vencimiento",
+            "documento_referencia_externo", "concepto_correccion", "fecha_vencimiento",
             "orden_compra", "orden_compra_fecha", "orden_compra_tipo",
             "orden_compra_documento",
             "observaciones", "detalles", "pos",
@@ -541,11 +580,13 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"documento_referencia": "No pertenece al emisor del documento."}
             )
+        externo = self._referencia_externa(attrs, tipo, referencia)
         # Una nota sin referencia es un documento que nace muerto: se crea bien,
         # consume un consecutivo y solo falla al emitirlo, cuando ya no se puede
         # editar. La misma regla la exige `generar_y_firmar`.
         if (
             referencia is None
+            and externo is None
             and tipo is not None
             and tipo.codigo in TIPOS_QUE_EXIGEN_REFERENCIA
         ):
@@ -554,7 +595,7 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
             )
         self._validar_referencia(attrs, tipo, referencia)
         self._validar_concepto(attrs, tipo)
-        self._validar_anulacion_sin_referencia(attrs, tipo, referencia)
+        self._validar_anulacion_sin_referencia(attrs, tipo, referencia or externo)
         self._validar_vencimiento(attrs, tipo)
         self._validar_fecha_compra(attrs, tipo)
         self._validar_retenciones(attrs, tipo)
@@ -779,6 +820,43 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
             raise serializers.ValidationError({
                 "documento_referencia": mensaje_referencia_de_otro_ambiente(referencia),
             })
+
+    def _referencia_externa(self, attrs, tipo, referencia):
+        """El documento corregido emitido en otro sistema, ya validado.
+
+        Solo lo admiten las notas de ``TIPOS_CON_REFERENCIA_EXTERNA`` y nunca
+        junto con `documento_referencia`: la nota corrige un documento, y dos
+        referencias dejarían al XML eligiendo cuál. La fecha no puede ser
+        posterior a la de la nota: no se corrige lo que todavía no existía.
+
+        Lo demás que `_validar_referencia` mira en un documento de nobelio
+        —tipo, estado, ambiente— aquí no se puede: no está en la base. Lo
+        comprueba la DIAN al recibir la nota.
+        """
+        if "documento_referencia_externo" in attrs:
+            externo = attrs["documento_referencia_externo"]
+        else:
+            externo = getattr(self.instance, "documento_referencia_externo", None)
+        if externo is None:
+            return None
+        if tipo is not None and tipo.codigo not in TIPOS_CON_REFERENCIA_EXTERNA:
+            raise serializers.ValidationError(
+                {"documento_referencia_externo": mensaje_referencia_externa_no_aplica(tipo)}
+            )
+        if referencia is not None:
+            raise serializers.ValidationError(
+                {"documento_referencia_externo": MENSAJE_DOS_REFERENCIAS}
+            )
+        fecha_nota = attrs.get(
+            "fecha_emision", getattr(self.instance, "fecha_emision", None),
+        )
+        if fecha_nota is not None and externo["fecha"] > fecha_nota.isoformat():
+            raise serializers.ValidationError(
+                {"documento_referencia_externo": {
+                    "fecha": [MENSAJE_REFERENCIA_EXTERNA_POSTERIOR],
+                }}
+            )
+        return externo
 
     def _validar_anulacion_sin_referencia(self, attrs, tipo, referencia):
         """Una anulación (concepto 2) tiene que decir qué factura anula.

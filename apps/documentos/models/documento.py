@@ -1,10 +1,21 @@
 """Documento electrónico: factura de venta, notas, documento soporte."""
+from datetime import date
+from typing import NamedTuple
+
 from django.conf import settings
 from django.db import models
 
 from apps.nucleo.entorno import exigir_ambiente_permitido
 from apps.nucleo.models import Ambiente as AmbienteDian, ModeloConFechas, ModeloUUID
 from apps.utilidades.almacenamiento import almacenamiento_backblaze
+
+
+class ReferenciaCorregida(NamedTuple):
+    """Los datos del documento corregido que lleva el XML de una nota."""
+
+    numero: str
+    cufe_cude: str
+    fecha: date
 
 
 def ambiente_por_defecto():
@@ -285,6 +296,17 @@ class Documento(ModeloUUID, ModeloConFechas):
         related_name="notas", null=True, blank=True,
         verbose_name="documento de referencia",
     )
+    # Para notas cuyo documento corregido se emitió en otro sistema y no está
+    # en nobelio: sus datos ante la DIAN, que son los que el XML necesita
+    # (cac:BillingReference y cbc:ReferenceID). Forma:
+    # ``{"numero": ..., "cufe_cude": ..., "fecha": "AAAA-MM-DD"}``. Excluyente
+    # con `documento_referencia`; por ahora solo lo admite la nota de ajuste al
+    # documento soporte (ver `DocumentoTipo.CODIGOS_CON_REFERENCIA_EXTERNA`).
+    documento_referencia_externo = models.JSONField(
+        "documento de referencia externo", null=True, blank=True,
+        help_text="Documento corregido emitido fuera de nobelio: número, "
+        "CUFE/CUDE/CUDS y fecha de emisión.",
+    )
     concepto_correccion = models.CharField(
         "concepto de corrección", max_length=2, blank=True,
         help_text="ResponseCode del DiscrepancyResponse: por qué se corrige el "
@@ -337,7 +359,16 @@ class Documento(ModeloUUID, ModeloConFechas):
             models.UniqueConstraint(
                 fields=["emisor", "prefijo", "consecutivo", "documento_tipo"],
                 name="documento_numero_unico_por_emisor",
-            )
+            ),
+            # La nota corrige un documento de nobelio o uno de otro sistema,
+            # nunca los dos a la vez.
+            models.CheckConstraint(
+                condition=(
+                    models.Q(documento_referencia__isnull=True)
+                    | models.Q(documento_referencia_externo__isnull=True)
+                ),
+                name="documento_una_sola_referencia",
+            ),
         ]
 
     def save(self, *args, **kwargs):
@@ -372,6 +403,34 @@ class Documento(ModeloUUID, ModeloConFechas):
         "adquiriente" queriendo decir lo contrario.
         """
         return self.adquiriente
+
+    @property
+    def tiene_referencia(self) -> bool:
+        """Indica el documento que corrige, sea de nobelio o de otro sistema."""
+        return (
+            self.documento_referencia_id is not None
+            or self.documento_referencia_externo is not None
+        )
+
+    @property
+    def referencia_corregida(self):
+        """Número, CUFE/CUDE/CUDS y fecha del documento que corrige la nota.
+
+        Es lo único que el XML usa del documento corregido, venga del FK o del
+        JSON de un documento emitido en otro sistema. ``None`` si no hay
+        ninguno (las notas «sin referencia a facturas»).
+        """
+        ref = self.documento_referencia
+        if ref is not None:
+            return ReferenciaCorregida(ref.numero, ref.cufe_cude, ref.fecha_emision)
+        externo = self.documento_referencia_externo
+        if externo:
+            return ReferenciaCorregida(
+                externo["numero"],
+                externo["cufe_cude"],
+                date.fromisoformat(externo["fecha"]),
+            )
+        return None
 
     @property
     def es_borrador(self) -> bool:
