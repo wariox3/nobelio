@@ -183,10 +183,16 @@ MENSAJE_ANULACION_SIN_REFERENCIA = (
 
 
 def mensaje_nota_sin_referencia(tipo):
-    """Mensaje para una nota que no indica el documento que corrige."""
+    """Mensaje para una nota que no indica el documento que corrige.
+
+    Nombra el tipo que corrige esa nota (`TIPO_QUE_CORRIGE_CADA_NOTA`): la de
+    ajuste referencia un documento soporte, no una factura.
+    """
+    esperado = TIPO_QUE_CORRIGE_CADA_NOTA[tipo.codigo]
     return (
         f"Una {tipo.nombre.lower()} debe referenciar el documento que corrige: "
-        "indique el id de la factura en `documento_referencia`."
+        "indique en `documento_referencia` el id del documento de tipo "
+        f"{esperado.label.lower()}."
     )
 
 
