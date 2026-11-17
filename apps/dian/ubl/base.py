@@ -112,6 +112,10 @@ CODIGO_TIPO_REFERENCIA_POS = "20"
 # gratis.
 NOMBRE_TIPO_DOCUMENTO_EQUIVALENTE_POS = "Factura tipo punto de venta POS"
 
+# cbc:CustomizationID de la factura de venta sin tipo de operación elegido
+# (lista TipoOperacionF): operación estándar.
+CUSTOMIZATION_FACTURA_ESTANDAR = "10"
+
 # cbc:CustomizationID del documento soporte (lista TipoOperacion del anexo DS).
 # Ojo: aquí no indica el tipo de operación como en la factura, sino de dónde es
 # el vendedor, y de eso dependen qué campos de las partes son obligatorios.

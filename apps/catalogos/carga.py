@@ -65,6 +65,9 @@ LISTAS = (
     # `TipoIdentificacion` se les añadieron a mano el `20` (P.O.S.) y el `47`
     # (PEP), que no vienen en ninguna lista de la DIAN.
     Lista("TipoDocumento", models.TipoFactura),
+    # Solo la de factura: las de nota y documento soporte no se eligen, el
+    # código sale del documento (ver `TipoOperacion`).
+    Lista("TipoOperacionF", models.TipoOperacion),
     Lista("TipoIdentificacion", models.TipoIdentificacion),
     Lista("TipoOrganizacion", models.TipoOrganizacion),
     Lista("TipoResponsabilidad", models.ResponsabilidadFiscal),

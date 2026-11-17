@@ -291,6 +291,11 @@ con los otros dos; otro valor responde 400.
   es obligatoria como clave y admite null: a crédito tiene que traer fecha (no
   anterior a la emisión); en contado, si viene, se descarta y se guarda en null;
   en las notas tiene que ir en null, o responde 400.
+  `tipo_operacion` (id del catálogo `/api/catalogos/tipo-operacion/`, que es el
+  propio código: 9 AIU, 10 estándar, 11 mandatos, 12 transporte, 13 cambiario)
+  es opcional y solo lo admite la factura de venta: sin él sale como estándar
+  (`CustomizationID` 10). En cualquier otro tipo responde 400, porque las notas
+  y el documento soporte deducen su `CustomizationID` del propio documento.
   El `digito_verificacion` del `adquiriente` no se envía: lo calcula el sistema
   a partir del NIT, y mandarlo responde 400 con `campo_solo_lectura`.
   Si el `adquiriente` es persona natural (`tipo_organizacion` 2), `primer_nombre` y

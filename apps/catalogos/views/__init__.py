@@ -17,6 +17,7 @@ from .subtipo_trabajador import SubTipoTrabajadorViewSet
 from .tipo_contrato import TipoContratoViewSet
 from .tipo_factura import TipoFacturaViewSet
 from .tipo_identificacion import TipoIdentificacionViewSet
+from .tipo_operacion import TipoOperacionViewSet
 from .tipo_organizacion import TipoOrganizacionViewSet
 from .tipo_trabajador import TipoTrabajadorViewSet
 from .tributo import TributoViewSet
@@ -27,7 +28,7 @@ for _vista in (
     DepartamentoViewSet, FormaPagoViewSet, MedioPagoViewSet, MonedaViewSet,
     MunicipioViewSet, PaisViewSet, PeriodoNominaViewSet,
     ResponsabilidadFiscalViewSet, SubTipoTrabajadorViewSet, TipoContratoViewSet,
-    TipoFacturaViewSet, TipoIdentificacionViewSet, TipoOrganizacionViewSet,
+    TipoFacturaViewSet, TipoOperacionViewSet, TipoIdentificacionViewSet, TipoOrganizacionViewSet,
     TipoTrabajadorViewSet, TributoViewSet, UnidadMedidaViewSet,
     EventoRadianViewSet, ConceptoReclamoViewSet,
 ):
@@ -36,6 +37,7 @@ for _vista in (
 __all__ = [
     "CatalogosView",
     "TipoFacturaViewSet",
+    "TipoOperacionViewSet",
     "TipoIdentificacionViewSet",
     "TipoOrganizacionViewSet",
     "ResponsabilidadFiscalViewSet",

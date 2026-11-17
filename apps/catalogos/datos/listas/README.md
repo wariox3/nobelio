@@ -14,7 +14,7 @@ dice un único registro, `LISTAS` en `apps/catalogos/carga.py`:
 
 | Carpeta | Listas |
 |---------|--------|
-| esta | las 14 de factura: tipo de documento, identificación, organización, responsabilidad, tributo, unidad de medida, forma y medio de pago, moneda, país, departamento, municipio, conceptos de nota crédito y débito; y `Concepto de Reclamo` (evento RADIAN 031) |
+| esta | las 15 de factura: tipo de documento, tipo de operación (`TipoOperacionF`), identificación, organización, responsabilidad, tributo, unidad de medida, forma y medio de pago, moneda, país, departamento, municipio, conceptos de nota crédito y débito; y `Concepto de Reclamo` (evento RADIAN 031) |
 | `documento-soporte/` | `TipoDocumento` (el `05` y el `95`), que se suman a los tipos de factura |
 | `nomina/` | `PeriodoNomina`, `TipoContrato`, `TipoTrabajador`, `SubTipoTrabajador` |
 | `radian/` | `EventoRadian` (030–033), transcrita de los ejemplos del anexo RADIAN |
@@ -57,7 +57,7 @@ columna `id`) y una línea en `LISTAS`.
 > Al reemplazar una lista por una versión nueva de la caja de herramientas hay
 > que volver a poner todo lo de este apartado, con los mismos ids.
 
-- **Columna `id`** en las 16 listas oficiales que se cargan (las 15 de aquí y
+- **Columna `id`** en las 17 listas oficiales que se cargan (las 16 de aquí y
   `documento-soporte/TipoDocumento-2.1.gc`), declarada `Use="optional"` y
   colocada en cada fila justo después de `code`. Los valores son los ids que ya
   circulaban, los de la base con la que torio está integrado: no se deducen de
@@ -70,6 +70,13 @@ columna `id`) y una línea en `LISTAS`.
 
   Igual en **`Concepto de Reclamo.gc`** (añadida el 2026-10-06, sin ids
   previos que respetar): `01` → id 1, …, `04` → id 4.
+
+  Y en **`TipoOperacionF-2.1.gc`** (añadida el 2026-11-17, tampoco tenía ids
+  previos): `09` AIU → id 9, `10` estándar → id 10, …, `13` → id 13. Las otras
+  listas `TipoOperacion*` (nota crédito, nota débito, salud y la del documento
+  soporte) no se cargan: sus códigos no los elige quien integra, salen del
+  documento, y chocarían con estos (el `10` y el `11` del documento soporte son
+  residente y no residente).
 
 - **Filas que la DIAN no publica en ninguna lista:**
   - `TipoDocumento-2.1.gc`: `20` Documento equivalente P.O.S. (id 9).

@@ -269,6 +269,14 @@ class Documento(ModeloUUID, ModeloConFechas):
         related_name="documentos", verbose_name="medio de pago",
         null=True, blank=True,
     )
+    # Tipo de operación de la factura (cbc:CustomizationID). Solo la factura
+    # de venta lo elige; vacío es la estándar (10). En las notas y el documento
+    # soporte el código sale del propio documento.
+    tipo_operacion = models.ForeignKey(
+        "catalogos.TipoOperacion", on_delete=models.PROTECT,
+        related_name="documentos", verbose_name="tipo de operación",
+        null=True, blank=True,
+    )
     # Orden de compra del comprador (cac:OrderReference).
     orden_compra = models.CharField(
         "orden de compra", max_length=100, blank=True,

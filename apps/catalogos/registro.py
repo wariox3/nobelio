@@ -85,6 +85,15 @@ CATALOGOS = (
         _id(RESOLUCION, "tipo_factura"),
     ),
     Catalogo(
+        "tipo-operacion", models.TipoOperacion,
+        "Tipo de operación de la factura de venta (`cbc:CustomizationID`): "
+        "10 estándar, 09 AIU, 11 mandatos, 12 transporte, 13 cambiario. El "
+        "`id` es el propio código (09 = 9). Las notas y el documento soporte "
+        "no lo eligen: su código sale del propio documento.",
+        "TipoOperacionF", (FACTURA,),
+        _id(DOCUMENTO, "tipo_operacion"),
+    ),
+    Catalogo(
         "tipo-identificacion", models.TipoIdentificacion,
         "Tipo de documento de identificación: cédula, NIT, pasaporte, "
         "documento extranjero… El `id` es el propio código DIAN (13 cédula = "

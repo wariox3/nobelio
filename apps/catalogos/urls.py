@@ -6,6 +6,7 @@ from apps.catalogos import views
 
 router = SimpleRouter()
 router.register("tipo-factura", views.TipoFacturaViewSet)
+router.register("tipo-operacion", views.TipoOperacionViewSet)
 router.register("tipo-identificacion", views.TipoIdentificacionViewSet)
 router.register("tipo-organizacion", views.TipoOrganizacionViewSet)
 router.register("responsabilidad-fiscal", views.ResponsabilidadFiscalViewSet)

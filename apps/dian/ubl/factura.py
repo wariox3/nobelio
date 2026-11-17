@@ -32,6 +32,12 @@ class ConstructorFacturaUBL(ConstructorUBL):
 
     profile_id = "DIAN 2.1: Factura Electrónica de Venta"
 
+    @property
+    def customization_id_default(self) -> str:
+        """El tipo de operación que eligió el documento; sin él, estándar (10)."""
+        tipo = self.doc.tipo_operacion
+        return tipo.codigo if tipo is not None else CUSTOMIZATION_FACTURA_ESTANDAR
+
     def _linea_extra(self, il, linea):
         _sub(il, "cbc", "FreeOfChargeIndicator", "false")
 

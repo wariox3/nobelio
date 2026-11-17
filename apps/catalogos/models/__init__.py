@@ -23,6 +23,7 @@ from .subtipo_trabajador import SubTipoTrabajador
 from .tipo_contrato import TipoContrato
 from .tipo_factura import TipoFactura
 from .tipo_identificacion import TipoIdentificacion
+from .tipo_operacion import TipoOperacion
 from .tipo_organizacion import TipoOrganizacion
 from .tipo_trabajador import TipoTrabajador
 from .tributo import Tributo
@@ -31,6 +32,7 @@ from .unidad_medida import UnidadMedida
 __all__ = [
     "ElementoCatalogo",
     "TipoFactura",
+    "TipoOperacion",
     "TipoIdentificacion",
     "TipoOrganizacion",
     "ResponsabilidadFiscal",

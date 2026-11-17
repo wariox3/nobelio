@@ -21,6 +21,11 @@
          <ShortName>Nombre</ShortName>
          <Data Type="normalizedString"/>
       </Column>
+      <Column Id="id" Use="optional">
+         <ShortName>Id</ShortName>
+         <LongName xml:lang="es">Id fijo del código en nobelio</LongName>
+         <Data Type="nonNegativeInteger"/>
+      </Column>
       <Key Id="codeKey">
          <ShortName>CodeKey</ShortName>
          <ColumnRef Ref="code"/>
@@ -31,6 +36,9 @@
          <Value ColumnRef="code">
             <SimpleValue>10</SimpleValue>
          </Value>
+         <Value ColumnRef="id">
+            <SimpleValue>10</SimpleValue>
+         </Value>
          <Value ColumnRef="name">
             <SimpleValue>Estandar</SimpleValue>
          </Value>
@@ -39,12 +47,18 @@
          <Value ColumnRef="code">
             <SimpleValue>09</SimpleValue>
          </Value>
+         <Value ColumnRef="id">
+            <SimpleValue>9</SimpleValue>
+         </Value>
          <Value ColumnRef="name">
             <SimpleValue>AIU</SimpleValue>
          </Value>
       </Row>
       <Row>
          <Value ColumnRef="code">
+            <SimpleValue>11</SimpleValue>
+         </Value>
+         <Value ColumnRef="id">
             <SimpleValue>11</SimpleValue>
          </Value>
          <Value ColumnRef="name">
@@ -55,12 +69,18 @@
          <Value ColumnRef="code">
             <SimpleValue>12</SimpleValue>
          </Value>
+         <Value ColumnRef="id">
+            <SimpleValue>12</SimpleValue>
+         </Value>
          <Value ColumnRef="name">
             <SimpleValue>Transporte</SimpleValue>
          </Value>
       </Row>
 	  <Row>
          <Value ColumnRef="code">
+            <SimpleValue>13</SimpleValue>
+         </Value>
+         <Value ColumnRef="id">
             <SimpleValue>13</SimpleValue>
          </Value>
          <Value ColumnRef="name">

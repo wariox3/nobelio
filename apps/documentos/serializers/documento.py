@@ -257,6 +257,14 @@ def mensaje_fecha_compra_no_aplica(tipo):
     )
 
 
+def mensaje_tipo_operacion_no_aplica(tipo):
+    """Mensaje para un tipo de operación en un tipo que no lo elige."""
+    return (
+        f"{tipo.nombre} no lleva tipo de operación: solo lo elige la factura de "
+        f"venta. En las notas y el documento soporte sale del propio documento."
+    )
+
+
 def mensaje_fecha_compra_futura(hoy):
     """Mensaje para una fecha de compra posterior a hoy."""
     return f"La fecha de compra no puede ser posterior a hoy ({hoy})."
@@ -355,7 +363,7 @@ class DocumentoSerializer(serializers.ModelSerializer):
             "orden_compra", "orden_compra_fecha", "orden_compra_tipo",
             "orden_compra_documento",
             "fecha_emision", "hora_emision", "fecha_compra",
-            "moneda", "forma_pago", "medio_pago",
+            "moneda", "forma_pago", "medio_pago", "tipo_operacion",
             "valor_bruto", "total_impuestos",
             "total_descuentos", "descuentos_motivo", "total_cargos", "cargos_motivo",
             "total_a_pagar", "documento_referencia", "documento_referencia_externo",
@@ -462,7 +470,7 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
             "referencia_externa",
             "adquiriente", "prefijo", "consecutivo", "numero",
             "fecha_emision", "fecha_compra", "moneda", "forma_pago", "medio_pago",
-            "total_descuentos", "descuentos_motivo",
+            "tipo_operacion", "total_descuentos", "descuentos_motivo",
             "total_cargos", "cargos_motivo", "documento_referencia",
             "documento_referencia_externo", "concepto_correccion", "fecha_vencimiento",
             "orden_compra", "orden_compra_fecha", "orden_compra_tipo",
@@ -501,6 +509,7 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
             "medio_pago": {"required": True, "allow_null": False},
             "fecha_vencimiento": {"required": True, "allow_null": True},
             "fecha_compra": {"required": False, "allow_null": True},
+            "tipo_operacion": {"required": False, "allow_null": True},
         }
         # Sin validador de unicidad, a propósito: el duplicado no es un error de
         # datos (400) sino un conflicto (409) con un documento que ya existe, y
@@ -598,6 +607,7 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
         self._validar_anulacion_sin_referencia(attrs, tipo, referencia or externo)
         self._validar_vencimiento(attrs, tipo)
         self._validar_fecha_compra(attrs, tipo)
+        self._validar_tipo_operacion(attrs, tipo)
         self._validar_retenciones(attrs, tipo)
         self._validar_descuentos_globales(attrs)
 
@@ -687,6 +697,21 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
         ]
         if any(errores):
             raise serializers.ValidationError({"detalles": errores})
+
+    def _validar_tipo_operacion(self, attrs, tipo):
+        """El tipo de operación solo lo elige la factura de venta.
+
+        En las notas y el documento soporte el ``CustomizationID`` sale del
+        propio documento —con o sin factura referenciada, país del vendedor—, y
+        sus listas no son esta: un 11 en un documento soporte es «no
+        residente», no «mandatos». Recibirlo ahí sería ignorarlo sin avisar.
+        """
+        if attrs.get("tipo_operacion") is None:
+            return
+        if tipo is not None and tipo.codigo != models.DocumentoTipo.Codigo.FACTURA_VENTA:
+            raise serializers.ValidationError(
+                {"tipo_operacion": mensaje_tipo_operacion_no_aplica(tipo)}
+            )
 
     def _validar_retenciones(self, attrs, tipo):
         """Las retenciones solo van en los tipos que las separan del total.
