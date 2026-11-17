@@ -88,8 +88,9 @@ CATALOGOS = (
         "tipo-operacion", models.TipoOperacion,
         "Tipo de operación de la factura de venta (`cbc:CustomizationID`): "
         "10 estándar, 09 AIU, 11 mandatos, 12 transporte, 13 cambiario. El "
-        "`id` es el propio código (09 = 9). Las notas y el documento soporte "
-        "no lo eligen: su código sale del propio documento.",
+        "`id` es el propio código (09 = 9). La API admite 10, 09 y 12; 11 y "
+        "13 todavía no. Las notas y el documento soporte no lo eligen: su "
+        "código sale del propio documento.",
         "TipoOperacionF", (FACTURA,),
         _id(DOCUMENTO, "tipo_operacion"),
     ),

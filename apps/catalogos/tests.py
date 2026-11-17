@@ -174,6 +174,13 @@ class IdsFijosTests(SimpleTestCase):
         self.assertEqual(tabla["EventoRadian"], {"030": 30, "031": 31, "032": 32, "033": 33})
         self.assertEqual(tabla["ConceptoReclamo"], {"01": 1, "02": 2, "03": 3, "04": 4})
 
+    def test_en_tipo_de_operacion_el_id_es_el_codigo(self):
+        """Solo la lista de factura, y el id es el código: 09 → 9."""
+        self.assertEqual(
+            _tabla_de_ids()["TipoOperacion"],
+            {"09": 9, "10": 10, "11": 11, "12": 12, "13": 13},
+        )
+
     def test_en_festivos_el_id_es_la_fecha(self):
         for codigo, id_fijo in _tabla_de_ids()["Festivo"].items():
             with self.subTest(codigo=codigo):

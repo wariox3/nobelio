@@ -115,6 +115,17 @@ NOMBRE_TIPO_DOCUMENTO_EQUIVALENTE_POS = "Factura tipo punto de venta POS"
 # cbc:CustomizationID de la factura de venta sin tipo de operación elegido
 # (lista TipoOperacionF): operación estándar.
 CUSTOMIZATION_FACTURA_ESTANDAR = "10"
+CUSTOMIZATION_FACTURA_TRANSPORTE = "12"
+
+# Factura de transporte de carga (anexo FE 1.9, numeral 19.2).
+# `cbc:ID/@schemeID` de la línea (lista RegistroTransporte): si factura una
+# remesa registrada en el RNDC o un servicio adicional.
+REGISTRO_TRANSPORTE_SERVICIO_ADICIONAL = "0"
+REGISTRO_TRANSPORTE_REMESA = "1"
+# `cbc:Name` de cada `cac:AdditionalItemProperty` (lista RemesaTransporte).
+REMESA_RADICADO = "01"
+REMESA_CONSECUTIVO = "02"
+REMESA_VALOR_FLETE = "03"
 
 # cbc:CustomizationID del documento soporte (lista TipoOperacion del anexo DS).
 # Ojo: aquí no indica el tipo de operación como en la factura, sino de dónde es
@@ -677,7 +688,7 @@ class ConstructorUBL:
     def _lineas(self, raiz):
         for linea in self.doc.detalles.all():
             il = _sub(raiz, "cac", self.etiqueta_linea)
-            _sub(il, "cbc", "ID", linea.numero_linea)
+            _sub(il, "cbc", "ID", linea.numero_linea, **self._atributos_id_linea(linea))
             if linea.nota:
                 _sub(il, "cbc", "Note", linea.nota)
             _sub(il, "cbc", self.etiqueta_cantidad, _cantidad(linea.cantidad),
@@ -722,6 +733,7 @@ class ConstructorUBL:
             _sub(std_item, "cbc", "ID", linea.codigo_producto or str(linea.numero_linea),
                  schemeID=COD_ESTANDAR_CONTRIBUYENTE, schemeAgencyID="195",
                  schemeName=NOMBRE_ESTANDAR_CONTRIBUYENTE)
+            self._propiedades_item(item, linea)
 
             precio = _sub(il, "cac", "Price")
             _sub(precio, "cbc", "PriceAmount", _valor(linea.valor_unitario), currencyID=self.moneda)
@@ -746,6 +758,16 @@ class ConstructorUBL:
 
     def _linea_extra(self, il, linea):
         """Hook para campos de línea propios de la factura (FreeOfChargeIndicator)."""
+
+    def _atributos_id_linea(self, linea) -> dict:
+        """Atributos del ``cbc:ID`` de la línea. Ninguno, salvo en la factura de
+        transporte (``@schemeID``)."""
+        return {}
+
+    def _propiedades_item(self, item, linea):
+        """Hook para los ``cac:AdditionalItemProperty`` del ítem. Van al final del
+        ``cac:Item``: en el XSD siguen a ``StandardItemIdentification`` y a
+        ``ClassifiedTaxCategory``, que aquí no se emite."""
 
     # -- Componentes de parte ----------------------------------------------
 

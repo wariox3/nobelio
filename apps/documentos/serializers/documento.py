@@ -6,6 +6,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from apps.catalogos.memoria import RelacionDeCatalogo
+from apps.catalogos.models import TipoOperacion
 from apps.documentos import models
 from apps.emisores.models import Emisor, Resolucion
 from apps.emisores.servicios import motivo_no_puede_emitir
@@ -263,6 +264,33 @@ def mensaje_tipo_operacion_no_aplica(tipo):
         f"{tipo.nombre} no lleva tipo de operación: solo lo elige la factura de "
         f"venta. En las notas y el documento soporte sale del propio documento."
     )
+
+
+def mensaje_tipo_operacion_no_admitido(tipo_operacion):
+    """Mensaje para un tipo de operación que nobelio todavía no construye."""
+    return (
+        f"El tipo de operación {tipo_operacion.codigo} ({tipo_operacion.nombre}) "
+        f"todavía no se puede emitir: solo se admiten 10 (estándar), 09 (AIU) y "
+        f"12 (transporte)."
+    )
+
+
+# Regla FAV03 del anexo FE 1.9: en la factura AIU, la nota de la línea de
+# Administración empieza por este texto y sigue con el objeto del contrato.
+TEXTO_NOTA_AIU = "Contrato de servicios AIU por concepto de:"
+MENSAJE_AIU_SIN_NOTA = (
+    "Una factura AIU (tipo de operación 09) tiene que llevar en la línea de "
+    f"Administración una `nota` que empiece por «{TEXTO_NOTA_AIU}» seguida "
+    "del objeto del contrato (regla FAV03)."
+)
+MENSAJE_TRANSPORTE_SIN_REMESA = (
+    "Una factura de transporte (tipo de operación 12) tiene que facturar al "
+    "menos una remesa del RNDC: informe `remesa` en las líneas que la facturan. "
+    "Las líneas sin remesa son servicios adicionales."
+)
+MENSAJE_REMESA_SOLO_EN_TRANSPORTE = (
+    "La remesa solo va en una factura de transporte (`tipo_operacion` 12)."
+)
 
 
 def mensaje_fecha_compra_futura(hoy):
@@ -699,19 +727,70 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
             raise serializers.ValidationError({"detalles": errores})
 
     def _validar_tipo_operacion(self, attrs, tipo):
-        """El tipo de operación solo lo elige la factura de venta.
+        """El tipo de operación y lo que cada uno exige a las líneas.
 
-        En las notas y el documento soporte el ``CustomizationID`` sale del
-        propio documento —con o sin factura referenciada, país del vendedor—, y
-        sus listas no son esta: un 11 en un documento soporte es «no
-        residente», no «mandatos». Recibirlo ahí sería ignorarlo sin avisar.
+        - Solo lo elige la factura de venta. En las notas y el documento soporte
+          el ``CustomizationID`` sale del propio documento —con o sin factura
+          referenciada, país del vendedor—, y sus listas no son esta: un 11 en
+          un documento soporte es «no residente», no «mandatos».
+        - De la lista, solo los que nobelio sabe construir
+          (``TipoOperacion.ADMITIDOS``): estándar, AIU y transporte.
+        - **AIU (09)**: alguna línea —la de Administración— lleva en su nota el
+          texto con que el anexo exige empezarla (regla FAV03).
+        - **Transporte (12)**: al menos una línea factura una remesa del RNDC;
+          es lo que hace de la factura una de transporte de carga (numeral
+          19.2). Las líneas sin remesa son servicios adicionales.
+        - La remesa solo va en una factura de transporte: en cualquier otra se
+          perdería sin llegar al XML.
+
+        Hoy la API no expone edición, pero como las demás validaciones de aquí
+        contempla ``self.instance``: si llegara a cambiarse el tipo de operación
+        de un borrador, se comprueba contra las líneas que ya tiene (que no se
+        editan, ver ``update``).
         """
-        if attrs.get("tipo_operacion") is None:
+        if self.instance is not None and "tipo_operacion" not in attrs:
             return
-        if tipo is not None and tipo.codigo != models.DocumentoTipo.Codigo.FACTURA_VENTA:
+        tipo_operacion = attrs.get("tipo_operacion")
+        if "detalles" in attrs:
+            lineas = [
+                (detalle.get("nota") or "", detalle.get("remesa"))
+                for detalle in attrs["detalles"]
+            ]
+        elif self.instance is not None:
+            lineas = [
+                (detalle.nota, detalle.remesa)
+                for detalle in self.instance.detalles.all()
+            ]
+        else:
+            lineas = []
+
+        if tipo_operacion is not None:
+            if tipo is not None and tipo.codigo != models.DocumentoTipo.Codigo.FACTURA_VENTA:
+                raise serializers.ValidationError(
+                    {"tipo_operacion": mensaje_tipo_operacion_no_aplica(tipo)}
+                )
+            if tipo_operacion.codigo not in TipoOperacion.ADMITIDOS:
+                raise serializers.ValidationError(
+                    {"tipo_operacion": mensaje_tipo_operacion_no_admitido(tipo_operacion)}
+                )
+        codigo = tipo_operacion.codigo if tipo_operacion is not None else None
+
+        if codigo != TipoOperacion.TRANSPORTE:
+            errores = [
+                {"remesa": MENSAJE_REMESA_SOLO_EN_TRANSPORTE} if remesa else {}
+                for _, remesa in lineas
+            ]
+            if any(errores):
+                raise serializers.ValidationError({"detalles": errores})
+        elif not any(remesa for _, remesa in lineas):
             raise serializers.ValidationError(
-                {"tipo_operacion": mensaje_tipo_operacion_no_aplica(tipo)}
+                {"detalles": MENSAJE_TRANSPORTE_SIN_REMESA}
             )
+
+        if codigo == TipoOperacion.AIU and not any(
+            nota.startswith(TEXTO_NOTA_AIU) for nota, _ in lineas
+        ):
+            raise serializers.ValidationError({"detalles": MENSAJE_AIU_SIN_NOTA})
 
     def _validar_retenciones(self, attrs, tipo):
         """Las retenciones solo van en los tipos que las separan del total.

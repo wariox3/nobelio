@@ -7,6 +7,8 @@ from apps.documentos.models import DocumentoDetalleImpuesto, DocumentoDetalle
 from apps.catalogos.memoria import RelacionDeCatalogo
 from apps.nucleo.serializers import EstructuraEstricta
 
+from .documento_detalle_remesa import DocumentoDetalleRemesaSerializer
+
 CERO = Decimal("0")
 # Dos redondeos legítimos a dos decimales pueden separarse un céntimo y no más;
 # es la misma tolerancia que la regla de impuestos del documento.
@@ -65,6 +67,9 @@ class DocumentoDetalleSerializer(EstructuraEstricta, serializers.ModelSerializer
     # Y la misma unidad de medida.
     serializer_related_field = RelacionDeCatalogo
     impuestos = DocumentoDetalleImpuestoSerializer(many=True)
+    # Solo en la factura de transporte de carga; que el documento lo sea lo
+    # comprueba `DocumentoCrearSerializer`, que es quien conoce el tipo.
+    remesa = DocumentoDetalleRemesaSerializer(required=False, allow_null=True)
 
     class Meta:
         model = DocumentoDetalle
@@ -76,6 +81,7 @@ class DocumentoDetalleSerializer(EstructuraEstricta, serializers.ModelSerializer
             "nota", "marca", "modelo", "centro_costo",
             "periodo_desde", "periodo_hasta",
             "periodo_descripcion", "periodo_descripcion_codigo",
+            "remesa",
         ]
         # Como en el impuesto: los importes de la línea no se pueden omitir, el
         # `descuento` tampoco —entra en el total de la línea, así que sin

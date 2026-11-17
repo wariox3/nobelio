@@ -166,6 +166,39 @@ Disponibles en `Listas de valores/*.gc` para alimentar la app `catalogos`:
 `FormasPago`, `MediosPago`, `TipoMoneda`, `TipoImpuesto`, `TarifaImpuestoIVA/INC/ReteFuente/ReteIVA`,
 `AlgoritmoCUFE`, `AlgoritmoCUDE`, `TipoAmbiente`, `ConceptoNotaCredito`, `ConceptoNotaDebito`, etc.
 
+## 11. Tipos de operación (`cbc:CustomizationID` de la factura)
+
+Lista `TipoOperacionF` (catálogo `tipo-operacion`, campo `tipo_operacion` del
+documento): 10 estándar (por defecto), 09 AIU, 11 mandatos, 12 transporte, 13
+cambiario. nobelio construye **10, 09 y 12**; 11 y 13 exigen grupos que aún no
+se emiten (`InformationContentProviderParty` del mandante, extensión
+`DebidaDiligencia`) y la API los rechaza. Fuente: anexo 1.9 (PDF de 635 págs.
+consultado el 2026-11-17), páginas citadas abajo.
+
+**AIU (09).**
+- FAV03 (Notificación, pág. 126): `InvoiceLine/cbc:Note` de la línea de
+  Administración «debe empezar por el texto: “Contrato de servicios AIU por
+  concepto de:”» y seguir con el objeto del contrato. nobelio lo exige al crear.
+- FAX01 (Rechazo, pág. 126): el `TaxTotal` de línea no se informa para «ítems
+  cuyo concepto en contratos de AIU no haga parte de la base gravable». Lo
+  decide el ERP al mandar los impuestos de cada línea.
+
+**Transporte de carga (12)** — numeral 19.2 (págs. 607-609):
+- Cada línea lleva `cbc:ID/@schemeID` (lista `RegistroTransporte`, 13.5.1):
+  `1` remesa registrada en el RNDC, `0` servicio adicional. FAV08c/FAV08d
+  (Notificación).
+- La línea de remesa lleva en `cac:Item` tres `cac:AdditionalItemProperty`
+  (lista `RemesaTransporte`, 13.5.2; FBF02-FBF05): `Name` `01` radicado del
+  RNDC (numérico hasta 100.000 millones), `02` consecutivo interno
+  (alfanumérico, hasta 15), `03` valor del flete (entero) con
+  `cbc:ValueQuantity` = cantidad transportada (entera) y `@unitCode` `KGM` o
+  `GLL`.
+- La estructura sigue el ejemplo de la *Guía factura electrónica de
+  transporte* del Ministerio de Transporte (V11). Esa guía añade un cuarto
+  `AdditionalItemProperty` `04` (factura original, para un flete adicional
+  sobre una remesa ya facturada) que el anexo no menciona —dice «los 3
+  cac:AdditionalItemProperty que se permiten»—; nobelio no lo emite.
+
 ---
 
 ### Casos de prueba derivados (para tests automáticos)

@@ -65,6 +65,17 @@ class DocumentoDetalle(ModeloConFechas):
         "código de la descripción del periodo", max_length=20, blank=True,
         help_text="cac:InvoicePeriod/cbc:DescriptionCode.",
     )
+    # Factura de transporte de carga (tipo de operación 12, anexo FE 1.9
+    # numeral 19.2): la remesa registrada en el RNDC que factura esta línea.
+    # Forma: ``{"radicado": ..., "consecutivo": ..., "valor_flete": ...,
+    # "cantidad": ..., "unidad": "KGM"|"GLL"}``. Nula, la línea es un servicio
+    # adicional (`cbc:ID/@schemeID` 0); con remesa, schemeID 1 y los tres
+    # `cac:AdditionalItemProperty` 01, 02 y 03.
+    remesa = models.JSONField(
+        "remesa de transporte", null=True, blank=True,
+        help_text="Remesa del RNDC que factura la línea (solo en facturas de "
+        "transporte de carga).",
+    )
 
     # --- Relaciones ---
     documento = models.ForeignKey(

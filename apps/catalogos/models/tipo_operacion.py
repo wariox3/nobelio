@@ -13,6 +13,15 @@ class TipoOperacion(ElementoCatalogo):
     del propio documento —con o sin factura referenciada, país del vendedor—.
     """
 
+    # Los códigos que el XML trata aparte (anexo FE 1.9, numeral 19.2 y regla
+    # FAV03). El catálogo trae la lista entera de la DIAN, pero la API solo
+    # admite los de `ADMITIDOS`: mandatos (11) y cambiario (13) exigen grupos
+    # del XML que nobelio todavía no construye.
+    AIU = "09"
+    ESTANDAR = "10"
+    TRANSPORTE = "12"
+    ADMITIDOS = frozenset({AIU, ESTANDAR, TRANSPORTE})
+
     class Meta(ElementoCatalogo.Meta):
         db_table = "cat_tipo_operacion"
         verbose_name = "tipo de operación"

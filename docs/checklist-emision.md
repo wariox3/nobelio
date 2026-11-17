@@ -292,10 +292,22 @@ con los otros dos; otro valor responde 400.
   anterior a la emisión); en contado, si viene, se descarta y se guarda en null;
   en las notas tiene que ir en null, o responde 400.
   `tipo_operacion` (id del catálogo `/api/catalogos/tipo-operacion/`, que es el
-  propio código: 9 AIU, 10 estándar, 11 mandatos, 12 transporte, 13 cambiario)
-  es opcional y solo lo admite la factura de venta: sin él sale como estándar
-  (`CustomizationID` 10). En cualquier otro tipo responde 400, porque las notas
-  y el documento soporte deducen su `CustomizationID` del propio documento.
+  propio código) es opcional y solo lo admite la factura de venta: sin él sale
+  como estándar (`CustomizationID` 10). En cualquier otro tipo responde 400,
+  porque las notas y el documento soporte deducen su `CustomizationID` del
+  propio documento. Se admiten 10 (estándar), 9 (AIU) y 12 (transporte); 11
+  (mandatos) y 13 (cambiario) están en el catálogo pero responden 400 hasta que
+  se construyan sus grupos del XML.
+  - **AIU (9):** alguna línea —la de Administración— lleva una `nota` que
+    empieza por «Contrato de servicios AIU por concepto de:» seguida del objeto
+    del contrato (regla FAV03). Las líneas cuyo concepto no forma parte de la
+    base gravable van sin impuestos (FAX01): eso lo decide el ERP.
+  - **Transporte (12):** cada línea que factura una remesa del RNDC trae
+    `remesa` con `radicado` (entero hasta 100.000 millones), `consecutivo`
+    (alfanumérico, hasta 15), `valor_flete` y `cantidad` (enteros mayores que
+    cero) y `unidad` (`KGM` o `GLL`). Las líneas sin `remesa` son servicios
+    adicionales. Al menos una línea tiene que traerla, y en cualquier otro tipo
+    de operación `remesa` responde 400.
   El `digito_verificacion` del `adquiriente` no se envía: lo calcula el sistema
   a partir del NIT, y mandarlo responde 400 con `campo_solo_lectura`.
   Si el `adquiriente` es persona natural (`tipo_organizacion` 2), `primer_nombre` y

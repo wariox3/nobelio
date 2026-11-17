@@ -41,6 +41,39 @@ class ConstructorFacturaUBL(ConstructorUBL):
     def _linea_extra(self, il, linea):
         _sub(il, "cbc", "FreeOfChargeIndicator", "false")
 
+    @property
+    def es_transporte(self) -> bool:
+        return self.customization_id == CUSTOMIZATION_FACTURA_TRANSPORTE
+
+    def _atributos_id_linea(self, linea) -> dict:
+        """En transporte toda línea dice si factura una remesa del RNDC o un
+        servicio adicional (reglas FAV08c y FAV08d)."""
+        if not self.es_transporte:
+            return {}
+        return {"schemeID": (
+            REGISTRO_TRANSPORTE_REMESA if linea.remesa
+            else REGISTRO_TRANSPORTE_SERVICIO_ADICIONAL
+        )}
+
+    def _propiedades_item(self, item, linea):
+        """La remesa de la línea: radicado, consecutivo y flete con la cantidad
+        transportada (reglas FBF02 a FBF05, numeral 19.2)."""
+        if not (self.es_transporte and linea.remesa):
+            return
+        remesa = linea.remesa
+        for nombre, valor in (
+            (REMESA_RADICADO, remesa["radicado"]),
+            (REMESA_CONSECUTIVO, remesa["consecutivo"]),
+        ):
+            propiedad = _sub(item, "cac", "AdditionalItemProperty")
+            _sub(propiedad, "cbc", "Name", nombre)
+            _sub(propiedad, "cbc", "Value", str(valor))
+        propiedad = _sub(item, "cac", "AdditionalItemProperty")
+        _sub(propiedad, "cbc", "Name", REMESA_VALOR_FLETE)
+        _sub(propiedad, "cbc", "Value", str(remesa["valor_flete"]))
+        _sub(propiedad, "cbc", "ValueQuantity", str(remesa["cantidad"]),
+             unitCode=remesa["unidad"])
+
 
 class _ConstructorNotaUBL(ConstructorUBL):
     """Base de notas: usan CUDE, DiscrepancyResponse y BillingReference."""

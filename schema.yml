@@ -2004,6 +2004,141 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/catalogos/tipo-operacion/:
+    get:
+      operationId: catalogos_tipo_operacion_list
+      description: |-
+        Tipo de operación de la factura de venta (`cbc:CustomizationID`): 10 estándar, 09 AIU, 11 mandatos, 12 transporte, 13 cambiario. El `id` es el propio código (09 = 9). La API admite 10, 09 y 12; 11 y 13 todavía no. Las notas y el documento soporte no lo eligen: su código sale del propio documento.
+
+        **Lista DIAN:** `TipoOperacionF`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `tipo_operacion` | `id` |
+
+        Paginado; `search` busca por código y nombre.
+      summary: Listar tipos de operación
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un número de página dentro del conjunto de resultados paginado.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedElementoCatalogoList'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/catalogos/tipo-operacion/{id}/:
+    get:
+      operationId: catalogos_tipo_operacion_retrieve
+      description: |-
+        Tipo de operación de la factura de venta (`cbc:CustomizationID`): 10 estándar, 09 AIU, 11 mandatos, 12 transporte, 13 cambiario. El `id` es el propio código (09 = 9). La API admite 10, 09 y 12; 11 y 13 todavía no. Las notas y el documento soporte no lo eligen: su código sale del propio documento.
+
+        **Lista DIAN:** `TipoOperacionF`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `tipo_operacion` | `id` |
+      summary: Consultar tipo de operación
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+        description: Un valor único que identifique este tipo de operación.
+        required: true
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ElementoCatalogo'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/catalogos/tipo-operacion/exportar/:
+    get:
+      operationId: catalogos_tipo_operacion_exportar_list
+      description: |-
+        Tipo de operación de la factura de venta (`cbc:CustomizationID`): 10 estándar, 09 AIU, 11 mandatos, 12 transporte, 13 cambiario. El `id` es el propio código (09 = 9). La API admite 10, 09 y 12; 11 y 13 todavía no. Las notas y el documento soporte no lo eligen: su código sale del propio documento.
+
+        **Lista DIAN:** `TipoOperacionF`. **Anexo técnico:** Factura Electrónica de Venta v1.9 (Resolución 000165 de 2023).
+
+        **Campos que reciben sus valores:**
+
+        | Ruta | Campo | Se envía |
+        |---|---|---|
+        | `/api/documentos/documento/` | `tipo_operacion` | `id` |
+
+        El catálogo entero en una respuesta, sin paginar y con los mismos campos que el detalle. Admite `search`.
+      summary: Exportar tipos de operación
+      parameters:
+      - name: search
+        required: false
+        in: query
+        description: Un término de búsqueda.
+        schema:
+          type: string
+      tags:
+      - catalogos
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ElementoCatalogo'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/catalogos/tipo-organizacion/:
     get:
       operationId: catalogos_tipo_organizacion_list
@@ -9549,6 +9684,13 @@ components:
           format: int64
           nullable: true
           title: Medio de pago
+        tipo_operacion:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+          nullable: true
+          title: Tipo de operación
         valor_bruto:
           type: string
           format: decimal
@@ -9743,6 +9885,15 @@ components:
           title: Medio de pago
           x-catalogo: medio-pago
           x-catalogo-valor: id
+        tipo_operacion:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+          nullable: true
+          title: Tipo de operación
+          x-catalogo: tipo-operacion
+          x-catalogo-valor: id
         total_descuentos:
           type: string
           format: decimal
@@ -9925,6 +10076,15 @@ components:
           format: int64
           title: Medio de pago
           x-catalogo: medio-pago
+          x-catalogo-valor: id
+        tipo_operacion:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+          nullable: true
+          title: Tipo de operación
+          x-catalogo: tipo-operacion
           x-catalogo-valor: id
         total_descuentos:
           type: string
@@ -10109,6 +10269,10 @@ components:
           title: Código de la descripción del periodo
           description: cac:InvoicePeriod/cbc:DescriptionCode.
           maxLength: 20
+        remesa:
+          allOf:
+          - $ref: '#/components/schemas/DocumentoDetalleRemesa'
+          nullable: true
       required:
       - cantidad
       - codigo_producto
@@ -10186,6 +10350,65 @@ components:
       - tarifa
       - tributo
       - valor
+    DocumentoDetalleRemesa:
+      type: object
+      description: |-
+        La remesa del RNDC que factura la línea.
+
+        El flete y la cantidad son enteros: el anexo los define «sin decimales».
+      properties:
+        radicado:
+          type: integer
+          maximum: 100000000000
+          minimum: 1
+          format: int64
+        consecutivo:
+          type: string
+          maxLength: 15
+        valor_flete:
+          type: integer
+          minimum: 1
+        cantidad:
+          type: integer
+          minimum: 1
+        unidad:
+          $ref: '#/components/schemas/UnidadEnum'
+      required:
+      - cantidad
+      - consecutivo
+      - radicado
+      - unidad
+      - valor_flete
+    DocumentoDetalleRemesaRequest:
+      type: object
+      description: |-
+        La remesa del RNDC que factura la línea.
+
+        El flete y la cantidad son enteros: el anexo los define «sin decimales».
+      properties:
+        radicado:
+          type: integer
+          maximum: 100000000000
+          minimum: 1
+          format: int64
+        consecutivo:
+          type: string
+          minLength: 1
+          maxLength: 15
+        valor_flete:
+          type: integer
+          minimum: 1
+        cantidad:
+          type: integer
+          minimum: 1
+        unidad:
+          $ref: '#/components/schemas/UnidadEnum'
+      required:
+      - cantidad
+      - consecutivo
+      - radicado
+      - unidad
+      - valor_flete
     DocumentoDetalleRequest:
       type: object
       properties:
@@ -10282,6 +10505,10 @@ components:
           title: Código de la descripción del periodo
           description: cac:InvoicePeriod/cbc:DescriptionCode.
           maxLength: 20
+        remesa:
+          allOf:
+          - $ref: '#/components/schemas/DocumentoDetalleRemesaRequest'
+          nullable: true
       required:
       - cantidad
       - codigo_producto
@@ -10535,6 +10762,13 @@ components:
           format: int64
           nullable: true
           title: Medio de pago
+        tipo_operacion:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: -9223372036854775808
+          format: int64
+          nullable: true
+          title: Tipo de operación
         valor_bruto:
           type: string
           format: decimal
@@ -15761,6 +15995,14 @@ components:
       description: |-
         * `102` - Documento soporte de pago de nómina electrónica
         * `103` - Nota de ajuste de documento soporte de pago de nómina
+    UnidadEnum:
+      enum:
+      - KGM
+      - GLL
+      type: string
+      description: |-
+        * `KGM` - Kilogramos
+        * `GLL` - Galones
     Uso:
       type: object
       properties:
