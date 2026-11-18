@@ -67,12 +67,12 @@ def verificar(documento, *, cliente=None):
     if estado == EstadoVerificacion.VALIDO:
         from apps.recepcion import eventos
 
-        if _es_factura_de_contado(documento, eventos):
-            # No admite eventos RADIAN (LGC62): el recibo termina aquí.
-            _terminar_recepcion(documento)
-        else:
-            # Con la factura confirmada, el acuse de recibo (030) si el emisor
-            # lo tiene automático. No falla: lo que lo impida queda en el log.
+        # Con la factura confirmada, el acuse de recibo (030) si el emisor lo
+        # tiene automático. No falla: lo que lo impida queda en el log. Una de
+        # contado no lo saca (no admite eventos RADIAN, LGC62), pero tampoco
+        # se termina sola: queda abierta para que el emisor la vea y la cierre
+        # con ``descarte.aceptar_contado``.
+        if not _es_factura_de_contado(documento, eventos):
             eventos.acuse_automatico(documento)
     return documento
 
@@ -83,16 +83,6 @@ def _es_factura_de_contado(documento, eventos):
     if documento.documento_tipo.codigo != DocumentoTipo.Codigo.FACTURA_VENTA:
         return False
     return eventos.codigo_forma_pago(documento) == eventos.CONTADO
-
-
-def _terminar_recepcion(documento):
-    if documento.estado_recepcion:
-        return
-    documento.estado_recepcion = True
-    documento.save(update_fields=["estado_recepcion", "actualizado_en"])
-    logger.info("recepcion.recepcion_terminada %s", campos(
-        documento=documento.pk, motivo="factura_contado",
-    ))
 
 
 def marcar_error(documento, detalle):

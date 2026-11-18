@@ -250,16 +250,35 @@ class DocumentoRecibidoViewSet(
     def restaurar(self, request, pk=None):
         """Quita el descarte: el documento vuelve a admitir eventos RADIAN.
 
-        ``estado_descartado`` pasa a ``false`` y ``estado_recepcion`` vuelve a
-        ``false``, salvo en una factura de contado verificada como válida, que
-        no admite eventos y queda terminada. El acuse automático omitido no se
-        pide solo. Devuelve el documento.
+        ``estado_descartado`` y ``estado_recepcion`` vuelven a ``false``. El
+        acuse automático omitido no se pide solo. Devuelve el documento.
 
         400 si no está descartado.
         """
         try:
             descarte.restaurar(self.get_object(), usuario=usuario_del_request(request))
         except descarte.DocumentoNoRestaurable as error:
+            raise ErrorSolicitud(str(error))
+        return Response(self.get_serializer(self.get_object()).data)
+
+    @extend_schema(
+        request=None,
+        responses={200: serializers.DocumentoRecibidoSerializer, 400: ErrorSerializer},
+    )
+    @action(detail=True, methods=["post"], url_path="aceptar-contado")
+    def aceptar_contado(self, request, pk=None):
+        """Da por aceptada una factura de contado: ``estado_recepcion`` en ``true``.
+
+        Una de contado no admite eventos RADIAN (LGC62), así que no se acepta
+        con el 033 ni termina sola al verificarse: el emisor la revisa y la
+        cierra con esta acción. No envía nada a la DIAN. Devuelve el documento.
+
+        400 si no es una factura de venta de contado, si la DIAN no la
+        confirmó como válida, si está descartada o si su recepción ya terminó.
+        """
+        try:
+            descarte.aceptar_contado(self.get_object(), usuario=usuario_del_request(request))
+        except descarte.DocumentoNoAceptable as error:
             raise ErrorSolicitud(str(error))
         return Response(self.get_serializer(self.get_object()).data)
 

@@ -130,15 +130,15 @@ class Documento(ModeloUUID, ModeloConFechas):
         help_text="El último evento registrado en RADIAN. El detalle está en rec_evento.",
     )
     # Si el recibo de la factura terminó: no queda nada que hacer con ella en
-    # nobelio. Una de contado no admite eventos RADIAN (LGC62), así que termina
-    # al verificarse como válida (`apps.recepcion.verificacion`); una a
-    # crédito, al registrarse la aceptación (033) o el reclamo (031)
-    # (`apps.recepcion.eventos`).
+    # nobelio. Una a crédito termina al registrarse la aceptación (033) o el
+    # reclamo (031) (`apps.recepcion.eventos`). Una de contado no admite
+    # eventos RADIAN (LGC62) pero no termina sola: queda abierta para que el
+    # emisor la vea, y la cierra aceptándola (`descarte.aceptar_contado`).
     estado_recepcion = models.BooleanField(
         "recepción terminada", default=False,
         help_text=(
-            "True cuando el recibo terminó: factura de contado verificada como "
-            "válida, o factura a crédito con aceptación (033) o reclamo (031) registrado, "
+            "True cuando el recibo terminó: factura a crédito con aceptación (033) "
+            "o reclamo (031) registrado, factura de contado aceptada por el emisor, "
             "o documento descartado."
         ),
     )

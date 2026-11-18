@@ -223,14 +223,17 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
   - ⚠ Falta saber qué `StatusCode` devuelve un CUFE inexistente. Las pruebas
     suponen `66`.
 - **Recepción terminada** (2026-10-17): `Documento.estado_recepcion`, booleano,
-  `False` por defecto. Pasa a `True` cuando una **factura de venta de contado**
-  se verifica como válida (`verificacion.verificar`): no admite eventos RADIAN
-  (LGC62), así que su recibo termina ahí y no saca acuse automático. La forma
-  de pago de los documentos de antes se lee de su XML la primera vez
-  (`eventos.codigo_forma_pago`). La migración `recepcion/0010` marca las de
-  contado que ya estaban válidas y tenían guardada la forma de pago; las que
-  no la tienen se marcan al verificarlas de nuevo. En la API: el campo en el
-  documento y `?estado_recepcion=true|false`. Una factura a crédito pasa a
+  `False` por defecto. Una **factura de venta de contado** no admite eventos
+  RADIAN (LGC62) ni saca acuse automático, pero **no termina sola** al
+  verificarse (decidido 2026-11-17): queda en `False` para que el emisor la
+  vea, y la cierra con `POST /api/recepcion/documento/{id}/aceptar-contado/`
+  (`descarte.aceptar_contado`), que solo pone `estado_recepcion` en `True` y no
+  envía nada a la DIAN. Responde 400 si no es factura de venta de contado, si
+  no está verificada como válida, si está descartada o si ya terminó. La forma de pago de los documentos de antes
+  se lee de su XML la primera vez (`eventos.codigo_forma_pago`). Hasta el
+  2026-11-17 sí terminaban al verificarse como válidas, y la migración
+  `recepcion/0010` marcó las que ya lo estaban: esas siguen en `True`. En la
+  API: el campo en el documento y `?estado_recepcion=true|false`. Una factura a crédito pasa a
   `True` cuando la DIAN registra su aceptación (033) o su reclamo (031)
   (`eventos.CIERRAN_RECEPCION`, en `_guardar_respuesta`); la migración
   `recepcion/0011` marca las que ya los tenían. Las notas quedan en `False`.
@@ -245,9 +248,7 @@ ver con la autenticación de la API (`docs/autenticacion.md`).
   `?estado_descartado=true|false`.
   - **Restaurar**: `POST /api/recepcion/documento/{id}/restaurar/`
     (`descarte.restaurar`). `estado_descartado` vuelve a `False` y
-    `estado_recepcion` a lo que diría la recepción sin el descarte: `False`,
-    salvo una factura de contado verificada como válida, que queda en `True`.
-    400 si no está descartado. El acuse automático omitido mientras estuvo
+    `estado_recepcion` a `False`. 400 si no está descartado. El acuse automático omitido mientras estuvo
     descartado no se pide solo.
 - **Comando `reprocesar_correos`** (`apps/recepcion/management/commands/`):
   `--id <n>` o `--todos`. Corre en el mismo proceso, no en Celery, y muestra

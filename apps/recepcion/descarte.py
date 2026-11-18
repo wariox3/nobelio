@@ -5,6 +5,11 @@ El documento queda intacto (datos, archivos y eventos), con
 eventos RADIAN, tampoco el acuse automático (``eventos._validar_documento``).
 
 ``restaurar`` lo deshace: el documento vuelve a admitir eventos.
+
+``aceptar_contado`` es el cierre de una factura de contado: no admite eventos
+RADIAN (LGC62), así que no termina con la aceptación (033) como una a crédito,
+y tampoco sola al verificarse (decidido 2026-11-17): el emisor la revisa y la
+da por aceptada, que solo pone ``estado_recepcion`` en ``True``.
 """
 import logging
 
@@ -23,6 +28,10 @@ class DocumentoNoDescartable(Exception):
 
 class DocumentoNoRestaurable(Exception):
     """El documento no se puede restaurar. El mensaje dice por qué."""
+
+
+class DocumentoNoAceptable(Exception):
+    """La factura de contado no se puede aceptar. El mensaje dice por qué."""
 
 
 def descartar(documento, *, usuario=None):
@@ -61,15 +70,13 @@ def descartar(documento, *, usuario=None):
 def restaurar(documento, *, usuario=None):
     """Quita el descarte de ``documento``: vuelve a admitir eventos RADIAN.
 
-    ``estado_recepcion`` vuelve a lo que diría la recepción sin el descarte:
-    un descartado nunca tiene eventos, así que solo queda terminada una
-    factura de contado verificada como válida. El acuse automático que se
-    omitió mientras estuvo descartado no se pide solo: se pide a mano.
+    ``estado_recepcion`` vuelve a ``False``: un descartado nunca tiene
+    eventos, y una factura de contado no termina sola (el emisor la cierra
+    descartándola). El acuse automático que se omitió mientras estuvo
+    descartado no se pide solo: se pide a mano.
 
     Lanza ``DocumentoNoRestaurable`` si no está descartado.
     """
-    from apps.recepcion import eventos, verificacion
-
     with transaction.atomic():
         # El mismo candado que el descarte y ``eventos.solicitar``.
         Emisor.objects.select_for_update().get(pk=documento.emisor_id)
@@ -77,12 +84,44 @@ def restaurar(documento, *, usuario=None):
         if not documento.estado_descartado:
             raise DocumentoNoRestaurable("El documento no está descartado.")
         documento.estado_descartado = False
-        documento.estado_recepcion = (
-            documento.verificacion_estado == EstadoVerificacion.VALIDO
-            and verificacion._es_factura_de_contado(documento, eventos)
-        )
+        documento.estado_recepcion = False
         documento.save(update_fields=["estado_descartado", "estado_recepcion", "actualizado_en"])
     logger.info("recepcion.documento_restaurado %s", campos(
+        documento=documento.pk, usuario=getattr(usuario, "pk", None),
+    ))
+    return documento
+
+
+def aceptar_contado(documento, *, usuario=None):
+    """Da por aceptada una factura de contado: termina su recepción.
+
+    Lanza ``DocumentoNoAceptable`` si no es una factura de venta de contado,
+    si la DIAN no la confirmó como válida, si está descartada o si su
+    recepción ya terminó.
+    """
+    from apps.recepcion import eventos, verificacion
+
+    with transaction.atomic():
+        # El mismo candado que el descarte y ``eventos.solicitar``.
+        Emisor.objects.select_for_update().get(pk=documento.emisor_id)
+        documento = Documento.objects.select_related("documento_tipo").get(pk=documento.pk)
+        if documento.estado_descartado:
+            raise DocumentoNoAceptable("El documento está descartado.")
+        if documento.estado_recepcion:
+            raise DocumentoNoAceptable("La recepción del documento ya terminó.")
+        if not verificacion._es_factura_de_contado(documento, eventos):
+            raise DocumentoNoAceptable(
+                "Solo se acepta así una factura de venta de contado; una a crédito "
+                "se acepta con el evento RADIAN 033."
+            )
+        if documento.verificacion_estado != EstadoVerificacion.VALIDO:
+            raise DocumentoNoAceptable(
+                "La DIAN no ha confirmado la factura como válida "
+                f"(verificación: {documento.get_verificacion_estado_display().lower()})."
+            )
+        documento.estado_recepcion = True
+        documento.save(update_fields=["estado_recepcion", "actualizado_en"])
+    logger.info("recepcion.contado_aceptada %s", campos(
         documento=documento.pk, usuario=getattr(usuario, "pk", None),
     ))
     return documento
