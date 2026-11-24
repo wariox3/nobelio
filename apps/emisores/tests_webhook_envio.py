@@ -79,6 +79,42 @@ class FirmaTests(TestCase):
         self.assertEqual(set(cuerpo), {"tipo", "cliente", "documento"})
         self.assertEqual(cuerpo["cliente"], 7)
 
+    def test_sin_parametros_el_cuerpo_es_el_del_vector(self):
+        # Un documento con `parametros_webhook` nulo es lo que torio recibe hoy.
+        documento = SimpleNamespace(
+            pk=uuid.UUID("0b8f3c2e-5d7a-4e1b-9c6f-2a4d8e7b1f90"),
+            emisor=SimpleNamespace(referencia_externa="12"),
+            fecha_validacion=datetime.datetime(2026, 9, 21, 15, 15, tzinfo=datetime.timezone.utc),
+            cufe_cude="abc123", parametros_webhook=None,
+        )
+
+        cuerpo = webhooks.armar_cuerpo(documento, WebhookAviso.Tipo.VALIDACION)
+
+        self.assertEqual(cuerpo, CUERPO_VECTOR)
+
+    def test_con_parametros_van_al_final_tal_cual(self):
+        documento = SimpleNamespace(
+            pk=uuid.UUID("0b8f3c2e-5d7a-4e1b-9c6f-2a4d8e7b1f90"),
+            emisor=SimpleNamespace(referencia_externa="12"),
+            fecha_validacion=datetime.datetime(2026, 9, 21, 15, 15, tzinfo=datetime.timezone.utc),
+            cufe_cude="abc123", parametros_webhook={"modulo": "TUR"},
+        )
+
+        cuerpo = webhooks.armar_cuerpo(documento, WebhookAviso.Tipo.VALIDACION)
+
+        self.assertEqual(cuerpo, CUERPO_VECTOR[:-1] + ', "parametros_webhook": {"modulo": "TUR"}}')
+
+    def test_la_notificacion_tambien_lleva_los_parametros(self):
+        documento = SimpleNamespace(
+            pk=uuid.uuid4(), emisor=SimpleNamespace(referencia_externa="7"),
+            parametros_webhook={"modulo": "TUR"},
+        )
+
+        cuerpo = json.loads(webhooks.armar_cuerpo(documento, WebhookAviso.Tipo.NOTIFICACION))
+
+        self.assertEqual(set(cuerpo), {"tipo", "cliente", "documento", "parametros_webhook"})
+        self.assertEqual(cuerpo["parametros_webhook"], {"modulo": "TUR"})
+
 
 class EntregaTests(TestCase):
     @classmethod
@@ -209,6 +245,52 @@ class DisparadoresTests(TestCase):
             "cufe": "cufe-de-prueba",
         })
         self.assertEqual(post.call_args.kwargs["data"], aviso.cuerpo.encode())
+
+    def test_la_validacion_lleva_los_parametros_del_documento(self):
+        self.documento.parametros_webhook = {"modulo": "TUR"}
+
+        with mock.patch(POST, return_value=_respuesta(200)) as post, \
+                self.captureOnCommitCallbacks(execute=True):
+            self._validar()
+
+        aviso = WebhookAviso.objects.get()
+        self.assertEqual(json.loads(aviso.cuerpo), {
+            "tipo": "validacion",
+            "cliente": 12,
+            "documento": str(self.documento.pk),
+            "fecha_validacion": "2026-09-21T10:15:00-05:00",
+            "cufe": "cufe-de-prueba",
+            "parametros_webhook": {"modulo": "TUR"},
+        })
+        self.assertEqual(post.call_args.kwargs["data"], aviso.cuerpo.encode())
+
+    def test_la_notificacion_lleva_los_parametros_del_documento(self):
+        self.documento.parametros_webhook = {"modulo": "TUR"}
+        self.documento.save(update_fields=["parametros_webhook"])
+
+        with mock.patch(POST, return_value=_respuesta(200)) as post, \
+                self.captureOnCommitCallbacks(execute=True):
+            marcar_notificado(self.documento)
+
+        aviso = WebhookAviso.objects.get()
+        self.assertEqual(json.loads(aviso.cuerpo), {
+            "tipo": "notificacion",
+            "cliente": 12,
+            "documento": str(self.documento.pk),
+            "parametros_webhook": {"modulo": "TUR"},
+        })
+        self.assertEqual(post.call_args.kwargs["data"], aviso.cuerpo.encode())
+
+    def test_la_notificacion_sin_parametros_no_lleva_la_clave(self):
+        with mock.patch(POST, return_value=_respuesta(200)), \
+                self.captureOnCommitCallbacks(execute=True):
+            marcar_notificado(self.documento)
+
+        self.assertEqual(json.loads(WebhookAviso.objects.get().cuerpo), {
+            "tipo": "notificacion",
+            "cliente": 12,
+            "documento": str(self.documento.pk),
+        })
 
     def _respondido(self):
         self.documento.refresh_from_db()

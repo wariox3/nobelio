@@ -222,6 +222,13 @@ class Documento(ModeloUUID, ModeloConFechas):
         "integra). Opcional y sin formato fijo: nobelio solo lo guarda, lo "
         "devuelve y deja buscar por él.",
     )
+    parametros_webhook = models.JSONField(
+        "parámetros del webhook", null=True, blank=True,
+        help_text="Objeto JSON libre del ERP que creó el documento. nobelio no "
+        "lo interpreta: lo guarda y lo devuelve tal cual en los avisos de "
+        "webhook de este documento (validación y notificación), por ejemplo "
+        '`{"modulo": "TUR"}` para que el ERP sepa dónde buscarlo.',
+    )
     fecha_validacion = models.DateTimeField(
         "fecha y hora de validación DIAN", null=True, blank=True,
         help_text="Momento en que la DIAN aceptó el documento.",

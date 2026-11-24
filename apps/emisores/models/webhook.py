@@ -25,6 +25,11 @@ class Webhook(ModeloConFechas):
 
     Puede haber varios. Las banderas dicen de qué se le avisa a cada uno: de
     la validación de la DIAN y de la notificación al adquiriente.
+
+    Cada aviso lleva `tipo`, `cliente` y `documento`; el de validación suma
+    `fecha_validacion` y `cufe`. Si el documento se creó con
+    `parametros_webhook`, los dos lo llevan tal cual se guardó; si no, la clave
+    no va. Ver ``apps/emisores/servicios/webhooks.py``.
     """
 
     nombre = models.CharField("nombre", max_length=150)

@@ -2768,6 +2768,13 @@ paths:
         la ruta del existente en `Location`: es donde HTTP la pone, y así el
         cuerpo no se sale de `detail` + `errores`.
 
+        `parametros_webhook` es opcional: un objeto JSON libre del ERP, de
+        hasta 2 KB serializado, que nobelio no interpreta. Se guarda y vuelve
+        tal cual en los avisos de webhook de validación y notificación de este
+        documento (por ejemplo `{"modulo": "TUR"}`); si no se manda, los avisos
+        no llevan la clave. Un valor que no sea objeto, o que pase del tope,
+        responde 400.
+
         La búsqueda previa no cubre la carrera —dos peticiones iguales que la
         pasan a la vez—: esa la resuelve la restricción de unicidad de la base,
         y el `IntegrityError` se traduce al mismo 409.
@@ -7928,6 +7935,61 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/recepcion/documento/{id}/aceptar-contado/:
+    post:
+      operationId: recepcion_documento_aceptar_contado_create
+      description: |-
+        Da por aceptada una factura de contado: ``estado_recepcion`` en ``true``.
+
+        Una de contado no admite eventos RADIAN (LGC62), así que no se acepta
+        con el 033 ni termina sola al verificarse: el emisor la revisa y la
+        cierra con esta acción. No envía nada a la DIAN. Devuelve el documento.
+
+        400 si no es una factura de venta de contado, si la DIAN no la
+        confirmó como válida, si está descartada o si su recepción ya terminó.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este documento recibido.
+        required: true
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentoRecibido'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/recepcion/documento/{id}/descartar/:
     post:
       operationId: recepcion_documento_descartar_create
@@ -8107,10 +8169,8 @@ paths:
       description: |-
         Quita el descarte: el documento vuelve a admitir eventos RADIAN.
 
-        ``estado_descartado`` pasa a ``false`` y ``estado_recepcion`` vuelve a
-        ``false``, salvo en una factura de contado verificada como válida, que
-        no admite eventos y queda terminada. El acuse automático omitido no se
-        pide solo. Devuelve el documento.
+        ``estado_descartado`` y ``estado_recepcion`` vuelven a ``false``. El
+        acuse automático omitido no se pide solo. Devuelve el documento.
 
         400 si no está descartado.
       parameters:
@@ -9603,6 +9663,15 @@ components:
             Opcional y sin formato fijo: nobelio solo lo guarda, lo devuelve y deja
             buscar por él.'
           maxLength: 100
+        parametros_webhook:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+          nullable: true
+          description: 'Objeto JSON libre del ERP (máximo 2048 bytes). nobelio no
+            lo interpreta: lo guarda y lo devuelve tal cual, como `parametros_webhook`,
+            en los avisos de webhook de validación y notificación de este documento.
+            Si no se manda, los avisos no llevan la clave.'
         errores:
           type: array
           items:
@@ -9779,6 +9848,7 @@ components:
       - id
       - moneda
       - notificado
+      - parametros_webhook
       - pos
       - prefijo
       - resolucion_numero
@@ -9832,6 +9902,14 @@ components:
             Opcional y sin formato fijo: nobelio solo lo guarda, lo devuelve y deja
             buscar por él.'
           maxLength: 100
+        parametros_webhook:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: 'Objeto JSON libre del ERP (máximo 2048 bytes). nobelio no
+            lo interpreta: lo guarda y lo devuelve tal cual, como `parametros_webhook`,
+            en los avisos de webhook de validación y notificación de este documento.
+            Si no se manda, los avisos no llevan la clave.'
         adquiriente:
           $ref: '#/components/schemas/Adquiriente'
         prefijo:
@@ -10024,6 +10102,14 @@ components:
             Opcional y sin formato fijo: nobelio solo lo guarda, lo devuelve y deja
             buscar por él.'
           maxLength: 100
+        parametros_webhook:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: 'Objeto JSON libre del ERP (máximo 2048 bytes). nobelio no
+            lo interpreta: lo guarda y lo devuelve tal cual, como `parametros_webhook`,
+            en los avisos de webhook de validación y notificación de este documento.
+            Si no se manda, los avisos no llevan la clave.'
         adquiriente:
           $ref: '#/components/schemas/AdquirienteRequest'
         prefijo:
@@ -10686,6 +10772,15 @@ components:
             Opcional y sin formato fijo: nobelio solo lo guarda, lo devuelve y deja
             buscar por él.'
           maxLength: 100
+        parametros_webhook:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+          nullable: true
+          description: 'Objeto JSON libre del ERP (máximo 2048 bytes). nobelio no
+            lo interpreta: lo guarda y lo devuelve tal cual, como `parametros_webhook`,
+            en los avisos de webhook de validación y notificación de este documento.
+            Si no se manda, los avisos no llevan la clave.'
         concepto_correccion:
           type: string
           title: Concepto de corrección
@@ -10853,6 +10948,7 @@ components:
       - id
       - moneda
       - notificado
+      - parametros_webhook
       - pos
       - prefijo
       - resolucion_numero
@@ -11269,9 +11365,9 @@ components:
           type: boolean
           readOnly: true
           title: Recepción terminada
-          description: 'True cuando el recibo terminó: factura de contado verificada
-            como válida, o factura a crédito con aceptación (033) o reclamo (031)
-            registrado, o documento descartado.'
+          description: 'True cuando el recibo terminó: factura a crédito con aceptación
+            (033) o reclamo (031) registrado, factura de contado aceptada por el emisor,
+            o documento descartado.'
         estado_descartado:
           type: boolean
           readOnly: true
@@ -11420,9 +11516,9 @@ components:
           type: boolean
           readOnly: true
           title: Recepción terminada
-          description: 'True cuando el recibo terminó: factura de contado verificada
-            como válida, o factura a crédito con aceptación (033) o reclamo (031)
-            registrado, o documento descartado.'
+          description: 'True cuando el recibo terminó: factura a crédito con aceptación
+            (033) o reclamo (031) registrado, factura de contado aceptada por el emisor,
+            o documento descartado.'
         estado_descartado:
           type: boolean
           readOnly: true

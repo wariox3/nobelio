@@ -221,6 +221,13 @@ class DocumentoViewSet(
         la ruta del existente en `Location`: es donde HTTP la pone, y así el
         cuerpo no se sale de `detail` + `errores`.
 
+        `parametros_webhook` es opcional: un objeto JSON libre del ERP, de
+        hasta 2 KB serializado, que nobelio no interpreta. Se guarda y vuelve
+        tal cual en los avisos de webhook de validación y notificación de este
+        documento (por ejemplo `{"modulo": "TUR"}`); si no se manda, los avisos
+        no llevan la clave. Un valor que no sea objeto, o que pase del tope,
+        responde 400.
+
         La búsqueda previa no cubre la carrera —dos peticiones iguales que la
         pasan a la vez—: esa la resuelve la restricción de unicidad de la base,
         y el `IntegrityError` se traduce al mismo 409.

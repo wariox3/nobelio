@@ -1,4 +1,5 @@
 """Serializers de lectura y creación del documento electrónico."""
+import json
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.db import transaction
@@ -37,6 +38,53 @@ MENSAJE_DOCUMENTO_NO_EDITABLE = (
 # Factura y documento soporte. La lista vive en el modelo porque
 # `generar_y_firmar` exige lo mismo al emitir.
 TIPOS_CON_RESOLUCION = models.DocumentoTipo.CODIGOS_CON_RESOLUCION
+
+
+# `parametros_webhook` es del ERP y nobelio no lo interpreta, pero viaja en cada
+# aviso de webhook del documento: el tope evita que un ERP convierta el aviso en
+# un vehículo de datos. Se mide sobre el JSON compacto, en bytes UTF-8.
+MAXIMO_PARAMETROS_WEBHOOK = 2048
+MENSAJE_PARAMETROS_WEBHOOK_NO_OBJETO = (
+    "Se espera un objeto JSON, por ejemplo {\"modulo\": \"TUR\"}."
+)
+MENSAJE_PARAMETROS_WEBHOOK_GRANDE = (
+    f"No puede ocupar más de {MAXIMO_PARAMETROS_WEBHOOK} bytes serializado en JSON."
+)
+
+
+class ParametrosWebhookField(serializers.DictField):
+    """Objeto JSON libre del ERP: se exige que sea objeto y que no pase del tope.
+
+    Sus claves no se validan —son del ERP—, así que no pasa por
+    `EstructuraEstricta`: el recorrido solo baja a los anidados que lo llevan.
+    """
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("help_text", (
+            "Objeto JSON libre del ERP (máximo "
+            f"{MAXIMO_PARAMETROS_WEBHOOK} bytes). nobelio no lo interpreta: lo "
+            "guarda y lo devuelve tal cual, como `parametros_webhook`, en los "
+            "avisos de webhook de validación y notificación de este documento. "
+            "Si no se manda, los avisos no llevan la clave."
+        ))
+        super().__init__(**kwargs)
+
+    def to_internal_value(self, data):
+        # `DictField` acepta un `QueryDict` de formulario; aquí solo vale el
+        # objeto JSON.
+        # `ValidationError` y no `self.fail`: el mensaje lleva llaves, y `fail`
+        # lo pasa por `str.format`.
+        if not isinstance(data, dict):
+            raise serializers.ValidationError(
+                MENSAJE_PARAMETROS_WEBHOOK_NO_OBJETO, code="not_a_dict",
+            )
+        serializado = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+        if len(serializado.encode()) > MAXIMO_PARAMETROS_WEBHOOK:
+            raise serializers.ValidationError(
+                MENSAJE_PARAMETROS_WEBHOOK_GRANDE, code="demasiado_grande",
+            )
+        # Tal cual llegó: sin convertir los valores, que son del ERP.
+        return data
 
 
 def mensaje_sin_resolucion(tipo):
@@ -376,6 +424,7 @@ class DocumentoSerializer(serializers.ModelSerializer):
     documento_referencia_externo = DocumentoReferenciaExternoSerializer(
         read_only=True, allow_null=True,
     )
+    parametros_webhook = ParametrosWebhookField(read_only=True, allow_null=True)
 
     class Meta:
         model = models.Documento
@@ -386,7 +435,7 @@ class DocumentoSerializer(serializers.ModelSerializer):
             "resolucion", "resolucion_numero", "adquiriente",
             "prefijo", "consecutivo", "numero", "cufe_cude", "track_id",
             "envio", "ambiente", "fecha_validacion", "notificado",
-            "respuesta_validado", "referencia_externa", "errores",
+            "respuesta_validado", "referencia_externa", "parametros_webhook", "errores",
             "concepto_correccion", "fecha_vencimiento",
             "orden_compra", "orden_compra_fecha", "orden_compra_tipo",
             "orden_compra_documento",
@@ -490,12 +539,15 @@ class DocumentoCrearSerializer(EstructuraEstricta, serializers.ModelSerializer):
     documento_referencia_externo = DocumentoReferenciaExternoSerializer(
         required=False, allow_null=True,
     )
+    # Opcional: torio y los demás ERP no lo mandan. Es un valor opaco del ERP
+    # que vuelve en los avisos de webhook del documento.
+    parametros_webhook = ParametrosWebhookField(required=False, allow_null=True)
 
     class Meta:
         model = models.Documento
         fields = [
             "id", "documento_tipo", "emisor", "ambiente", "numero_resolucion",
-            "referencia_externa",
+            "referencia_externa", "parametros_webhook",
             "adquiriente", "prefijo", "consecutivo", "numero",
             "fecha_emision", "fecha_compra", "moneda", "forma_pago", "medio_pago",
             "tipo_operacion", "total_descuentos", "descuentos_motivo",

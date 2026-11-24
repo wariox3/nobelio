@@ -1,5 +1,6 @@
 """`POST documento/{id}/respuesta-validado/`: avisar la validación y marcarla."""
 import datetime
+import json
 from unittest import mock
 from zoneinfo import ZoneInfo
 
@@ -66,6 +67,19 @@ class RespuestaValidadoTests(APITestCase):
         self.assertTrue(self._respondido())
         post.assert_called_once()
         self.assertEqual(WebhookAviso.objects.get().tipo, WebhookAviso.Tipo.VALIDACION)
+
+    def test_el_aviso_lleva_los_parametros_del_documento(self):
+        # El endpoint usa el mismo `armar_cuerpo` que el aviso automático.
+        self.documento.parametros_webhook = {"modulo": "TUR"}
+        self.documento.save(update_fields=["parametros_webhook"])
+
+        with mock.patch(POST, return_value=_respuesta(200)) as post:
+            resp = self._llamar()
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.data)
+        cuerpo = json.loads(post.call_args.kwargs["data"])
+        self.assertEqual(cuerpo["parametros_webhook"], {"modulo": "TUR"})
+        self.assertEqual(json.loads(WebhookAviso.objects.get().cuerpo), cuerpo)
 
     def test_sin_200_no_se_marca_y_responde_502(self):
         # También el 409: el que da por respondido es solo el 200.

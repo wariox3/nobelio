@@ -18,6 +18,11 @@ igual y el aviso, `fallido`, con el motivo.
 - **Prueba**: ``probar`` manda un aviso `prueba` a un webhook, en el acto y
   sin dejar rastro en los avisos, para comprobar URL, secreto y cliente.
 
+Los avisos de validación y notificación llevan, si el documento lo tiene, el
+`parametros_webhook` que el ERP mandó al crearlo, tal cual se guardó (por
+ejemplo ``{"modulo": "TUR"}``, para que sepa en qué módulo buscarlo). Si no lo
+tiene, la clave no va. La prueba no lo lleva: no es de ningún documento.
+
 Cada aviso sale **una sola vez**, sin reintentos (ver ``WebhookAviso``).
 """
 import hashlib
@@ -94,6 +99,10 @@ def _cliente(emisor):
 def armar_cuerpo(documento, tipo) -> str:
     """El JSON del aviso, serializado una sola vez.
 
+    ``tipo``, ``cliente`` y ``documento``; la validación suma
+    ``fecha_validacion`` y ``cufe``, y ambos, ``parametros_webhook`` si el
+    documento lo tiene.
+
     Se guarda y se manda tal cual: firmar un dict y dejar que la librería HTTP
     lo vuelva a serializar produce otros bytes, y la firma no cuadra.
     """
@@ -109,6 +118,11 @@ def armar_cuerpo(documento, tipo) -> str:
             documento.fecha_validacion
         ).isoformat(timespec="seconds")
         aviso["cufe"] = documento.cufe_cude
+    # Lo que el ERP mandó al crear el documento, tal cual. Sin él la clave no
+    # va: el cuerpo es byte a byte el de antes, el que torio ya recibe.
+    parametros = getattr(documento, "parametros_webhook", None)
+    if parametros is not None:
+        aviso["parametros_webhook"] = parametros
     return json.dumps(aviso)
 
 
