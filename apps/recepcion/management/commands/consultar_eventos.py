@@ -6,15 +6,14 @@ esa respuesta, que ``docs/recepcion.md`` marca con ⚠ (R3).
 
     python manage.py consultar_eventos --id <uuid>
 
-Consulta en el ambiente del documento, con el certificado de su emisor.
+Consulta en el ambiente del documento, con el certificado de su emisor. Lo
+mismo, sin guardar archivos, en ``GET /api/recepcion/documento/{id}/eventos-radian/``.
 """
 import pathlib
 
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.dian import soap
-from apps.dian.servicios import construir_cliente_emisor
-from apps.nucleo.models import Ambiente
+from apps.dian import servicios, soap
 from apps.recepcion.models import Documento
 
 
@@ -36,11 +35,11 @@ class Command(BaseCommand):
             raise CommandError(f"No existe el documento {opciones['id']}.")
         salida = pathlib.Path(opciones["salida"])
         salida.mkdir(parents=True, exist_ok=True)
-        ambiente = documento.ambiente or Ambiente.PRODUCCION
 
-        resultado = construir_cliente_emisor(documento.emisor, ambiente).consultar_eventos(
-            documento.cufe_cude,
-        )
+        try:
+            resultado = servicios.consultar_eventos_radian(documento)
+        except servicios.ErrorEmision as exc:
+            raise CommandError(str(exc))
         respuesta = resultado.respuesta
         base = salida / f"GetStatusEvent-{documento.numero}"
         pathlib.Path(f"{base}-respuesta.xml").write_text(respuesta.xml_crudo)

@@ -421,6 +421,11 @@ empezar el siguiente.
     consulta con el comando `consultar_eventos --id <uuid>`
     (`apps/recepcion/management/commands/`), que no guarda nada en la base y
     deja la respuesta cruda de `GetStatusEvent` en `capturas/eventos/`.
+  - Por la API (2026-11-26), solo lectura y sin guardar nada:
+    `GET /api/recepcion/documento/{id}/eventos-radian/` (la factura recibida) y
+    `GET /api/documentos/documento/{id}/eventos-radian/` (la emitida: lo que
+    hizo el adquiriente). Las dos usan `servicios.consultar_eventos_radian` y
+    devuelven la respuesta de la DIAN más `eventos` (`codigo`, `descripcion`).
     Hubo un comando `probar_evento` que mandaba el 030 con un número a mano;
     se quitó porque chocaba con la numeración de R4.
   - Primer 030 real (2026-10-09): rechazado por LGC62, factura de contado

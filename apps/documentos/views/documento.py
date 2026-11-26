@@ -17,8 +17,10 @@ from apps.dian import representacion, servicios
 from apps.dian.errores import error_pasarela_dian
 from apps.dian.esquema import (
     RESPUESTA_CONSULTA_DIAN,
+    RESPUESTA_EVENTOS_RADIAN,
     campos_emision,
     campos_respuesta_dian,
+    datos_eventos_radian,
 )
 from apps.documentos import serializers
 from apps.documentos.tareas import emitir_documento
@@ -104,7 +106,6 @@ RESPUESTA_VALIDADO = inline_serializer(
         "avisos": WebhookAvisoSerializer(many=True),
     },
 )
-
 MENSAJE_RESPUESTA_NO_ACEPTADO = (
     "Solo se avisa la validación de un documento aceptado por la DIAN; este "
     "está '{estado}'."
@@ -497,6 +498,30 @@ class DocumentoViewSet(
             "descripcion": respuesta.descripcion_estado,
             "errores": respuesta.errores,
         })
+
+    @extend_schema(
+        responses={200: RESPUESTA_EVENTOS_RADIAN, 400: ErrorSerializer, 502: ErrorSerializer},
+    )
+    @action(detail=True, methods=["get"], url_path="eventos-radian")
+    def eventos_radian(self, request, pk=None):
+        """Consulta (solo lectura) en la DIAN los eventos RADIAN de la factura.
+
+        ``GET /api/documentos/documento/{id}/eventos-radian/`` → GetStatusEvent,
+        por el CUFE. Es lo que el adquiriente registró sobre la factura: acuse
+        (030), recibo del bien o servicio (032), aceptación (033/034) o reclamo
+        (031). No guarda nada; devuelve lo que responde la DIAN.
+
+        400 si el documento aún no tiene CUFE o el emisor no tiene un
+        certificado utilizable; 502 si la DIAN no responde.
+        """
+        documento = self.get_object()
+        try:
+            resultado = servicios.consultar_eventos_radian(documento)
+        except servicios.ErrorEmision as exc:
+            raise ErrorSolicitud(str(exc))
+        except requests.RequestException as exc:
+            raise error_pasarela_dian(exc)
+        return Response(datos_eventos_radian(resultado))
 
     @extend_schema(
         request=None,

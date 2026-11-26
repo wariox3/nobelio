@@ -61,3 +61,47 @@ def campos_emision():
 RESPUESTA_CONSULTA_DIAN = inline_serializer(
     name="ConsultaDianRespuesta", fields=campos_respuesta_dian(),
 )
+
+
+def _campos_eventos_radian():
+    """La respuesta de GetStatusEvent: la de la DIAN, sin estado local, y los eventos."""
+    campos = campos_respuesta_dian()
+    del campos["estado"]  # la consulta no toca el documento
+    campos["eventos"] = inline_serializer(
+        name="EventoRadianDian",
+        many=True,
+        fields={
+            "codigo": serializers.CharField(
+                help_text="Código del evento (`030` acuse, `031` reclamo, `032` "
+                          "recibo, `033` aceptación expresa, `034` tácita…).",
+            ),
+            "descripcion": serializers.CharField(
+                help_text="Descripción del evento según la DIAN.",
+            ),
+        },
+        help_text=(
+            "Los eventos registrados en la DIAN, en el orden en que los devuelve. "
+            "⚠ Se leen solo código y descripción: la forma completa de la "
+            "respuesta está por confirmar contra la DIAN."
+        ),
+    )
+    return campos
+
+
+RESPUESTA_EVENTOS_RADIAN = inline_serializer(
+    name="EventosRadianRespuesta", fields=_campos_eventos_radian(),
+)
+
+
+def datos_eventos_radian(resultado):
+    """El cuerpo de la respuesta a partir de un ``soap.RespuestaEventos``."""
+    respuesta = resultado.respuesta
+    return {
+        "es_valido": respuesta.es_valido,
+        "codigo_estado": respuesta.codigo_estado,
+        "descripcion": respuesta.descripcion_estado,
+        "errores": respuesta.errores,
+        "eventos": [
+            {"codigo": e.codigo, "descripcion": e.descripcion} for e in resultado.eventos
+        ],
+    }

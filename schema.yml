@@ -3379,6 +3379,68 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/documentos/documento/{id}/eventos-radian/:
+    get:
+      operationId: documentos_documento_eventos_radian_retrieve
+      description: |-
+        Consulta (solo lectura) en la DIAN los eventos RADIAN de la factura.
+
+        ``GET /api/documentos/documento/{id}/eventos-radian/`` → GetStatusEvent,
+        por el CUFE. Es lo que el adquiriente registró sobre la factura: acuse
+        (030), recibo del bien o servicio (032), aceptación (033/034) o reclamo
+        (031). No guarda nada; devuelve lo que responde la DIAN.
+
+        400 si el documento aún no tiene CUFE o el emisor no tiene un
+        certificado utilizable; 502 si la DIAN no responde.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este documento electrónico.
+        required: true
+      tags:
+      - documentos
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventosRadianRespuesta'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '502':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/documentos/documento/{id}/notificar/:
     post:
       operationId: documentos_documento_notificar_create
@@ -8092,6 +8154,69 @@ paths:
                 $ref: '#/components/schemas/Evento'
           description: ''
         '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '429':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/recepcion/documento/{id}/eventos-radian/:
+    get:
+      operationId: recepcion_documento_eventos_radian_retrieve
+      description: |-
+        Consulta (solo lectura) en la DIAN los eventos RADIAN de la factura.
+
+        ``GET /api/recepcion/documento/{id}/eventos-radian/`` → GetStatusEvent,
+        por el CUFE, con el certificado del emisor. Son los eventos que la DIAN
+        tiene registrados, sirve para conciliarlos con los de
+        ``/api/recepcion/evento/?documento=<id>``. No guarda nada; devuelve lo
+        que responde la DIAN.
+
+        400 si el documento no tiene CUFE o el emisor no tiene un certificado
+        utilizable; 502 si la DIAN no responde.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este documento recibido.
+        required: true
+      tags:
+      - recepcion
+      security:
+      - LlaveApi: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventosRadianRespuesta'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: ''
+        '502':
           content:
             application/json:
               schema:
@@ -13140,6 +13265,50 @@ components:
         * `registrado` - Registrado
         * `rechazado` - Rechazado
         * `error` - Error al enviar
+    EventoRadianDian:
+      type: object
+      properties:
+        codigo:
+          type: string
+          description: Código del evento (`030` acuse, `031` reclamo, `032` recibo,
+            `033` aceptación expresa, `034` tácita…).
+        descripcion:
+          type: string
+          description: Descripción del evento según la DIAN.
+      required:
+      - codigo
+      - descripcion
+    EventosRadianRespuesta:
+      type: object
+      properties:
+        es_valido:
+          type: boolean
+          description: '`true` si la DIAN lo dio por válido.'
+        codigo_estado:
+          type: string
+          description: Código de estado de la DIAN (`00` aceptado, `99` con errores…).
+        descripcion:
+          type: string
+          description: Descripción del estado según la DIAN.
+        errores:
+          type: array
+          items:
+            type: string
+          description: Reglas de rechazo y notificaciones, tal como las devuelve la
+            DIAN.
+        eventos:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventoRadianDian'
+          description: 'Los eventos registrados en la DIAN, en el orden en que los
+            devuelve. ⚠ Se leen solo código y descripción: la forma completa de la
+            respuesta está por confirmar contra la DIAN.'
+      required:
+      - codigo_estado
+      - descripcion
+      - errores
+      - es_valido
+      - eventos
     GrupoEnum:
       enum:
       - devengado

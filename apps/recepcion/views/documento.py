@@ -1,6 +1,7 @@
 """API de los documentos recibidos de proveedores."""
 import logging
 
+import requests
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from django.db.models import Exists, OuterRef
@@ -9,6 +10,9 @@ from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
+from apps.dian import servicios
+from apps.dian.errores import error_pasarela_dian
+from apps.dian.esquema import RESPUESTA_EVENTOS_RADIAN, datos_eventos_radian
 from apps.nucleo.api import (
     ErrorSolicitud,
     OrdenEstable,
@@ -315,6 +319,31 @@ class DocumentoRecibidoViewSet(
             serializers.EventoSerializer(evento, context=self.get_serializer_context()).data,
             status=status.HTTP_201_CREATED,
         )
+
+    @extend_schema(
+        responses={200: RESPUESTA_EVENTOS_RADIAN, 400: ErrorSerializer, 502: ErrorSerializer},
+    )
+    @action(detail=True, methods=["get"], url_path="eventos-radian")
+    def eventos_radian(self, request, pk=None):
+        """Consulta (solo lectura) en la DIAN los eventos RADIAN de la factura.
+
+        ``GET /api/recepcion/documento/{id}/eventos-radian/`` → GetStatusEvent,
+        por el CUFE, con el certificado del emisor. Son los eventos que la DIAN
+        tiene registrados, sirve para conciliarlos con los de
+        ``/api/recepcion/evento/?documento=<id>``. No guarda nada; devuelve lo
+        que responde la DIAN.
+
+        400 si el documento no tiene CUFE o el emisor no tiene un certificado
+        utilizable; 502 si la DIAN no responde.
+        """
+        documento = self.get_object()
+        try:
+            resultado = servicios.consultar_eventos_radian(documento)
+        except servicios.ErrorEmision as exc:
+            raise ErrorSolicitud(str(exc))
+        except requests.RequestException as exc:
+            raise error_pasarela_dian(exc)
+        return Response(datos_eventos_radian(resultado))
 
     @extend_schema(responses=RESPUESTA_XML)
     @action(detail=True, methods=["get"])

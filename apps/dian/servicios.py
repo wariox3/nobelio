@@ -35,6 +35,7 @@ from apps.emisores.servicios import (
     webhooks,
 )
 from apps.nucleo.entorno import ambiente_segun_habilitacion
+from apps.nucleo.models import Ambiente
 from apps.nucleo.registro import campos
 
 # La traza del pipeline. Deja una línea por transición de estado —firmado,
@@ -844,6 +845,23 @@ def consultar_estado(documento, *, cliente=None, ambiente=None, track_id=None, *
     if not clave:
         raise ErrorEmision("El documento no tiene CUFE; emítalo primero.")
     return cliente.consultar_estado(clave)
+
+
+def consultar_eventos_radian(documento, *, cliente=None, ambiente=None, **cred):
+    """GetStatusEvent: los eventos RADIAN que la DIAN tiene sobre una factura.
+
+    Solo lectura: no guarda nada. Sirve igual para una factura emitida (qué
+    hizo el adquiriente) que para una recibida (qué registramos nosotros); en
+    las dos se consulta con el certificado del emisor y por el CUFE de la
+    factura. Una recibida puede no tener ambiente: llegó por correo y se da por
+    producción, como el comando ``consultar_eventos``.
+    """
+    if ambiente is None:
+        ambiente = documento.ambiente or Ambiente.PRODUCCION
+    cliente = _cliente_para(documento, cliente, ambiente, **cred)
+    if not documento.cufe_cude:
+        raise ErrorEmision("El documento no tiene CUFE.")
+    return cliente.consultar_eventos(documento.cufe_cude)
 
 
 def consultar_estado_zip(documento, *, cliente=None, ambiente=None, zip_key=None, **cred):
